@@ -1,0 +1,16 @@
+# Built place files (make one with: rojo build -o RollAnEgg.rbxl)
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# Tooling
+sourcemap.json
+roblox.yml
+/Packages/
+/ServerPackages/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

@@ -1,0 +1,6 @@
+std = "roblox"
+exclude = ["vendor/**"]
+
+[lints]
+# Tests replace `require` and `game` on purpose.
+global_usage = "allow"
