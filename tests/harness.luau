@@ -127,6 +127,8 @@ end
 -- A very small test framework.
 
 local results = { passed = 0, failed = 0, failures = {} :: { string } }
+-- Set VERBOSE=1 to print each test's name as it starts (useful for finding a test that hangs).
+local verbose = require("@lune/process").env.VERBOSE ~= nil
 local currentSuite = ""
 
 function harness.describe(name: string, body: () -> ())
@@ -136,6 +138,9 @@ function harness.describe(name: string, body: () -> ())
 end
 
 function harness.it(name: string, body: () -> ())
+	if verbose then
+		print(`  {currentSuite} > {name}`)
+	end
 	local ok, err = xpcall(body, function(message)
 		return debug.traceback(tostring(message), 2)
 	end)
