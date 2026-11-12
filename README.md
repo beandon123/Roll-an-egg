@@ -10,7 +10,7 @@ The first playable slice: **the runway and riding**.
 - A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for the 32 Forest, Desert, Snow and Ocean pets, rigged with joints so they can be animated
+- Blocky pet models for all 40 zone pets, rigged with joints so they can be animated
   (see below). Pets do not hatch or roam yet.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
@@ -89,12 +89,13 @@ Then open `tools/out/egg-gallery.html` in a browser.
 ## Pet models
 
 Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one design per pet. Each egg in
-`Config/Zones.luau` names the pet that hatches from it. So far the Forest, Desert, Snow and Ocean pets are done:
+`Config/Zones.luau` names the pet that hatches from it. Every pet has its model:
 
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
+- Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Eternal Phoenix
 
 The rarer the pet, the more detailed it is. Secret and Eternal pets are the showpieces: the tests require each to
 have at least 150 blocks and at least 30% more than any other pet in the game.

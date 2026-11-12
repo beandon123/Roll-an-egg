@@ -17,6 +17,16 @@ return function(harness)
 		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
 		{ "SeaTurtle", "Dolphin", "MantaRay", "GreatShark", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
+		{
+			"ObsidianGoat",
+			"CinderBoar",
+			"VolcanoTortoise",
+			"FireSalamander",
+			"Chimera",
+			"LavaGolem",
+			"Cerberus",
+			"EternalPhoenix",
+		},
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local BUDGET = 120
@@ -45,7 +55,7 @@ return function(harness)
 	end
 
 	describe("PetModels", function()
-		it("has every Forest, Desert, Snow and Ocean pet, in the order of their eggs", function()
+		it("has every pet in the game, in the order of their eggs", function()
 			for zoneId, wanted in DONE do
 				local made = {}
 				for _, kind in PetModels.all() do
@@ -66,6 +76,7 @@ return function(harness)
 					local hatches = EggModels.describe(entry.egg).hatches
 					expect.equal(entry.pet, (string.gsub(hatches, " ", "")), entry.egg .. " pet")
 					local model = PetModels.get(entry.pet)
+					expect.truthy(model, entry.pet .. " has a model")
 					if model then
 						expect.equal(model.name, hatches, entry.pet .. " name")
 						expect.equal(model.rarity, entry.rarity, entry.pet .. " rarity")

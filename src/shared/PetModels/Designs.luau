@@ -5,7 +5,7 @@
 --     limb:box() draws a solid block, limb:paint() colours the surface of blocks already drawn (eyes, bellies),
 --     and the ...Pair versions mirror across the middle of the pet.
 -- Pets have big heads and small bodies, like the eggs they come from, and are themed to match their egg.
--- So far: the Forest, Desert, Snow and Ocean pets. The Volcano pets come next.
+-- Every pet in the game has a design, zone by zone: Forest, Desert, Snow, Ocean and Volcano.
 -- Secret and Eternal pets are the showpieces, far more detailed than the rest (the tests check this).
 -- Curved parts use the helpers below: `tube` (tentacles, coils, horns), `curl` (a spiral to end a tube on), and
 -- `blob` (rounded bodies, filled from a shape function).
@@ -198,7 +198,14 @@ export type Tube = {
 	inside: (x: number, y: number, z: number) -> boolean,
 }
 
-export type TubeOptions = { material: string?, transparency: number?, even: boolean? }
+export type TubeOptions = {
+	material: string?,
+	transparency: number?,
+	even: boolean?,
+	-- Colours each block along the tube instead of `color`: given the block, its place along the tube and how many
+	-- blocks there are, returns its colour and material.
+	shade: ((cube: { number }, index: number, count: number) -> (Color, string?))?,
+}
 
 local ROUNDED = 4
 
@@ -223,15 +230,74 @@ local function tube(limb: Limb, points: { { number } }, color: Color, options: T
 		cube[7] = axis
 	end
 
-	-- Join runs of same-sized blocks that slide one step at a time along one axis into single long blocks.
+	-- How each block looks.
+	local shade = options and options.shade
+	local looks = {}
+	for index, cube in cubes do
+		if shade then
+			local c, m = shade(cube, index, #cubes)
+			looks[index] = { color = c, material = m }
+		else
+			looks[index] = { color = color, material = material }
+		end
+	end
+	-- Where the colour changes, cut back the blocks of the new colour that overlap blocks of the old one just
+	-- before them (overlapping blocks of different colours flicker), dropping any cut away to nothing.
+	local function overlaps(a: { number }, b: { number }): boolean
+		for k = 1, 3 do
+			if a[k] > b[k + 3] or b[k] > a[k + 3] then
+				return false
+			end
+		end
+		return true
+	end
+	local kept, keptLooks = {}, {}
+	for index, cube in cubes do
+		local look = looks[index]
+		local empty = false
+		for back = #kept, math.max(1, #kept - 4), -1 do
+			local previous, before = kept[back], keptLooks[back]
+			if
+				not empty
+				and (look.color ~= before.color or look.material ~= before.material)
+				and overlaps(cube, previous)
+			then
+				local axis, most = 1, 0
+				for k = 1, 3 do
+					local moved = (cube[k] + cube[k + 3]) - (previous[k] + previous[k + 3])
+					if math.abs(moved) > math.abs(most) then
+						axis, most = k, moved
+					end
+				end
+				if most >= 0 then
+					cube[axis] = previous[axis + 3] + 1
+				else
+					cube[axis + 3] = previous[axis] - 1
+				end
+				empty = cube[axis] > cube[axis + 3]
+			end
+		end
+		if not empty then
+			table.insert(kept, cube)
+			table.insert(keptLooks, look)
+		end
+	end
+	cubes, looks = kept, keptLooks
+
+	-- Join runs of same-sized, same-looking blocks that slide one step at a time along one axis into single long
+	-- blocks.
 	local runs = {}
-	for _, cube in cubes do
+	for index, cube in cubes do
+		local look = looks[index]
 		local run = runs[#runs]
 		local joined = false
-		if run then
+		if run and run.look.color == look.color and run.look.material == look.material then
 			local head = run.cubes[#run.cubes]
 			local axis, sign = nil, 0
-			local fits = cube[4] - cube[1] == head[4] - head[1]
+			local fits = true
+			for k = 1, 3 do
+				fits = fits and cube[k + 3] - cube[k] == head[k + 3] - head[k]
+			end
 			for k = 1, 3 do
 				local d = cube[k] - head[k]
 				if d ~= 0 then
@@ -250,10 +316,11 @@ local function tube(limb: Limb, points: { { number } }, color: Color, options: T
 			end
 		end
 		if not joined then
-			table.insert(runs, { box = table.clone(cube), cubes = { cube } })
+			table.insert(runs, { box = table.clone(cube), cubes = { cube }, look = look })
 		end
 	end
 	for _, run in runs do
+		local runColor, runMaterial = run.look.color, run.look.material
 		if run.axis then
 			for _, cube in run.cubes do
 				cube[7] = run.axis
@@ -262,14 +329,14 @@ local function tube(limb: Limb, points: { { number } }, color: Color, options: T
 		local b = run.box
 		local along = run.cubes[1][7]
 		if run.cubes[1][4] - run.cubes[1][1] + 1 < ROUNDED then
-			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], color, material, transparency)
+			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], runColor, runMaterial, transparency)
 		else
 			-- Two crossed blocks, each one narrower on a different side: a block with its long edges cut off.
 			for _, trim in { along % 3 + 1, (along + 1) % 3 + 1 } do
 				local c = table.clone(b)
 				c[trim] += 1
 				c[trim + 3] -= 1
-				limb:box(c[1], c[2], c[3], c[4], c[5], c[6], color, material, transparency)
+				limb:box(c[1], c[2], c[3], c[4], c[5], c[6], runColor, runMaterial, transparency)
 			end
 		end
 	end
@@ -3479,6 +3546,1001 @@ Designs.Leviathan = {
 		pet:light(GLOW, 3, 22)
 		pet:particles("Bubbles", GLOW, 16)
 		pet:seat(0, 16, -13)
+	end,
+}
+
+----------------------------------------------------------------------------------------------------------------
+-- Volcano
+
+Designs.ObsidianGoat = {
+	name = "Obsidian Goat",
+	skeleton = "Quadruped",
+	gait = "Hop",
+	scale = 0.6,
+	draw = function(pet)
+		local OBSIDIAN = rgb(42, 34, 54)
+		local SHEEN = rgb(84, 70, 112)
+		local SHARD = rgb(120, 80, 190)
+		local SHARD_GLOW = rgb(196, 150, 255)
+		local EMBER = rgb(255, 128, 36)
+		local ASH = rgb(118, 110, 116)
+		local HORN = rgb(150, 140, 138)
+		local HORN_DARK = rgb(104, 96, 96)
+		local HOOF = rgb(24, 20, 28)
+
+		-- A goat of glassy black volcanic rock, glinting where the light catches it, with purple crystals
+		-- growing from its back and a few cracks still glowing from the lava it cooled from.
+		local body = pet:limb("Body", { 0, 7, -1 })
+		body:box(-3, 6, -6, 2, 10, 3, OBSIDIAN, GLASS)
+		body:box(-2, 5, -5, 1, 5, 2, OBSIDIAN, GLASS)
+		body:box(-2, 11, -5, 1, 11, 2, OBSIDIAN, GLASS)
+		body:paintPair(2, 9, -4, 2, 10, -3, SHEEN, GLASS)
+		body:paintPair(2, 8, 1, 2, 9, 2, SHEEN, GLASS)
+		body:paint(-2, 11, -1, -1, 11, 0, SHEEN, GLASS)
+		body:paintPair(2, 6, -2, 2, 7, -2, EMBER, NEON)
+		body:paintPair(2, 7, -1, 2, 7, -1, EMBER, NEON)
+		body:paint(2, 8, -5, 2, 8, -5, EMBER, NEON)
+		for _, crystal in
+			{
+				{ -1, 12, -1, 0, 14, 0 },
+				{ 0, 12, -3, 1, 15, -2 },
+				{ -2, 12, -4, -2, 13, -4 },
+				{ -1, 12, -5, -1, 14, -5 },
+				{ 1, 12, 1, 1, 12, 1 },
+			}
+		do
+			body:box(crystal[1], crystal[2], crystal[3], crystal[4], crystal[5], crystal[6], SHARD, GLASS, 0.1)
+		end
+		body:box(-1, 15, 0, -1, 15, 0, SHARD_GLOW, NEON)
+		body:box(1, 16, -2, 1, 16, -2, SHARD_GLOW, NEON)
+		body:box(-1, 15, -5, -1, 15, -5, SHARD_GLOW, NEON)
+		body:box(-2, 14, -4, -2, 14, -4, SHARD_GLOW, NEON)
+
+		-- A long face with an ashen muzzle and beard, glowing ember eyes, and great ram's horns curling round.
+		local head = pet:limb("Head", { 0, 10, 4 })
+		head:box(-2, 9, 3, 1, 13, 7, OBSIDIAN, GLASS)
+		head:box(-2, 9, 8, 1, 11, 10, OBSIDIAN, GLASS)
+		head:paint(-2, 9, 10, 1, 10, 10, ASH)
+		head:paint(-1, 10, 10, 0, 10, 10, HOOF)
+		head:paint(-2, 11, 8, 1, 11, 9, SHEEN, GLASS)
+		head:box(-1, 7, 8, 0, 8, 9, ASH)
+		head:box(-1, 6, 9, 0, 6, 9, ASH)
+		head:paintPair(1, 12, 6, 1, 12, 7, EMBER, NEON)
+		head:paintPair(1, 12, 7, 1, 12, 7, HOOF)
+		-- Each horn rises from the crown, sweeps back, curls down behind the eye and forward again.
+		head:boxPair(1, 14, 4, 2, 14, 6, HORN)
+		head:boxPair(2, 15, 1, 3, 15, 4, HORN)
+		head:boxPair(2, 11, 0, 3, 14, 1, HORN)
+		head:boxPair(2, 11, 2, 3, 11, 3, HORN)
+		head:boxPair(3, 12, 4, 3, 12, 4, HORN)
+		head:paintPair(2, 15, 3, 3, 15, 3, HORN_DARK)
+		head:paintPair(2, 13, 0, 3, 13, 1, HORN_DARK)
+
+		-- Slim legs on black hooves, built for leaping up crags.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 1.5, 6, 1.5 }, function(leg)
+			leg:box(1, 1, 0, 2, 5, 2, OBSIDIAN, GLASS)
+			leg:box(1, 0, 0, 2, 0, 2, HOOF)
+			leg:paint(2, 3, 2, 2, 3, 2, EMBER, NEON)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 1.5, 6, -4.5 }, function(leg)
+			leg:box(1, 4, -6, 2, 8, -3, OBSIDIAN, GLASS)
+			leg:box(1, 1, -5, 2, 3, -4, OBSIDIAN, GLASS)
+			leg:box(1, 0, -5, 2, 0, -4, HOOF)
+		end)
+
+		-- A short tail, tipped with a crystal.
+		local tail = pet:limb("Tail", { 0, 10, -6 })
+		tail:box(-1, 10, -8, 0, 11, -7, OBSIDIAN, GLASS)
+		tail:box(-1, 12, -8, 0, 12, -8, SHARD, GLASS, 0.1)
+
+		pet:seat(0, 11, -2)
+	end,
+}
+
+Designs.CinderBoar = {
+	name = "Cinder Boar",
+	skeleton = "Quadruped",
+	gait = "Stomp",
+	scale = 0.6,
+	draw = function(pet)
+		local BOAR = rgb(62, 42, 38)
+		local BOAR_DARK = rgb(42, 28, 26)
+		local ASH = rgb(104, 96, 98)
+		local SNOUT = rgb(150, 92, 84)
+		local NOSTRIL = rgb(66, 36, 36)
+		local TUSK = rgb(236, 226, 206)
+		local LAVA = rgb(255, 112, 24)
+		local LAVA_HOT = rgb(255, 196, 40)
+		local HOOF = rgb(30, 24, 24)
+
+		-- A hulking boar, high in the shoulder, with lava glowing through cracks in its hide and a ridge of
+		-- burning bristles down its back.
+		local body = pet:limb("Body", { 0, 7, -1 })
+		body:box(-4, 5, -2, 3, 11, 4, BOAR)
+		body:box(-3, 5, -8, 2, 10, -3, BOAR)
+		body:paintPair(3, 5, -1, 3, 6, 4, BOAR_DARK)
+		body:paintPair(3, 7, 0, 3, 8, 0, LAVA, NEON)
+		body:paintPair(3, 8, 1, 3, 8, 2, LAVA, NEON)
+		body:paintPair(3, 9, 2, 3, 9, 2, LAVA_HOT, NEON)
+		body:paintPair(2, 7, -6, 2, 7, -4, LAVA, NEON)
+		body:paintPair(2, 8, -7, 2, 8, -7, LAVA, NEON)
+		body:paint(-4, 10, -2, 3, 11, -2, ASH)
+		body:paint(-3, 10, -8, 2, 10, -8, ASH)
+		-- Burning bristles, tallest over the shoulders.
+		body:box(-1, 12, -1, 0, 13, 4, LAVA, NEON)
+		body:box(-1, 14, 0, 0, 14, 0, LAVA_HOT, NEON)
+		body:box(-1, 14, 2, 0, 15, 2, LAVA_HOT, NEON)
+		body:box(-1, 14, 4, 0, 14, 4, LAVA_HOT, NEON)
+		body:box(-1, 11, -7, 0, 11, -3, LAVA, NEON)
+		body:box(-1, 12, -6, 0, 12, -6, LAVA_HOT, NEON)
+		body:box(-1, 12, -4, 0, 12, -4, LAVA_HOT, NEON)
+
+		-- A heavy head with a wide snout, small burning eyes under a heavy brow, pointed ears, and tusks curling up.
+		local head = pet:limb("Head", { 0, 8, 4 })
+		head:box(-3, 5, 5, 2, 10, 8, BOAR)
+		head:box(-2, 5, 9, 1, 8, 10, BOAR)
+		head:box(-2, 5, 11, 1, 7, 11, SNOUT)
+		head:paintPair(0, 6, 11, 0, 6, 11, NOSTRIL)
+		head:paint(-2, 5, 9, 1, 5, 10, NOSTRIL)
+		head:boxPair(2, 6, 10, 2, 7, 10, TUSK)
+		head:boxPair(3, 8, 10, 3, 9, 10, TUSK)
+		head:boxPair(3, 10, 9, 3, 10, 9, TUSK)
+		head:paintPair(2, 9, 7, 2, 9, 8, LAVA_HOT, NEON)
+		head:boxPair(1, 11, 7, 2, 11, 8, BOAR_DARK)
+		head:boxPair(2, 11, 5, 3, 12, 6, BOAR)
+		head:boxPair(3, 13, 5, 3, 13, 5, BOAR_DARK)
+		head:paintPair(3, 11, 6, 3, 12, 6, LAVA, NEON)
+		head:paint(-1, 10, 6, 0, 10, 8, ASH)
+		head:box(-1, 11, 5, 0, 12, 6, LAVA, NEON)
+
+		-- Short, thick legs on cloven hooves.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 2.5, 5, 1.5 }, function(leg)
+			leg:box(1, 1, 0, 3, 4, 2, BOAR)
+			leg:box(1, 0, 0, 3, 0, 2, HOOF)
+			leg:paint(2, 0, 2, 2, 0, 2, BOAR_DARK)
+			leg:paint(3, 3, 1, 3, 3, 1, LAVA, NEON)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 2, 5, -6 }, function(leg)
+			leg:box(1, 1, -7, 2, 4, -5, BOAR)
+			leg:box(1, 0, -7, 2, 0, -5, HOOF)
+		end)
+
+		-- A thin tail ending in a smouldering tuft.
+		local tail = pet:limb("Tail", { 0, 9, -8 })
+		tail:box(-1, 8, -9, 0, 9, -9, BOAR)
+		tail:box(-1, 6, -10, 0, 8, -10, BOAR_DARK)
+		tail:box(-1, 5, -10, 0, 5, -10, LAVA, NEON)
+
+		pet:seat(0, 11, -5)
+	end,
+}
+
+Designs.VolcanoTortoise = {
+	name = "Volcano Tortoise",
+	skeleton = "Quadruped",
+	gait = "Stomp",
+	scale = 0.55,
+	draw = function(pet)
+		local SHELL = rgb(84, 66, 58)
+		local SHELL_LIGHT = rgb(112, 90, 76)
+		local RIM = rgb(60, 48, 44)
+		local CONE = rgb(124, 112, 108)
+		local CONE_DARK = rgb(92, 82, 80)
+		local SKIN = rgb(130, 112, 74)
+		local SKIN_DARK = rgb(98, 82, 52)
+		local PLASTRON = rgb(176, 150, 96)
+		local BEAK = rgb(70, 58, 44)
+		local LAVA = rgb(255, 112, 24)
+		local LAVA_HOT = rgb(255, 196, 40)
+		local NAIL = rgb(214, 204, 186)
+
+		-- A high domed shell, its plates split by seams of glowing lava: a rim of dark plates round the bottom,
+		-- a ring of plates above it, and three more over the top.
+		local function inShell(x: number, y: number, z: number): boolean
+			-- Leaving a gap at the front for its neck.
+			if y < 4 or (y <= 6 and z >= 5 and x >= -3 and x <= 2) then
+				return false
+			end
+			return ((x + 0.5) / 8.2) ^ 2 + ((z + 0.5) / 9.2) ^ 2 + ((y + 0.5 - 4) / 8.5) ^ 2 <= 1
+		end
+		local body = pet:limb("Body", { 0, 6, 0 })
+		local bounds = { -9, 4, -10, 8, 12, 9 }
+		local function plate(color: Color, keep: (number, number, number) -> boolean)
+			blob(body, bounds, function(x, y, z)
+				return inShell(x, y, z) and keep(x, y, z)
+			end, color)
+		end
+		local function seam(keep: (number, number, number) -> boolean)
+			blob(body, bounds, function(x, y, z)
+				return inShell(x, y, z) and keep(x, y, z)
+			end, LAVA, NEON)
+		end
+		-- Round the gap for the neck, each level is drawn in three parts, so each part has no gap in it.
+		for _, part in { { -9, -4 }, { -3, 2 }, { 3, 8 } } do
+			plate(RIM, function(x, y)
+				return y <= 5 and x >= part[1] and x <= part[2]
+			end)
+			seam(function(x, y)
+				return y == 6 and x >= part[1] and x <= part[2]
+			end)
+		end
+		for index, band in { { -10, -5 }, { -3, 2 }, { 4, 9 } } do
+			plate(if index == 2 then SHELL_LIGHT else SHELL, function(_, y, z)
+				return y >= 7 and z >= band[1] and z <= band[2]
+			end)
+		end
+		seam(function(_, y, z)
+			return y >= 7 and (z == -4 or z == 3)
+		end)
+		-- Its belly, between the legs.
+		body:box(-4, 2, -7, 3, 3, 6, PLASTRON)
+
+		-- A little volcano on its back, glowing at the crater, with lava running down its sides and over the shell.
+		body:box(-3, 12, -6, 2, 12, -1, CONE)
+		body:box(-2, 13, -5, 1, 14, -2, CONE)
+		body:box(-2, 15, -5, 1, 15, -5, CONE_DARK)
+		body:box(-2, 15, -2, 1, 15, -2, CONE_DARK)
+		body:box(-2, 15, -4, -2, 15, -3, CONE_DARK)
+		body:box(1, 15, -4, 1, 15, -3, CONE_DARK)
+		body:box(-1, 15, -4, 0, 15, -3, LAVA_HOT, NEON)
+		body:box(-1, 16, -4, 0, 16, -3, LAVA, NEON)
+		body:box(-1, 17, -4, -1, 18, -4, LAVA_HOT, NEON)
+		body:box(-1, 13, -1, 0, 14, -1, LAVA, NEON)
+		body:box(-1, 12, 0, 0, 12, 0, LAVA, NEON)
+		body:box(2, 13, -4, 2, 14, -4, LAVA, NEON)
+		body:box(3, 12, -4, 3, 12, -4, LAVA, NEON)
+		-- The lava keeps running down the shell, just outside it.
+		for _, flow in { { 0, 1, 12, 7 }, { 1, 0, 11, 5 } } do
+			local cellsDown = {}
+			for y = flow[3], flow[4], -1 do
+				local reach = 0
+				while inShell(if flow[2] == 0 then reach + 1 else -1, y, if flow[1] == 0 then reach + 1 else -4) do
+					reach += 1
+				end
+				if flow[1] == 0 then
+					table.insert(cellsDown, { -1, y, reach + 1 })
+				else
+					table.insert(cellsDown, { reach + 1, y, -4 })
+				end
+			end
+			cells(body, cellsDown, LAVA, false, NEON)
+		end
+
+		-- A wrinkled neck and a blunt head with a hooked beak and ember eyes.
+		local head = pet:limb("Head", { 0, 6, 7 })
+		tube(head, { { 0, 4.5, 7, 1.5 }, { 0, 6, 9.5, 1.4 }, { 0, 7.5, 10.5, 1.3 } }, SKIN, { even = true })
+		head:box(-2, 6, 10, 1, 9, 14, SKIN)
+		head:box(-1, 6, 15, 0, 8, 15, BEAK)
+		head:box(-1, 5, 15, 0, 5, 15, BEAK)
+		head:paint(-2, 6, 14, 1, 6, 14, BEAK)
+		head:paintPair(1, 8, 12, 1, 8, 13, LAVA_HOT, NEON)
+		head:paintPair(1, 8, 12, 1, 8, 12, BEAK)
+		head:paintPair(1, 6, 11, 1, 7, 11, SKIN_DARK)
+
+		-- Stumpy, scaly elephant legs with pale nails.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 5, 3.5, 4 }, function(leg)
+			leg:box(4, 0, 3, 6, 3, 5, SKIN)
+			leg:box(4, 0, 6, 6, 0, 6, NAIL)
+			leg:paint(6, 2, 3, 6, 2, 4, SKIN_DARK)
+			leg:paint(4, 3, 5, 5, 3, 5, SKIN_DARK)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 5, 3.5, -6 }, function(leg)
+			leg:box(4, 0, -7, 6, 3, -5, SKIN)
+			leg:box(4, 0, -4, 6, 0, -4, NAIL)
+			leg:paint(6, 1, -6, 6, 2, -6, SKIN_DARK)
+		end)
+
+		-- A stubby pointed tail.
+		local tail = pet:limb("Tail", { 0, 4, -9 })
+		tail:box(-1, 2, -11, 0, 3, -9, SKIN)
+		tail:box(-1, 2, -12, 0, 2, -12, SKIN_DARK)
+
+		pet:light(LAVA, 2, 14)
+		pet:seat(0, 12, 2)
+	end,
+}
+
+Designs.FireSalamander = {
+	name = "Fire Salamander",
+	skeleton = "LowSlung",
+	gait = "Crawl",
+	scale = 0.6,
+	draw = function(pet)
+		local BLACK = rgb(34, 28, 32)
+		local BLACK_LIGHT = rgb(60, 50, 56)
+		local YELLOW = rgb(255, 210, 40)
+		local ORANGE = rgb(255, 142, 32)
+		local FLAME = rgb(242, 82, 28)
+		local BELLY = rgb(74, 60, 64)
+		local IRIS = rgb(255, 196, 40)
+		local MOUTH = rgb(120, 40, 36)
+
+		-- A long, low black body splashed with bright yellow and orange blotches.
+		local function inBody(x: number, y: number, z: number): boolean
+			local t = (z + 0.5 - 0) / 6.5
+			if math.abs(t) > 1 then
+				return false
+			end
+			local r = 1 - t * t
+			return ((x + 0.5) / (3.4 * r ^ 0.4)) ^ 2 + ((y + 0.5 - 3) / (2.4 * r ^ 0.4)) ^ 2 <= 1
+		end
+		local body = pet:limb("Body", { 0, 3, 0 })
+		blob(body, { -4, 0, -7, 3, 6, 6 }, inBody, BLACK)
+		local function onBody(y: number, z: number, side: number): { number }
+			local x = if side > 0 then 0 else -1
+			while inBody(x + side, y, z) do
+				x += side
+			end
+			return { x, y, z }
+		end
+		for _, blotch in { { 4, -4, 1, YELLOW }, { 3, 0, 1, ORANGE }, { 3, 3, -1, ORANGE }, { 4, -2, -1, YELLOW } } do
+			local cell = onBody(blotch[1], blotch[2], blotch[3])
+			local top = if inBody(cell[1], cell[2] + 1, cell[3]) then cell[2] + 1 else cell[2]
+			local front = if inBody(cell[1], cell[2], cell[3] + 1) and inBody(cell[1], top, cell[3] + 1)
+				then cell[3] + 1
+				else cell[3]
+			body:paint(cell[1], cell[2], cell[3], cell[1], top, front, blotch[4])
+		end
+		for _, spot in { { -2, -5, 0, -4, YELLOW }, { 0, -2, 1, 0, ORANGE }, { -2, 2, -1, 4, YELLOW } } do
+			body:paint(spot[1], 4, spot[2], spot[3], 4, spot[4], spot[5])
+		end
+		body:paint(-2, 1, -3, 1, 1, 3, BELLY)
+
+		-- A wide flat head with bulging golden eyes, a broad smile, and feathery gills of fire fanning out behind.
+		local head = pet:limb("Head", { 0, 3, 6 })
+		head:box(-3, 1, 6, 2, 5, 9, BLACK)
+		head:box(-2, 1, 10, 1, 4, 11, BLACK)
+		head:paint(-2, 2, 11, 1, 2, 11, MOUTH)
+		head:paintPair(2, 2, 9, 2, 2, 9, MOUTH)
+		head:paint(-2, 4, 11, 1, 4, 11, BLACK_LIGHT)
+		head:boxPair(1, 6, 8, 2, 6, 9, BLACK)
+		head:paintPair(1, 6, 9, 2, 6, 9, IRIS, NEON)
+		head:paintPair(2, 6, 9, 2, 6, 9, EYE)
+		head:paint(-1, 5, 7, 0, 5, 9, YELLOW)
+		-- Each gill runs out from the head in three steps, from red at the root to yellow at the tip.
+		for _, gill in
+			{
+				{ { 3, 5, 7, 4, 5, 7 }, { 5, 6, 7, 6, 6, 7 }, { 7, 7, 7, 7, 8, 7 } },
+				{ { 3, 4, 6, 4, 4, 6 }, { 5, 4, 5, 6, 4, 5 }, { 7, 4, 4, 8, 4, 4 } },
+				{ { 3, 3, 7, 4, 3, 7 }, { 5, 2, 7, 6, 2, 7 }, { 7, 1, 7, 7, 1, 7 } },
+			}
+		do
+			for step, color in { FLAME, ORANGE, YELLOW } do
+				local b = gill[step]
+				head:boxPair(b[1], b[2], b[3], b[4], b[5], b[6], color, NEON)
+			end
+		end
+
+		-- Short legs splayed out to the sides, with yellow-tipped toes.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 3, 3 }, function(leg)
+			leg:box(3, 2, 2, 4, 3, 4, BLACK)
+			leg:box(5, 0, 2, 6, 2, 4, BLACK)
+			leg:box(5, 0, 5, 6, 0, 5, BLACK)
+			leg:paint(5, 0, 5, 6, 0, 5, YELLOW)
+			leg:paint(4, 3, 3, 4, 3, 3, ORANGE)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 3, -4 }, function(leg)
+			leg:box(3, 2, -5, 4, 3, -3, BLACK)
+			leg:box(5, 0, -6, 6, 2, -4, BLACK)
+			leg:box(5, 0, -3, 6, 0, -3, BLACK)
+			leg:paint(5, 0, -3, 6, 0, -3, YELLOW)
+			leg:paint(5, 2, -5, 5, 2, -5, ORANGE)
+		end)
+
+		-- A long tail, swinging to one side, banded yellow and burning at the tip.
+		local tail = pet:limb("Tail", { 0, 3, -6 })
+		local t = tube(tail, {
+			{ 0, 3, -6, 1.6 },
+			{ 0.5, 2.5, -9, 1.4 },
+			{ 2, 2, -12, 1.1 },
+			{ 3.5, 1.5, -14.5, 0.9 },
+			{ 3, 1.5, -17, 0.7 },
+			{ 1.5, 1.5, -18.5, 0.5 },
+		}, BLACK)
+		for index, cube in t.cubes do
+			if index > #t.cubes - 2 then
+				tail:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], FLAME, NEON)
+			elseif index % 4 == 2 and index > 2 then
+				tail:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], YELLOW)
+			end
+		end
+		local tip = t.cubes[#t.cubes]
+		tail:box(tip[1], tip[5] + 1, tip[3], tip[1], tip[5] + 2, tip[3], ORANGE, NEON)
+		tail:box(tip[1], tip[5] + 3, tip[3], tip[1], tip[5] + 3, tip[3], YELLOW, NEON)
+
+		pet:light(FLAME, 1.8, 12)
+		pet:seat(0, 6, -1)
+	end,
+}
+
+Designs.Chimera = {
+	name = "Chimera",
+	skeleton = "Quadruped",
+	gait = "Stomp",
+	scale = 0.55,
+	draw = function(pet)
+		local LION = rgb(226, 162, 72)
+		local LION_LIGHT = rgb(244, 204, 132)
+		local LION_DARK = rgb(196, 128, 50)
+		local MANE = rgb(184, 92, 38)
+		local MANE_DARK = rgb(140, 62, 28)
+		local NOSE = rgb(90, 50, 40)
+		local GOAT = rgb(112, 98, 88)
+		local GOAT_LIGHT = rgb(150, 136, 124)
+		local GOAT_DARK = rgb(78, 68, 62)
+		local HORN = rgb(190, 180, 168)
+		local HORN_DARK = rgb(130, 120, 112)
+		local SNAKE = rgb(74, 150, 72)
+		local SNAKE_DARK = rgb(46, 104, 50)
+		local FANG = rgb(250, 246, 236)
+		local FIRE = rgb(255, 120, 30)
+		local FLAME = rgb(255, 200, 50)
+		local AMBER = rgb(255, 176, 40)
+		local VENOM = rgb(200, 255, 60)
+		local TONGUE = rgb(230, 40, 60)
+
+		-- A lion's body, deep in the chest and narrow at the waist.
+		local body = pet:limb("Body", { 0, 8, -2 })
+		body:box(-4, 6, -1, 3, 12, 2, LION)
+		body:box(-3, 6, -7, 2, 11, -2, LION)
+		body:box(-4, 6, -10, 3, 11, -8, LION)
+		body:paint(-3, 6, -7, 2, 6, -2, LION_LIGHT)
+		body:paint(-4, 6, -1, 3, 6, 2, LION_LIGHT)
+		body:paintPair(3, 9, -10, 3, 10, -9, LION_DARK)
+		body:paintPair(2, 8, -6, 2, 9, -4, LION_DARK)
+
+		-- A goat's head rising from the middle of its back, on a shaggy neck, with long swept horns.
+		body:box(-2, 12, -7, 1, 13, -3, GOAT_DARK)
+		body:box(-1, 14, -6, 0, 15, -4, GOAT)
+		body:box(-2, 16, -6, 1, 19, -2, GOAT)
+		body:box(-1, 16, -1, 0, 18, 0, GOAT_LIGHT)
+		body:paint(-1, 18, 0, 0, 18, 0, NOSE)
+		body:box(-1, 14, -1, 0, 15, -1, GOAT_DARK)
+		body:paintPair(1, 18, -3, 1, 18, -3, AMBER, NEON)
+		body:paintPair(1, 18, -3, 1, 18, -3, EYE)
+		body:boxPair(2, 18, -5, 3, 18, -4, GOAT)
+		body:boxPair(1, 20, -4, 1, 20, -3, HORN)
+		body:boxPair(2, 21, -6, 2, 21, -4, HORN)
+		body:boxPair(3, 21, -9, 3, 21, -7, HORN_DARK)
+		body:boxPair(3, 20, -10, 3, 20, -10, HORN_DARK)
+
+		-- The lion's head: a great shaggy mane, glowing eyes under a heavy brow, and jaws open on a mouthful of fire.
+		local head = pet:limb("Head", { 0, 11, 5 })
+		head:box(-5, 8, 3, 4, 16, 5, MANE)
+		head:box(-4, 7, 3, 3, 17, 5, MANE)
+		head:boxPair(5, 10, 3, 5, 14, 4, MANE_DARK)
+		head:box(-3, 18, 3, 2, 18, 4, MANE_DARK)
+		head:box(-2, 6, 3, 1, 6, 5, MANE_DARK)
+		head:boxPair(3, 18, 4, 4, 19, 4, LION)
+		head:paintPair(3, 18, 4, 3, 18, 4, NOSE)
+		head:box(-3, 9, 6, 2, 16, 9, LION)
+		head:box(-3, 15, 10, 2, 15, 10, LION_DARK)
+		head:box(-2, 11, 10, 1, 13, 12, LION_LIGHT)
+		head:box(-1, 12, 13, 0, 13, 13, NOSE)
+		head:box(-2, 7, 9, 1, 8, 9, LION)
+		head:box(-2, 7, 10, 1, 8, 12, LION_LIGHT)
+		head:paint(-2, 9, 9, 1, 10, 9, FIRE, NEON)
+		head:boxPair(1, 10, 12, 1, 10, 12, FANG)
+		head:boxPair(1, 9, 11, 1, 9, 11, FANG)
+		head:box(-1, 9, 13, 0, 10, 14, FIRE, NEON)
+		head:box(-1, 9, 15, 0, 9, 16, FLAME, NEON)
+		head:paintPair(1, 14, 9, 2, 14, 9, AMBER, NEON)
+		head:paintPair(1, 14, 9, 1, 14, 9, EYE)
+		head:paintPair(2, 12, 9, 2, 13, 9, LION_DARK)
+
+		-- Powerful lion legs on broad paws.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 7, 2 }, function(leg)
+			leg:box(2, 1, 1, 4, 6, 3, LION)
+			leg:box(2, 0, 1, 4, 0, 4, LION_LIGHT)
+			leg:paint(2, 0, 4, 4, 0, 4, LION_DARK)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 8, -8.5 }, function(leg)
+			leg:box(2, 4, -10, 4, 9, -7, LION)
+			leg:box(2, 1, -9, 3, 3, -8, LION)
+			leg:box(2, 0, -9, 4, 0, -7, LION_LIGHT)
+		end)
+
+		-- Its tail is a serpent, rearing up behind with its hood spread and its tongue flicking.
+		local tail = pet:limb("Tail", { 0, 10, -10 })
+		local snake = tube(tail, {
+			{ 0, 10, -10.5, 1.2 },
+			{ 0, 11, -13, 1.1 },
+			{ 0, 14, -15, 1 },
+			{ 0, 17, -15.5, 1 },
+			{ 0, 19, -14.5, 1 },
+		}, SNAKE)
+		for index, cube in snake.cubes do
+			if index % 3 == 2 then
+				tail:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], SNAKE_DARK)
+			end
+		end
+		tail:box(-3, 16, -16, 2, 21, -16, SNAKE)
+		tail:paint(-3, 16, -16, -3, 21, -16, SNAKE_DARK)
+		tail:paint(2, 16, -16, 2, 21, -16, SNAKE_DARK)
+		tail:box(-2, 18, -19, 1, 20, -17, SNAKE)
+		tail:box(-1, 18, -21, 0, 19, -20, SNAKE)
+		tail:paint(-2, 20, -19, 1, 20, -17, SNAKE_DARK)
+		tail:paintPair(1, 19, -18, 1, 19, -18, VENOM, NEON)
+		tail:boxPair(0, 17, -21, 0, 17, -21, FANG)
+		tail:box(-1, 18, -23, 0, 18, -22, TONGUE)
+		tail:boxPair(1, 18, -24, 1, 18, -24, TONGUE)
+
+		pet:light(FIRE, 2, 14)
+		pet:particles("Embers", FLAME, 8)
+		pet:seat(0, 13, 0)
+	end,
+}
+
+Designs.LavaGolem = {
+	name = "Lava Golem",
+	skeleton = "Biped",
+	gait = "Stomp",
+	scale = 0.55,
+	draw = function(pet)
+		local ROCK = rgb(74, 64, 62)
+		local ROCK_LIGHT = rgb(110, 98, 94)
+		local ROCK_DARK = rgb(52, 44, 44)
+		local LAVA = rgb(255, 112, 24)
+		local LAVA_HOT = rgb(255, 196, 40)
+
+		-- A body of heavy slabs of rock round a core of molten lava, which glows out through every crack between
+		-- them, hottest at its heart.
+		local body = pet:limb("Body", { 0, 9, 0 })
+		body:box(-4, 8, -2, 3, 16, 2, LAVA, NEON)
+		body:paint(-1, 13, 2, -1, 14, 2, LAVA_HOT, NEON)
+		body:box(0, 12, 3, 4, 16, 4, ROCK)
+		body:box(-5, 11, 3, -2, 15, 4, ROCK_LIGHT)
+		body:box(-4, 8, 3, 3, 10, 4, ROCK_DARK)
+		body:box(-5, 8, -4, -1, 13, -3, ROCK)
+		body:box(1, 9, -4, 4, 16, -3, ROCK_LIGHT)
+		body:box(-5, 15, -4, -1, 16, -3, ROCK_DARK)
+		body:box(4, 8, -2, 5, 11, 2, ROCK_DARK)
+		body:box(4, 13, -2, 5, 16, 2, ROCK)
+		body:box(-6, 8, -2, -5, 12, 2, ROCK)
+		body:box(-6, 14, -2, -5, 16, 2, ROCK_LIGHT)
+		body:box(-5, 17, -3, 4, 17, 3, ROCK_DARK)
+		body:box(-4, 7, -2, 3, 7, 2, ROCK_DARK)
+		body:paint(2, 14, 4, 2, 16, 4, LAVA, NEON)
+		body:paint(3, 13, 4, 3, 13, 4, LAVA, NEON)
+		body:paint(-4, 13, 4, -3, 13, 4, LAVA, NEON)
+		body:paint(5, 9, 2, 5, 10, 2, LAVA, NEON)
+		body:paint(-3, 10, 4, -3, 10, 4, LAVA, NEON)
+		body:paint(-5, 12, 3, -5, 13, 3, ROCK)
+		body:paint(1, 15, -4, 2, 16, -4, ROCK_DARK)
+		body:paint(-3, 11, -4, -3, 12, -4, LAVA, NEON)
+		-- A ridge of rocks down its back.
+		body:box(-1, 14, -5, 0, 17, -5, ROCK_DARK)
+		body:box(-1, 10, -5, 0, 12, -5, ROCK)
+		body:box(-1, 13, -5, 0, 13, -5, LAVA, NEON)
+
+		-- A small head sunk between the shoulders, with burning eyes and mouth, under a crown of molten spikes
+		-- that drips down its face.
+		local head = pet:limb("Head", { 0, 18, 0 })
+		head:box(-2, 18, -1, 1, 21, 2, ROCK)
+		head:box(-3, 21, 3, 2, 21, 3, ROCK_DARK)
+		head:paintPair(1, 20, 2, 1, 20, 2, LAVA_HOT, NEON)
+		head:paint(-1, 18, 2, 0, 18, 2, LAVA, NEON)
+		head:paintPair(1, 19, -1, 1, 21, -1, LAVA, NEON)
+		head:box(-2, 22, -1, 1, 22, 2, LAVA, NEON)
+		head:boxPair(1, 23, -1, 1, 24, -1, LAVA_HOT, NEON)
+		head:boxPair(1, 23, 2, 1, 23, 2, LAVA_HOT, NEON)
+		head:box(-1, 23, 2, 0, 25, 2, LAVA_HOT, NEON)
+		head:box(-1, 23, -1, 0, 23, -1, LAVA_HOT, NEON)
+
+		-- Huge boulder shoulders and long arms ending in fists that nearly drag on the ground, glowing at the joints.
+		pet:limbPair("LeftArm", "RightArm", { 6, 16, 0 }, function(arm)
+			arm:box(6, 14, -3, 10, 19, 3, ROCK_LIGHT)
+			arm:paint(6, 16, 3, 10, 16, 3, LAVA, NEON)
+			arm:paint(10, 15, -3, 10, 17, -3, LAVA, NEON)
+			arm:box(7, 20, -2, 9, 21, 1, ROCK)
+			arm:box(8, 22, -1, 8, 22, 0, ROCK_DARK)
+			arm:box(11, 15, -2, 11, 18, 1, ROCK_DARK)
+			arm:paint(7, 20, 1, 9, 20, 1, LAVA, NEON)
+			arm:paint(11, 16, 1, 11, 17, 1, LAVA, NEON)
+			arm:paint(6, 18, -3, 7, 19, -3, ROCK)
+			arm:box(11, 6, -1, 11, 7, 1, ROCK)
+			arm:paint(10, 6, 2, 10, 7, 2, LAVA, NEON)
+			arm:box(7, 10, -1, 9, 13, 1, ROCK)
+			arm:box(7, 9, -1, 9, 9, 1, LAVA, NEON)
+			arm:box(6, 5, -2, 10, 8, 2, ROCK_DARK)
+			arm:box(7, 4, -1, 9, 4, 1, LAVA, NEON)
+			arm:box(6, 1, -2, 10, 3, 3, ROCK)
+			arm:paint(6, 2, 3, 10, 2, 3, LAVA, NEON)
+			arm:paint(10, 1, 0, 10, 2, 0, LAVA, NEON)
+			arm:box(6, 2, 4, 7, 3, 4, ROCK_LIGHT)
+			arm:box(9, 2, 4, 10, 3, 4, ROCK_LIGHT)
+			arm:box(8, 3, 4, 8, 3, 4, ROCK_LIGHT)
+		end)
+
+		-- Short, massive legs on wide feet of rock.
+		pet:limbPair("LeftLeg", "RightLeg", { 2.5, 7, 0 }, function(leg)
+			leg:box(1, 3, -2, 4, 6, 2, ROCK)
+			leg:paint(1, 3, 2, 4, 3, 2, LAVA, NEON)
+			leg:box(0, 0, -2, 4, 2, 3, ROCK_DARK)
+			leg:paint(0, 0, 3, 4, 1, 3, ROCK)
+			leg:paint(2, 1, 3, 2, 1, 3, LAVA, NEON)
+			leg:box(1, 5, 3, 4, 6, 3, ROCK_LIGHT)
+			leg:paint(2, 5, 3, 3, 5, 3, LAVA, NEON)
+		end)
+
+		pet:light(LAVA, 2.2, 16)
+		pet:particles("Embers", LAVA_HOT, 10)
+		pet:seat(0, 18, -3)
+	end,
+}
+
+Designs.Cerberus = {
+	name = "Cerberus",
+	skeleton = "Quadruped",
+	gait = "Stomp",
+	scale = 0.45,
+	draw = function(pet)
+		local COAL = rgb(50, 44, 50)
+		local COAL_DARK = rgb(30, 26, 32)
+		local EMBER = rgb(255, 84, 28)
+		local FLAME = rgb(255, 146, 30)
+		local FLAME_HOT = rgb(255, 222, 80)
+		local COLLAR = rgb(186, 32, 42)
+		local STEEL = rgb(206, 206, 216)
+		local IRON = rgb(96, 96, 108)
+		local CLAW = rgb(232, 224, 208)
+		local MOUTH = rgb(92, 16, 26)
+		local TONGUE = rgb(208, 54, 74)
+		local FANG = rgb(250, 248, 236)
+
+		-- A huge black hound: deep in the chest, narrow at the waist, heavy in the haunches.
+		local profile = {
+			{ 6.5, 2.6, 3.2, 15.6 },
+			{ 4, 6, 6.6, 15.2 },
+			{ 0, 5.8, 6.2, 15 },
+			{ -5, 4.4, 4.9, 14.6 },
+			{ -9, 5.2, 5.6, 14.2 },
+			{ -12.5, 4.8, 5.1, 14.2 },
+			{ -15, 2.2, 2.6, 14.6 },
+		}
+		local function shape(z: number): (number, number, number)
+			if z >= profile[1][1] or z <= profile[#profile][1] then
+				return 0, 0, 0
+			end
+			for index = 1, #profile - 1 do
+				local a, b = profile[index], profile[index + 1]
+				if z <= a[1] and z >= b[1] then
+					local t = (a[1] - z) / (a[1] - b[1])
+					return a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t
+				end
+			end
+			return 0, 0, 0
+		end
+		local function inBody(x: number, y: number, z: number): boolean
+			local rx, ry, yc = shape(z + 0.5)
+			return rx > 0 and ((x + 0.5) / rx) ^ 2 + ((y + 0.5 - yc) / ry) ^ 2 <= 1
+		end
+		-- The outermost cell of its body on one side (or on top) at a height and a point along it.
+		local function side(y: number, z: number, direction: number): number
+			local x = if direction > 0 then 0 else -1
+			while inBody(x + direction, y, z) do
+				x += direction
+			end
+			return x
+		end
+		local function top(z: number): number
+			local y = 14
+			while inBody(0, y + 1, z) do
+				y += 1
+			end
+			return y
+		end
+
+		local body = pet:limb("Body", { 0, 14, -4 })
+		blob(body, { -7, 7, -16, 6, 23, 7 }, inBody, COAL)
+		-- Glowing cracks down its flanks, as if it were full of fire.
+		for _, crack in { { 12, 14, -1 }, { 14, 16, -3 }, { 11, 12, -7 }, { 13, 15, -8 }, { 15, 16, -2 } } do
+			for y = crack[1], crack[2] do
+				local x = side(y, crack[3], 1)
+				body:paintPair(x, y, crack[3], x, y, crack[3], if y == crack[2] then FLAME else EMBER, NEON)
+			end
+		end
+		-- A mane of fire licking up its spine and streaming back.
+		for _, z in { 3, 0, -9, -12 } do
+			local y = top(z)
+			body:box(-1, y + 1, z - 1, 0, y + 2, z, EMBER, NEON)
+			body:box(-1, y + 3, z - 2, 0, y + 4, z - 2, FLAME, NEON)
+			body:box(-1, y + 5, z - 3, -1, y + 6, z - 3, FLAME_HOT, NEON)
+			body:boxPair(1, y + 1, z - 2, 1, y + 2, z - 2, FLAME, NEON)
+			body:boxPair(1, y + 3, z - 3, 1, y + 3, z - 3, FLAME_HOT, NEON)
+		end
+
+		-- Three heads on three thick necks, each in a studded red collar: the middle one biggest and highest. Each
+		-- snarls with its jaws open on a glowing throat, fangs bared, eyes burning under a heavy brow, ears up.
+		local head = pet:limb("Head", { 0, 18, 4 })
+		local function hound(limb, ox: number, oy: number, oz: number, w: number)
+			local function box(x0, y0, z0, x1, y1, z1, ...)
+				limb:box(x0 + ox, y0 + oy, z0 + oz, x1 + ox, y1 + oy, z1 + oz, ...)
+			end
+			local function paint(x0, y0, z0, x1, y1, z1, ...)
+				limb:paint(x0 + ox, y0 + oy, z0 + oz, x1 + ox, y1 + oy, z1 + oz, ...)
+			end
+			local function both(fn, x0, y0, z0, x1, y1, z1, ...)
+				fn(x0, y0, z0, x1, y1, z1, ...)
+				fn(-1 - x0, y0, z0, -1 - x1, y1, z1, ...)
+			end
+			local front = 9 + w - 3
+			box(-w, 3, 0, w - 1, 8, 5, COAL)
+			box(-w + 1, 9, 0, w - 2, 9, 4, COAL)
+			box(-w, 0, 2, w - 1, 2, 4, COAL)
+			box(-w + 1, 4, 6, w - 2, 6, front, COAL)
+			box(-1, 5, front + 1, 0, 6, front + 1, COAL_DARK)
+			box(-w + 1, 0, 5, w - 2, 1, front - 1, COAL)
+			both(box, w, 4, 2, w, 5, 3, COAL)
+			-- Inside the mouth: a glowing throat, fangs top and bottom, and a tongue lolling out over the jaw.
+			paint(-w + 2, 4, 6, w - 3, 4, front, MOUTH)
+			paint(-w + 2, 1, 5, w - 3, 1, front - 1, MOUTH)
+			paint(-w + 1, 2, 4, w - 2, 2, 4, EMBER, NEON)
+			paint(-w + 1, 3, 5, w - 2, 3, 5, MOUTH)
+			box(-1, 2, 5, 0, 2, front - 1, TONGUE)
+			box(-1, 0, front, 0, 1, front, TONGUE)
+			both(box, w - 2, 3, front, w - 2, 3, front, FANG)
+			both(box, w - 2, 3, front - 2, w - 2, 3, front - 2, FANG)
+			both(box, w - 2, 2, front - 1, w - 2, 2, front - 1, FANG)
+			both(box, w - 2, 2, front - 3, w - 2, 2, front - 3, FANG)
+			-- Burning eyes under a scowling brow, and snarl lines on the muzzle.
+			paint(-w + 2, 6, 7, w - 3, 6, 7, COAL_DARK)
+			both(paint, 1, 7, 5, w - 1, 7, 5, EMBER, NEON)
+			both(paint, w - 1, 7, 4, w - 1, 7, 4, EMBER, NEON)
+			both(paint, 2, 7, 5, 2, 7, 5, FLAME_HOT, NEON)
+			both(box, 1, 8, 6, 2, 8, 6, COAL_DARK)
+			both(box, w - 1, 9, 5, w - 1, 9, 6, COAL_DARK)
+			-- Tall pointed ears, glowing inside, and a crest of fire between them.
+			both(box, w - 2, 10, 0, w - 1, 11, 1, COAL)
+			both(box, w - 1, 12, 0, w - 1, 12, 0, COAL)
+			both(paint, w - 2, 10, 1, w - 2, 11, 1, EMBER, NEON)
+			box(-1, 10, 0, 0, 11, 1, EMBER, NEON)
+			box(-1, 12, -1, 0, 13, -1, FLAME, NEON)
+			box(-1, 14, -2, -1, 14, -2, FLAME_HOT, NEON)
+		end
+		hound(head, 0, 21, 8, 4)
+		hound(head, 8, 18, 5, 3)
+		hound(mirrored(head), 8, 18, 5, 3)
+		local necks = {
+			tube(head, { { 0, 16, 2, 2.6 }, { 0, 19.5, 5.5, 2.6 }, { 0, 22, 8.5, 2.5 } }, COAL, { even = true }),
+			tube(head, { { 3, 15.5, 2, 2.2 }, { 6, 17.5, 4.5, 2.1 }, { 8, 19.5, 6.5, 2 } }, COAL),
+			tube(head, { { -3, 15.5, 2, 2.2 }, { -6, 17.5, 4.5, 2.1 }, { -8, 19.5, 6.5, 2 } }, COAL),
+		}
+		for _, neck in necks do
+			local band = neck.cubes[math.max(1, #neck.cubes - 3)]
+			head:paint(band[1], band[2], band[3], band[4], band[5], band[6], COLLAR)
+			for _, direction in { { 0, 1, 0 }, { 1, 0, 0 }, { -1, 0, 0 } } do
+				local s = surfaceCell(neck, band, direction)
+				if s then
+					local spike = { s[1] + direction[1], s[2] + direction[2], s[3] + direction[3] }
+					head:box(spike[1], spike[2], spike[3], spike[1], spike[2], spike[3], STEEL)
+				end
+			end
+		end
+
+		-- Massive legs on clawed paws, flames licking up from the paws. A shackle still hangs from one foreleg,
+		-- its chain snapped.
+		local function paw(leg, x0: number, z0: number)
+			leg:box(x0, 0, z0, x0 + 4, 1, z0 + 4, COAL)
+			for _, toe in { 0, 2, 4 } do
+				leg:box(x0 + toe, 0, z0 + 5, x0 + toe, 1, z0 + 5, COAL)
+				leg:box(x0 + toe, 0, z0 + 6, x0 + toe, 0, z0 + 6, CLAW)
+			end
+		end
+		local function flames(leg, x: number, y0: number, z0: number)
+			leg:paint(x, y0, z0, x, y0 + 2, z0, EMBER, NEON)
+			leg:paint(x, y0, z0 + 1, x, y0 + 3, z0 + 1, FLAME, NEON)
+			leg:paint(x, y0, z0 + 2, x, y0 + 1, z0 + 2, EMBER, NEON)
+			leg:paint(x, y0 + 4, z0 + 1, x, y0 + 4, z0 + 1, FLAME_HOT, NEON)
+		end
+		local function foreleg(leg)
+			leg:box(3, 6, 0, 6, 11, 4, COAL)
+			leg:box(3, 2, 1, 5, 5, 3, COAL)
+			paw(leg, 2, 0)
+			flames(leg, 5, 2, 1)
+		end
+		local frontLeft = pet:limb("FrontLeftLeg", { 4.5, 11, 2 })
+		foreleg(frontLeft)
+		frontLeft:box(2, 3, 0, 6, 3, 4, IRON)
+		frontLeft:box(7, 2, 1, 7, 3, 2, IRON)
+		frontLeft:box(8, 1, 2, 8, 1, 3, IRON)
+		frontLeft:box(8, 0, 4, 9, 0, 4, IRON)
+		foreleg(mirrored(pet:limb("FrontRightLeg", { -4.5, 11, 2 })))
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 4.5, 13, -10 }, function(leg)
+			leg:box(3, 8, -13, 7, 14, -8, COAL)
+			leg:box(4, 4, -13, 6, 7, -11, COAL)
+			leg:box(4, 2, -12, 5, 3, -11, COAL)
+			paw(leg, 3, -12)
+			flames(leg, 6, 3, -13)
+		end)
+
+		-- A thick tail that turns to fire towards its tip.
+		local tail = pet:limb("Tail", { 0, 17, -14 })
+		local t = tube(tail, {
+			{ 0, 16.5, -14, 1.5 },
+			{ 0, 18.5, -17, 1.3 },
+			{ 0, 21.5, -19, 1.1 },
+			{ 0, 25, -19.5, 0.9 },
+			{ 0, 27.5, -18.5, 0.7 },
+		}, COAL)
+		local count = #t.cubes
+		for index, cube in t.cubes do
+			local f = index / count
+			local color = if f > 0.9 then FLAME_HOT elseif f > 0.75 then FLAME elseif f > 0.55 then EMBER else nil
+			if color then
+				tail:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], color, NEON)
+			end
+		end
+		local tip = t.cubes[count]
+		tail:box(tip[1], tip[5] + 1, tip[3], tip[4], tip[5] + 2, tip[6], FLAME_HOT, NEON)
+		tail:box(tip[1], tip[5] + 3, tip[3] - 1, tip[1], tip[5] + 3, tip[3] - 1, FLAME_HOT, NEON)
+
+		pet:light(FLAME, 3, 22)
+		pet:particles("Embers", FLAME_HOT, 16)
+		pet:seat(0, 21, -3)
+	end,
+}
+
+Designs.EternalPhoenix = {
+	name = "Eternal Phoenix",
+	skeleton = "Winged",
+	gait = "Walk",
+	hover = 2,
+	scale = 0.45,
+	draw = function(pet)
+		local CRIMSON = rgb(198, 30, 34)
+		local CRIMSON_DARK = rgb(140, 18, 28)
+		local FLAME = rgb(242, 82, 28)
+		local ORANGE = rgb(255, 142, 32)
+		local GOLD = rgb(255, 202, 52)
+		local PALE_GOLD = rgb(255, 236, 140)
+		local ETERNAL = rgb(150, 255, 245)
+		local ETERNAL_DEEP = rgb(70, 210, 236)
+		local BEAK = rgb(255, 214, 90)
+		local TALON = rgb(70, 40, 40)
+
+		-- An upright body of crimson feathers over a golden breast.
+		local function inBody(x: number, y: number, z: number): boolean
+			return ((x + 0.5) / 4.6) ^ 2 + ((y + 0.5 - 12) / 6.5) ^ 2 + ((z + 0.5 - 0.6 * (y + 0.5 - 12) / 6.5) / 4.4) ^ 2
+				<= 1
+		end
+		local function breast(y: number, z: number): boolean
+			return z >= 2 and y >= 7 and y <= 15
+		end
+		local body = pet:limb("Body", { 0, 12, 0 })
+		blob(body, { -5, 5, -6, 4, 19, 6 }, function(x, y, z)
+			return inBody(x, y, z) and not breast(y, z)
+		end, CRIMSON)
+		blob(body, { -5, 5, -6, 4, 19, 6 }, function(x, y, z)
+			return inBody(x, y, z) and breast(y, z)
+		end, GOLD)
+		-- Rows of feathers down the breast, and flame-tipped feathers over the back.
+		for y = 8, 14, 2 do
+			local z = 2
+			while inBody(-1, y, z + 1) do
+				z += 1
+			end
+			body:paint(-1, y, z, 0, y, z, PALE_GOLD)
+		end
+		for _, spot in { { 16, -3 }, { 14, -4 }, { 12, -4 }, { 10, -4 } } do
+			local z = 0
+			while inBody(1, spot[1], z - 1) do
+				z -= 1
+			end
+			body:paintPair(1, spot[1], z, 2, spot[1], z, if spot[1] % 4 == 0 then ORANGE else FLAME)
+		end
+
+		-- A fierce head with a hooked golden beak, eyes burning eternal blue, flame plumes sweeping back from
+		-- its cheeks, and a great crest fanning up behind, each plume tipped with eternal fire.
+		local head = pet:limb("Head", { 0, 18, 1 })
+		head:box(-3, 18, -2, 2, 22, 3, CRIMSON)
+		head:box(-2, 23, -1, 1, 23, 2, CRIMSON)
+		head:box(-2, 17, -1, 1, 17, 2, CRIMSON)
+		head:box(-1, 19, 4, 0, 21, 5, BEAK)
+		head:box(-1, 18, 6, 0, 20, 6, BEAK)
+		head:box(-1, 17, 6, 0, 17, 6, ORANGE)
+		head:paint(-1, 21, 4, 0, 21, 5, PALE_GOLD)
+		head:paintPair(2, 20, 2, 2, 20, 3, ETERNAL, NEON)
+		head:paintPair(2, 20, 3, 2, 20, 3, SHINE)
+		head:boxPair(2, 21, 2, 3, 21, 4, CRIMSON_DARK)
+		head:paintPair(2, 19, 0, 2, 19, 1, GOLD)
+		for _, plume in { { 3, 20, 0, 5, 21, -2 }, { 3, 19, 1, 5, 19, 0 } } do
+			local feather = line({ plume[1], plume[2], plume[3] }, { plume[4], plume[5], plume[6] })
+			cells(head, feather, ORANGE, false, NEON)
+			cells(mirrored(head), feather, ORANGE, false, NEON)
+		end
+		for _, feather in { { -3, 3, 0.5 }, { -1, 5, 0.5 }, { 1, 5.5, 0 }, { 3, 5, 0.5 }, { 5, 3, 0.5 } } do
+			local x = feather[1] / 1.6
+			local quill = tube(head, {
+				{ 0, 24.5, 0.5, 0.5 },
+				{ x * 0.6, 26, -0.5 + feather[3], 0.5 },
+				{ x, 27 + feather[2] * 0.5, -2.5 + feather[3], 0.5 },
+				{ x * 1.15, 28 + feather[2] * 0.6, -4, 0.5 },
+			}, FLAME, { material = NEON })
+			local tip = quill.cubes[#quill.cubes]
+			head:box(tip[1], tip[2] + 1, tip[3], tip[1], tip[2] + 2, tip[3], GOLD, NEON)
+			head:box(tip[1], tip[2] + 3, tip[3], tip[1], tip[2] + 3, tip[3], ETERNAL, NEON)
+		end
+
+		-- Great wings raised and spread, layered like flames: crimson at the root, then flame, gold, and tips
+		-- burning eternal blue. Each feather hangs from the wing's leading edge, longest at the tip.
+		pet:limbPair("LeftWing", "RightWing", { 4, 16, -1 }, function(wing)
+			tube(
+				wing,
+				{ { 3.5, 16, -1.5, 1.4 }, { 12, 25.5, -2, 1.2 }, { 17, 27, -2.5, 1 }, { 22, 28, -3, 0.7 } },
+				CRIMSON
+			)
+			local bands = { { CRIMSON, 0.3 }, { FLAME, 0.22 }, { ORANGE, 0.2 }, { GOLD, 0.18 }, { ETERNAL, 0.1 } }
+			for x = 5, 21, 2 do
+				-- Short feathers near the body, long ones at the tip, every other one longer and set further back.
+				local topY = if x <= 12 then math.floor(16 + (x - 4) * 1.1) else math.floor(25 + (x - 12) * 0.3)
+				local f = (x - 5) / 16
+				local stagger = (x // 2) % 2
+				local length = math.floor(6 + 9 * f * f) + 2 * stagger
+				local z = -3 + stagger
+				local y = topY
+				for index, band in bands do
+					local size = if index == #bands
+						then math.max(1, y - (topY - length))
+						else math.max(1, math.round(length * band[2]))
+					wing:box(x, y - size + 1, z - 1, x + 1, y, z, band[1], if band[1] == CRIMSON then nil else NEON)
+					y -= size
+					if y <= topY - length then
+						break
+					end
+				end
+			end
+		end)
+
+		-- Golden legs with dark talons.
+		pet:limbPair("LeftLeg", "RightLeg", { 2, 6, 1 }, function(leg)
+			leg:box(1, 5, 0, 3, 7, 2, CRIMSON_DARK)
+			leg:box(2, 2, 1, 2, 4, 1, GOLD)
+			leg:box(1, 0, 0, 3, 1, 2, GOLD)
+			leg:box(1, 0, 3, 1, 0, 3, TALON)
+			leg:box(3, 0, 3, 3, 0, 3, TALON)
+			leg:box(2, 0, -1, 2, 0, -1, TALON)
+		end)
+
+		-- A long train of tail plumes sweeping back and curling up at their ends, crimson to gold, each ending in
+		-- an eye of eternal fire.
+		local tail = pet:limb("Tail", { 0, 8, -4 })
+		for _, plume in { { 0, 1.2 }, { 2.5, 0.9 }, { -2.5, 0.9 }, { 5, 0.6 }, { -5, 0.6 } } do
+			local x, reach = plume[1], plume[2]
+			local points = andThen(
+				{
+					{ x * 0.2, 8, -4, 1 },
+					{ x * 0.5, 6, -9, 0.9 },
+					{ x * 0.8, 3.5, -14 - 2 * reach, 0.75 },
+					{ x, 2, -18 - 3 * reach, 0.6 },
+				},
+				curl({
+					centre = { x, 4.5, -18 - 3 * reach },
+					plane = { 3, 2 },
+					from = -math.pi / 2,
+					turns = -0.75,
+					radius = { 2.5, 1.2 },
+					width = { 0.6, 0.5 },
+				})
+			)
+			-- Crimson near the body, then flame, then gold, all the plumes changing colour at the same distance back.
+			tube(tail, points, CRIMSON, {
+				shade = function(cube, index, count)
+					if index >= count - 1 then
+						return (if index == count then ETERNAL else ETERNAL_DEEP), NEON
+					elseif cube[3] > -9 then
+						return CRIMSON, nil
+					elseif cube[3] > -15 then
+						return FLAME, NEON
+					end
+					return GOLD, NEON
+				end,
+			})
+		end
+
+		pet:light(ETERNAL, 3, 24)
+		pet:particles("Embers", GOLD, 16)
+		pet:seat(0, 17, -4)
 	end,
 }
 
