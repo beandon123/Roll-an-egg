@@ -88,6 +88,16 @@ return function(harness)
 			end)
 		end)
 
+		it("has no differently coloured blocks sharing a face, which would flicker", function()
+			each(function(model)
+				expect.equal(
+					model.flicker,
+					0,
+					model.name .. " flickering faces: " .. table.concat(model.flickerAt, "; ")
+				)
+			end)
+		end)
+
 		it("stands on the ground, within its part budget", function()
 			each(function(model)
 				local count, lowest = 0, math.huge

@@ -62,6 +62,10 @@ export type Model = {
 	particles: Particles?,
 	-- Blocks not joined to the rest of the pet, which would float in the air. Should always be 0.
 	loose: number,
+	-- Pairs of differently coloured blocks with faces in the same place, which flicker in Roblox. Should be 0.
+	flicker: number,
+	-- Where the first few of those are, to help fix them.
+	flickerAt: { string },
 }
 
 local PetModels = {}
@@ -318,6 +322,53 @@ local function joined(a: Range, b: Range): boolean
 	return touching <= 2
 end
 
+-- Pairs of solid blocks of different looks whose faces lie on the same plane, facing the same way, and overlap.
+-- Roblox cannot tell which to draw in front, so they flicker. Paint never counts: it always sits on top.
+local function countFlicker(pet: PetBuilder): (number, { string })
+	local solids: { { range: Range, look: string, limb: string } } = {}
+	for _, limb in pet.limbs do
+		for index, range in limb.ranges do
+			local box = limb.boxes[index]
+			if box.sx == range[4] - range[1] + 1 then
+				local look = `{box.color[1]},{box.color[2]},{box.color[3]},{box.material},{box.transparency}`
+				table.insert(solids, { range = range, look = look, limb = limb.name })
+			end
+		end
+	end
+	local count = 0
+	local where = {}
+	for i = 1, #solids do
+		for j = i + 1, #solids do
+			local a, b = solids[i], solids[j]
+			if a.look == b.look then
+				continue
+			end
+			local clash = false
+			for axis = 1, 3 do
+				local other1, other2 = axis % 3 + 1, (axis + 1) % 3 + 1
+				local function overlaps(o: number): boolean
+					return math.max(a.range[o], b.range[o]) < math.min(a.range[o + 3], b.range[o + 3]) + 1
+				end
+				if overlaps(other1) and overlaps(other2) then
+					if a.range[axis] == b.range[axis] or a.range[axis + 3] == b.range[axis + 3] then
+						clash = true
+					end
+				end
+			end
+			if clash then
+				count += 1
+				if #where < 5 then
+					table.insert(
+						where,
+						`{a.limb} {table.concat(a.range, ",")} and {b.limb} {table.concat(b.range, ",")}`
+					)
+				end
+			end
+		end
+	end
+	return count, where
+end
+
 -- Blocks not joined, through other blocks, to the first block of the Body.
 local function countLoose(pet: PetBuilder): number
 	local all: { Range } = {}
@@ -425,7 +476,10 @@ function PetModels.get(kind: string): Model?
 		light = pet.lightInfo,
 		particles = pet.particleInfo,
 		loose = countLoose(pet),
+		flicker = 0,
+		flickerAt = {},
 	}
+	model.flicker, model.flickerAt = countFlicker(pet)
 	cache[kind] = model
 	return model
 end

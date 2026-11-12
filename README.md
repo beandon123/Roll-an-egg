@@ -136,7 +136,8 @@ There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
   stamina, bounces, closures), and that every egg and pet model exists, is unique, has nothing floating loose, and
-  stays within its part budget (and that each pet has the limbs its skeleton needs).
+  stays within its part budget. Pets are also checked for the limbs their skeleton needs, and for differently coloured
+  blocks sharing a face (which flicker in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
 
