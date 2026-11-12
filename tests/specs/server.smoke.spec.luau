@@ -264,15 +264,18 @@ return function(harness)
 			session:heartbeat(1 / 60)
 			local egg = mount(session, player, root, 1, "Common")
 
+			-- Eggs spawn at a random side-to-side spot, possibly right by an edge, so steer towards the middle;
+			-- steering outwards could be clamped to the edge of the runway.
+			local toward = if egg.lateral > 0 then -1 else 1
 			session:heartbeat(0.5)
-			session:fromClient("RideLateral", player, egg.lateral + 4)
+			session:fromClient("RideLateral", player, egg.lateral + 4 * toward)
 			local relayed = session:lastSent("EggLateral", "all")
 			expect.truthy(relayed, "EggLateral")
 			expect.equal(relayed.args[1], egg.id)
-			expect.near(relayed.args[2], egg.lateral + 4, 1e-6)
+			expect.near(relayed.args[2], egg.lateral + 4 * toward, 1e-6)
 
 			-- Reports arriving faster than 30 a second are dropped.
-			session:fromClient("RideLateral", player, egg.lateral + 5)
+			session:fromClient("RideLateral", player, egg.lateral + 5 * toward)
 			expect.equal(#session:sent("EggLateral", "all"), 1)
 		end)
 
