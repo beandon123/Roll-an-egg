@@ -882,6 +882,8 @@ Designs.Mammoth = {
 			{ { -3, 7, 6 }, { -3, 6, 7 }, { -4, 6, 8 }, { -5, 7, 8 }, { -5, 8, 8 }, { -5, 9, 7 }, { -6, 10, 7 } }
 		pairCells(egg, tusk, SNOW.ivory)
 		pairCells(egg, { { -2, 7, 6 }, { -3, 7, 7 }, { -4, 7, 8 } }, SNOW.ivory)
+		egg:light(SNOW.glow, 1.6, 12)
+		egg:particles("Snow", SNOW.snow, 8)
 	end,
 }
 
@@ -1085,8 +1087,6 @@ Designs.FrostWolf = {
 			".WW",
 		}, -4, 20, { -1, 0 }, { W = { SNOW.wolf } }, true)
 		pairCells(egg, { { -3, 17, 1 }, { -3, 18, 1 } }, SNOW.snow)
-		egg:light(SNOW.glow, 1.6, 12)
-		egg:particles("Snow", SNOW.snow, 8)
 	end,
 }
 

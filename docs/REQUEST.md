@@ -166,8 +166,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
                 Legendary: Moss Stag | Mythic: Treant
     2 Desert:   Common: Meerkat | Uncommon: Armadillo, Fennec Fox | Rare: Camel | Epic: Giant Scorpion
                 Legendary: Pharaoh Jackal | Mythic: Sphinx, Golden Scarab
-    3 Snow:     Uncommon: Snow Hare, Arctic Fox | Rare: Reindeer | Epic: Woolly Mammoth | Legendary: Sabertooth Cat
-                Mythic: Aurora Owl, Frost Wolf | Secret: Yeti
+    3 Snow:     Uncommon: Snow Hare, Arctic Fox | Rare: Reindeer | Epic: Frost Wolf | Legendary: Sabertooth Cat
+                Mythic: Aurora Owl, Woolly Mammoth | Secret: Yeti
     4 Ocean:    Rare: Sea Turtle, Dolphin | Epic: Manta Ray, King Crab | Legendary: Narwhal | Mythic: Hippocampus
                 Secret: Kraken, Leviathan
     5 Volcano:  Rare: Obsidian Goat | Epic: Cinder Boar | Legendary: Volcano Tortoise, Fire Salamander
@@ -256,7 +256,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
         - [ ] Pets are built in the same blocky style as the eggs, from parts in code (decided), rigged with a
-              Motor6D per limb; Forest and Desert pets done, the other zones next
+              Motor6D per limb; Forest, Desert and Snow pets done, Ocean and Volcano next
+        - [ ] Secret and Eternal pets are exceptionally detailed, well beyond every other pet (decided)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow

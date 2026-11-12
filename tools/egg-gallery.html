@@ -675,12 +675,12 @@
     if (subject.light) {
       halo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: GLOW, color: new THREE.Color(subject.light.color), transparent: true,
-        opacity: 0.22 + subject.light.brightness * 0.05, depthWrite: false, blending: THREE.AdditiveBlending,
+        opacity: 0.14 + subject.light.brightness * 0.03, depthWrite: false, blending: THREE.AdditiveBlending,
       }));
       halo.scale.setScalar(34);
-      halo.position.set(0, middleY, -2);
+      halo.position.set(0, middleY, box.min.z - 2);
       root.add(halo);
-      const light = new THREE.PointLight(new THREE.Color(subject.light.color), subject.light.brightness * 0.5, 40);
+      const light = new THREE.PointLight(new THREE.Color(subject.light.color), subject.light.brightness * 0.25, 30);
       light.position.set(0, middleY, 8);
       root.add(light);
     }

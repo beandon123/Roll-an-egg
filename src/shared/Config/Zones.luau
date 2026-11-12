@@ -75,10 +75,10 @@ local list: { ZoneInfo } = {
 			{ egg = "Snowball", rarity = "Uncommon", pet = "SnowHare" },
 			{ egg = "Snowcap", rarity = "Uncommon", pet = "ArcticFox" },
 			{ egg = "Knitted", rarity = "Rare", pet = "Reindeer" },
-			{ egg = "Mammoth", rarity = "Epic", pet = "WoollyMammoth" },
+			{ egg = "FrostWolf", rarity = "Epic", pet = "FrostWolf" },
 			{ egg = "Sabertooth", rarity = "Legendary", pet = "SabertoothCat" },
 			{ egg = "AuroraOwl", rarity = "Mythic", pet = "AuroraOwl" },
-			{ egg = "FrostWolf", rarity = "Mythic", pet = "FrostWolf" },
+			{ egg = "Mammoth", rarity = "Mythic", pet = "WoollyMammoth" },
 			{ egg = "Yeti", rarity = "Secret", pet = "Yeti" },
 		},
 		stamina = {
