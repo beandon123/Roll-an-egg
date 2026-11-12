@@ -16,13 +16,13 @@ return function(harness)
 		{ "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" },
 		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
-		{ "SeaTurtle", "Dolphin", "MantaRay", "KingCrab", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
+		{ "SeaTurtle", "Dolphin", "MantaRay", "GreatShark", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local BUDGET = 120
 	-- Secret and Eternal pets are the showpieces: far more detailed than the rest, so they get a bigger budget,
 	-- and must have at least this many blocks and this much more than any other pet in the game.
-	local SHOWPIECE_BUDGET = 260
+	local SHOWPIECE_BUDGET = 500
 	local SHOWPIECE_MINIMUM = 150
 	local SHOWPIECE_LEAD = 1.3
 

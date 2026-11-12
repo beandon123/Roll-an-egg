@@ -168,13 +168,14 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
                 Legendary: Pharaoh Jackal | Mythic: Sphinx, Golden Scarab
     3 Snow:     Uncommon: Snow Hare, Arctic Fox | Rare: Reindeer | Epic: Frost Wolf | Legendary: Sabertooth Cat
                 Mythic: Aurora Owl, Woolly Mammoth | Secret: Yeti
-    4 Ocean:    Rare: Sea Turtle, Dolphin | Epic: Manta Ray, King Crab | Legendary: Narwhal | Mythic: Hippocampus
+    4 Ocean:    Rare: Sea Turtle, Dolphin | Epic: Manta Ray, Great Shark | Legendary: Narwhal | Mythic: Hippocampus
                 Secret: Kraken, Leviathan
     5 Volcano:  Rare: Obsidian Goat | Epic: Cinder Boar | Legendary: Volcano Tortoise, Fire Salamander
                 Mythic: Chimera, Lava Golem | Secret: Cerberus | Eternal: Eternal Phoenix
 
     Shelved for now (designed, out of the game): Frost Dragon and Magma Dragon (decided), plus the Hermit Crab,
-    Fire Salamander (old Common egg), and Magma Toad eggs, whose rarities those zones no longer drop.
+    Fire Salamander (old Common egg), and Magma Toad eggs, whose rarities those zones no longer drop, and the
+    King Crab egg (replaced by the Great Shark).
 
 ### Plot & Pen
 - [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided

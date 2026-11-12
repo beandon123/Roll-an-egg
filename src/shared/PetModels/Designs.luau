@@ -7,6 +7,8 @@
 -- Pets have big heads and small bodies, like the eggs they come from, and are themed to match their egg.
 -- So far: the Forest, Desert, Snow and Ocean pets. The Volcano pets come next.
 -- Secret and Eternal pets are the showpieces, far more detailed than the rest (the tests check this).
+-- Curved parts use the helpers below: `tube` (tentacles, coils, horns), `curl` (a spiral to end a tube on), and
+-- `blob` (rounded bodies, filled from a shape function).
 
 type Color = { number }
 type Pet = any
@@ -29,6 +31,7 @@ local function rgb(r: number, g: number, b: number): Color
 end
 
 local NEON = "Neon"
+local GLASS = "Glass"
 local EYE = rgb(26, 22, 26)
 local SHINE = rgb(255, 255, 255)
 
@@ -51,6 +54,411 @@ local function mirrored(limb: Limb): Limb
 			limb:paint(-1 - x0, y0, z0, -1 - x1, y1, z1, ...)
 		end,
 	}
+end
+
+-- Whether two blocks overlap or share part of a face.
+local function touching(a: { number }, b: { number }): boolean
+	local faces = 0
+	for k = 1, 3 do
+		local low, high = math.max(a[k], b[k]), math.min(a[k + 3], b[k + 3]) + 1
+		if high < low then
+			return false
+		elseif high == low then
+			faces += 1
+		end
+	end
+	return faces <= 1
+end
+
+-- A block one step from `cube` towards `previous`, along the axis they are furthest apart on.
+local function between(previous: { number }, cube: { number }): { number }
+	local axis, most = 1, 0
+	for k = 1, 3 do
+		local d = (previous[k] + previous[k + 3]) - (cube[k] + cube[k + 3])
+		if math.abs(d) > math.abs(most) then
+			axis, most = k, d
+		end
+	end
+	local moved = table.clone(cube)
+	local sign = if most > 0 then 1 else -1
+	moved[axis] += sign
+	moved[axis + 3] += sign
+	return moved
+end
+
+-- The cells along a path through points { x, y, z, radius } (centres in voxels; halves are fine): one cube per
+-- step, { x0, y0, z0, x1, y1, z1 } with cells inclusive, as wide as twice the radius there. With `even`, widths
+-- stay even, so a path down the middle of the pet (x = 0) stays symmetric.
+local function path(points: { { number } }, even: boolean?): { { number } }
+	local cubes: { { number } } = {}
+	for index = 1, #points - 1 do
+		local a, b = points[index], points[index + 1]
+		local steps = math.max(1, math.ceil(math.abs(b[1] - a[1]) + math.abs(b[2] - a[2]) + math.abs(b[3] - a[3])))
+		local last = if index == #points - 1 then steps else steps - 1
+		for step = 0, last do
+			local t = step / steps
+			local radius = a[4] + (b[4] - a[4]) * t
+			local size = if even then math.max(2, math.round(radius) * 2) else math.max(1, math.round(radius * 2))
+			local cube = {}
+			for axis = 1, 3 do
+				local centre = a[axis] + (b[axis] - a[axis]) * t
+				cube[axis] = math.round(centre - size / 2)
+				cube[axis + 3] = cube[axis] + size - 1
+			end
+			local previous = cubes[#cubes]
+			if previous == nil then
+				table.insert(cubes, cube)
+				continue
+			end
+			local same = true
+			for k = 1, 6 do
+				same = same and previous[k] == cube[k]
+			end
+			if not same then
+				-- Where a step jumps across a corner, put blocks in between so the path stays joined face to face.
+				local chain = { cube }
+				while not touching(previous, chain[1]) and #chain < 8 do
+					table.insert(chain, 1, between(previous, chain[1]))
+				end
+				for _, link in chain do
+					table.insert(cubes, link)
+				end
+			end
+		end
+	end
+	return cubes
+end
+
+-- The cells on a straight line from one cell to another, each touching the one before.
+local function line(from: { number }, to: { number }): { { number } }
+	local list = {}
+	for _, cube in path({
+		{ from[1] + 0.5, from[2] + 0.5, from[3] + 0.5, 0.5 },
+		{ to[1] + 0.5, to[2] + 0.5, to[3] + 0.5, 0.5 },
+	}) do
+		table.insert(list, { cube[1], cube[2], cube[3] })
+	end
+	return list
+end
+
+-- Draws single cells (or, with `paint`, paints them), joining cells that follow on in a straight line into one block.
+local function cells(
+	limb: Limb,
+	list: { { number } },
+	color: Color,
+	paint: boolean?,
+	material: string?,
+	transparency: number?
+)
+	local runs = {}
+	for _, cell in list do
+		local run = runs[#runs]
+		local joined = false
+		if run then
+			local axis, sign, moved = 0, 0, 0
+			for k = 1, 3 do
+				local d = cell[k] - run.last[k]
+				if d ~= 0 then
+					axis, sign, moved = k, d, moved + 1
+				end
+			end
+			if moved == 0 then
+				joined = true
+			elseif
+				moved == 1
+				and math.abs(sign) == 1
+				and (run.axis == nil or (run.axis == axis and run.sign == sign))
+			then
+				run.axis, run.sign, run.last = axis, sign, cell
+				run.box[axis] = math.min(run.box[axis], cell[axis])
+				run.box[axis + 3] = math.max(run.box[axis + 3], cell[axis])
+				joined = true
+			end
+		end
+		if not joined then
+			table.insert(runs, { box = { cell[1], cell[2], cell[3], cell[1], cell[2], cell[3] }, last = cell })
+		end
+	end
+	for _, run in runs do
+		local b = run.box
+		if paint then
+			limb:paint(b[1], b[2], b[3], b[4], b[5], b[6], color, material)
+		else
+			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], color, material, transparency)
+		end
+	end
+end
+
+export type Tube = {
+	-- Every block along the tube, in order: { x0, y0, z0, x1, y1, z1, axis }, with cells inclusive and `axis` (1 to
+	-- 3 for x, y, z) the way the tube runs there. Blocks 4 or more wide have their edges along `axis` trimmed off,
+	-- which rounds the tube.
+	cubes: { { number } },
+	-- Whether a cell is inside the tube.
+	inside: (x: number, y: number, z: number) -> boolean,
+}
+
+export type TubeOptions = { material: string?, transparency: number?, even: boolean? }
+
+local ROUNDED = 4
+
+-- Draws a rounded tube through points { x, y, z, radius } (see `path`), tapering as the radius changes: tentacles,
+-- serpent bodies, horns. Blocks are merged where the tube runs straight. Returns the tube, so details can be added
+-- along it.
+local function tube(limb: Limb, points: { { number } }, color: Color, options: TubeOptions?): Tube
+	local material = options and options.material
+	local transparency = options and options.transparency
+	local cubes = path(points, options and options.even)
+
+	-- The way the tube runs at each block: the axis it moves furthest along between the blocks either side.
+	for index, cube in cubes do
+		local before, after = cubes[math.max(1, index - 1)], cubes[math.min(#cubes, index + 1)]
+		local axis, most = 2, 0
+		for k = 1, 3 do
+			local d = math.abs(after[k] - before[k])
+			if d > most then
+				axis, most = k, d
+			end
+		end
+		cube[7] = axis
+	end
+
+	-- Join runs of same-sized blocks that slide one step at a time along one axis into single long blocks.
+	local runs = {}
+	for _, cube in cubes do
+		local run = runs[#runs]
+		local joined = false
+		if run then
+			local head = run.cubes[#run.cubes]
+			local axis, sign = nil, 0
+			local fits = cube[4] - cube[1] == head[4] - head[1]
+			for k = 1, 3 do
+				local d = cube[k] - head[k]
+				if d ~= 0 then
+					if axis ~= nil or math.abs(d) ~= 1 then
+						fits = false
+					end
+					axis, sign = k, d
+				end
+			end
+			if fits and axis and (run.axis == nil or (run.axis == axis and run.sign == sign)) then
+				run.box[axis] = math.min(run.box[axis], cube[axis])
+				run.box[axis + 3] = math.max(run.box[axis + 3], cube[axis + 3])
+				run.axis, run.sign = axis, sign
+				table.insert(run.cubes, cube)
+				joined = true
+			end
+		end
+		if not joined then
+			table.insert(runs, { box = table.clone(cube), cubes = { cube } })
+		end
+	end
+	for _, run in runs do
+		if run.axis then
+			for _, cube in run.cubes do
+				cube[7] = run.axis
+			end
+		end
+		local b = run.box
+		local along = run.cubes[1][7]
+		if run.cubes[1][4] - run.cubes[1][1] + 1 < ROUNDED then
+			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], color, material, transparency)
+		else
+			-- Two crossed blocks, each one narrower on a different side: a block with its long edges cut off.
+			for _, trim in { along % 3 + 1, (along + 1) % 3 + 1 } do
+				local c = table.clone(b)
+				c[trim] += 1
+				c[trim + 3] -= 1
+				limb:box(c[1], c[2], c[3], c[4], c[5], c[6], color, material, transparency)
+			end
+		end
+	end
+
+	return {
+		cubes = cubes,
+		inside = function(x: number, y: number, z: number): boolean
+			local p = { x, y, z }
+			for _, c in cubes do
+				if x >= c[1] and x <= c[4] and y >= c[2] and y <= c[5] and z >= c[3] and z <= c[6] then
+					if c[4] - c[1] + 1 < ROUNDED then
+						return true
+					end
+					local edges = 0
+					for k = 1, 3 do
+						if k ~= c[7] and (p[k] == c[k] or p[k] == c[k + 3]) then
+							edges += 1
+						end
+					end
+					if edges < 2 then
+						return true
+					end
+				end
+			end
+			return false
+		end,
+	}
+end
+
+-- A tube and its mirror image on the other side of the pet (horns, whiskers).
+local function tubePair(limb: Limb, points: { { number } }, color: Color, options: TubeOptions?): (Tube, Tube)
+	local other = {}
+	for _, point in points do
+		table.insert(other, { -point[1], point[2], point[3], point[4] })
+	end
+	return tube(limb, points, color, options), tube(limb, other, color, options)
+end
+
+-- The middle cell of a tube block.
+local function cubeMiddle(cube: { number }): (number, number, number)
+	return (cube[1] + cube[4]) // 2, (cube[2] + cube[5]) // 2, (cube[3] + cube[6]) // 2
+end
+
+-- The axis (1 to 3) a direction such as { 0, 1, 0 } points along.
+local function axisOf(direction: { number }): number
+	return if direction[1] ~= 0 then 1 elseif direction[2] ~= 0 then 2 else 3
+end
+
+-- The outermost cell of a tube going out from the middle of one of its blocks in a direction such as { 0, 1, 0 }:
+-- where to paint a sucker, or stand a spike. Nil if the tube runs that way there, so there is no side to find.
+local function surfaceCell(t: Tube, cube: { number }, direction: { number }): { number }?
+	if cube[7] == axisOf(direction) then
+		return nil
+	end
+	local x, y, z = cubeMiddle(cube)
+	while t.inside(x + direction[1], y + direction[2], z + direction[3]) do
+		x, y, z = x + direction[1], y + direction[2], z + direction[3]
+	end
+	return { x, y, z }
+end
+
+export type Curl = {
+	-- The middle of the curl.
+	centre: { number },
+	-- The two axes (1 to 3 for x, y, z) of the plane it curls in.
+	plane: { number },
+	-- Where it starts, as an angle round the middle (radians, from the first axis towards the second).
+	from: number,
+	-- How far round it goes, in whole turns; negative goes the other way.
+	turns: number,
+	-- How far from the middle it is at the start and at the end.
+	radius: { number },
+	-- How thick the tube is (its radius) at the start and at the end.
+	width: { number },
+}
+
+-- Points round a curl, for the tip of a tentacle or tail, to pass to `tube` after the points leading up to it.
+local function curl(c: Curl): { { number } }
+	local points = {}
+	local count = math.max(4, math.ceil(math.abs(c.turns) * 12))
+	for i = 0, count do
+		local f = i / count
+		local angle = c.from + c.turns * 2 * math.pi * f
+		local r = c.radius[1] + (c.radius[2] - c.radius[1]) * f
+		local point = { c.centre[1], c.centre[2], c.centre[3], c.width[1] + (c.width[2] - c.width[1]) * f }
+		point[c.plane[1]] += r * math.cos(angle)
+		point[c.plane[2]] += r * math.sin(angle)
+		table.insert(points, point)
+	end
+	return points
+end
+
+-- `points` followed by `more`.
+local function andThen(points: { { number } }, more: { { number } }): { { number } }
+	local all = table.clone(points)
+	table.move(more, 1, #more, #all + 1, all)
+	return all
+end
+
+-- `points` mirrored to the other side of the pet.
+local function mirrorPoints(points: { { number } }): { { number } }
+	local other = {}
+	for _, point in points do
+		table.insert(other, { -point[1], point[2], point[3], point[4] })
+	end
+	return other
+end
+
+-- Fills the cells inside a rounded shape with blocks: `inside(x, y, z)` says which cells are in it, and `bounds`
+-- ({ x0, y0, z0, x1, y1, z1 }) is a box round it. Each level of the shape must be convex, with no dents or holes.
+-- Blocks overlap, so a few cover each level, and stack into taller blocks where levels match. Returns `inside`.
+local function blob(
+	limb: Limb,
+	bounds: { number },
+	inside: (number, number, number) -> boolean,
+	color: Color,
+	material: string?
+): (number, number, number) -> boolean
+	local open: { { number } } = {}
+	local function draw(b: { number })
+		limb:box(b[1], b[5], b[2], b[3], b[6], b[4], color, material)
+	end
+	for y = bounds[2], bounds[5] do
+		-- Each row across the level (along x), by z.
+		local rows: { [number]: { number } } = {}
+		for z = bounds[3], bounds[6] do
+			for x = bounds[1], bounds[4] do
+				if inside(x, y, z) then
+					local row = rows[z]
+					if row then
+						row[2] = x
+					else
+						rows[z] = { x, x }
+					end
+				end
+			end
+		end
+		-- One block for each different row, reaching over every row next to it that is at least as wide.
+		local level: { { number } } = {}
+		for z = bounds[3], bounds[6] do
+			local row = rows[z]
+			if row then
+				local function covers(other: { number }?): boolean
+					return other ~= nil and other[1] <= row[1] and other[2] >= row[2]
+				end
+				local z0, z1 = z, z
+				while covers(rows[z0 - 1]) do
+					z0 -= 1
+				end
+				while covers(rows[z1 + 1]) do
+					z1 += 1
+				end
+				local new = true
+				for _, b in level do
+					if b[1] == row[1] and b[3] == row[2] and b[2] == z0 and b[4] == z1 then
+						new = false
+					end
+				end
+				if new then
+					table.insert(level, { row[1], z0, row[2], z1 })
+				end
+			end
+		end
+		-- Carry on the blocks from the level below that this level matches; finish the rest.
+		local carried: { { number } } = {}
+		for _, b in level do
+			local found = nil
+			for index, o in open do
+				if o[1] == b[1] and o[2] == b[2] and o[3] == b[3] and o[4] == b[4] then
+					found = index
+				end
+			end
+			if found then
+				local o = table.remove(open, found)
+				o[6] = y
+				table.insert(carried, o)
+			else
+				table.insert(carried, { b[1], b[2], b[3], b[4], y, y })
+			end
+		end
+		for _, o in open do
+			draw(o)
+		end
+		open = carried
+	end
+	for _, o in open do
+		draw(o)
+	end
+	return inside
 end
 
 local Designs: { [string]: Design } = {}
@@ -2023,73 +2431,164 @@ Designs.MantaRay = {
 	end,
 }
 
-Designs.KingCrab = {
-	name = "King Crab",
-	skeleton = "ManyLegged",
-	scale = 0.55,
+Designs.GreatShark = {
+	name = "Great Shark",
+	skeleton = "Swimmer",
+	gait = "Swim",
+	hover = 3,
+	scale = 0.42,
 	draw = function(pet)
-		local CRAB = rgb(216, 64, 48)
-		local CRAB_DARK = rgb(156, 38, 30)
-		local BELLY = rgb(250, 178, 128)
-		local SPIKE = rgb(240, 120, 86)
-		local TIP = rgb(48, 32, 32)
-		local GOLD = rgb(255, 200, 60)
-		local RUBY = rgb(220, 30, 80)
+		local GREY = rgb(112, 128, 146)
+		local GREY_DARK = rgb(78, 90, 108)
+		local WHITE = rgb(238, 242, 246)
+		local MOUTH = rgb(96, 24, 36)
+		local TOOTH = rgb(252, 252, 244)
+		local SCAR = rgb(176, 186, 198)
 
-		-- A spiky shell with a pale belly, and a little gold crown, because it is the king.
-		local body = pet:limb("Body", { 0, 4, 0 })
-		body:box(-5, 3, -4, 4, 5, 3, CRAB)
-		body:box(-4, 6, -3, 3, 6, 2, CRAB)
-		body:box(-4, 2, -3, 3, 2, 2, BELLY)
-		body:paint(-5, 3, -4, 4, 3, 3, CRAB_DARK)
-		body:boxPair(2, 7, -2, 2, 7, -2, SPIKE)
-		body:boxPair(3, 7, 1, 3, 7, 1, SPIKE)
-		body:boxPair(5, 4, -2, 5, 4, -2, SPIKE)
-		body:boxPair(5, 4, 1, 5, 4, 1, SPIKE)
-		body:boxPair(2, 5, -5, 2, 5, -5, SPIKE)
-		body:box(-2, 7, -1, 1, 7, 1, GOLD)
-		body:boxPair(1, 8, -1, 1, 8, -1, GOLD)
-		body:boxPair(1, 8, 1, 1, 8, 1, GOLD)
-		body:paint(-1, 7, 1, 0, 7, 1, RUBY)
-
-		-- Eyes on stalks, and claws: one big one for show, one small one for eating.
-		local head = pet:limb("Head", { 0, 4, 4 })
-		head:box(-3, 3, 4, 2, 4, 4, CRAB)
-		head:paint(-1, 3, 4, 0, 3, 4, BELLY)
-		head:boxPair(1, 5, 4, 1, 6, 4, CRAB)
-		head:boxPair(1, 7, 4, 1, 7, 4, EYE)
-		head:box(3, 3, 4, 4, 4, 6, CRAB)
-		head:box(4, 3, 7, 5, 4, 8, CRAB)
-		head:box(3, 2, 9, 6, 5, 11, CRAB)
-		head:box(4, 4, 12, 6, 5, 14, CRAB)
-		head:box(4, 2, 12, 5, 2, 13, CRAB_DARK)
-		head:paint(4, 4, 14, 6, 5, 14, TIP)
-		head:paint(3, 5, 9, 6, 5, 11, SPIKE)
-		head:box(-5, 3, 4, -4, 4, 6, CRAB)
-		head:box(-6, 3, 7, -5, 4, 8, CRAB)
-		head:box(-6, 3, 9, -4, 4, 10, CRAB)
-		head:box(-6, 3, 11, -5, 4, 12, CRAB)
-		head:box(-4, 3, 11, -4, 3, 12, CRAB_DARK)
-		head:paint(-6, 4, 12, -5, 4, 12, TIP)
-
-		-- Long spiky legs, bent high at the knee.
-		local function leg(z: number)
-			return function(limb)
-				limb:box(5, 4, z, 6, 5, z, CRAB)
-				limb:box(7, 5, z, 8, 5, z, CRAB)
-				limb:box(9, 1, z, 9, 4, z, CRAB)
-				limb:box(9, 0, z, 9, 0, z, TIP)
-				limb:paint(7, 5, z, 8, 5, z, SPIKE)
+		-- A torpedo: deepest just behind the head, tapering to a pointed snout and a narrow tail.
+		local function shape(z: number): (number, number, number)
+			local rx, ry
+			if z >= 2 then
+				local t = math.min(1, (z - 2) / 14.5)
+				rx, ry = 4.4 * (1 - t ^ 2.2) ^ 0.5, 4.8 * (1 - t ^ 2) ^ 0.5
+			else
+				local t = math.min(1, (2 - z) / 16)
+				rx, ry = 4.4 * (1 - t ^ 1.6) ^ 0.6 + 0.9 * t, 4.8 * (1 - t ^ 1.6) ^ 0.6 + 1.2 * t
+			end
+			return rx, ry, 5 + 0.08 * z
+		end
+		local function inBody(x: number, y: number, z: number): boolean
+			local rx, ry, yc = shape(z + 0.5)
+			return ((x + 0.5) / rx) ^ 2 + ((y + 0.5 - yc) / ry) ^ 2 <= 1
+		end
+		-- Grey above, white below, along a jagged line.
+		local function white(y: number, z: number): boolean
+			local _, ry, yc = shape(z + 0.5)
+			return y + 0.5 < yc - ry * 0.2 + (if z % 3 == 0 then 0.8 else 0)
+		end
+		-- The open mouth: a wedge cut under the snout, widening towards the front.
+		local function inMouth(y: number, z: number): boolean
+			if z < 9 or z > 15 then
+				return false
+			end
+			local _, ry, yc = shape(z + 0.5)
+			local low = yc - ry * 0.6
+			return y + 0.5 > low and y + 0.5 < low + 1.2 + (z - 9) * 0.45
+		end
+		local function part(limb, z0: number, z1: number, plain: boolean?)
+			for _, pale in if plain then { false } else { true, false } do
+				blob(limb, { -5, 0, z0, 4, 12, z1 }, function(x, y, z)
+					return z >= z0
+						and z <= z1
+						and inBody(x, y, z)
+						and not inMouth(y, z)
+						and (plain or white(y, z) == pale)
+				end, if pale then WHITE else GREY)
 			end
 		end
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 5, 4.5, 2.5 }, leg(2))
-		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", { 5, 4.5, -0.5 }, leg(-1))
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 5, 4.5, -2.5 }, leg(-3))
 
-		local tail = pet:limb("Tail", { 0, 3, -4 })
-		tail:box(-2, 2, -5, 1, 3, -5, CRAB_DARK)
+		-- The outermost cell on its left side at a height, to paint on.
+		local function side(y: number, z: number): number
+			local x = 0
+			while inBody(x + 1, y, z) and not inMouth(y, z) do
+				x += 1
+			end
+			return x
+		end
+		local function paintSide(limb, y0: number, y1: number, z: number, color: Color)
+			local x = side(y0, z)
+			if side(y1, z) == x then
+				limb:paintPair(x, y0, z, x, y1, z, color)
+			else
+				for y = y0, y1 do
+					limb:paintPair(side(y, z), y, z, side(y, z), y, z, color)
+				end
+			end
+		end
 
-		pet:seat(0, 8, -3)
+		local body = pet:limb("Body", { 0, 5, 0 })
+		part(body, -5, 8)
+		-- A tall swept-back dorsal fin, gill slits, and an old scar.
+		for _, row in
+			{
+				{ 10, -3, 3 },
+				{ 11, -3, 2 },
+				{ 12, -3, 1 },
+				{ 13, -3, 0 },
+				{ 14, -4, -1 },
+				{ 15, -5, -2 },
+				{ 16, -6, -4 },
+			}
+		do
+			body:box(-1, row[1], row[2], 0, row[1], row[3], GREY_DARK)
+		end
+		for _, z in { 4, 6, 8 } do
+			paintSide(body, 5, 6, z, GREY_DARK)
+		end
+		local scarX = side(7, -1)
+		body:paint(scarX, 7, -2, scarX, 7, 0, SCAR)
+		body:paint(side(6, -3), 6, -3, side(6, -3), 6, -3, SCAR)
+
+		-- The head: a pointed snout over a gaping mouth ringed with jagged teeth, and flat black eyes.
+		local head = pet:limb("Head", { 0, 5, 9 })
+		part(head, 9, 16)
+		head:paint(-2, 3, 9, 1, 4, 9, MOUTH)
+		for z = 10, 15 do
+			local low, high = math.huge, -math.huge
+			for y = 0, 12 do
+				if inMouth(y, z) then
+					low, high = math.min(low, y), math.max(high, y)
+				end
+			end
+			local edge = if z <= 13 then 1 else 0
+			if high > low then
+				head:boxPair(
+					edge,
+					if z % 2 == 1 then high else low,
+					z,
+					edge,
+					if z % 2 == 1 then high else low,
+					z,
+					TOOTH
+				)
+			end
+		end
+		paintSide(head, 6, 7, 11, EYE)
+
+		-- Long pectoral fins, swept back and angled down.
+		pet:limbPair("LeftFin", "RightFin", { 4, 3, 3 }, function(fin)
+			fin:box(4, 3, 1, 5, 3, 4, GREY)
+			fin:box(6, 2, -1, 7, 2, 3, GREY)
+			fin:box(8, 1, -3, 9, 1, 1, GREY)
+			fin:box(10, 0, -4, 10, 0, -1, GREY_DARK)
+			fin:paint(4, 3, 1, 9, 3, 1, GREY_DARK)
+		end)
+
+		-- The narrow tail and a tall crescent fin, its upper lobe longer than the lower.
+		local tail = pet:limb("Tail", { 0, 5, -6 })
+		part(tail, -15, -6, true)
+		for _, row in
+			{
+				{ 14, -24, -23 },
+				{ 13, -24, -22 },
+				{ 12, -23, -21 },
+				{ 11, -22, -20 },
+				{ 10, -21, -19 },
+				{ 9, -20, -18 },
+				{ 8, -19, -17 },
+				{ 7, -18, -16 },
+				{ 6, -17, -16 },
+				{ 3, -17, -16 },
+				{ 2, -18, -17 },
+				{ 1, -19, -18 },
+				{ 0, -20, -19 },
+			}
+		do
+			tail:box(-1, row[1], row[2], 0, row[1], row[3], GREY_DARK)
+		end
+		tail:box(-1, 4, -18, 0, 5, -16, GREY_DARK)
+
+		pet:seat(0, 10, 3)
 	end,
 }
 
@@ -2293,181 +2792,330 @@ Designs.Kraken = {
 	name = "Kraken",
 	skeleton = "Tentacled",
 	gait = "Crawl",
-	scale = 0.55,
+	scale = 0.5,
 	draw = function(pet)
 		local PURPLE = rgb(104, 42, 134)
-		local PURPLE_DARK = rgb(70, 26, 96)
-		local MAGENTA = rgb(202, 72, 164)
-		local SUCKER = rgb(255, 186, 224)
-		local GLOW = rgb(255, 120, 220)
-		local EYE_GLOW = rgb(255, 220, 80)
-		local PUPIL = rgb(30, 10, 30)
-		local BEAK = rgb(60, 40, 30)
-		local GOLD = rgb(255, 200, 60)
+		local PURPLE_DARK = rgb(64, 22, 90)
+		local PURPLE_LIGHT = rgb(150, 82, 180)
+		local SUCKER = rgb(255, 190, 226)
+		local GLOW = rgb(255, 110, 220)
+		local EYE_GLOW = rgb(255, 214, 60)
+		local PUPIL = rgb(24, 8, 24)
+		local GOLD = rgb(255, 196, 56)
+		local GOLD_DARK = rgb(206, 140, 30)
 		local RUBY = rgb(220, 30, 80)
+		local EMERALD = rgb(40, 200, 120)
+		local PEARL = rgb(250, 246, 240)
 		local BARNACLE = rgb(226, 220, 206)
-		local CORAL = rgb(255, 120, 100)
-		local IRON = rgb(92, 98, 112)
-		local RUST = rgb(150, 86, 52)
+		local WOOD = rgb(132, 86, 50)
+		local WOOD_DARK = rgb(96, 60, 36)
 
-		-- The body the tentacles grow from, glowing spots round its rim.
-		local body = pet:limb("Body", { 0, 4, 0 })
-		body:box(-4, 3, -4, 3, 6, 3, PURPLE)
-		body:box(-5, 3, -3, 4, 5, 2, PURPLE)
-		body:box(-3, 3, -5, 2, 5, 4, PURPLE)
-		body:paint(-5, 3, -3, 4, 3, 2, PURPLE_DARK)
-		body:paint(-3, 3, -5, 2, 3, 4, PURPLE_DARK)
-		for _, dot in
-			{ { 4, 4, -2 }, { 4, 4, 1 }, { -5, 4, -2 }, { -5, 4, 1 }, { 1, 4, 4 }, { -2, 4, 4 }, { -1, 4, -5 } }
-		do
-			body:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+		-- A rounded level of a dome, as wide as `r` and a little deeper, centred across the pet on `zc`.
+		local function round(x: number, z: number, zc: number, r: number): boolean
+			return r > 0.5 and (math.abs(x + 0.5) / r) ^ 2.3 + (math.abs(z + 0.5 - zc) / (r * 1.08)) ^ 2.3 <= 1
 		end
 
-		-- A towering mantle curving back, ridged and spotted with light, with huge glowing eyes, angry brows and
-		-- a beak, crusted with barnacles and coral, wearing a sunken king's crown askew.
-		local head = pet:limb("Head", { 0, 7, 0 })
-		head:box(-5, 7, -5, 4, 14, 4, PURPLE)
-		head:box(-4, 15, -5, 3, 17, 2, PURPLE)
-		head:box(-3, 18, -6, 2, 19, 0, PURPLE)
-		head:box(-2, 20, -6, 1, 21, -2, PURPLE)
-		head:paint(-5, 14, -5, 4, 14, 4, PURPLE_DARK)
-		head:paint(-4, 17, -5, 3, 17, 2, PURPLE_DARK)
-		head:paintPair(4, 8, -3, 4, 13, -3, MAGENTA)
-		head:paintPair(4, 8, 0, 4, 13, 0, MAGENTA)
-		head:paint(-2, 8, -5, -2, 13, -5, MAGENTA)
-		head:paint(1, 8, -5, 1, 13, -5, MAGENTA)
-		head:paintPair(3, 15, -3, 3, 17, -3, MAGENTA)
-		for _, dot in
+		-- The squat body the tentacles grow from.
+		local body = pet:limb("Body", { 0, 5, 0 })
+		blob(body, { -8, 2, -8, 7, 8, 7 }, function(x, y, z)
+			local t = (y - 1.5) / 7.5
+			return round(x, z, 0, 6.6 * math.sqrt(1 - (t * 0.75) ^ 2))
+		end, PURPLE)
+
+		-- A huge rounded mantle swelling up and leaning back.
+		local head = pet:limb("Head", { 0, 9, 0 })
+		local inMantle = blob(head, { -9, 9, -16, 8, 28, 8 }, function(x, y, z)
+			local t = (y - 8.5) / 20
+			local bulge = if t < 0.35 then 1 - ((0.35 - t) / 0.62) ^ 2 else 1 - ((t - 0.35) / 0.66) ^ 2
+			return round(x, z, -0.8 - 5.5 * t ^ 1.4, 8.2 * math.sqrt(math.max(0, bulge)))
+		end, PURPLE)
+		-- The outermost cell of the mantle at height y, going out from its middle at an angle: 0 is straight ahead,
+		-- 90 to its left, 180 straight back.
+		local function onMantle(y: number, angle: number): { number }
+			local t = (y - 8.5) / 20
+			local zc = -0.8 - 5.5 * t ^ 1.4
+			local a = math.rad(angle)
+			local cell = { 0, y, math.floor(zc) }
+			for r = 0, 12, 0.25 do
+				local x, z = math.floor(math.sin(a) * r), math.floor(zc + math.cos(a) * r)
+				if not inMantle(x, y, z) then
+					break
+				end
+				cell = { x, y, z }
+			end
+			return cell
+		end
+		-- A spot on the mantle at height y and an angle round it, up to `size` cells across and tall where the
+		-- mantle is there to take it.
+		local function dot(y: number, angle: number, color: Color, material: string?, size: number?)
+			local cell = onMantle(y, angle)
+			local a = math.rad(angle)
+			local across = if math.abs(math.cos(a)) > math.abs(math.sin(a)) then { 1, 0, 0 } else { 0, 0, 1 }
+			local range = { cell[1], cell[2], cell[3], cell[1], cell[2], cell[3] }
+			for _, grow in { across, { 0, 1, 0 } } do
+				for _ = 2, size or 1 do
+					local ok = true
+					for x = range[1], range[4] + grow[1] do
+						for yy = range[2], range[5] + grow[2] do
+							for z = range[3], range[6] + grow[3] do
+								ok = ok and inMantle(x, yy, z)
+							end
+						end
+					end
+					if ok then
+						range[4] += grow[1]
+						range[5] += grow[2]
+						range[6] += grow[3]
+					end
+				end
+			end
+			head:paint(range[1], range[2], range[3], range[4], range[5], range[6], color, material)
+		end
+		-- Mottling light and dark, and rows of glowing spots down its sides.
+		for _, spot in
 			{
-				{ 4, 12, -2 },
-				{ 4, 9, 2 },
-				{ -5, 11, 1 },
-				{ -5, 8, -4 },
-				{ 3, 16, -1 },
-				{ -4, 16, 0 },
-				{ 0, 19, -6 },
-				{ -2, 10, -5 },
-				{ 2, 18, -4 },
-				{ -3, 19, -2 },
+				{ 12, 40 },
+				{ 16, 65 },
+				{ 20, 35 },
+				{ 14, 145 },
+				{ 19, 115 },
+				{ 23, 160 },
+				{ 25, 75 },
+				{ 21, 180 },
+				{ 10, 110 },
+				{ 17, 10 },
 			}
 		do
-			head:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+			dot(spot[1], spot[2], PURPLE_LIGHT, nil, 3)
+			dot(spot[1] + 1, -spot[2] - 12, PURPLE_LIGHT, nil, 3)
 		end
-		head:paintPair(2, 10, 4, 4, 12, 4, EYE_GLOW, NEON)
-		head:paintPair(3, 10, 4, 3, 12, 4, PUPIL)
-		head:boxPair(2, 13, 5, 4, 13, 5, PURPLE_DARK)
-		head:boxPair(1, 12, 5, 1, 12, 5, PURPLE_DARK)
-		head:box(-1, 7, 5, 0, 9, 5, BEAK)
-		head:box(-1, 7, 6, 0, 7, 6, BEAK)
-		head:box(2, 20, -1, 2, 20, -1, BARNACLE)
-		head:box(-3, 20, -5, -3, 20, -5, BARNACLE)
-		head:box(2, 20, -5, 2, 20, -5, BARNACLE)
-		head:box(-5, 15, 1, -5, 15, 1, BARNACLE)
-		head:box(4, 15, -2, 4, 17, -2, CORAL)
-		head:box(5, 16, -2, 5, 16, -2, CORAL)
-		head:box(5, 18, -2, 5, 18, -2, CORAL)
-		head:box(-2, 22, -5, 1, 22, -3, GOLD)
-		head:box(-2, 23, -5, -2, 23, -5, GOLD)
-		head:box(1, 23, -5, 1, 24, -5, GOLD)
-		head:box(-2, 23, -3, -2, 23, -3, GOLD)
-		head:box(1, 23, -3, 1, 24, -3, GOLD)
-		head:paint(-1, 22, -3, 0, 22, -3, RUBY)
-		head:paint(1, 22, -5, 1, 22, -5, RUBY)
-		head:box(-3, 20, -4, -3, 22, -4, rgb(60, 140, 90))
-		head:box(2, 20, -4, 2, 21, -4, rgb(60, 140, 90))
-
-		-- Eight thick tentacles spreading over the ground, lined with suckers, their tips curling up and glowing.
-		local function frontTentacle(limb)
-			limb:box(2, 2, 3, 3, 4, 4, PURPLE)
-			limb:box(3, 1, 5, 4, 2, 6, PURPLE)
-			limb:box(4, 0, 7, 5, 1, 9, PURPLE)
-			limb:box(5, 0, 10, 5, 0, 11, PURPLE)
-			limb:box(5, 1, 12, 5, 2, 12, MAGENTA)
-			limb:box(5, 3, 11, 5, 3, 11, GLOW, NEON)
-			limb:paint(4, 1, 7, 4, 1, 7, SUCKER)
-			limb:paint(5, 1, 9, 5, 1, 9, SUCKER)
-			limb:paint(3, 2, 5, 3, 2, 5, SUCKER)
-			limb:paint(5, 0, 11, 5, 0, 11, SUCKER)
-			limb:paint(2, 4, 4, 3, 4, 4, MAGENTA)
-			limb:box(4, 2, 8, 4, 2, 8, BARNACLE)
+		for _, spot in { { 15, 25 }, { 22, 100 }, { 18, 160 }, { 26, 130 }, { 13, 85 }, { 24, 20 } } do
+			dot(spot[1], spot[2], PURPLE_DARK, nil, 2)
+			dot(spot[1] - 1, -spot[2] + 10, PURPLE_DARK, nil, 2)
 		end
-		local function sideTentacle(limb)
-			limb:box(4, 2, 0, 5, 4, 2, PURPLE)
-			limb:box(6, 1, 1, 7, 2, 2, PURPLE)
-			limb:box(8, 0, 1, 10, 1, 2, PURPLE)
-			limb:box(11, 0, 2, 12, 0, 2, PURPLE)
-			limb:box(13, 1, 2, 13, 2, 2, MAGENTA)
-			limb:box(12, 3, 2, 12, 3, 2, GLOW, NEON)
-			limb:paint(6, 2, 2, 6, 2, 2, SUCKER)
-			limb:paint(8, 1, 2, 8, 1, 2, SUCKER)
-			limb:paint(10, 1, 2, 10, 1, 2, SUCKER)
-			limb:paint(12, 0, 2, 12, 0, 2, SUCKER)
-			limb:paint(4, 4, 0, 5, 4, 1, MAGENTA)
-			limb:box(9, 2, 1, 9, 2, 1, BARNACLE)
+		for y = 12, 26, 2 do
+			dot(y, 88 + (y - 12) * 3, GLOW, NEON)
+			dot(y, -88 - (y - 12) * 3, GLOW, NEON)
 		end
-		local function rearSideTentacle(limb)
-			limb:box(4, 2, -3, 5, 4, -2, PURPLE)
-			limb:box(6, 1, -4, 7, 2, -3, PURPLE)
-			limb:box(8, 0, -6, 9, 1, -4, PURPLE)
-			limb:box(10, 0, -8, 10, 0, -6, PURPLE)
-			limb:box(11, 1, -8, 11, 2, -8, MAGENTA)
-			limb:box(11, 3, -7, 11, 3, -7, GLOW, NEON)
-			limb:paint(6, 2, -3, 6, 2, -3, SUCKER)
-			limb:paint(9, 1, -5, 9, 1, -5, SUCKER)
-			limb:paint(10, 0, -7, 10, 0, -7, SUCKER)
-			limb:paint(8, 1, -4, 8, 1, -4, SUCKER)
-			limb:paint(4, 4, -3, 5, 4, -2, MAGENTA)
-		end
-		local function rearTentacle(limb)
-			limb:box(2, 2, -5, 3, 4, -4, PURPLE)
-			limb:box(3, 1, -7, 4, 2, -6, PURPLE)
-			limb:box(4, 0, -10, 5, 1, -8, PURPLE)
-			limb:box(5, 0, -12, 5, 0, -11, PURPLE)
-			limb:box(5, 1, -13, 5, 2, -13, MAGENTA)
-			limb:box(5, 3, -12, 5, 3, -12, GLOW, NEON)
-			limb:paint(4, 1, -9, 4, 1, -9, SUCKER)
-			limb:paint(3, 2, -6, 3, 2, -6, SUCKER)
-			limb:paint(5, 0, -11, 5, 0, -11, SUCKER)
-			limb:paint(2, 4, -5, 3, 4, -4, MAGENTA)
-			limb:box(4, 2, -9, 4, 2, -9, BARNACLE)
-		end
-		local shapes = {
-			{ frontTentacle, { 2.5, 3, 3.5 } },
-			{ sideTentacle, { 4.5, 3, 1 } },
-			{ rearSideTentacle, { 4.5, 3, -2.5 } },
-			{ rearTentacle, { 2.5, 3, -4.5 } },
-		}
-		local grip
-		for index, shape in shapes do
-			local draw, pivot = shape[1], shape[2]
-			draw(pet:limb("Tentacle" .. (index * 2 - 1), pivot))
-			local right = mirrored(pet:limb("Tentacle" .. (index * 2), { -pivot[1], pivot[2], pivot[3] }))
-			draw(right)
-			if index == 2 then
-				grip = right
+		-- Barnacles crusted on its back.
+		for _, b in { { 16, 170 }, { 17, 160 }, { 13, -150 }, { 14, -155 }, { 21, 185 }, { 24, -165 } } do
+			local cell = onMantle(b[1], b[2])
+			local out = { cell[1] + (if b[2] > 180 or b[2] < 0 then -1 else 1), cell[2], cell[3] - 1 }
+			if not inMantle(out[1], out[2], out[3]) then
+				head:box(out[1], out[2], out[3], out[1], out[2], out[3], BARNACLE)
 			end
 		end
-		-- One tentacle grips a rusted ship's anchor.
-		grip:box(13, 1, 1, 13, 8, 1, IRON)
-		grip:box(11, 7, 1, 15, 7, 1, IRON)
-		grip:box(12, 9, 1, 12, 10, 1, IRON)
-		grip:box(14, 9, 1, 14, 10, 1, IRON)
-		grip:box(13, 11, 1, 13, 11, 1, IRON)
-		grip:box(11, 0, 1, 15, 0, 1, IRON)
-		grip:box(11, 1, 1, 11, 2, 1, IRON)
-		grip:box(15, 1, 1, 15, 2, 1, IRON)
-		grip:paint(13, 4, 1, 13, 5, 1, RUST)
-		grip:paint(14, 0, 1, 15, 0, 1, RUST)
-		grip:paint(11, 7, 1, 11, 7, 1, RUST)
-		grip:box(12, 5, 2, 14, 5, 2, MAGENTA)
-		grip:box(13, 12, 1, 13, 12, 1, IRON)
-		grip:box(12, 13, 1, 12, 13, 1, IRON)
-		grip:box(11, 14, 1, 11, 14, 1, IRON)
-		grip:paint(13, 12, 1, 13, 12, 1, RUST)
 
-		pet:light(GLOW, 2.6, 18)
-		pet:particles("Bubbles", SUCKER, 12)
-		pet:seat(0, 18, 1)
+		-- Huge glowing eyes in raised sockets, with slit pupils, under heavy scowling brows; a hooked beak below.
+		head:boxPair(3, 9, 3, 7, 14, 6, PURPLE)
+		head:paintPair(3, 9, 6, 7, 14, 6, PURPLE_DARK)
+		head:paintPair(4, 10, 6, 6, 13, 6, EYE_GLOW, NEON)
+		head:paintPair(5, 10, 6, 5, 13, 6, PUPIL)
+		head:paintPair(4, 13, 6, 4, 13, 6, SHINE)
+		head:paintPair(7, 10, 3, 7, 13, 5, PURPLE_DARK)
+		head:boxPair(2, 15, 5, 4, 15, 7, PURPLE)
+		head:boxPair(5, 16, 5, 8, 16, 6, PURPLE)
+		head:paintPair(2, 15, 5, 4, 15, 7, PURPLE_DARK)
+		head:paintPair(5, 16, 5, 8, 16, 6, PURPLE_DARK)
+
+		-- A sunken king's crown, sat crooked on top.
+		head:box(-3, 29, -9, 2, 29, -4, GOLD)
+		head:paint(-3, 29, -9, 2, 29, -9, GOLD_DARK)
+		head:box(-3, 30, -9, -3, 32, -9, GOLD)
+		head:box(2, 30, -9, 2, 31, -9, GOLD)
+		head:box(-3, 30, -4, -3, 32, -4, GOLD)
+		head:box(2, 30, -4, 2, 30, -4, GOLD)
+		head:box(-1, 30, -4, 0, 31, -4, GOLD)
+		head:box(-1, 32, -4, 0, 32, -4, PEARL)
+		head:paint(-1, 29, -4, 0, 29, -4, RUBY)
+		head:paint(-3, 29, -7, -3, 29, -6, EMERALD)
+		head:paint(2, 29, -7, 2, 29, -6, EMERALD)
+
+		-- Eight thick tentacles, each ending in a curl: two arms raised in front (one brandishing a ship's wheel),
+		-- two sprawled out to the sides, two trailing behind, and two rearing up over its back. A pale line of
+		-- suckers runs along the inside of every bend (or underneath, where it runs straight), and the tips glow.
+		local function tentacle(name: string, pivot: { number }, points: { { number } })
+			local limb = pet:limb(name, pivot)
+			local t = tube(limb, points, PURPLE)
+			local count = #t.cubes
+			local function middle(c: { number }, k: number): number
+				return (c[k] + c[k + 3]) / 2
+			end
+			local suckers = {}
+			for index, cube in t.cubes do
+				if index >= count - 1 then
+					limb:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], GLOW, NEON)
+				elseif index > 3 then
+					local before, after = t.cubes[math.max(1, index - 3)], t.cubes[math.min(count, index + 3)]
+					local axis, most = 2, 0.6
+					for k = 1, 3 do
+						local bend = (middle(before, k) + middle(after, k)) / 2 - middle(cube, k)
+						if k ~= cube[7] and math.abs(bend) > most then
+							axis, most = k, math.abs(bend)
+						end
+					end
+					local direction = { 0, -1, 0 }
+					if most > 0.6 then
+						local bend = (middle(before, axis) + middle(after, axis)) / 2 - middle(cube, axis)
+						direction = { 0, 0, 0 }
+						direction[axis] = if bend > 0 then 1 else -1
+					end
+					local s = surfaceCell(t, cube, direction)
+					if s and s[2] > 0 then
+						table.insert(suckers, s)
+					end
+				end
+			end
+			cells(limb, suckers, SUCKER, true)
+			return limb
+		end
+
+		tentacle(
+			"Tentacle1",
+			{ 3, 5, 4 },
+			andThen(
+				{
+					{ 3, 5, 4, 2.4 },
+					{ 6, 4, 7.5, 2.2 },
+					{ 9, 5, 9, 1.9 },
+					{ 11.5, 8.5, 9.5, 1.6 },
+					{ 12.5, 12.5, 9, 1.4 },
+					{ 12.5, 16.5, 8.5, 1.2 },
+				},
+				curl({
+					centre = { 15.5, 16.5, 8.5 },
+					plane = { 1, 2 },
+					from = math.pi,
+					turns = -0.8,
+					radius = { 3, 1.2 },
+					width = { 1.2, 0.5 },
+				})
+			)
+		)
+		local wheelArm = tentacle("Tentacle2", { -4, 5, 4 }, {
+			{ -4, 5, 4, 2.4 },
+			{ -7, 4, 7.5, 2.2 },
+			{ -10, 5.5, 9, 1.9 },
+			{ -12, 9, 9.5, 1.5 },
+			{ -13, 12.5, 9.5, 1.25 },
+			{ -14, 15, 9.5, 1 },
+			{ -15.5, 16.5, 9.5, 0.8 },
+			{ -16.5, 15.5, 9.5, 0.6 },
+			{ -16, 14, 9.5, 0.5 },
+		})
+		tentacle(
+			"Tentacle3",
+			{ 5, 4, 0 },
+			andThen(
+				{ { 5, 4, 0, 2.3 }, { 9, 2.2, 1, 2 }, { 13, 1.8, 1.5, 1.6 }, { 16.5, 1.3, 1.5, 1.2 } },
+				curl({
+					centre = { 16.5, 4, 1.5 },
+					plane = { 1, 2 },
+					from = -math.pi / 2,
+					turns = 0.8,
+					radius = { 2.7, 1.2 },
+					width = { 1.2, 0.5 },
+				})
+			)
+		)
+		tentacle(
+			"Tentacle4",
+			{ -6, 4, 0 },
+			andThen(
+				{ { -6, 4, 0, 2.3 }, { -10, 2.2, 0, 2 }, { -14, 1.8, -0.5, 1.6 }, { -17.5, 1.3, -1, 1.2 } },
+				curl({
+					centre = { -17.5, 3.8, -1 },
+					plane = { 1, 2 },
+					from = -math.pi / 2,
+					turns = -0.85,
+					radius = { 2.5, 1.1 },
+					width = { 1.2, 0.5 },
+				})
+			)
+		)
+		local back = andThen(
+			{ { 4, 4, -4, 2.2 }, { 7, 2.2, -7, 1.9 }, { 10, 1.6, -10, 1.5 }, { 12, 1.2, -13, 1.1 } },
+			curl({
+				centre = { 12, 3.6, -13 },
+				plane = { 3, 2 },
+				from = -math.pi / 2,
+				turns = -0.8,
+				radius = { 2.4, 1.1 },
+				width = { 1.1, 0.5 },
+			})
+		)
+		tentacle("Tentacle5", { 4, 4, -4 }, back)
+		tentacle("Tentacle6", { -5, 4, -4 }, mirrorPoints(back))
+		tentacle(
+			"Tentacle7",
+			{ 3, 5, -6 },
+			andThen(
+				{
+					{ 3, 5, -6, 2.2 },
+					{ 5, 6, -10, 1.9 },
+					{ 8, 9, -12, 1.7 },
+					{ 10, 14, -12, 1.5 },
+					{ 11, 19, -11, 1.3 },
+					{ 11, 24, -10, 1.1 },
+				},
+				curl({
+					centre = { 14, 24, -10 },
+					plane = { 1, 2 },
+					from = math.pi,
+					turns = -0.75,
+					radius = { 3, 1.2 },
+					width = { 1.1, 0.5 },
+				})
+			)
+		)
+		tentacle(
+			"Tentacle8",
+			{ -4, 5, -6 },
+			andThen(
+				{
+					{ -4, 5, -6, 2.2 },
+					{ -6, 6, -10, 1.9 },
+					{ -9, 10, -12, 1.7 },
+					{ -11, 15, -12, 1.5 },
+					{ -12, 20, -11, 1.3 },
+					{ -12, 25, -10, 1.1 },
+				},
+				curl({
+					centre = { -12, 25, -13 },
+					plane = { 3, 2 },
+					from = 0,
+					turns = 0.75,
+					radius = { 3, 1.2 },
+					width = { 1.1, 0.5 },
+				})
+			)
+		)
+
+		-- A ship's wheel, torn from a wreck and held up high.
+		local function wood(x0: number, y0: number, x1: number, y1: number, color: Color?)
+			wheelArm:box(x0, y0, 8, x1, y1, 8, color or WOOD)
+		end
+		wood(-16, 17, -13, 17)
+		wood(-16, 26, -13, 26)
+		wood(-19, 20, -19, 23)
+		wood(-10, 20, -10, 23)
+		for _, corner in
+			{ { -17, 18 }, { -18, 19 }, { -12, 18 }, { -11, 19 }, { -17, 25 }, { -18, 24 }, { -12, 25 }, { -11, 24 } }
+		do
+			wood(corner[1], corner[2], corner[1], corner[2])
+		end
+		wood(-15, 18, -14, 25, WOOD_DARK)
+		wood(-18, 21, -16, 22, WOOD_DARK)
+		wood(-13, 21, -11, 22, WOOD_DARK)
+		wood(-15, 27, -14, 28)
+		wood(-21, 21, -20, 22)
+		wood(-9, 21, -8, 22)
+		wood(-15, 15, -14, 16)
+		wheelArm:box(-15, 21, 9, -14, 22, 9, GOLD)
+
+		pet:light(GLOW, 3, 22)
+		pet:particles("Bubbles", SUCKER, 14)
+		pet:seat(0, 24, 2)
 	end,
 }
 
@@ -2475,132 +3123,362 @@ Designs.Leviathan = {
 	name = "Leviathan",
 	skeleton = "Serpent",
 	gait = "Swim",
-	scale = 0.55,
+	scale = 0.36,
 	draw = function(pet)
-		local SCALE = rgb(18, 42, 58)
-		local SCALE_LIGHT = rgb(30, 78, 96)
-		local BELLY = rgb(46, 122, 130)
+		local SCALE = rgb(20, 52, 76)
+		local SCALE_DARK = rgb(10, 28, 46)
+		local SCALE_LIGHT = rgb(42, 102, 126)
+		local BELLY = rgb(168, 214, 200)
+		local BELLY_DARK = rgb(116, 170, 160)
 		local GLOW = rgb(80, 255, 228)
 		local FIN = rgb(90, 220, 210)
-		local HORN = rgb(196, 222, 226)
-		local FANG = rgb(236, 244, 244)
-		local THROAT = rgb(180, 255, 240)
+		local HORN = rgb(222, 232, 226)
+		local HORN_DARK = rgb(132, 152, 156)
+		local FANG = rgb(248, 250, 242)
+		local MOUTH = rgb(66, 14, 38)
+		local THROAT = rgb(190, 255, 240)
+		local TONGUE = rgb(214, 70, 110)
+		local PUPIL = rgb(8, 18, 22)
 
-		-- Scales: a checker of lighter scales over the sides of a block, between two heights.
-		local function scales(limb, x: number, y0: number, y1: number, z0: number, z1: number)
-			for y = y0, y1 do
-				for z = z0, z1 do
-					if (y + z) % 2 == 0 then
-						limb:paintPair(x, y, z, x, y, z, SCALE_LIGHT)
+		-- The long body as tubes: rearing up into a neck at the front, then two great arching coils and a tail,
+		-- swaying from side to side. Each length is a limb of its own, so a ripple can run down it.
+		local body = pet:limb("Body", { 0, 3, -3 })
+		local neck = tube(body, {
+			{ 0, 3, -3, 2.8 },
+			{ 0, 3.2, 1, 2.8 },
+			{ 0, 5.5, 4, 2.6 },
+			{ 0, 10, 5.5, 2.5 },
+			{ 0, 15, 5.5, 2.4 },
+			{ 0, 19, 6.5, 2.2 },
+			{ 0, 21.5, 8.5, 2 },
+		}, SCALE, { even = true })
+		local segment1 = pet:limb("Segment1", { 0, 3, -3 })
+		local coil1 = tube(segment1, {
+			{ 0, 3, -3, 2.8 },
+			{ 0, 3, -6, 2.8 },
+			{ 0, 7, -9, 2.7 },
+			{ 0, 12, -11.5, 2.6 },
+			{ 0, 13, -14, 2.5 },
+			{ 0, 9, -17, 2.4 },
+			{ 0, 3, -19.5, 2.3 },
+			{ 0, 2.2, -21.5, 2.2 },
+		}, SCALE, { even = true })
+		local segment2 = pet:limb("Segment2", { 0, 2.2, -21.5 }, "Segment1")
+		local coil2 = tube(segment2, {
+			{ 0, 2.2, -21.5, 2.2 },
+			{ -1, 2.4, -24, 2.1 },
+			{ -2, 6, -26.5, 2 },
+			{ -2.5, 9.5, -29, 1.9 },
+			{ -2, 8, -31.5, 1.8 },
+			{ -1, 3, -33.5, 1.7 },
+			{ 0, 2, -35, 1.6 },
+		}, SCALE)
+		local tail = pet:limb("Tail", { 0, 2, -35 }, "Segment2")
+		local tailTube = tube(tail, {
+			{ 0, 2, -35, 1.6 },
+			{ 1, 1.5, -37.5, 1.3 },
+			{ 1.5, 1.5, -40, 1.1 },
+			{ 1.5, 3, -42, 0.9 },
+			{ 1.5, 5, -43, 0.7 },
+		}, SCALE)
+		local tubes = { neck, coil1, coil2, tailTube }
+
+		-- Whether a cell is free for a spike or fin: not in the body, the head, or a spike already drawn.
+		local used: { [string]: boolean } = {}
+		local function free(cell: { number }): boolean
+			local x, y, z = cell[1], cell[2], cell[3]
+			if y < 0 or used[`{x},{y},{z}`] or (x >= -6 and x <= 5 and y >= 16 and z >= 5) or z <= -45 then
+				return false
+			end
+			for _, t in tubes do
+				if t.inside(x, y, z) then
+					return false
+				end
+			end
+			return true
+		end
+		local function step(cell: { number }, direction: { number }, count: number): { number }
+			return { cell[1] + direction[1] * count, cell[2] + direction[2] * count, cell[3] + direction[3] * count }
+		end
+
+		-- Along each length: horn spikes down the spine with a glassy fin between them, banded plates down the
+		-- belly where it shows, and a glowing line along each flank. Its back faces away from the middle of the
+		-- arch it is part of (`focus`), or, up the rearing neck, towards the inside of the curve.
+		local function decorate(limb, t: Tube, focus: { number }, inward: boolean, wide: boolean)
+			local backs = {}
+			for index, cube in t.cubes do
+				local _, y, z = cubeMiddle(cube)
+				local dy, dz = y - focus[2], z - focus[3]
+				if inward then
+					dy, dz = -dy, -dz
+				end
+				local upward = math.abs(dy) >= math.abs(dz)
+				if (upward and cube[7] == 2) or (not upward and cube[7] == 3) then
+					upward = not upward
+				end
+				backs[index] = if upward
+					then { 0, if dy >= 0 then 1 else -1, 0 }
+					else { 0, 0, if dz >= 0 then 1 else -1 }
+			end
+			local columns = if wide then { 0, 1 } else { 0 }
+
+			-- Spikes first, then the fin fills the gaps between them.
+			for pass = 1, 2 do
+				local fin = {}
+				for _, column in columns do
+					for index, cube in t.cubes do
+						local back = backs[index]
+						local top = surfaceCell(t, cube, back)
+						local spike = index % 4 == 0
+						if top and back[2] >= 0 and spike == (pass == 1) then
+							top = step(top, { 1, 0, 0 }, column)
+							local reach = if not spike then 1 elseif cube[4] - cube[1] >= 3 then 3 else 2
+							local cellsHere = {}
+							for n = 1, reach do
+								local cell = step(top, back, n)
+								if not free(cell) then
+									break
+								end
+								table.insert(cellsHere, cell)
+							end
+							for _, cell in cellsHere do
+								used[`{cell[1]},{cell[2]},{cell[3]}`] = true
+								if not spike then
+									table.insert(fin, cell)
+								end
+							end
+							if spike and #cellsHere > 0 then
+								local a, b = cellsHere[1], cellsHere[#cellsHere]
+								limb:box(a[1], a[2], a[3], b[1], b[2], b[3], HORN)
+							end
+						end
+					end
+				end
+				if pass == 2 then
+					cells(limb, fin, FIN, false, GLASS, 0.3)
+				end
+			end
+
+			-- Belly plates, light and dark, where the belly faces forwards or back: a row across the belly at each
+			-- block, two rows to a plate.
+			local rows = {}
+			for index, cube in t.cubes do
+				local back = backs[index]
+				local belly = { 0, -back[2], -back[3] }
+				local s = if belly[3] ~= 0 then surfaceCell(t, cube, belly) else nil
+				if s and free(step(s, belly, 1)) then
+					local x0, x1 = s[1], s[1]
+					while t.inside(x0 - 1, s[2], s[3]) do
+						x0 -= 1
+					end
+					while t.inside(x1 + 1, s[2], s[3]) do
+						x1 += 1
+					end
+					local previous = rows[#rows]
+					local within = previous
+						and previous[2] <= s[2]
+						and s[2] <= previous[5]
+						and previous[3] <= s[3]
+						and s[3] <= previous[6]
+					if
+						previous
+						and not previous.full
+						and previous[1] == x0
+						and previous[4] == x1
+						and math.abs(previous[2] - s[2]) + math.abs(previous[3] - s[3]) == 1
+					then
+						previous[2], previous[5] = math.min(previous[2], s[2]), math.max(previous[5], s[2])
+						previous[3], previous[6] = math.min(previous[3], s[3]), math.max(previous[6], s[3])
+						previous.full = true
+					elseif not within then
+						table.insert(rows, { x0, s[2], s[3], x1, s[2], s[3] })
 					end
 				end
 			end
+			for index, r in rows do
+				limb:paint(r[1], r[2], r[3], r[4], r[5], r[6], if index % 2 == 0 then BELLY else BELLY_DARK)
+			end
+
+			-- Dashes of light along both flanks.
+			for _, side in { { 1, 0, 0 }, { -1, 0, 0 } } do
+				local dashes = {}
+				for index, cube in t.cubes do
+					local s = if index % 5 ~= 0 then surfaceCell(t, cube, side) else nil
+					if s and free(step(s, side, 1)) then
+						table.insert(dashes, s)
+					end
+				end
+				cells(limb, dashes, GLOW, true, NEON)
+			end
 		end
 
-		-- The front coil rising from the ground into a long neck, pale-bellied, glowing along its flanks.
-		local body = pet:limb("Body", { 0, 4, 4 })
-		body:box(-3, 0, 2, 2, 5, 6, SCALE)
-		body:box(-2, 6, 4, 1, 12, 7, SCALE)
-		body:paint(-2, 6, 7, 1, 12, 7, BELLY)
-		body:paint(-3, 0, 6, 2, 5, 6, BELLY)
-		body:paint(-2, 7, 7, 1, 7, 7, SCALE)
-		body:paint(-2, 10, 7, 1, 10, 7, SCALE)
-		body:paintPair(2, 2, 2, 2, 2, 5, GLOW, NEON)
-		body:paintPair(1, 8, 4, 1, 11, 4, GLOW, NEON)
-		scales(body, 2, 3, 5, 2, 5)
-		scales(body, 1, 6, 7, 5, 6)
-		body:box(-1, 8, 3, 0, 11, 3, FIN, GLASS, 0.3)
-		body:paint(-1, 9, 3, 0, 9, 3, GLOW, NEON)
-		body:box(-1, 6, 3, 0, 6, 3, HORN)
-		scales(body, 1, 8, 12, 5, 6)
+		-- A dragon's head, jaws wide: fangs, a forked tongue and a glowing throat, slanted glowing eyes under heavy
+		-- brows, ridged horns sweeping back, frilled gill fans, whiskers, and a glowing lure dangling over the snout.
+		local head = pet:limb("Head", { 0, 21, 8 })
+		head:box(-4, 22, 7, 3, 26, 13, SCALE)
+		head:box(-3, 21, 7, 2, 27, 13, SCALE)
+		head:box(-3, 22, 6, 2, 26, 6, SCALE)
+		head:box(-3, 22, 12, 2, 25, 18, SCALE)
+		head:box(-2, 22, 19, 1, 24, 21, SCALE)
+		head:box(-1, 23, 22, 0, 24, 22, SCALE)
+		head:box(-3, 18, 8, 2, 20, 11, SCALE)
+		head:box(-3, 17, 12, 2, 18, 18, SCALE)
+		head:box(-2, 17, 19, 1, 18, 20, SCALE)
+		head:box(-1, 16, 13, 0, 16, 19, SCALE_LIGHT)
+		-- Inside the mouth.
+		head:paint(-2, 19, 11, 1, 20, 11, THROAT, NEON)
+		head:paint(-2, 22, 14, 1, 22, 20, MOUTH)
+		head:paint(-2, 18, 12, 1, 18, 19, MOUTH)
+		head:box(-1, 19, 12, 0, 19, 15, TONGUE)
+		head:boxPair(1, 19, 16, 1, 19, 17, TONGUE)
+		for _, z in { 14, 16, 18 } do
+			head:boxPair(2, 21, z, 2, 21, z, FANG)
+		end
+		for _, z in { 13, 15, 17 } do
+			head:boxPair(2, 19, z, 2, 19, z, FANG)
+		end
+		head:boxPair(1, 20, 21, 1, 21, 21, FANG)
+		head:boxPair(1, 19, 19, 1, 20, 19, FANG)
+		-- Glowing lines along the jaws, nostrils, and nubs of horn up the snout.
+		head:paintPair(2, 23, 13, 2, 23, 18, GLOW, NEON)
+		head:paintPair(2, 17, 13, 2, 17, 18, GLOW, NEON)
+		head:paintPair(1, 24, 21, 1, 24, 21, SCALE_DARK)
+		for _, z in { 14, 16, 18 } do
+			head:box(-1, 26, z, 0, 26, z, HORN)
+		end
+		head:box(-1, 25, 20, 0, 25, 20, HORN)
+		-- Scales on the cheeks and crown.
+		for _, cell in { { 3, 22, 10 }, { 3, 23, 11 }, { 3, 22, 12 }, { 2, 19, 10 } } do
+			head:paintPair(cell[1], cell[2], cell[3], cell[1], cell[2], cell[3], SCALE_LIGHT)
+		end
+		for _, cell in { { 1, 27, 8 }, { 1, 27, 11 } } do
+			head:paintPair(cell[1], cell[2], cell[3], cell[1], cell[2], cell[3], SCALE_LIGHT)
+		end
+		-- Eyes: glowing, slanted, slit-pupilled, under jutting brows.
+		head:paintPair(3, 24, 12, 3, 24, 13, GLOW, NEON)
+		head:paintPair(3, 25, 11, 3, 25, 12, GLOW, NEON)
+		head:paintPair(3, 24, 12, 3, 25, 12, PUPIL)
+		head:boxPair(3, 27, 10, 4, 27, 14, SCALE_DARK)
+		head:boxPair(4, 26, 13, 4, 26, 14, SCALE_DARK)
+		-- Horns: ridged, sweeping back and up, tipped with light.
+		local horns = {
+			tubePair(head, {
+				{ 3.5, 28.5, 10, 1 },
+				{ 4.5, 30, 7, 1 },
+				{ 5.5, 31, 4, 0.8 },
+				{ 6.5, 31.5, 1, 0.7 },
+				{ 7.5, 32.5, -1.5, 0.5 },
+				{ 8, 34, -3, 0.5 },
+			}, HORN),
+		}
+		for _, horn in horns do
+			for index, cube in horn.cubes do
+				local color = if index == #horn.cubes then GLOW elseif index % 3 == 0 then HORN_DARK else nil
+				if color then
+					head:paint(
+						cube[1],
+						cube[2],
+						cube[3],
+						cube[4],
+						cube[5],
+						cube[6],
+						color,
+						if color == GLOW then NEON else nil
+					)
+				end
+			end
+		end
+		-- Gill fans: glassy frills on spines, behind the jaw.
+		for _, column in
+			{ { 3, 20, 24 }, { 4, 19, 25 }, { 5, 18, 26 }, { 6, 17, 27 }, { 7, 17, 27 }, { 8, 18, 26 }, { 9, 19, 25 } }
+		do
+			head:boxPair(4, column[2], column[1], 4, column[3], column[1], FIN, GLASS, 0.3)
+		end
+		for _, spine in
+			{ { { 5, 22, 8 }, { 5, 28, 5 } }, { { 5, 21, 8 }, { 5, 21, 1 } }, { { 5, 21, 8 }, { 5, 16, 4 } } }
+		do
+			local spineCells = line(spine[1], spine[2])
+			cells(head, spineCells, HORN)
+			cells(mirrored(head), spineCells, HORN)
+			local tip = spineCells[#spineCells]
+			head:paintPair(tip[1], tip[2], tip[3], tip[1], tip[2], tip[3], GLOW, NEON)
+		end
+		-- Whiskers drooping from the lip.
+		local whiskers = {
+			tubePair(head, {
+				{ 2.5, 22.5, 19.5, 0.5 },
+				{ 4.5, 22.5, 20.5, 0.5 },
+				{ 5.5, 20.5, 20.5, 0.5 },
+				{ 6.5, 17.5, 19.5, 0.5 },
+				{ 6.5, 15.5, 18.5, 0.5 },
+			}, SCALE_LIGHT),
+		}
+		for _, whisker in whiskers do
+			local tip = whisker.cubes[#whisker.cubes]
+			head:paint(tip[1], tip[2], tip[3], tip[4], tip[5], tip[6], GLOW, NEON)
+		end
+		-- The lure: a stalk arching forward from the brow, with a glowing bulb hanging in front of the jaws.
+		tube(head, {
+			{ 0, 28.5, 12.5, 0.5 },
+			{ 0, 31, 14, 0.5 },
+			{ 0, 32, 16.5, 0.5 },
+			{ 0, 31, 19, 0.5 },
+			{ 0, 29.5, 20.5, 0.5 },
+		}, HORN_DARK)
+		head:box(-2, 26, 20, 0, 28, 22, GLOW, NEON)
 
-		-- A dragon's head with an open jaw: fangs, a glowing throat, glowing eyes, swept-back horns,
-		-- glassy frilled gills and a crest.
-		local head = pet:limb("Head", { 0, 13, 6 })
-		head:box(-3, 13, 5, 2, 17, 10, SCALE)
-		head:box(-2, 13, 11, 1, 15, 14, SCALE)
-		head:box(-2, 10, 9, 1, 11, 13, SCALE)
-		head:box(-1, 12, 9, 0, 12, 11, THROAT, NEON)
-		head:paint(-2, 10, 9, 1, 10, 13, BELLY)
-		head:boxPair(1, 12, 13, 1, 12, 13, FANG)
-		head:boxPair(1, 12, 12, 1, 12, 12, FANG)
-		head:paint(-1, 15, 14, 0, 15, 14, SCALE_LIGHT)
-		head:paintPair(1, 14, 14, 1, 14, 14, GLOW, NEON)
-		head:paintPair(2, 16, 10, 2, 16, 10, GLOW, NEON)
-		head:boxPair(2, 17, 11, 3, 17, 11, HORN)
-		head:boxPair(2, 18, 6, 2, 19, 7, HORN)
-		head:boxPair(2, 20, 4, 2, 21, 5, HORN)
-		head:boxPair(2, 22, 3, 2, 22, 3, GLOW, NEON)
-		head:boxPair(3, 13, 6, 5, 16, 7, FIN, GLASS, 0.3)
-		head:paintPair(4, 13, 7, 4, 16, 7, GLOW, NEON)
-		head:boxPair(6, 14, 6, 6, 15, 6, FIN, GLASS, 0.3)
-		head:box(-1, 18, 5, 0, 19, 9, FIN, GLASS, 0.3)
-		head:paint(-1, 18, 7, 0, 19, 7, GLOW, NEON)
-		scales(head, 2, 13, 16, 5, 9)
-		head:paintPair(2, 13, 11, 2, 13, 13, GLOW, NEON)
-		head:boxPair(1, 12, 10, 1, 12, 10, FANG)
-		head:box(-1, 18, 10, -1, 20, 10, HORN)
-		head:box(-1, 21, 11, -1, 21, 12, HORN)
-		head:box(-1, 19, 13, -1, 20, 13, GLOW, NEON)
-		head:paint(-3, 17, 6, 2, 17, 6, SCALE_LIGHT)
-		head:paintPair(1, 17, 8, 1, 17, 8, GLOW, NEON)
-		head:paintPair(2, 14, 5, 2, 14, 5, GLOW, NEON)
-
-		-- Front flippers with see-through webbing.
-		pet:limbPair("LeftFin", "RightFin", { 3, 3, 4 }, function(fin)
-			fin:box(3, 2, 3, 3, 4, 5, SCALE_LIGHT)
-			fin:box(4, 1, 2, 6, 4, 6, FIN, GLASS, 0.3)
-			fin:paint(5, 1, 3, 5, 4, 3, GLOW, NEON)
-			fin:paint(5, 1, 5, 5, 4, 5, GLOW, NEON)
+		-- Front fins: webbed fans of glass on bony rays, glowing at the tips.
+		pet:limbPair("LeftFin", "RightFin", { 3, 3, 2 }, function(fin)
+			fin:box(3, 2, 0, 3, 4, 3, SCALE)
+			for _, row in
+				{ { 4, 0, 4 }, { 5, -1, 4 }, { 6, -2, 3 }, { 7, -3, 2 }, { 8, -4, 1 }, { 9, -5, -1 }, { 10, -5, -3 } }
+			do
+				fin:box(row[1], 3, row[2], row[1], 3, row[3], FIN, GLASS, 0.3)
+			end
+			for _, ray in { { 4, 6, 3 }, { 4, 8, 1 }, { 5, 9, -1 }, { 7, 10, -3 } } do
+				fin:paint(ray[1], 3, ray[3], ray[2], 3, ray[3], HORN)
+			end
+			for _, tip in { { 6, 3 }, { 8, 1 }, { 9, -1 }, { 10, -3 } } do
+				fin:paint(tip[1], 3, tip[2], tip[1], 3, tip[2], GLOW, NEON)
+			end
 		end)
 
-		-- A great arching coil with a glassy crest and glowing stripes.
-		local coil = pet:limb("Segment1", { 0, 3, 1 })
-		coil:box(-3, 0, -1, 2, 5, 1, SCALE)
-		coil:box(-3, 6, -5, 2, 9, -1, SCALE)
-		coil:box(-3, 0, -7, 2, 5, -5, SCALE)
-		coil:paint(-3, 6, -5, 2, 6, -1, BELLY)
-		coil:paint(-3, 0, 1, 2, 5, 1, BELLY)
-		coil:paintPair(2, 7, -5, 2, 7, -1, GLOW, NEON)
-		coil:paintPair(2, 2, -7, 2, 2, -5, GLOW, NEON)
-		coil:paintPair(2, 3, -1, 2, 3, 0, GLOW, NEON)
-		scales(coil, 2, 8, 9, -5, -1)
-		scales(coil, 2, 3, 5, -7, -5)
-		scales(coil, 2, 0, 2, -1, 0)
-		coil:box(-1, 10, -5, 0, 11, -2, FIN, GLASS, 0.3)
-		coil:paint(-1, 10, -4, 0, 11, -4, GLOW, NEON)
-		coil:box(-1, 6, -7, 0, 7, -6, FIN, GLASS, 0.3)
+		-- A great forked tail fan of glass, ribbed with bone.
+		for _, column in
+			{
+				{ -45, 3, 9 },
+				{ -46, 2, 12 },
+				{ -47, 1, 14 },
+				{ -48, 1, 16 },
+				{ -49, 1, 8, 11, 17 },
+				{ -50, 1, 5, 13, 18 },
+				{ -51, 1, 3, 15, 18 },
+			}
+		do
+			tail:box(1, column[2], column[1], 1, column[3], column[1], FIN, GLASS, 0.3)
+			if column[4] then
+				tail:box(1, column[4], column[1], 1, column[5], column[1], FIN, GLASS, 0.3)
+			end
+		end
+		for _, ray in
+			{ { { 1, 6, -45 }, { 1, 14, -47 } }, { { 1, 6, -45 }, { 1, 17, -50 } }, { { 1, 5, -45 }, { 1, 2, -50 } } }
+		do
+			local rayCells = line(ray[1], ray[2])
+			cells(tail, rayCells, HORN, true)
+			local tip = rayCells[#rayCells]
+			tail:paint(tip[1], tip[2], tip[3], tip[1], tip[2], tip[3], GLOW, NEON)
+		end
+		tail:paint(1, 15, -51, 1, 18, -51, GLOW, NEON)
+		tail:paint(1, 1, -51, 1, 3, -51, GLOW, NEON)
 
-		-- A smaller second coil.
-		local coil2 = pet:limb("Segment2", { 0, 2, -7 }, "Segment1")
-		coil2:box(-2, 0, -9, 1, 4, -8, SCALE)
-		coil2:box(-2, 5, -12, 1, 7, -8, SCALE)
-		coil2:box(-2, 0, -13, 1, 4, -12, SCALE)
-		coil2:paint(-2, 5, -12, 1, 5, -8, BELLY)
-		coil2:paintPair(1, 6, -12, 1, 6, -8, GLOW, NEON)
-		coil2:paintPair(1, 2, -13, 1, 2, -12, GLOW, NEON)
-		scales(coil2, 1, 0, 4, -9, -8)
-		coil2:box(-1, 8, -12, 0, 9, -9, FIN, GLASS, 0.3)
-		coil2:paint(-1, 8, -10, 0, 9, -10, GLOW, NEON)
-		coil2:box(-1, 8, -8, 0, 8, -8, HORN)
-		scales(coil2, 1, 5, 7, -12, -9)
-		scales(coil2, 1, 0, 4, -13, -12)
+		decorate(body, neck, { 0, 16, -6 }, true, true)
+		decorate(segment1, coil1, { 0, 2, -12.5 }, false, false)
+		decorate(segment2, coil2, { -2, 1, -28.5 }, false, false)
+		decorate(tail, tailTube, { 1, -20, -39 }, false, false)
 
-		-- A tapering tail ending in a tall see-through fin.
-		local tail = pet:limb("Tail", { 0, 2, -13 }, "Segment2")
-		tail:box(-1, 0, -17, 0, 2, -14, SCALE)
-		tail:box(-1, 1, -19, 0, 3, -18, SCALE)
-		tail:paintPair(0, 1, -17, 0, 1, -14, GLOW, NEON)
-		tail:box(-1, 2, -22, 0, 7, -20, FIN, GLASS, 0.3)
-		tail:paint(-1, 3, -21, 0, 7, -21, GLOW, NEON)
-		tail:box(-1, 8, -21, 0, 8, -21, GLOW, NEON)
-		tail:box(-1, 3, -16, 0, 3, -16, HORN)
-		tail:box(-1, 3, -14, 0, 3, -14, HORN)
-		tail:box(-1, 4, -18, 0, 4, -18, HORN)
-
-		pet:light(GLOW, 2.6, 18)
-		pet:particles("Bubbles", GLOW, 12)
-		pet:seat(0, 10, -1)
+		pet:light(GLOW, 3, 22)
+		pet:particles("Bubbles", GLOW, 16)
+		pet:seat(0, 16, -13)
 	end,
 }
 

@@ -118,10 +118,11 @@ PetModels.SKELETONS = {
 
 local DEFAULT_MATERIAL = "SmoothPlastic"
 
--- Paint sits a hair outside the blocks it covers so it always draws on top; each later paint on the same limb sits
--- a little further out, so paint on paint (an eye on a cheek patch) never flickers.
+-- Paint sits a hair outside the blocks it covers so it always draws on top. Paint over earlier paint on the same
+-- limb (an eye on a cheek patch) sits a step further out, and paint right beside earlier paint sits at a different
+-- depth from it, so no two paints ever share a surface and flicker.
 local PAINT_BASE = 0.03
-local PAINT_STEP = 0.012
+local PAINT_STEP = 0.02
 local PAINT_MAX = 0.15
 
 type Range = { number } -- { x0, y0, z0, x1, y1, z1 }, inclusive cell numbers
@@ -132,7 +133,8 @@ type LimbBuild = {
 	pivot: { number },
 	boxes: { Box },
 	ranges: { Range },
-	paints: number,
+	-- Each paint so far and how many steps out it sits.
+	paints: { { range: Range, layer: number } },
 }
 
 ----------------------------------------------------------------------------------------------------------------
@@ -208,8 +210,35 @@ function LimbBuilder.paint(
 	color: Color,
 	material: string?
 )
-	local pad = math.min(PAINT_MAX, PAINT_BASE + PAINT_STEP * self.build.paints)
-	self.build.paints += 1
+	x0, x1 = sorted(x0, x1)
+	y0, y1 = sorted(y0, y1)
+	z0, z1 = sorted(z0, z1)
+	-- Out past every paint it covers, and not at the depth of any paint it touches.
+	local above, beside = 0, {}
+	for _, earlier in self.build.paints do
+		local r = earlier.range
+		local overlaps, touches = true, true
+		for axis, low in { x0, y0, z0 } do
+			local high = ({ x1, y1, z1 })[axis]
+			if r[axis] > high or r[axis + 3] < low then
+				overlaps = false
+			end
+			if r[axis] > high + 1 or r[axis + 3] < low - 1 then
+				touches = false
+			end
+		end
+		if overlaps then
+			above = math.max(above, earlier.layer + 1)
+		elseif touches then
+			beside[earlier.layer] = true
+		end
+	end
+	local layer = above
+	while beside[layer] do
+		layer += 1
+	end
+	table.insert(self.build.paints, { range = { x0, y0, z0, x1, y1, z1 }, layer = layer })
+	local pad = math.min(PAINT_MAX, PAINT_BASE + PAINT_STEP * layer)
 	addBox(self.build, x0, y0, z0, x1, y1, z1, color, material, 0, pad)
 end
 
@@ -272,7 +301,7 @@ function PetBuilder.limb(self: PetBuilder, name: string, pivot: { number }, pare
 		pivot = pivot,
 		boxes = {},
 		ranges = {},
-		paints = 0,
+		paints = {},
 	}
 	table.insert(self.limbs, build)
 	self.byName[name] = build
@@ -309,7 +338,13 @@ function PetBuilder.limbPair(
 			pad
 		)
 	end
-	right.build.paints = left.build.paints
+	for _, paint in left.build.paints do
+		local r = paint.range
+		table.insert(
+			right.build.paints,
+			{ range = { -1 - r[4], r[2], r[3], -1 - r[1], r[5], r[6] }, layer = paint.layer }
+		)
+	end
 end
 
 -- Where a rider sits on the pet's back, in voxels.

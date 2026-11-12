@@ -381,6 +381,10 @@ local OCEAN = {
 	seahorse = rgb(36, 172, 168),
 	seahorseDark = rgb(22, 122, 126),
 	seahorseBelly = rgb(188, 242, 230),
+	shark = rgb(120, 134, 150),
+	sharkDark = rgb(84, 96, 112),
+	sharkBelly = rgb(240, 244, 248),
+	sharkMouth = rgb(90, 30, 40),
 }
 
 local VOLCANO = {
@@ -1273,10 +1277,53 @@ Designs.Abyss = {
 	end,
 }
 
+Designs.GreatShark = {
+	name = "Great Shark Egg",
+	hatches = "Great Shark",
+	seed = 50,
+	draw = function(egg)
+		egg:base(OCEAN.shark)
+		-- A jagged white underside, a grin full of teeth on the front, gill slits, and a tall fin on its back.
+		zigzagFill(egg, 5, 2, 7, false, OCEAN.sharkBelly)
+		egg:paint(function(cell)
+			if cell.facing ~= "side" or cell.angle < 55 or cell.angle > 125 then
+				return nil
+			end
+			if cell.y == 6 then
+				return OCEAN.sharkMouth
+			elseif cell.y == 7 then
+				return if math.floor(cell.angle / 8) % 2 == 0 then OCEAN.sharkBelly else OCEAN.sharkMouth
+			end
+			return nil
+		end)
+		spots(egg, rgb(20, 22, 28), { { 10, 62, 1.2 }, { 10, 118, 1.2 } })
+		egg:paint(function(cell)
+			if cell.facing ~= "side" or cell.y < 7 or cell.y > 10 then
+				return nil
+			end
+			for _, line in { 25, 35, 145, 155 } do
+				if math.abs(cell.angle - line) < 3 then
+					return OCEAN.sharkDark
+				end
+			end
+			return nil
+		end)
+		spriteZ(egg, {
+			"F...",
+			"FF..",
+			"FFF.",
+			".FFF",
+			"..FF",
+		}, -9, 13, { -1, 0 }, { F = { OCEAN.sharkDark } })
+		pairCells(egg, { { 6, 6, 0 }, { 6, 5, 1 }, { 7, 5, 1 }, { 7, 4, 2 } }, OCEAN.shark)
+	end,
+}
+
 Designs.KingCrab = {
 	name = "King Crab Egg",
 	hatches = "King Crab",
 	seed = 48,
+	shelved = "Epic",
 	profile = "Round",
 	draw = function(egg)
 		egg:base(OCEAN.crab)

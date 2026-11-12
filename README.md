@@ -69,8 +69,8 @@ picks a rarity with the zone's odds, then one of the zone's eggs of that rarity.
 
 - **Common**: plain, the zone's colour and one simple mark.
 - **Uncommon, Rare**: a zone pattern with a hint of the pets inside (an acorn, a turtle shell, a knitted sweater).
-- **Epic and up**: the egg looks like its pet: ears, horns, tusks, fins and markings, like the King Crab's claws
-  and eye stalks or the Lava Golem's glowing cracks and boulder shoulders.
+- **Epic and up**: the egg looks like its pet: ears, horns, tusks, fins and markings, like the Great Shark's fin,
+  gills and teeth or the Lava Golem's glowing cracks and boulder shoulders.
 - **Legendary and up** glow in their rarity colour; **Mythic and up** also give off particles.
 
 Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom to the point; x and z from -6 to 5).
@@ -94,10 +94,14 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
-- Ocean: Sea Turtle, Dolphin, Manta Ray, King Crab, Narwhal, Hippocampus, Kraken, Leviathan
+- Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 
 The rarer the pet, the more detailed it is. Secret and Eternal pets are the showpieces: the tests require each to
 have at least 150 blocks and at least 30% more than any other pet in the game.
+
+Most blocks are placed by hand. Curved and rounded parts are drawn with helpers at the top of the designs file:
+`tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
+the end of one, and `blob` fills a rounded shape such as the Kraken's mantle or the Great Shark's body.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, winged, two legs, six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a

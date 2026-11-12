@@ -101,7 +101,7 @@ local list: { ZoneInfo } = {
 			{ egg = "Turtle", rarity = "Rare", pet = "SeaTurtle" },
 			{ egg = "Dolphin", rarity = "Rare", pet = "Dolphin" },
 			{ egg = "Manta", rarity = "Epic", pet = "MantaRay" },
-			{ egg = "KingCrab", rarity = "Epic", pet = "KingCrab" },
+			{ egg = "GreatShark", rarity = "Epic", pet = "GreatShark" },
 			{ egg = "Narwhal", rarity = "Legendary", pet = "Narwhal" },
 			{ egg = "Hippocampus", rarity = "Mythic", pet = "Hippocampus" },
 			{ egg = "Kraken", rarity = "Secret", pet = "Kraken" },
