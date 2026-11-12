@@ -351,6 +351,57 @@ return function(harness)
 			)
 		end)
 
+		it("show the zone's pets, rigged and ready to animate", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			root.Position = roblox.Vector3.new(0, 13, 100) -- Forest
+			session:heartbeat(1 / 60)
+			session:fromClient("DevCommand", player, "ShowPets")
+			local folder = session:service("Workspace"):FindFirstChild("StudioPets")
+			expect.truthy(folder, "Workspace.StudioPets")
+			local names = {}
+			for _, pet in folder:GetChildren() do
+				table.insert(names, pet.Name)
+			end
+			table.sort(names)
+			expect.equal(table.concat(names, ","), "Bear,Bunny,Fox,Hedgehog,MossStag,Owl,Squirrel,Treant")
+
+			local fox = folder.Fox
+			expect.truthy(fox.PrimaryPart == fox.Root, "PrimaryPart")
+			expect.equal(fox.Root.Anchored, true)
+			-- Every limb is a part on a Motor6D, and the legs and head hang from the body.
+			local body = fox.Body
+			expect.truthy(fox.Root:FindFirstChild("Body"):IsA("Motor6D"), "Root -> Body motor")
+			for _, limb in { "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" } do
+				local motor = body:FindFirstChild(limb)
+				expect.truthy(motor and motor:IsA("Motor6D"), "Body -> " .. limb .. " motor")
+				expect.truthy(motor.Part1 == fox[limb], limb .. " motor joins the limb")
+			end
+			local blocks = 0
+			for _, part in fox:GetChildren() do
+				if part:IsA("BasePart") and part:FindFirstChildOfClass("WeldConstraint") then
+					blocks += 1
+					expect.equal(part.Anchored, false)
+				end
+			end
+			expect.truthy(blocks > 15, "visible blocks welded to their limbs: " .. blocks)
+			expect.truthy(fox:GetAttribute("GroundOffset") > 0, "GroundOffset")
+			expect.truthy(fox:GetAttribute("SeatOffset"), "SeatOffset")
+			-- The Treant is Mythic: it glows and sparkles.
+			expect.truthy(folder.Treant.Root:FindFirstChildOfClass("PointLight"), "Treant light")
+			expect.truthy(folder.Treant.Root:FindFirstChildOfClass("ParticleEmitter"), "Treant particles")
+
+			-- Showing them again replaces them rather than piling up.
+			session:fromClient("DevCommand", player, "ShowPets")
+			local folders = 0
+			for _, child in session:service("Workspace"):GetChildren() do
+				if child.Name == "StudioPets" then
+					folders += 1
+				end
+			end
+			expect.equal(folders, 1)
+		end)
+
 		it("drop each of the zone's eggs in turn", function()
 			local session = startServer()
 			local player, _, root = session:addPlayer(1, "Tester")

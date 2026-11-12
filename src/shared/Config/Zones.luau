@@ -2,14 +2,15 @@
 -- The runway's zones, in order from the hub to the end cliff.
 -- Pure data (no Roblox APIs) so the test runner can load it outside Studio.
 --
--- eggs:    the zone's 8 eggs, from the most common to the rarest. `egg` names a design in Shared/EggModels/Designs.
+-- eggs:    the zone's 8 eggs, from the most common to the rarest. `egg` names a design in Shared/EggModels/Designs;
+--          `pet` is the pet that hatches from it (a design in Shared/PetModels/Designs, once it has a model).
 --          A zone can have two eggs of the same rarity.
 -- stamina: the stamina requirement of each egg rarity that can drop in the zone.
 --          A rarity missing from this table cannot drop there.
 -- weights: relative drop odds for each rarity in the zone. A drop first picks a rarity with these odds, then one
 --          of the zone's eggs of that rarity, each equally likely.
 
-export type ZoneEgg = { egg: string, rarity: string }
+export type ZoneEgg = { egg: string, rarity: string, pet: string }
 
 export type ZoneInfo = {
 	id: number,
@@ -33,14 +34,14 @@ local list: { ZoneInfo } = {
 		ground = { 92, 150, 78 },
 		accent = { 50, 96, 48 },
 		eggs = {
-			{ egg = "Leafy", rarity = "Common" },
-			{ egg = "Cottontail", rarity = "Common" },
-			{ egg = "Acorn", rarity = "Uncommon" },
-			{ egg = "Foxtail", rarity = "Uncommon" },
-			{ egg = "Toadstool", rarity = "Rare" },
-			{ egg = "Bear", rarity = "Epic" },
-			{ egg = "MossStag", rarity = "Legendary" },
-			{ egg = "Treant", rarity = "Mythic" },
+			{ egg = "Leafy", rarity = "Common", pet = "Squirrel" },
+			{ egg = "Cottontail", rarity = "Common", pet = "Bunny" },
+			{ egg = "Acorn", rarity = "Uncommon", pet = "Hedgehog" },
+			{ egg = "Foxtail", rarity = "Uncommon", pet = "Fox" },
+			{ egg = "Toadstool", rarity = "Rare", pet = "Owl" },
+			{ egg = "Bear", rarity = "Epic", pet = "Bear" },
+			{ egg = "MossStag", rarity = "Legendary", pet = "MossStag" },
+			{ egg = "Treant", rarity = "Mythic", pet = "Treant" },
 		},
 		stamina = { Common = 50, Uncommon = 80, Rare = 120, Epic = 200, Legendary = 350, Mythic = 450 },
 		weights = { Common = 55, Uncommon = 27, Rare = 12, Epic = 5, Legendary = 1, Mythic = 0.2 },
@@ -52,14 +53,14 @@ local list: { ZoneInfo } = {
 		ground = { 226, 196, 128 },
 		accent = { 176, 120, 62 },
 		eggs = {
-			{ egg = "Sandy", rarity = "Common" },
-			{ egg = "Sandstone", rarity = "Uncommon" },
-			{ egg = "Fennec", rarity = "Uncommon" },
-			{ egg = "Caravan", rarity = "Rare" },
-			{ egg = "Scorpion", rarity = "Epic" },
-			{ egg = "PharaohJackal", rarity = "Legendary" },
-			{ egg = "Sphinx", rarity = "Mythic" },
-			{ egg = "Scarab", rarity = "Mythic" },
+			{ egg = "Sandy", rarity = "Common", pet = "Meerkat" },
+			{ egg = "Sandstone", rarity = "Uncommon", pet = "Armadillo" },
+			{ egg = "Fennec", rarity = "Uncommon", pet = "FennecFox" },
+			{ egg = "Caravan", rarity = "Rare", pet = "Camel" },
+			{ egg = "Scorpion", rarity = "Epic", pet = "GiantScorpion" },
+			{ egg = "PharaohJackal", rarity = "Legendary", pet = "PharaohJackal" },
+			{ egg = "Sphinx", rarity = "Mythic", pet = "Sphinx" },
+			{ egg = "Scarab", rarity = "Mythic", pet = "GoldenScarab" },
 		},
 		stamina = { Common = 500, Uncommon = 650, Rare = 850, Epic = 1100, Legendary = 1400, Mythic = 1800 },
 		weights = { Common = 52, Uncommon = 27, Rare = 13, Epic = 6, Legendary = 1.7, Mythic = 0.3 },
@@ -71,14 +72,14 @@ local list: { ZoneInfo } = {
 		ground = { 236, 243, 250 },
 		accent = { 140, 190, 230 },
 		eggs = {
-			{ egg = "Snowball", rarity = "Uncommon" },
-			{ egg = "Snowcap", rarity = "Uncommon" },
-			{ egg = "Knitted", rarity = "Rare" },
-			{ egg = "Mammoth", rarity = "Epic" },
-			{ egg = "Sabertooth", rarity = "Legendary" },
-			{ egg = "AuroraOwl", rarity = "Mythic" },
-			{ egg = "FrostWolf", rarity = "Mythic" },
-			{ egg = "Yeti", rarity = "Secret" },
+			{ egg = "Snowball", rarity = "Uncommon", pet = "SnowHare" },
+			{ egg = "Snowcap", rarity = "Uncommon", pet = "ArcticFox" },
+			{ egg = "Knitted", rarity = "Rare", pet = "Reindeer" },
+			{ egg = "Mammoth", rarity = "Epic", pet = "WoollyMammoth" },
+			{ egg = "Sabertooth", rarity = "Legendary", pet = "SabertoothCat" },
+			{ egg = "AuroraOwl", rarity = "Mythic", pet = "AuroraOwl" },
+			{ egg = "FrostWolf", rarity = "Mythic", pet = "FrostWolf" },
+			{ egg = "Yeti", rarity = "Secret", pet = "Yeti" },
 		},
 		stamina = {
 			Uncommon = 2500,
@@ -97,14 +98,14 @@ local list: { ZoneInfo } = {
 		ground = { 240, 222, 170 },
 		accent = { 40, 150, 200 },
 		eggs = {
-			{ egg = "Turtle", rarity = "Rare" },
-			{ egg = "Dolphin", rarity = "Rare" },
-			{ egg = "Manta", rarity = "Epic" },
-			{ egg = "KingCrab", rarity = "Epic" },
-			{ egg = "Narwhal", rarity = "Legendary" },
-			{ egg = "Hippocampus", rarity = "Mythic" },
-			{ egg = "Kraken", rarity = "Secret" },
-			{ egg = "Abyss", rarity = "Secret" },
+			{ egg = "Turtle", rarity = "Rare", pet = "SeaTurtle" },
+			{ egg = "Dolphin", rarity = "Rare", pet = "Dolphin" },
+			{ egg = "Manta", rarity = "Epic", pet = "MantaRay" },
+			{ egg = "KingCrab", rarity = "Epic", pet = "KingCrab" },
+			{ egg = "Narwhal", rarity = "Legendary", pet = "Narwhal" },
+			{ egg = "Hippocampus", rarity = "Mythic", pet = "Hippocampus" },
+			{ egg = "Kraken", rarity = "Secret", pet = "Kraken" },
+			{ egg = "Abyss", rarity = "Secret", pet = "Leviathan" },
 		},
 		stamina = {
 			Rare = 12500,
@@ -122,14 +123,14 @@ local list: { ZoneInfo } = {
 		ground = { 74, 60, 60 },
 		accent = { 235, 95, 40 },
 		eggs = {
-			{ egg = "Obsidian", rarity = "Rare" },
-			{ egg = "CinderBoar", rarity = "Epic" },
-			{ egg = "VolcanoTortoise", rarity = "Legendary" },
-			{ egg = "Salamander", rarity = "Legendary" },
-			{ egg = "Chimera", rarity = "Mythic" },
-			{ egg = "LavaGolem", rarity = "Mythic" },
-			{ egg = "Cerberus", rarity = "Secret" },
-			{ egg = "EternalPhoenix", rarity = "Eternal" },
+			{ egg = "Obsidian", rarity = "Rare", pet = "ObsidianGoat" },
+			{ egg = "CinderBoar", rarity = "Epic", pet = "CinderBoar" },
+			{ egg = "VolcanoTortoise", rarity = "Legendary", pet = "VolcanoTortoise" },
+			{ egg = "Salamander", rarity = "Legendary", pet = "FireSalamander" },
+			{ egg = "Chimera", rarity = "Mythic", pet = "Chimera" },
+			{ egg = "LavaGolem", rarity = "Mythic", pet = "LavaGolem" },
+			{ egg = "Cerberus", rarity = "Secret", pet = "Cerberus" },
+			{ egg = "EternalPhoenix", rarity = "Eternal", pet = "EternalPhoenix" },
 		},
 		stamina = {
 			Rare = 55000,

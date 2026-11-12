@@ -10,6 +10,7 @@ local specs = {
 	"./specs/config.spec",
 	"./specs/shared.spec",
 	"./specs/eggModels.spec",
+	"./specs/petModels.spec",
 	"./specs/runwaySim.spec",
 	"./specs/server.smoke.spec",
 	"./specs/client.smoke.spec",

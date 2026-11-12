@@ -48,6 +48,7 @@
     color-scheme: dark;
   }
 
+  [hidden] { display: none !important; }
   body {
     background: var(--bg);
     color: var(--ink);
@@ -142,6 +143,7 @@
     cursor: pointer;
   }
   .seg button[aria-pressed="true"] { background: var(--yolk); color: var(--yolk-ink); }
+  .seg button:disabled { opacity: 0.45; cursor: not-allowed; }
   button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
   .card {
@@ -273,16 +275,20 @@
   <header>
     <div class="eyebrow">Roll an Egg · egg models</div>
     <h1>Runway Egg Lineup</h1>
-    <p class="lede">Every egg that can drop on the runway, 8 per zone, built from blocks the way the game builds them.
-      Commons are plain, Uncommon and Rare eggs carry a zone pattern, and from Epic up each egg looks like the pet
-      inside.</p>
+    <p class="lede">Every egg that can drop on the runway, 8 per zone, and the pets that hatch from them, built from
+      blocks the way the game builds them. Commons are plain, Uncommon and Rare eggs carry a zone pattern, and from
+      Epic up each egg looks like the pet inside.</p>
   </header>
 
   <section class="stage" aria-label="Selected egg">
     <div class="viewer" id="viewer">
       <canvas id="stage-canvas" aria-label="3D view of the selected egg. Drag to turn it."></canvas>
       <div class="viewer-tools">
-        <div class="seg" role="group" aria-label="Pose">
+        <div class="seg" role="group" aria-label="Show">
+          <button type="button" id="view-egg" aria-pressed="true">Egg</button>
+          <button type="button" id="view-pet" aria-pressed="false">Pet</button>
+        </div>
+        <div class="seg" role="group" aria-label="Pose" id="pose-group">
           <button type="button" id="pose-stand" aria-pressed="true">Standing</button>
           <button type="button" id="pose-roll" aria-pressed="false">Rolling</button>
         </div>
@@ -293,10 +299,10 @@
       <div class="chips" id="egg-chips"></div>
       <h2 id="egg-name">Egg</h2>
       <dl class="facts">
-        <dt>Hatches</dt><dd id="egg-hatches">-</dd>
-        <dt>Stamina</dt><dd id="egg-stamina">-</dd>
-        <dt>Size</dt><dd id="egg-size">-</dd>
-        <dt>Parts</dt><dd id="egg-parts">-</dd>
+        <dt id="fact1-label">Hatches</dt><dd id="fact1">-</dd>
+        <dt id="fact2-label">Stamina</dt><dd id="fact2">-</dd>
+        <dt id="fact3-label">Size</dt><dd id="fact3">-</dd>
+        <dt>Parts</dt><dd id="fact4">-</dd>
       </dl>
       <p class="tier" id="egg-tier"></p>
       <div class="step">
@@ -314,6 +320,15 @@
       <div class="table" id="table"></div>
     </div>
   </section>
+
+  <section class="lineup" aria-label="Pets">
+    <h2 id="pets-title">Pets</h2>
+    <p id="pets-note">The pets that hatch from the eggs, built the same way. Each one is made of limbs that bend at
+      joints, so pets that share a skeleton share their walk.</p>
+    <div class="table-wrap">
+      <div class="table" id="pet-table"></div>
+    </div>
+  </section>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -321,6 +336,8 @@
 (function () {
   const DATA = /*EGG_DATA*/null;
   const eggs = DATA.eggs;
+  const pets = DATA.pets || [];
+  const petByKind = Object.fromEntries(pets.map((p) => [p.kind, p]));
   const rarityColor = Object.fromEntries(DATA.rarities.map((r) => [r.name, r.color]));
   const zoneById = Object.fromEntries(DATA.zones.map((z) => [z.id, z]));
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -389,6 +406,85 @@
     return group;
   }
 
+  // A pet: one group per limb, placed at the limb's pivot so it turns around its joint. Limbs hang from Body.
+  function buildPet(pet) {
+    const root = new THREE.Group();
+    const groups = {};
+    const base = new Map();
+    for (const limb of pet.limbs) {
+      const g = new THREE.Group();
+      const [px, py, pz] = limb.pivot;
+      for (const b of limb.boxes) {
+        const [x, y, z, sx, sy, sz, hex, kind, tr] = b;
+        const mesh = new THREE.Mesh(BOX, materialFor(hex, kind, tr));
+        mesh.position.set(x - px, y - py, z - pz);
+        mesh.scale.set(sx, sy, sz);
+        mesh.castShadow = kind !== "Glass";
+        mesh.receiveShadow = true;
+        g.add(mesh);
+      }
+      groups[limb.name] = g;
+    }
+    for (const limb of pet.limbs) {
+      const g = groups[limb.name];
+      const parent = limb.parent && groups[limb.parent];
+      if (parent) {
+        const pp = pet.limbs.find((l) => l.name === limb.parent).pivot;
+        g.position.set(limb.pivot[0] - pp[0], limb.pivot[1] - pp[1], limb.pivot[2] - pp[2]);
+        parent.add(g);
+      } else {
+        g.position.set(limb.pivot[0], limb.pivot[1], limb.pivot[2]);
+        root.add(g);
+      }
+      base.set(g, g.position.clone());
+    }
+    root.userData = { pet, groups, base };
+    return root;
+  }
+
+  // Walks the pet on the spot, the way its skeleton and gait would move in the game.
+  function animatePet(model, t) {
+    const { pet, groups, base } = model.userData;
+    for (const g of Object.values(groups)) {
+      g.position.copy(base.get(g));
+      g.rotation.set(0, 0, 0);
+    }
+    const gait = pet.gait;
+    const speed = gait === "Stomp" ? 4 : gait === "Hop" ? 6.5 : 6;
+    const s = Math.sin(t * speed), c = Math.cos(t * speed);
+    const turn = (name, axis, angle) => { if (groups[name]) groups[name].rotation[axis] = angle; };
+    const body = groups.Body;
+    if (pet.skeleton === "Quadruped" || pet.skeleton === "LowSlung") {
+      if (gait === "Hop") {
+        body.position.y += Math.max(0, s) * 1.6;
+        turn("FrontLeftLeg", "x", -0.5 * s); turn("FrontRightLeg", "x", -0.5 * s);
+        turn("BackLeftLeg", "x", 0.6 * s); turn("BackRightLeg", "x", 0.6 * s);
+        turn("Head", "x", -0.08 * s);
+      } else {
+        const a = pet.skeleton === "LowSlung" ? 0.6 : gait === "Stomp" ? 0.35 : 0.45;
+        turn("FrontLeftLeg", "x", a * s); turn("BackRightLeg", "x", a * s);
+        turn("FrontRightLeg", "x", -a * s); turn("BackLeftLeg", "x", -a * s);
+        body.position.y += Math.abs(c) * (gait === "Stomp" ? 0.35 : 0.25);
+        if (gait === "Stomp") body.rotation.z = 0.04 * s;
+        turn("Head", "x", 0.05 * c);
+      }
+      turn("Tail", "y", 0.35 * Math.sin(t * speed * 0.8));
+    } else if (pet.skeleton === "Winged") {
+      body.rotation.z = 0.12 * s;
+      body.position.y += Math.abs(s) * 0.3;
+      const flap = 0.2 + 0.25 * Math.sin(t * speed * 1.6);
+      turn("LeftWing", "z", flap); turn("RightWing", "z", -flap);
+      turn("LeftLeg", "x", 0.4 * s); turn("RightLeg", "x", -0.4 * s);
+      turn("Tail", "y", 0.2 * c);
+    } else if (pet.skeleton === "Biped") {
+      turn("LeftLeg", "x", 0.35 * s); turn("RightLeg", "x", -0.35 * s);
+      turn("LeftArm", "x", -0.4 * s); turn("RightArm", "x", 0.4 * s);
+      body.rotation.z = 0.05 * s;
+      body.position.y += Math.abs(c) * 0.3;
+      turn("Head", "y", 0.12 * Math.sin(t * 1.3));
+    }
+  }
+
   function addLights(scene) {
     scene.add(new THREE.HemisphereLight(0xf4f8ff, 0x8a8478, 0.62));
     const sun = new THREE.DirectionalLight(0xffffff, 0.78);
@@ -413,17 +509,17 @@
   }
 
   // ---------------------------------------------------------------- thumbnails
-  function renderThumbnails() {
+  function renderThumbnails(items, build) {
     const size = 200;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(1);
     renderer.setSize(size, size, false);
     renderer.setClearColor(0x000000, 0);
     const urls = [];
-    for (const egg of eggs) {
+    for (const item of items) {
       const scene = new THREE.Scene();
       addLights(scene);
-      const group = buildEgg(egg, false);
+      const group = build(item);
       scene.add(group);
       const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 500);
       const fit = frameCamera(camera, group, 0.92);
@@ -480,7 +576,7 @@
   }
   const GLOW = glowTexture();
 
-  const state = { index: eggs.findIndex((e) => e.name === "Eternal Phoenix Egg"), lying: false, yaw: 0.38, pitch: 0.22 };
+  const state = { index: eggs.findIndex((e) => e.name === "Eternal Phoenix Egg"), lying: false, view: "egg", yaw: 0.38, pitch: 0.22 };
   if (state.index < 0) state.index = 0;
   let current = null;
 
@@ -535,15 +631,19 @@
       current.ground.material.map.dispose();
       current.ground.material.dispose();
     }
+    const pet = petByKind[egg.pet];
+    if (state.view === "pet" && !pet) state.view = "egg";
+    const showPet = state.view === "pet";
+    const subject = showPet ? pet : egg;
     const root = new THREE.Group();
     const pivot = new THREE.Group();
-    const model = buildEgg(egg, state.lying);
+    const model = showPet ? buildPet(pet) : buildEgg(egg, state.lying);
     pivot.add(model);
     root.add(pivot);
 
     const zone = zoneById[egg.zone] || { ground: "#9a9ca3" };
     const box = new THREE.Box3().setFromObject(model);
-    const groundY = state.lying ? -DATA.radius : box.min.y;
+    const groundY = showPet ? 0 : state.lying ? -DATA.radius : box.min.y;
     const texture = stripeTexture(zone.ground);
     texture.repeat.set(1, 24);
     const ground = new THREE.Mesh(
@@ -554,44 +654,71 @@
     ground.receiveShadow = true;
     root.add(ground);
 
+    const middleY = state.lying && !showPet ? 0 : (box.min.y + box.max.y) / 2;
     let halo = null;
-    if (egg.light) {
+    if (subject.light) {
       halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: GLOW, color: new THREE.Color(egg.light.color), transparent: true,
-        opacity: 0.22 + egg.light.brightness * 0.05, depthWrite: false, blending: THREE.AdditiveBlending,
+        map: GLOW, color: new THREE.Color(subject.light.color), transparent: true,
+        opacity: 0.22 + subject.light.brightness * 0.05, depthWrite: false, blending: THREE.AdditiveBlending,
       }));
       halo.scale.setScalar(34);
-      halo.position.set(0, state.lying ? 0 : (box.min.y + box.max.y) / 2, -2);
+      halo.position.set(0, middleY, -2);
       root.add(halo);
-      const light = new THREE.PointLight(new THREE.Color(egg.light.color), egg.light.brightness * 0.5, 40);
-      light.position.set(0, 0, 8);
+      const light = new THREE.PointLight(new THREE.Color(subject.light.color), subject.light.brightness * 0.5, 40);
+      light.position.set(0, middleY, 8);
       root.add(light);
     }
     let particles = null;
-    if (egg.particles) {
-      particles = makeParticles(egg.particles, DATA.radius * 1.2);
-      particles.position.y = state.lying ? 0 : (box.min.y + box.max.y) / 2;
+    if (subject.particles) {
+      particles = makeParticles(subject.particles, DATA.radius * 1.2);
+      particles.position.y = middleY;
       root.add(particles);
     }
 
     scene.add(root);
-    const center = new THREE.Vector3(0, state.lying ? -1 : (box.min.y + box.max.y) / 2 - 1, 0);
+    const center = new THREE.Vector3(0, state.lying && !showPet ? -1 : middleY - 1, 0);
     const size = box.getSize(new THREE.Vector3());
-    current = { root, pivot, model, ground, texture, particles, center, radius: Math.max(size.x, size.y, size.z) * 0.62 + 3 };
+    current = {
+      root, pivot, model, ground, texture, particles, center, pet: showPet,
+      radius: Math.max(size.x, size.y, size.z) * 0.62 + 3,
+    };
     resize();
     updateCard(egg);
     updateTiles();
+    updateControls();
+  }
+
+  const MOVES = { Quadruped: "Four legs", LowSlung: "Four short legs", Winged: "Wings", Biped: "Two legs" };
+  const GAITS = { Walk: "walks", Hop: "hops", Waddle: "waddles", Stomp: "stomps" };
+
+  function setFact(n, label, value) {
+    if (label) document.getElementById("fact" + n + "-label").textContent = label;
+    document.getElementById("fact" + n).textContent = value;
   }
 
   function updateCard(egg) {
-    document.getElementById("egg-name").textContent = egg.name;
-    document.getElementById("egg-hatches").textContent = egg.hatches;
-    document.getElementById("egg-stamina").textContent = egg.stamina ? "Needs " + formatNumber(egg.stamina) : "Not dropping";
-    document.getElementById("egg-size").textContent = egg.size.toFixed(2).replace(/0$/, "") + "x";
-    document.getElementById("egg-parts").textContent = String(egg.boxes.length + 1);
-    document.getElementById("egg-tier").textContent = egg.shelved
-      ? "Shelved for now. It was a " + egg.rarity + " egg."
-      : TIERS[egg.rarity] || "";
+    const pet = petByKind[egg.pet];
+    const showPet = state.view === "pet" && pet;
+    const rarity = egg.rarity;
+    document.getElementById("egg-name").textContent = showPet ? pet.name : egg.name;
+    if (showPet) {
+      let parts = 1 + pet.limbs.length;
+      for (const limb of pet.limbs) parts += limb.boxes.length;
+      setFact(1, "Hatches from", egg.name);
+      setFact(2, "Moves", MOVES[pet.skeleton] + ", " + GAITS[pet.gait]);
+      setFact(3, "Height", (pet.size[1] * pet.scale).toFixed(1) + " studs");
+      setFact(4, null, String(parts));
+      document.getElementById("egg-tier").textContent =
+        "Built from " + pet.limbs.length + " limbs (" + pet.limbs.map((l) => l.name).join(", ") + ") that bend at joints.";
+    } else {
+      setFact(1, "Hatches", egg.hatches);
+      setFact(2, "Stamina", egg.stamina ? "Needs " + formatNumber(egg.stamina) : "Not dropping");
+      setFact(3, "Size", egg.size.toFixed(2).replace(/0$/, "") + "x");
+      setFact(4, null, String(egg.boxes.length + 1));
+      document.getElementById("egg-tier").textContent = egg.shelved
+        ? "Shelved for now. It was a " + egg.rarity + " egg."
+        : TIERS[egg.rarity] || "";
+    }
     const chips = document.getElementById("egg-chips");
     chips.replaceChildren();
     const zoneChip = document.createElement("span");
@@ -599,9 +726,9 @@
     zoneChip.textContent = egg.zoneName;
     const rarityChip = document.createElement("span");
     rarityChip.className = "chip rarity";
-    rarityChip.textContent = egg.rarity;
-    rarityChip.style.background = rarityColor[egg.rarity];
-    rarityChip.style.color = textOn(rarityColor[egg.rarity]);
+    rarityChip.textContent = rarity;
+    rarityChip.style.background = rarityColor[rarity];
+    rarityChip.style.color = textOn(rarityColor[rarity]);
     chips.append(zoneChip, rarityChip);
   }
 
@@ -637,8 +764,9 @@
     time += dt;
     idle += dt;
     if (current) {
-      if (!dragging && idle > 1.2 && !reduceMotion && !state.lying) state.yaw += dt * 0.35;
-      if (state.lying && !reduceMotion) {
+      if (!dragging && idle > 1.2 && !reduceMotion && (current.pet || !state.lying)) state.yaw += dt * 0.35;
+      if (current.pet && !reduceMotion) animatePet(current.model, time);
+      if (state.lying && !current.pet && !reduceMotion) {
         // Rolls down the runway (+z) like in the game: spin around x, ground sliding past.
         current.pivot.rotation.x += dt * 2.2;
         current.texture.offset.y -= dt * 2.2 * DATA.radius / 140 * 24 / 1;
@@ -716,8 +844,59 @@
       for (let k = shelved.length; k < 8; k++) table.append(document.createElement("div"));
     }
   }
+  const petTiles = {};
+  function buildPetTable(urls) {
+    const petTable = document.getElementById("pet-table");
+    for (const zone of DATA.zones) {
+      const list = pets.filter((p) => p.zone === zone.id);
+      if (!list.length) continue;
+      petTable.append(rowHead(zone.name, list.length + " of 8 pets"));
+      for (const pet of list) {
+        const index = eggs.findIndex((e) => e.pet === pet.kind && !e.shelved);
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "tile";
+        tile.style.setProperty("--zone", zone.ground);
+        tile.setAttribute("aria-label", pet.name + ", hatches from the " + eggs[index].name);
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = urls[pets.indexOf(pet)];
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = pet.name;
+        const tag = document.createElement("span");
+        tag.className = "rtag";
+        const dot = document.createElement("span");
+        dot.className = "dot";
+        dot.style.background = rarityColor[pet.rarity];
+        tag.append(dot, document.createTextNode(pet.rarity));
+        tile.append(img, label, tag);
+        tile.addEventListener("click", () => {
+          state.view = "pet";
+          state.yaw = 0.38;
+          state.pitch = 0.22;
+          show(index);
+          viewer.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+        });
+        petTiles[pet.kind] = tile;
+        petTable.append(tile);
+      }
+      for (let k = list.length; k < 8; k++) petTable.append(document.createElement("div"));
+    }
+    const waiting = DATA.zones.filter((z) => !pets.some((p) => p.zone === z.id)).map((z) => z.name);
+    document.getElementById("pets-title").textContent = "Pets: " + pets.length + " of 40";
+    if (waiting.length) {
+      document.getElementById("pets-note").textContent +=
+        " " + waiting.join(", ").replace(/, ([^,]*)$/, " and $1") + " pets come next.";
+    }
+  }
+
   function updateTiles() {
     tiles.forEach((tile, i) => tile && tile.setAttribute("aria-pressed", i === state.index ? "true" : "false"));
+    const egg = eggs[state.index];
+    for (const [kind, tile] of Object.entries(petTiles)) {
+      tile.setAttribute("aria-pressed", state.view === "pet" && egg.pet === kind ? "true" : "false");
+    }
   }
 
   // ---------------------------------------------------------------- controls
@@ -731,12 +910,42 @@
     state.pitch = lying ? 0.32 : 0.22;
     show(state.index);
   }
+  const eggBtn = document.getElementById("view-egg");
+  const petBtn = document.getElementById("view-pet");
+  function updateControls() {
+    const hasPet = Boolean(petByKind[eggs[state.index].pet]);
+    petBtn.disabled = !hasPet;
+    petBtn.title = hasPet ? "" : "This pet's model comes later";
+    eggBtn.setAttribute("aria-pressed", String(state.view === "egg"));
+    petBtn.setAttribute("aria-pressed", String(state.view === "pet"));
+    document.getElementById("pose-group").hidden = state.view === "pet";
+    const noun = state.view === "pet" ? "pet" : "egg";
+    document.getElementById("prev").textContent = "Previous " + noun;
+    document.getElementById("next").textContent = "Next " + noun;
+  }
+  function setView(view) {
+    state.view = view;
+    state.yaw = 0.38;
+    state.pitch = 0.22;
+    show(state.index);
+  }
+  eggBtn.addEventListener("click", () => setView("egg"));
+  petBtn.addEventListener("click", () => setView("pet"));
   standBtn.addEventListener("click", () => setPose(false));
   rollBtn.addEventListener("click", () => setPose(true));
-  document.getElementById("prev").addEventListener("click", () => show(state.index - 1));
-  document.getElementById("next").addEventListener("click", () => show(state.index + 1));
+  function step(direction) {
+    if (state.view !== "pet") return show(state.index + direction);
+    let i = state.index;
+    for (let n = 0; n < eggs.length; n++) {
+      i = (i + direction + eggs.length) % eggs.length;
+      if (petByKind[eggs[i].pet] && !eggs[i].shelved) return show(i);
+    }
+  }
+  document.getElementById("prev").addEventListener("click", () => step(-1));
+  document.getElementById("next").addEventListener("click", () => step(1));
 
-  buildTable(renderThumbnails());
+  buildTable(renderThumbnails(eggs, (egg) => buildEgg(egg, false)));
+  buildPetTable(renderThumbnails(pets, buildPet));
   show(state.index);
   requestAnimationFrame(frame);
 })();

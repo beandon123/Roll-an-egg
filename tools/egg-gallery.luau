@@ -1,5 +1,6 @@
 --!nocheck
--- Builds a web page that shows every egg model in 3D, so designs can be checked without opening Studio.
+-- Builds a web page that shows every egg model, and every pet model made so far, in 3D, so designs can be checked
+-- without opening Studio.
 -- From the repository root:
 --     lune run tools/egg-gallery
 -- writes tools/out/egg-gallery.html. Open it in a browser. Pass a path to write somewhere else, and add
@@ -12,6 +13,7 @@ local serde = require("@lune/serde")
 local harness = require("../tests/harness")
 
 local EggModels = harness.load("src/shared/EggModels")
+local PetModels = harness.load("src/shared/PetModels")
 local Rarities = harness.load("src/shared/Config/Rarities")
 local Zones = harness.load("src/shared/Config/Zones")
 
@@ -33,9 +35,9 @@ local function round(value: number): number
 	return math.round(value * 1000) / 1000
 end
 
-local function describe(model, slot: number?)
+local function exportBoxes(list)
 	local boxes = {}
-	for _, box in model.boxes do
+	for _, box in list do
 		table.insert(boxes, {
 			round(box.x),
 			round(box.y),
@@ -48,6 +50,10 @@ local function describe(model, slot: number?)
 			box.transparency,
 		})
 	end
+	return boxes
+end
+
+local function describe(model, slot: number?)
 	local zone = Zones.List[model.zone]
 	return {
 		kind = model.kind,
@@ -60,10 +66,39 @@ local function describe(model, slot: number?)
 		hatches = model.hatches,
 		stamina = if zone then zone.stamina[model.rarity] else nil,
 		size = Rarities.Info[model.rarity].size,
-		boxes = boxes,
+		pet = PetModels.fromEgg(model.kind),
+		boxes = exportBoxes(model.boxes),
 		light = model.light and { color = hex(model.light.color), brightness = model.light.brightness },
 		particles = model.particles and { color = hex(model.particles.color), style = model.particles.style },
 	}
+end
+
+local pets = {}
+for _, kind in PetModels.all() do
+	local model = PetModels.get(kind)
+	local limbs = {}
+	for _, limb in model.limbs do
+		table.insert(limbs, {
+			name = limb.name,
+			parent = limb.parent,
+			pivot = limb.pivot,
+			boxes = exportBoxes(limb.boxes),
+		})
+	end
+	table.insert(pets, {
+		kind = kind,
+		name = model.name,
+		zone = model.zone,
+		rarity = model.rarity,
+		skeleton = model.skeleton,
+		gait = model.gait,
+		scale = model.scale,
+		size = model.size,
+		center = model.center,
+		limbs = limbs,
+		light = model.light and { color = hex(model.light.color), brightness = model.light.brightness },
+		particles = model.particles and { color = hex(model.particles.color), style = model.particles.style },
+	})
 end
 
 local eggs = {}
@@ -85,7 +120,8 @@ for _, rarity in Rarities.Order do
 	table.insert(rarities, { name = rarity, color = hex(Rarities.Info[rarity].color) })
 end
 
-local data = serde.encode("json", { eggs = eggs, zones = zones, rarities = rarities, radius = EggModels.RADIUS })
+local data =
+	serde.encode("json", { eggs = eggs, pets = pets, zones = zones, rarities = rarities, radius = EggModels.RADIUS })
 local template = fs.readFile("tools/egg-gallery.html")
 local page = string.gsub(template, "/%*EGG_DATA%*/null", function()
 	return data
@@ -102,4 +138,4 @@ if folder and not fs.isDir(folder) then
 	fs.writeDir(folder)
 end
 fs.writeFile(outPath, page)
-print(`Wrote {#eggs} eggs ({#EggModels.shelved()} shelved) to {outPath}`)
+print(`Wrote {#eggs} eggs ({#EggModels.shelved()} shelved) and {#pets} pets to {outPath}`)

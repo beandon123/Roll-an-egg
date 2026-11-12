@@ -16,6 +16,7 @@ local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
 local EggModels = Load.shared("EggModels")
+local ModelEffects = Load.shared("ModelEffects")
 local EggMotion = Load.shared("EggMotion")
 local EggSpec = Load.shared("EggSpec")
 local Net = Load.shared("Net")
@@ -76,10 +77,6 @@ local function rgb(color: { number }): Color3
 	return Color3.fromRGB(color[1], color[2], color[3])
 end
 
-local function sequence(color: Color3): ColorSequence
-	return ColorSequence.new(color)
-end
-
 local function refreshLabel(egg: ClientEgg)
 	if egg.riderUserId ~= nil then
 		egg.needLabel.Text = "Taken"
@@ -120,15 +117,6 @@ local function newLabel(parent: Instance, text: string, color: Color3, position:
 	label.Parent = parent
 	return label
 end
-
--- Particle settings by style (see EggModels). Acceleration is in world space, so embers rise and snow falls
--- whichever way the egg has rolled.
-local PARTICLE_STYLES = {
-	Sparkles = { lifetime = 0.9, speed = 1.5, acceleration = Vector3.zero, size = 0.45, transparency = 0 },
-	Embers = { lifetime = 1.4, speed = 1, acceleration = Vector3.new(0, 7, 0), size = 0.35, transparency = 0 },
-	Bubbles = { lifetime = 1.8, speed = 0.6, acceleration = Vector3.new(0, 4, 0), size = 0.5, transparency = 0.35 },
-	Snow = { lifetime = 2, speed = 0.5, acceleration = Vector3.new(0, -3, 0), size = 0.35, transparency = 0.1 },
-}
 
 -- Builds the model for one kind of egg from its boxes, lying on its side with the pointed top towards +X.
 local function buildTemplate(spec, kind: string): Model
@@ -172,29 +160,7 @@ local function buildTemplate(spec, kind: string): Model
 		weld.Parent = part
 	end
 
-	if design.light then
-		local light = Instance.new("PointLight")
-		light.Color = rgb(design.light.color)
-		light.Brightness = design.light.brightness
-		light.Range = design.light.range
-		light.Shadows = false
-		light.Parent = root
-	end
-
-	if design.particles then
-		local style = PARTICLE_STYLES[design.particles.style] or PARTICLE_STYLES.Sparkles
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Color = sequence(rgb(design.particles.color))
-		emitter.Rate = design.particles.rate
-		emitter.Lifetime = NumberRange.new(style.lifetime * 0.7, style.lifetime)
-		emitter.Speed = NumberRange.new(style.speed * 0.5, style.speed)
-		emitter.SpreadAngle = Vector2.new(180, 180)
-		emitter.Acceleration = style.acceleration
-		emitter.Size = NumberSequence.new(style.size * voxel * 2, 0)
-		emitter.Transparency = NumberSequence.new(style.transparency, 1)
-		emitter.LightEmission = 1
-		emitter.Parent = root
-	end
+	ModelEffects.add(root, design.light, design.particles, voxel)
 
 	return model
 end
