@@ -11,7 +11,11 @@ return function(harness)
 	local Rarities = harness.load("src/shared/Config/Rarities")
 	local Zones = harness.load("src/shared/Config/Zones")
 
-	local FOREST_PETS = { "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" }
+	-- The pets made so far, zone by zone.
+	local DONE = {
+		{ "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" },
+		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
+	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local BUDGET = 120
 
@@ -22,14 +26,16 @@ return function(harness)
 	end
 
 	describe("PetModels", function()
-		it("has every Forest pet, in the order of their eggs", function()
-			local forest = {}
-			for _, kind in PetModels.all() do
-				if PetModels.get(kind).zone == 1 then
-					table.insert(forest, kind)
+		it("has every Forest and Desert pet, in the order of their eggs", function()
+			for zoneId, wanted in DONE do
+				local made = {}
+				for _, kind in PetModels.all() do
+					if PetModels.get(kind).zone == zoneId then
+						table.insert(made, kind)
+					end
 				end
+				expect.equal(table.concat(made, ","), table.concat(wanted, ","), "zone " .. zoneId)
 			end
-			expect.equal(table.concat(forest, ","), table.concat(FOREST_PETS, ","))
 			expect.equal(PetModels.get("NoSuchPet"), nil)
 			expect.equal(PetModels.fromEgg("Toadstool"), "Owl")
 			expect.equal(PetModels.fromEgg("NoSuchEgg"), nil)

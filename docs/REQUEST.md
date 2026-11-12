@@ -256,7 +256,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
         - [ ] Pets are built in the same blocky style as the eggs, from parts in code (decided), rigged with a
-              Motor6D per limb; Forest pets done, the other zones next
+              Motor6D per limb; Forest and Desert pets done, the other zones next
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow

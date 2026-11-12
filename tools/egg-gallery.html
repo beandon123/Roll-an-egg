@@ -476,6 +476,22 @@
       turn("LeftWing", "z", flap); turn("RightWing", "z", -flap);
       turn("LeftLeg", "x", 0.4 * s); turn("RightLeg", "x", -0.4 * s);
       turn("Tail", "y", 0.2 * c);
+    } else if (pet.skeleton === "ManyLegged") {
+      // Tripod walk: three legs swing forward, lifted, while the other three push back.
+      const tripodA = ["FrontLeftLeg", "MiddleRightLeg", "BackLeftLeg"];
+      const tripodB = ["FrontRightLeg", "MiddleLeftLeg", "BackRightLeg"];
+      for (const [legs, sign] of [[tripodA, 1], [tripodB, -1]]) {
+        for (const name of legs) {
+          const g = groups[name];
+          if (!g) continue;
+          const side = name.includes("Left") ? 1 : -1;
+          g.rotation.y = 0.35 * s * sign * side;
+          g.rotation.z = side * 0.3 * Math.max(0, c * sign);
+        }
+      }
+      body.position.y += Math.abs(c) * 0.15;
+      turn("Head", "y", 0.06 * s);
+      turn("Tail", "x", 0.08 * s);
     } else if (pet.skeleton === "Biped") {
       turn("LeftLeg", "x", 0.35 * s); turn("RightLeg", "x", -0.35 * s);
       turn("LeftArm", "x", -0.4 * s); turn("RightArm", "x", 0.4 * s);
@@ -688,7 +704,9 @@
     updateControls();
   }
 
-  const MOVES = { Quadruped: "Four legs", LowSlung: "Four short legs", Winged: "Wings", Biped: "Two legs" };
+  const MOVES = {
+    Quadruped: "Four legs", LowSlung: "Four short legs", Winged: "Wings", Biped: "Two legs", ManyLegged: "Six legs",
+  };
   const GAITS = { Walk: "walks", Hop: "hops", Waddle: "waddles", Stomp: "stomps" };
 
   function setFact(n, label, value) {

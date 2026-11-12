@@ -77,6 +77,18 @@ PetModels.SKELETONS = {
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
 	Biped = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg" },
+	-- Six legs (scorpions, beetles, crabs). Claws are part of the Head.
+	ManyLegged = {
+		"Body",
+		"Head",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"MiddleLeftLeg",
+		"MiddleRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"Tail",
+	},
 } :: { [string]: { string } }
 
 local DEFAULT_MATERIAL = "SmoothPlastic"
