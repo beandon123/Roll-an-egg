@@ -14,6 +14,8 @@ local Zones = require(Shared.Config.Zones)
 local RunwayService = require(script.Parent.RunwayService)
 
 local MAX_TEST_STAMINA = 1e7
+-- Seconds between eggs for DropEachEgg, so they spread out down the runway instead of landing in a pile.
+local EACH_EGG_GAP = 0.8
 
 local DevService = {}
 
@@ -36,6 +38,15 @@ local commands: { [string]: (Player) -> () } = {
 			end
 		end
 		RunwayService.DropEgg(zone.id, best)
+	end,
+	-- Drops each of the zone's eggs in turn, a moment apart, so all of them can be looked at on the runway.
+	DropEachEgg = function(player)
+		local zone = Zones.List[RunwayService.GetZoneOf(player)]
+		for index, entry in zone.eggs do
+			task.delay((index - 1) * EACH_EGG_GAP, function()
+				RunwayService.DropEgg(zone.id, nil, entry.egg)
+			end)
+		end
 	end,
 }
 

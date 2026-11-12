@@ -27,7 +27,7 @@ Session length: 15-30 min target. First claimed egg in under 60 s, first hatch i
 What makes it unique: a "rodeo on a rolling egg." Every ride is a race between your claim meter and your stamina while
 dodging obstacles, and every time you leave an egg it cracks a little more. The runway is shared and live, so any
 unlocked egg can be stolen mid-ride in a rhythm duel. The world changes as you roll deeper, and so does the prize:
-Forest up to Legendary, Desert up to Mythic, Snow and Ocean up to Secret, Volcano up to Eternal.
+Forest and Desert up to Mythic, Snow and Ocean up to Secret, Volcano up to Eternal.
 Original theme, art, and creatures.
 
 ## Target Audience
@@ -48,12 +48,13 @@ Original theme, art, and creatures.
           (decided; exact prices set during economy tuning)
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
-- [ ] Zone rarity caps (decided):
-    - [ ] Forest: Common-Legendary
-    - [ ] Desert: Common-Mythic
-    - [ ] Snow: Common-Secret (1 Secret pet)
-    - [ ] Ocean: Common-Secret (2 Secret pets)
-    - [ ] Volcano: Common-Eternal (1 Secret + 1 Eternal pet)
+- [ ] 8 eggs per zone, one per pet (decided). Deeper zones start at a higher rarity (decided):
+    - [ ] Forest: 2 Common, 2 Uncommon, Rare, Epic, Legendary, Mythic
+    - [ ] Desert: Common, 2 Uncommon, Rare, Epic, Legendary, 2 Mythic
+    - [ ] Snow: 2 Uncommon, Rare, Epic, Legendary, 2 Mythic, Secret (no Commons)
+    - [ ] Ocean: 2 Rare, 2 Epic, Legendary, Mythic, 2 Secret
+    - [ ] Volcano: Rare, Epic, 2 Legendary, 2 Mythic, Secret, Eternal
+    - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
 - [ ] Eggs: lineup rolled per zone at the start of each cycle; down-runway movement fixed by spawn time (decided);
       ~8 active eggs per zone (12 during Egg Avalanche)
 - [ ] Egg lifecycle
@@ -79,14 +80,14 @@ First-pass egg tuning by rarity (same in every zone; adjust in playtests):
     Secret     2.0x   22 s        20 st/s     3        12 @ 160 bpm
     Eternal    2.3x   26 s        21 st/s     4        12 @ 170 bpm
 
-First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500 / 2,000 decided, rest proposed):
+First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 500 decided, rest proposed):
 
     Zone        Common  Uncommon  Rare    Epic    Legendary  Mythic   Secret   Eternal
-    1 Forest    50      80        120     200     350        -        -        -
+    1 Forest    50      80        120     200     350        450      -        -
     2 Desert    500     650       850     1,100   1,400      1,800    -        -
-    3 Snow      2,000   2,500     3,200   4,000   5,000      6,200    7,500    -
-    4 Ocean     8,000   10,000    12,500  16,000  20,000     25,000   30,000   -
-    5 Volcano   35,000  45,000    55,000  70,000  85,000     100,000  125,000  150,000
+    3 Snow      -       2,500     3,200   4,000   5,000      6,200    7,500    -
+    4 Ocean     -       -         12,500  16,000  20,000     25,000   30,000   -
+    5 Volcano   -       -         55,000  70,000  85,000     100,000  125,000  150,000
 
     Riding drains 80% of the egg's requirement over its claim time; bumps cost extra.
     Meeting the requirement leaves a 20% buffer for mistakes; below it, you fall off before the claim finishes.
@@ -151,25 +152,29 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
     - [ ] Jump from your pet onto an egg; the pet unsummons; 3 s resummon cooldown after leaving the egg
     - [ ] The mounted pet keeps earning while you ride it (decided)
 - [ ] Starter pet (a Forest Common) given during the tutorial so new players learn mounting early
-- [ ] 8 pets per zone (decided), themed to their zone, more fantastic deeper down -> 40 core pets at launch;
-      more zones and pets added later (decided)
+- [ ] 8 pets per zone (decided), one per egg, themed to their zone, more fantastic deeper down -> 40 core pets at
+      launch; more zones and pets added later (decided)
 - [ ] 1 Robux egg with 5 unique pets on top of the core set (decided) -> 45 pets at launch; event pets later
 - [ ] All pets rideable, built on ~7 shared skeletons (four-legged, two-legged, winged, low-slung, many-legged,
       floating/swimming for Ocean pets, special) so animations are reused
 - [ ] Sell pets for coins; pet inventory cap (upgradeable)
 
-Draft roster (edit freely; Robux-egg pets designed during the art phase):
+Roster, one pet per egg (edit freely; Robux-egg pets designed during the art phase). The eggs are in
+`src/shared/Config/Zones.luau`:
 
-    1 Forest:   Common: Bunny, Squirrel | Uncommon: Fox, Hedgehog | Rare: Owl, Deer | Epic: Bear
-                Legendary: Moss Stag
-    2 Desert:   Common: Lizard, Meerkat | Uncommon: Fennec Fox, Armadillo | Rare: Camel | Epic: Giant Scorpion
-                Legendary: Pharaoh Jackal | Mythic: Sphinx
-    3 Snow:     Common: Penguin, Snow Hare | Uncommon: Arctic Fox | Rare: Reindeer | Epic: Woolly Mammoth
-                Legendary: Sabertooth Cat | Mythic: Yeti | Secret: Frost Dragon
-    4 Ocean:    Common: Hermit Crab | Uncommon: Sea Turtle | Rare: Dolphin | Epic: Manta Ray | Legendary: Narwhal
-                Mythic: Kraken | Secret: Leviathan, Hippocampus
-    5 Volcano:  Common: Fire Salamander | Uncommon: Magma Toad | Rare: Obsidian Goat | Epic: Cinder Boar
-                Legendary: Cerberus | Mythic: Chimera | Secret: Magma Dragon | Eternal: Eternal Phoenix
+    1 Forest:   Common: Squirrel, Bunny | Uncommon: Hedgehog, Fox | Rare: Owl | Epic: Bear
+                Legendary: Moss Stag | Mythic: Treant
+    2 Desert:   Common: Meerkat | Uncommon: Armadillo, Fennec Fox | Rare: Camel | Epic: Giant Scorpion
+                Legendary: Pharaoh Jackal | Mythic: Sphinx, Golden Scarab
+    3 Snow:     Uncommon: Snow Hare, Arctic Fox | Rare: Reindeer | Epic: Woolly Mammoth | Legendary: Sabertooth Cat
+                Mythic: Aurora Owl, Frost Wolf | Secret: Yeti
+    4 Ocean:    Rare: Sea Turtle, Dolphin | Epic: Manta Ray, King Crab | Legendary: Narwhal | Mythic: Hippocampus
+                Secret: Kraken, Leviathan
+    5 Volcano:  Rare: Obsidian Goat | Epic: Cinder Boar | Legendary: Volcano Tortoise, Fire Salamander
+                Mythic: Chimera, Lava Golem | Secret: Cerberus | Eternal: Eternal Phoenix
+
+    Shelved for now (designed, out of the game): Frost Dragon and Magma Dragon (decided), plus the Hermit Crab,
+    Fire Salamander (old Common egg), and Magma Toad eggs, whose rarities those zones no longer drop.
 
 ### Plot & Pen
 - [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided
@@ -244,11 +249,10 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - [ ] Art style: original, bright, stylized low-poly cartoon
 - [ ] All 3D art made by Claude in Blender (decided): pets, obstacles, zone kits, hub, plots, pens, nests,
       teleport pads
-    - [ ] Eggs (decided): blocky voxel-style eggs built from parts (no meshes), every zone + rarity egg its own
-          design (33): Commons plain, Uncommon/Rare a zone pattern hinting at the pets inside, Epic and up
-          looking like the pet that hatches (e.g. a lava egg for the Magma Dragon); Legendary+ glow, Mythic+ give
-          off particles. Still to do: 5 zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon
-          yolk splat (no gore)
+    - [ ] Eggs (decided): blocky voxel-style eggs built from parts (no meshes), every egg its own design (40, 8 per
+          zone, plus 5 shelved): Commons plain, Uncommon/Rare a zone pattern hinting at the pet inside, Epic and up
+          looking like the pet that hatches; Legendary+ glow, Mythic+ give off particles. Still to do: 5
+          zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon yolk splat (no gore)
     - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons

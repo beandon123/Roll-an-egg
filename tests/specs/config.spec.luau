@@ -42,14 +42,49 @@ return function(harness)
 			end
 		end)
 
-		it("caps each zone at the agreed rarity", function()
-			local caps = { "Legendary", "Mythic", "Secret", "Secret", "Eternal" }
+		it("gives every zone 8 eggs in the agreed mix of rarities", function()
+			local mixes = {
+				{ Common = 2, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1 },
+				{ Common = 1, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2 },
+				{ Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2, Secret = 1 },
+				{ Rare = 2, Epic = 2, Legendary = 1, Mythic = 1, Secret = 2 },
+				{ Rare = 1, Epic = 1, Legendary = 2, Mythic = 2, Secret = 1, Eternal = 1 },
+			}
 			for index, zone in Zones.List do
-				local highest = 0
-				for rarity in zone.stamina do
-					highest = math.max(highest, Rarities.Info[rarity].order)
+				expect.equal(#zone.eggs, 8, zone.name .. " eggs")
+				local counts = {}
+				local lastOrder = 0
+				for _, entry in zone.eggs do
+					counts[entry.rarity] = (counts[entry.rarity] or 0) + 1
+					local order = Rarities.Info[entry.rarity].order
+					expect.truthy(order >= lastOrder, zone.name .. " lists its eggs from most common to rarest")
+					lastOrder = order
 				end
-				expect.equal(Rarities.Order[highest], caps[index], zone.name .. " cap")
+				for _, rarity in Rarities.Order do
+					expect.equal(counts[rarity] or 0, mixes[index][rarity] or 0, `{zone.name} {rarity} eggs`)
+				end
+			end
+		end)
+
+		it("only drops the rarities a zone has eggs for", function()
+			for _, zone in Zones.List do
+				for _, rarity in Rarities.Order do
+					local hasEgg = false
+					for _, entry in zone.eggs do
+						hasEgg = hasEgg or entry.rarity == rarity
+					end
+					expect.equal(zone.stamina[rarity] ~= nil, hasEgg, `{zone.name} {rarity}`)
+				end
+			end
+		end)
+
+		it("never puts the same egg in two places", function()
+			local seen = {}
+			for _, zone in Zones.List do
+				for _, entry in zone.eggs do
+					expect.falsy(seen[entry.egg], entry.egg .. " is listed twice")
+					seen[entry.egg] = true
+				end
 			end
 		end)
 
@@ -76,7 +111,11 @@ return function(harness)
 						last = requirement
 					end
 				end
-				expect.truthy(zone.stamina.Common > previousTop, zone.name .. " starts above the previous zone")
+				local lowest = math.huge
+				for _, requirement in zone.stamina do
+					lowest = math.min(lowest, requirement)
+				end
+				expect.truthy(lowest > previousTop, zone.name .. " starts above the previous zone")
 				previousTop = last
 			end
 		end)
@@ -84,7 +123,8 @@ return function(harness)
 		it("uses the zone baselines from the request", function()
 			expect.equal(Zones.List[1].stamina.Common, 50)
 			expect.equal(Zones.List[2].stamina.Common, 500)
-			expect.equal(Zones.List[3].stamina.Common, 2000)
+			-- Snow starts at Uncommon now; its old Common baseline (2,000) is gone with its Commons.
+			expect.equal(Zones.List[3].stamina.Uncommon, 2500)
 		end)
 	end)
 
@@ -102,7 +142,8 @@ return function(harness)
 		end)
 
 		it("returns nil for an egg that cannot drop in a zone", function()
-			expect.falsy(EggSpec.get(1, "Mythic"))
+			expect.falsy(EggSpec.get(1, "Secret"))
+			expect.falsy(EggSpec.get(3, "Common"))
 			expect.falsy(EggSpec.get(4, "Eternal"))
 			expect.falsy(EggSpec.get(9, "Common"))
 		end)
@@ -113,10 +154,26 @@ return function(harness)
 					local rarity = EggSpec.rollRarity(zone.id, step / 1000)
 					expect.truthy(zone.stamina[rarity], zone.name .. " rolled " .. rarity)
 				end
-				expect.equal(EggSpec.rollRarity(zone.id, 0), "Common")
+				expect.equal(EggSpec.rollRarity(zone.id, 0), zone.eggs[1].rarity, zone.name .. " most common")
 			end
-			expect.equal(EggSpec.rollRarity(1, 0.9999), "Legendary")
+			expect.equal(EggSpec.rollRarity(1, 0.99999), "Mythic")
+			expect.equal(EggSpec.rollRarity(4, 0), "Rare")
 			expect.equal(EggSpec.rollRarity(5, 0.99999), "Eternal")
+		end)
+
+		it("picks evenly between a zone's eggs of the same rarity", function()
+			expect.equal(table.concat(EggSpec.eggsOf(1, "Common"), ","), "Leafy,Cottontail")
+			expect.equal(EggSpec.pickEgg(1, "Common", 0), "Leafy")
+			expect.equal(EggSpec.pickEgg(1, "Common", 0.49), "Leafy")
+			expect.equal(EggSpec.pickEgg(1, "Common", 0.5), "Cottontail")
+			expect.equal(EggSpec.pickEgg(1, "Common", 0.9999), "Cottontail")
+			expect.equal(EggSpec.pickEgg(4, "Secret", 0.7), "Abyss")
+			expect.equal(EggSpec.pickEgg(1, "Epic", 0.9), "Bear")
+			expect.falsy(EggSpec.pickEgg(3, "Common", 0))
+			local zone, rarity = EggSpec.placeOf("Yeti")
+			expect.equal(zone, 3)
+			expect.equal(rarity, "Secret")
+			expect.falsy(EggSpec.placeOf("MagmaDragon"), "shelved")
 		end)
 
 		it("fits every egg on the runway with room to steer", function()

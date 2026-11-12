@@ -12,6 +12,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local CycleClock = require(Shared.CycleClock)
+local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
@@ -86,7 +87,7 @@ local function killCharacter(player: Player)
 	end
 end
 
-local function grantEgg(player: Player, zone: number, rarity: string)
+local function grantEgg(player: Player, zone: number, rarity: string, kind: string)
 	local data = DataService.GetData(player)
 	if data == nil then
 		return
@@ -95,6 +96,7 @@ local function grantEgg(player: Player, zone: number, rarity: string)
 		uid = HttpService:GenerateGUID(false),
 		zone = zone,
 		rarity = rarity,
+		kind = kind,
 		claimedAt = os.time(),
 	})
 	data.Stats.EggsClaimed += 1
@@ -111,8 +113,10 @@ local function dispatch(events)
 			if info.announce then
 				local zone = Zones.List[event.egg.zone]
 				local article = if event.egg.rarity == "Eternal" then "An" else "A"
+				local about = EggModels.describe(event.egg.kind)
+				local name = if about then about.name else "egg"
 				Net.Announce:FireAllClients(
-					`{article} {event.egg.rarity} egg just dropped in the {zone.name}!`,
+					`{article} {event.egg.rarity} {name} just dropped in the {zone.name}!`,
 					info.color
 				)
 			end
@@ -140,6 +144,7 @@ local function dispatch(events)
 					eggId = event.id,
 					zone = event.zone,
 					rarity = event.rarity,
+					kind = event.kind,
 				})
 				if event.reason == "Cliff" then
 					-- Rode the egg over the end of the runway.
@@ -154,7 +159,7 @@ local function dispatch(events)
 		elseif kind == "Claimed" then
 			local player = playersByUserId[event.rider]
 			if player then
-				grantEgg(player, event.zone, event.rarity)
+				grantEgg(player, event.zone, event.rarity, event.kind)
 			end
 		end
 	end
@@ -284,8 +289,9 @@ function RunwayService.GetMaxStamina(player: Player): number
 end
 
 -- Drops an egg of a chosen rarity in a zone, if that rarity can drop there. Returns whether it did.
-function RunwayService.DropEgg(zoneId: number, rarity: string): boolean
-	return sim:spawnEgg(zoneId, now(), rarity) ~= nil
+-- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup).
+function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?): boolean
+	return sim:spawnEgg(zoneId, now(), rarity, kind) ~= nil
 end
 
 -- The zone a player's character is standing in (1 when they are at the hub).

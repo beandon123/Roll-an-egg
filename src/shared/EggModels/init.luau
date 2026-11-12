@@ -1,5 +1,5 @@
 --!strict
--- Blocky egg models. Every zone + rarity egg has its own design (see Designs), all built on the same voxel grid:
+-- Blocky egg models. Every egg has its own design (see Designs), all built on the same voxel grid:
 -- a stack of square-cornered layers for the shell, painted cells for patterns, and extra cells for ears, horns,
 -- fins and so on. Plain Commons up to eggs that look like the pet inside.
 --
@@ -40,10 +40,14 @@ export type Particles = {
 }
 
 export type Model = {
+	-- The design's name in Designs, e.g. "MossStag". Also what saved data and remotes call the egg.
+	kind: string,
+	-- The zone it drops in, and its rarity there. A shelved egg has zone 0 and the rarity it last had.
 	zone: number,
 	rarity: string,
+	shelved: boolean,
 	name: string,
-	-- Which pets can hatch from it, for people reading the designs.
+	-- Which pet hatches from it.
 	hatches: string,
 	boxes: { Box },
 	light: Light?,
@@ -598,40 +602,71 @@ local function countLoose(self: Egg): number
 	return loose
 end
 
+-- Secret's rarity colour is nearly black, which would make a dark light and invisible sparkles.
+local SECRET_GLOW: Color = { 226, 214, 255 }
+
 -- Rarer eggs shine. A design can choose its own light or particles; otherwise these are used.
 local function rarityExtras(self: Egg, rarity: string)
 	local info = Rarities.Info[rarity]
+	local color = if rarity == "Secret" then SECRET_GLOW else info.color
 	if info.order >= 5 and self.lightInfo == nil then
-		self:light(info.color, 1 + (info.order - 5) * 0.4, 10 + (info.order - 5) * 2)
+		self:light(color, 1 + (info.order - 5) * 0.4, 10 + (info.order - 5) * 2)
 	end
 	if info.order >= 6 and self.particleInfo == nil then
-		self:particles("Sparkles", info.color, 4 + (info.order - 6) * 3)
+		self:particles("Sparkles", color, 4 + (info.order - 6) * 3)
 	end
 end
 
 ----------------------------------------------------------------------------------------------------------------
 -- Public
 
+export type LineupEgg = { zone: number, rarity: string, kind: string }
+
+-- Where each egg drops: kind -> { zone, rarity }. Built from Config/Zones the first time it is needed.
+local placeByKind: { [string]: LineupEgg }? = nil
+
+local function places(): { [string]: LineupEgg }
+	if placeByKind == nil then
+		local map = {}
+		for zoneId, zone in Zones.List do
+			for _, entry in zone.eggs do
+				map[entry.egg] = { zone = zoneId, rarity = entry.rarity, kind = entry.egg }
+			end
+		end
+		placeByKind = map
+	end
+	return placeByKind :: { [string]: LineupEgg }
+end
+
+-- A string's own steady number, used as the pattern seed for a design that does not set one.
+local function hashOf(text: string): number
+	local h = 7
+	for index = 1, #text do
+		h = (h * 31 + string.byte(text, index)) % 1000003
+	end
+	return h
+end
+
 local cache: { [string]: Model } = {}
 
--- The model for a zone + rarity egg, or nil if that egg does not exist.
-function EggModels.get(zoneId: number, rarity: string): Model?
-	local key = zoneId .. ":" .. rarity
-	local cached = cache[key]
+-- The model for an egg (a design name such as "MossStag"), or nil if there is no such egg.
+function EggModels.get(kind: string): Model?
+	local cached = cache[kind]
 	if cached then
 		return cached
 	end
 
-	local zone = Zones.List[zoneId]
-	if zone == nil or Rarities.Info[rarity] == nil then
-		return nil
-	end
-	local design = Designs[zone.key] and Designs[zone.key][rarity]
+	local design = Designs[kind]
 	if design == nil then
 		return nil
 	end
+	local place = places()[kind]
+	local rarity = if place then place.rarity else design.shelved
+	if rarity == nil or Rarities.Info[rarity] == nil then
+		return nil
+	end
 
-	local egg = newEgg(design.profile or "Classic", zoneId * 10 + Rarities.Info[rarity].order)
+	local egg = newEgg(design.profile or "Classic", design.seed or hashOf(kind))
 	design.draw(egg)
 	rarityExtras(egg, rarity)
 
@@ -640,8 +675,10 @@ function EggModels.get(zoneId: number, rarity: string): Model?
 	cellBoxes(egg, boxes)
 
 	local model: Model = {
-		zone = zoneId,
+		kind = kind,
+		zone = if place then place.zone else 0,
 		rarity = rarity,
+		shelved = place == nil,
 		name = design.name,
 		hatches = design.hatches,
 		boxes = boxes,
@@ -649,20 +686,46 @@ function EggModels.get(zoneId: number, rarity: string): Model?
 		particles = egg.particleInfo,
 		loose = countLoose(egg),
 	}
-	cache[key] = model
+	cache[kind] = model
 	return model
 end
 
--- Every zone + rarity pair that has an egg, in runway and rarity order.
-function EggModels.all(): { { zone: number, rarity: string } }
+-- An egg's name and pet without building its model, or nil if there is no such egg.
+function EggModels.describe(kind: string): { name: string, hatches: string }?
+	local design = Designs[kind]
+	if design == nil then
+		return nil
+	end
+	return { name = design.name, hatches = design.hatches }
+end
+
+-- Every egg that can drop, zone by zone in runway order, each zone's eggs from most common to rarest.
+function EggModels.lineup(): { LineupEgg }
 	local list = {}
 	for zoneId, zone in Zones.List do
-		for _, rarity in Rarities.Order do
-			if zone.stamina[rarity] ~= nil then
-				table.insert(list, { zone = zoneId, rarity = rarity })
-			end
+		for _, entry in zone.eggs do
+			table.insert(list, { zone = zoneId, rarity = entry.rarity, kind = entry.egg })
 		end
 	end
+	return list
+end
+
+-- Eggs taken out of the game for now (designed, but in no zone), from most common to rarest.
+function EggModels.shelved(): { string }
+	local list = {}
+	for kind, design in Designs do
+		if design.shelved and places()[kind] == nil then
+			table.insert(list, kind)
+		end
+	end
+	table.sort(list, function(a, b)
+		local ra = Rarities.Info[Designs[a].shelved :: string].order
+		local rb = Rarities.Info[Designs[b].shelved :: string].order
+		if ra ~= rb then
+			return ra < rb
+		end
+		return a < b
+	end)
 	return list
 end
 

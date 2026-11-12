@@ -48,7 +48,7 @@ return function(harness)
 		return roblox.Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z)
 	end
 
-	-- Drops an egg of a chosen kind and returns its EggSpawned message.
+	-- Drops an egg of a chosen rarity and returns its EggSpawned message.
 	local function dropEgg(session, zone, rarity)
 		session:clearSent()
 		expect.truthy(runwayService(session).DropEgg(zone, rarity), "DropEgg")
@@ -196,6 +196,7 @@ return function(harness)
 			expect.truthy(ended, "RideEnded")
 			expect.equal(ended.args[1], "Claimed")
 			expect.equal(ended.args[2].rarity, "Common")
+			expect.equal(ended.args[2].kind, egg.kind)
 
 			local removed
 			for _, entry in session:sent("EggRemoved", "all") do
@@ -211,6 +212,8 @@ return function(harness)
 			expect.equal(#data.Eggs, 1)
 			expect.equal(data.Eggs[1].zone, 1)
 			expect.equal(data.Eggs[1].rarity, "Common")
+			expect.equal(data.Eggs[1].kind, egg.kind)
+			expect.truthy(egg.kind == "Leafy" or egg.kind == "Cottontail", "a Forest Common egg: " .. egg.kind)
 			expect.truthy(data.Eggs[1].uid, "uid")
 			expect.equal(data.Stats.EggsClaimed, 1)
 
@@ -223,7 +226,7 @@ return function(harness)
 			local session = startServer()
 			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
-			local egg = dropEgg(session, 3, "Common")
+			local egg = dropEgg(session, 3, "Uncommon")
 
 			-- The player is still at the hub, 1,300 studs from a Snow egg.
 			session:fromClient("RequestMount", player, egg.id)
@@ -338,7 +341,35 @@ return function(harness)
 				end
 			end
 			expect.truthy(found, "a Mythic Desert egg")
-			expect.truthy(session:lastSent("Announce", "all"), "announcement")
+			local announce = session:lastSent("Announce", "all")
+			expect.truthy(announce, "announcement")
+			local text = announce.args[1]
+			expect.truthy(
+				text == "A Mythic Sphinx Egg just dropped in the Desert!"
+					or text == "A Mythic Scarab Egg just dropped in the Desert!",
+				text
+			)
+		end)
+
+		it("drop each of the zone's eggs in turn", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			root.Position = roblox.Vector3.new(0, 0, 2500) -- Volcano
+			session:heartbeat(1 / 60)
+			session:clearSent()
+			session:fromClient("DevCommand", player, "DropEachEgg")
+			task.wait(6)
+			session:heartbeat(1 / 60)
+			local kinds = {}
+			for _, entry in session:sent("EggSpawned", "all") do
+				if entry.args[1].zone == 5 then
+					table.insert(kinds, entry.args[1].kind)
+				end
+			end
+			expect.equal(
+				table.concat(kinds, ","),
+				"Obsidian,CinderBoar,VolcanoTortoise,Salamander,Chimera,LavaGolem,Cerberus,EternalPhoenix"
+			)
 		end)
 
 		it("do nothing in a live server", function()

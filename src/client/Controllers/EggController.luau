@@ -44,6 +44,8 @@ export type ClientEgg = {
 	id: number,
 	zone: number,
 	rarity: string,
+	-- Which egg it is: a design name in Shared/EggModels, such as "MossStag".
+	kind: string,
 	spec: any,
 	spawnTime: number,
 	startZ: number,
@@ -65,7 +67,7 @@ export type ClientEgg = {
 local EggController = {}
 
 local eggs: { [number]: ClientEgg } = {}
--- One finished model per zone + rarity, cloned for every egg of that kind.
+-- One finished model per kind of egg, cloned for every egg of that kind.
 local templates: { [string]: Model } = {}
 local eggFolder: Folder
 local localMaxStamina = Tuning.BASE_MAX_STAMINA
@@ -129,9 +131,9 @@ local PARTICLE_STYLES = {
 }
 
 -- Builds the model for one kind of egg from its boxes, lying on its side with the pointed top towards +X.
-local function buildTemplate(spec, zoneId: number, rarity: string): Model
-	local design = EggModels.get(zoneId, rarity)
-	assert(design, `no egg model for zone {zoneId} {rarity}`)
+local function buildTemplate(spec, kind: string): Model
+	local design = EggModels.get(kind)
+	assert(design, `no egg model called {kind}`)
 	-- Studs per voxel: the egg's widest layer is EggModels.RADIUS voxels from the middle.
 	local voxel = spec.radius / EggModels.RADIUS
 
@@ -197,21 +199,21 @@ local function buildTemplate(spec, zoneId: number, rarity: string): Model
 	return model
 end
 
-local function getTemplate(spec, zoneId: number, rarity: string): Model
-	local key = zoneId .. ":" .. rarity
-	local template = templates[key]
+-- Every egg of a kind has the same zone and rarity (see Config/Zones), so the spec, and so the size, is the same.
+local function getTemplate(spec, kind: string): Model
+	local template = templates[kind]
 	if template == nil then
-		template = buildTemplate(spec, zoneId, rarity)
-		templates[key] = template
+		template = buildTemplate(spec, kind)
+		templates[kind] = template
 	end
 	return template
 end
 
 -- A copy of the egg's model, with the label that shows its rarity and stamina requirement.
-local function buildModel(spec, zoneId: number, rarity: string, id: number): (Model, Part, TextLabel)
+local function buildModel(spec, kind: string, rarity: string, id: number): (Model, Part, TextLabel)
 	local rarityColor = rgb(Rarities.Info[rarity].color)
 
-	local model = getTemplate(spec, zoneId, rarity):Clone()
+	local model = getTemplate(spec, kind):Clone()
 	model.Name = "Egg" .. id
 	local root = model:FindFirstChild("Root") :: Part
 	model.PrimaryPart = root
@@ -249,12 +251,21 @@ local function addEgg(data)
 	if spec == nil then
 		return
 	end
+	-- The egg must be one of that zone's eggs of that rarity; fall back to the first one if not.
+	local kind = data.kind
+	if typeof(kind) ~= "string" or not table.find(EggSpec.eggsOf(data.zone, data.rarity), kind) then
+		kind = EggSpec.pickEgg(data.zone, data.rarity, 0)
+	end
+	if kind == nil then
+		return
+	end
 
-	local model, root, needLabel = buildModel(spec, data.zone, data.rarity, data.id)
+	local model, root, needLabel = buildModel(spec, kind, data.rarity, data.id)
 	local egg: ClientEgg = {
 		id = data.id,
 		zone = data.zone,
 		rarity = data.rarity,
+		kind = kind,
 		spec = spec,
 		spawnTime = data.spawnTime,
 		startZ = Runway.zoneStartZ(data.zone) + Tuning.EGG_SPAWN_OFFSET,

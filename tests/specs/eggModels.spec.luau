@@ -1,6 +1,6 @@
 --!nocheck
--- Tests for the blocky egg models (Shared/EggModels): every egg exists, is different from the others, holds
--- together, and stays within a part budget. How the eggs look is checked by eye in the egg gallery
+-- Tests for the blocky egg models (Shared/EggModels): every egg in the zones' lineups (and every shelved one)
+-- exists, is different from the others, holds together, and stays within a part budget. How the eggs look is checked by eye in the egg gallery
 -- (lune run tools/egg-gallery).
 
 return function(harness)
@@ -15,9 +15,14 @@ return function(harness)
 	local COMMON_BUDGET = 70
 	local BUDGET = 230
 
+	-- Every egg with a design: the 40 in the zones' lineups, then the shelved ones.
 	local function each(body)
-		for _, entry in EggModels.all() do
-			body(EggModels.get(entry.zone, entry.rarity), entry.zone, entry.rarity)
+		for _, entry in EggModels.lineup() do
+			body(EggModels.get(entry.kind), entry.rarity)
+		end
+		for _, kind in EggModels.shelved() do
+			local model = EggModels.get(kind)
+			body(model, model.rarity)
 		end
 	end
 
@@ -38,22 +43,35 @@ return function(harness)
 	end
 
 	describe("EggModels", function()
-		it("has a model for every egg that can drop, and none for eggs that cannot", function()
-			local count = 0
-			for zoneId, zone in Zones.List do
-				for _, rarity in Rarities.Order do
-					local model = EggModels.get(zoneId, rarity)
-					if zone.stamina[rarity] ~= nil then
-						expect.truthy(model, `{zone.name} {rarity}`)
-						count += 1
-					else
-						expect.falsy(model, `{zone.name} {rarity}`)
-					end
-				end
+		it("has a model for every egg in every zone, 8 per zone", function()
+			local lineup = EggModels.lineup()
+			expect.equal(#lineup, 40)
+			local perZone = {}
+			for _, entry in lineup do
+				local model = EggModels.get(entry.kind)
+				expect.truthy(model, entry.kind)
+				expect.equal(model.zone, entry.zone, entry.kind .. " zone")
+				expect.equal(model.rarity, entry.rarity, entry.kind .. " rarity")
+				expect.falsy(model.shelved, entry.kind .. " shelved")
+				perZone[entry.zone] = (perZone[entry.zone] or 0) + 1
 			end
-			expect.equal(count, 33)
-			expect.equal(#EggModels.all(), 33)
-			expect.equal(EggModels.get(99, "Common"), nil)
+			for zoneId in Zones.List do
+				expect.equal(perZone[zoneId], 8, "zone " .. zoneId)
+			end
+			expect.equal(EggModels.get("NoSuchEgg"), nil)
+			expect.equal(EggModels.describe("MossStag").name, "Moss Stag Egg")
+			expect.equal(EggModels.describe("NoSuchEgg"), nil)
+		end)
+
+		it("keeps shelved eggs out of the zones, ready to come back", function()
+			local shelved = EggModels.shelved()
+			expect.equal(table.concat(shelved, ","), "Ash,Seafoam,MagmaToad,FrostDragon,MagmaDragon")
+			for _, kind in shelved do
+				local model = EggModels.get(kind)
+				expect.truthy(model.shelved, kind)
+				expect.equal(model.zone, 0, kind .. " zone")
+			end
+			expect.equal(EggModels.get("MagmaDragon").rarity, "Secret")
 		end)
 
 		it("gives every egg its own name and its own look", function()
@@ -95,7 +113,7 @@ return function(harness)
 		end)
 
 		it("stays within its part budget and close to the egg", function()
-			each(function(model, _, rarity)
+			each(function(model, rarity)
 				local limit = if Rarities.Info[rarity].order <= 2 then COMMON_BUDGET else BUDGET
 				expect.truthy(#model.boxes <= limit, `{model.name} has {#model.boxes} boxes (limit {limit})`)
 				for _, box in model.boxes do
@@ -108,7 +126,7 @@ return function(harness)
 		end)
 
 		it("goes from plain Commons to eggs that look like their pet", function()
-			each(function(model, _, rarity)
+			each(function(model, rarity)
 				local order = Rarities.Info[rarity].order
 				if rarity == "Common" then
 					expect.falsy(sticksOut(model), model.name .. " should be a plain egg")
@@ -120,7 +138,7 @@ return function(harness)
 		end)
 
 		it("makes Legendary and rarer eggs glow, and Mythic and rarer sparkle", function()
-			each(function(model, _, rarity)
+			each(function(model, rarity)
 				local order = Rarities.Info[rarity].order
 				expect.equal(model.light ~= nil, order >= 5, model.name .. " light")
 				if order >= 6 then
@@ -129,13 +147,18 @@ return function(harness)
 				if order <= 4 then
 					expect.falsy(model.particles, model.name .. " particles")
 				end
+				-- Secret's rarity colour is nearly black; its glow must still show.
+				for _, effect in { model.light, model.particles } do
+					local c = effect.color
+					expect.truthy(math.max(c[1], c[2], c[3]) > 120, model.name .. " glow is bright enough")
+				end
 			end)
 		end)
 
 		it("builds the same egg every time", function()
-			local first = EggModels.get(5, "Secret")
-			expect.truthy(first == EggModels.get(5, "Secret"), "cached")
-			expect.equal(#first.boxes, #EggModels.get(5, "Secret").boxes)
+			local first = EggModels.get("Cerberus")
+			expect.truthy(first == EggModels.get("Cerberus"), "cached")
+			expect.equal(first.rarity, "Secret")
 		end)
 	end)
 end

@@ -16,7 +16,7 @@ local EVENTS = {
 	"Announce", -- (text, colorRgb?)
 	-- Server -> one player
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
-	"RideEnded", -- (reason, { eggId, zone, rarity })
+	"RideEnded", -- (reason, { eggId, zone, rarity, kind })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"InventoryUpdated", -- (eggCount)
 	-- Player -> server

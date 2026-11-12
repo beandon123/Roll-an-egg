@@ -117,7 +117,7 @@ local function devPanel(scope)
 		Name = "StudioTestPanel",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -10, 0.4, 0),
-		Size = UDim2.fromOffset(170, 150),
+		Size = UDim2.fromOffset(170, 189),
 		BackgroundColor3 = PANEL,
 		BackgroundTransparency = 0.2,
 		[Children] = {
@@ -144,6 +144,7 @@ local function devPanel(scope)
 			devButton(scope, "Max stamina x5", "StaminaUp", 1),
 			devButton(scope, "Reset stamina", "StaminaReset", 2),
 			devButton(scope, "Drop best egg here", "DropBestEgg", 3),
+			devButton(scope, "Drop each egg here", "DropEachEgg", 4),
 		},
 	})
 end

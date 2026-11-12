@@ -20,7 +20,9 @@ local TEMPLATE = {
 	Coins = 0,
 	-- upgradeId -> level bought
 	Upgrades = {},
-	-- Unhatched eggs: { uid = string, zone = number, rarity = string, claimedAt = number }
+	-- Unhatched eggs: { uid = string, zone = number, rarity = string, kind = string, claimedAt = number }
+	-- `kind` is the egg's design name (e.g. "MossStag"). Eggs claimed before kinds existed have none; treat those
+	-- as the zone's first egg of that rarity.
 	Eggs = {},
 	-- Hatched pets (filled in once hatching is built)
 	Pets = {},

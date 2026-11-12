@@ -9,7 +9,7 @@ The first playable slice: **the runway and riding**.
 
 - A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
-- Every egg has its own blocky model, built from parts: 33 designs, one per zone and rarity (see below).
+- Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
@@ -55,20 +55,27 @@ In Studio a small panel appears on the right of the screen. Its buttons only wor
 - **Max stamina x5**: lets you ride eggs in deeper zones before upgrades exist.
 - **Reset stamina**: back to 100.
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
+- **Drop each egg here**: drops each of the zone's 8 eggs in turn.
 
 ## Egg models
 
-Eggs are blocky, voxel-style models built from parts in code, so they need no uploaded meshes. Every zone + rarity
-has its own design in `src/shared/EggModels/Designs.luau`:
+Eggs are blocky, voxel-style models built from parts in code, so they need no uploaded meshes. Each zone has 8 eggs,
+listed in `src/shared/Config/Zones.luau` with their rarity (a zone can have two eggs of the same rarity). A drop
+picks a rarity with the zone's odds, then one of the zone's eggs of that rarity. Every egg has its own design in
+`src/shared/EggModels/Designs.luau`:
 
 - **Common**: plain, the zone's colour and one simple mark.
 - **Uncommon, Rare**: a zone pattern with a hint of the pets inside (an acorn, a turtle shell, a knitted sweater).
-- **Epic and up**: the egg looks like its pet: ears, horns, tusks, fins and markings. A Magma Dragon egg is black
-  scales split by glowing lava cracks, with fire-tipped horns.
+- **Epic and up**: the egg looks like its pet: ears, horns, tusks, fins and markings, like the King Crab's claws
+  and eye stalks or the Lava Golem's glowing cracks and boulder shoulders.
 - **Legendary and up** glow in their rarity colour; **Mythic and up** also give off particles.
 
 Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom to the point; x and z from -6 to 5).
-On the runway the egg lies on its side and rolls. To see every egg in 3D without opening Studio:
+On the runway the egg lies on its side and rolls. A design marked `shelved` is out of the game for now (the Frost
+Dragon and Magma Dragon eggs, among others); put it back in a zone's list to bring it back.
+
+In Studio, **Drop each egg here** on the test panel drops all 8 of the zone's eggs, one after another. To see every
+egg in 3D without opening Studio:
 
 ```bash
 lune run tools/egg-gallery

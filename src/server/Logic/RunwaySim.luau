@@ -23,6 +23,8 @@ export type Egg = {
 	id: number,
 	zone: number,
 	rarity: string,
+	-- Which of the zone's eggs it is: a design name such as "MossStag".
+	kind: string,
 	spec: EggSpec.Spec,
 	spawnTime: number,
 	startZ: number,
@@ -74,6 +76,7 @@ export type SerializedEgg = {
 	id: number,
 	zone: number,
 	rarity: string,
+	kind: string,
 	spawnTime: number,
 	lateral: number,
 	rider: number?,
@@ -97,9 +100,17 @@ export type Event =
 		claimTime: number,
 		combo: number,
 	}
-	| { type: "RideEnded", rider: number, reason: RideEndReason, id: number, zone: number, rarity: string }
+	| {
+		type: "RideEnded",
+		rider: number,
+		reason: RideEndReason,
+		id: number,
+		zone: number,
+		rarity: string,
+		kind: string,
+	}
 	| { type: "StaminaChanged", rider: number, value: number, time: number, rate: number, max: number }
-	| { type: "Claimed", rider: number, zone: number, rarity: string }
+	| { type: "Claimed", rider: number, zone: number, rarity: string, kind: string }
 
 local RunwaySim = {}
 RunwaySim.__index = RunwaySim
@@ -152,6 +163,7 @@ local function serialize(egg: Egg): SerializedEgg
 		id = egg.id,
 		zone = egg.zone,
 		rarity = egg.rarity,
+		kind = egg.kind,
 		spawnTime = egg.spawnTime,
 		lateral = egg.lateral,
 		rider = egg.riderId,
@@ -185,11 +197,29 @@ function RunwaySim._removeEgg(self: RunwaySim, egg: Egg, reason: EggRemoveReason
 	self:_emit({ type = "EggRemoved", id = egg.id, reason = reason, by = by })
 end
 
--- Drops a new egg at the start of a zone. `forcedRarity` skips the random roll.
-function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forcedRarity: string?): Egg?
-	local rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
+-- Drops a new egg at the start of a zone: a random rarity for the zone, then one of the zone's eggs of that
+-- rarity. `forcedRarity` and `forcedKind` skip the random rolls; a forced egg must belong to the zone.
+function RunwaySim.spawnEgg(
+	self: RunwaySim,
+	zoneId: number,
+	now: number,
+	forcedRarity: string?,
+	forcedKind: string?
+): Egg?
+	local rarity: string
+	local kind: string?
+	if forcedKind then
+		local place, placeRarity = EggSpec.placeOf(forcedKind)
+		if place ~= zoneId or placeRarity == nil then
+			return nil
+		end
+		rarity, kind = placeRarity, forcedKind
+	else
+		rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
+		kind = EggSpec.pickEgg(zoneId, rarity, self.random())
+	end
 	local spec = EggSpec.get(zoneId, rarity)
-	if spec == nil then
+	if spec == nil or kind == nil then
 		return nil
 	end
 
@@ -199,6 +229,7 @@ function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forced
 		id = self.nextEggId,
 		zone = zoneId,
 		rarity = rarity,
+		kind = kind,
 		spec = spec,
 		spawnTime = now,
 		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET,
@@ -334,6 +365,7 @@ function RunwaySim._endRide(self: RunwaySim, rider: Rider, now: number, reason: 
 		id = eggId,
 		zone = if egg then egg.zone else 0,
 		rarity = if egg then egg.rarity else "",
+		kind = if egg then egg.kind else "",
 	})
 
 	if egg then
@@ -543,7 +575,13 @@ function RunwaySim.step(self: RunwaySim, now: number)
 			if now >= ride.claimAt and ride.claimAt <= ride.emptyAt then
 				local egg = self.eggs[rider.eggId :: number]
 				if egg then
-					self:_emit({ type = "Claimed", rider = rider.id, zone = egg.zone, rarity = egg.rarity })
+					self:_emit({
+						type = "Claimed",
+						rider = rider.id,
+						zone = egg.zone,
+						rarity = egg.rarity,
+						kind = egg.kind,
+					})
 				end
 				self:_endRide(rider, now, "Claimed")
 			elseif now >= ride.emptyAt then

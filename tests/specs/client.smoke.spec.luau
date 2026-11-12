@@ -60,12 +60,13 @@ return function(harness)
 		}
 	end
 
-	-- An egg as the server describes it, spawned `age` seconds ago.
+	-- An egg as the server describes it, spawned `age` seconds ago. It is the zone's first egg of that rarity.
 	local function eggData(session, id, zone, rarity, age, lateral)
 		return {
 			id = id,
 			zone = zone,
 			rarity = rarity,
+			kind = shared(session).EggSpec.pickEgg(zone, rarity, 0),
 			spawnTime = session.clock - (age or 5),
 			lateral = lateral or 0,
 			rider = nil,
@@ -158,7 +159,7 @@ return function(harness)
 					table.insert(blocks, child)
 				end
 			end
-			expect.equal(#blocks, #EggModels.get(1, "Common").boxes, "one part per box")
+			expect.equal(#blocks, #EggModels.get("Leafy").boxes, "one part per box")
 			for _, block in blocks do
 				local weld = block:FindFirstChildOfClass("WeldConstraint")
 				expect.truthy(weld, block.Name .. " is welded")
@@ -186,6 +187,26 @@ return function(harness)
 			session:renderFrame(1 / 60)
 			expect.truthy(common.Root.CFrame.RightVector.X > 0.99, "Egg1 points +X")
 			expect.truthy(parts.eggFolder.Egg2.Root.CFrame.RightVector.X < -0.99, "Egg2 points -X")
+		end)
+
+		it("draws each of a zone's eggs of the same rarity differently", function()
+			local session, parts = startClient()
+			local leafy = eggData(session, 1, 1, "Common")
+			local cottontail = eggData(session, 3, 1, "Common", 5, 10)
+			cottontail.kind = "Cottontail"
+			-- An egg the zone does not have at that rarity is drawn as the zone's first egg of the rarity.
+			local wrong = eggData(session, 5, 1, "Common", 5, -10)
+			wrong.kind = "Yeti"
+			for _, egg in { leafy, cottontail, wrong } do
+				session:fromServer("EggSpawned", egg)
+			end
+			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
+			local function blockCount(model)
+				return #model:GetChildren() - 1
+			end
+			expect.equal(blockCount(parts.eggFolder.Egg1), #EggModels.get("Leafy").boxes)
+			expect.equal(blockCount(parts.eggFolder.Egg3), #EggModels.get("Cottontail").boxes)
+			expect.equal(blockCount(parts.eggFolder.Egg5), #EggModels.get("Leafy").boxes)
 		end)
 
 		it("loads eggs from the server snapshot at startup", function()
@@ -365,14 +386,14 @@ return function(harness)
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
 
-			session:fromServer("RideEnded", "Claimed", { eggId = 1, zone = 1, rarity = "Common" })
+			session:fromServer("RideEnded", "Claimed", { eggId = 1, zone = 1, rarity = "Common", kind = "Leafy" })
 			session:fromServer("EggRemoved", 1, "Claimed", LOCAL_USER_ID)
 			session:fromServer("InventoryUpdated", 3)
 			session:renderFrame(1 / 60)
 
 			expect.equal(parts.root.Anchored, false)
 			local toast = hud(parts).Toast
-			expect.equal(toast.Text, "CLAIMED! +1 Common egg")
+			expect.equal(toast.Text, "CLAIMED! +1 Leafy Egg")
 			expect.equal(toast.Visible, true)
 			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  3")
 		end)
@@ -485,7 +506,7 @@ return function(harness)
 			session:renderFrame(1, 3)
 			expect.equal(claim.Visible, true)
 			expect.near(claim.Fill.Size.X.Scale, 0.25, 1e-3)
-			expect.equal(labelOf(claim).Text, "Epic Forest egg  25%  - not enough stamina!")
+			expect.equal(labelOf(claim).Text, "Epic Bear Egg  25%  - not enough stamina!")
 		end)
 
 		it("sends Studio test commands from the test panel", function()

@@ -1,5 +1,6 @@
 --!strict
--- Everything about one kind of egg (a zone + a rarity), worked out once from the config tables.
+-- Everything about one tier of egg (a zone + a rarity), worked out once from the config tables: its size, speed,
+-- claim time and stamina. Every egg of the same zone and rarity shares these; only the look differs.
 
 local Config = script.Parent.Config
 local Rarities = require(Config.Rarities)
@@ -71,7 +72,7 @@ function EggSpec.rollRarity(zoneId: number, random01: number): string
 
 	local target = random01 * total
 	local running = 0
-	local last = "Common"
+	local last = ""
 	for _, rarity in Rarities.Order do
 		local weight = zone.weights[rarity] or 0
 		if weight > 0 then
@@ -83,6 +84,41 @@ function EggSpec.rollRarity(zoneId: number, random01: number): string
 		end
 	end
 	return last
+end
+
+-- The zone's eggs of one rarity (design names such as "MossStag"), in the order the zone lists them.
+function EggSpec.eggsOf(zoneId: number, rarity: string): { string }
+	local zone = Zones.List[zoneId]
+	local list = {}
+	if zone then
+		for _, entry in zone.eggs do
+			if entry.rarity == rarity then
+				table.insert(list, entry.egg)
+			end
+		end
+	end
+	return list
+end
+
+-- Picks one of the zone's eggs of a rarity from a random number in [0, 1), each equally likely.
+function EggSpec.pickEgg(zoneId: number, rarity: string, random01: number): string?
+	local list = EggSpec.eggsOf(zoneId, rarity)
+	if #list == 0 then
+		return nil
+	end
+	return list[math.clamp(math.floor(random01 * #list) + 1, 1, #list)]
+end
+
+-- The zone and rarity an egg drops at, or nil if it is in no zone's lineup.
+function EggSpec.placeOf(kind: string): (number?, string?)
+	for zoneId, zone in Zones.List do
+		for _, entry in zone.eggs do
+			if entry.egg == kind then
+				return zoneId, entry.rarity
+			end
+		end
+	end
+	return nil, nil
 end
 
 return EggSpec

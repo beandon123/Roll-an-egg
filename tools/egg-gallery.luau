@@ -33,10 +33,7 @@ local function round(value: number): number
 	return math.round(value * 1000) / 1000
 end
 
-local eggs = {}
-for _, entry in EggModels.all() do
-	local model = EggModels.get(entry.zone, entry.rarity)
-	local zone = Zones.List[entry.zone]
+local function describe(model, slot: number?)
 	local boxes = {}
 	for _, box in model.boxes do
 		table.insert(boxes, {
@@ -51,18 +48,32 @@ for _, entry in EggModels.all() do
 			box.transparency,
 		})
 	end
-	table.insert(eggs, {
-		zone = entry.zone,
-		zoneName = zone.name,
-		rarity = entry.rarity,
+	local zone = Zones.List[model.zone]
+	return {
+		kind = model.kind,
+		zone = model.zone,
+		zoneName = if zone then zone.name else "Shelved",
+		slot = slot,
+		rarity = model.rarity,
+		shelved = model.shelved,
 		name = model.name,
 		hatches = model.hatches,
-		stamina = zone.stamina[entry.rarity],
-		size = Rarities.Info[entry.rarity].size,
+		stamina = if zone then zone.stamina[model.rarity] else nil,
+		size = Rarities.Info[model.rarity].size,
 		boxes = boxes,
 		light = model.light and { color = hex(model.light.color), brightness = model.light.brightness },
 		particles = model.particles and { color = hex(model.particles.color), style = model.particles.style },
-	})
+	}
+end
+
+local eggs = {}
+local slots = {}
+for _, entry in EggModels.lineup() do
+	slots[entry.zone] = (slots[entry.zone] or 0) + 1
+	table.insert(eggs, describe(EggModels.get(entry.kind), slots[entry.zone]))
+end
+for index, kind in EggModels.shelved() do
+	table.insert(eggs, describe(EggModels.get(kind), index))
 end
 
 local zones = {}
@@ -91,4 +102,4 @@ if folder and not fs.isDir(folder) then
 	fs.writeDir(folder)
 end
 fs.writeFile(outPath, page)
-print(`Wrote {#eggs} eggs to {outPath}`)
+print(`Wrote {#eggs} eggs ({#EggModels.shelved()} shelved) to {outPath}`)

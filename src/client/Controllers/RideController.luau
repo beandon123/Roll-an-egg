@@ -9,11 +9,11 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
+local EggModels = Load.shared("EggModels")
 local Net = Load.shared("Net")
 local Rarities = Load.shared("Config", "Rarities")
 local Runway = Load.shared("Runway")
 local Tuning = Load.shared("Config", "Tuning")
-local Zones = Load.shared("Config", "Zones")
 
 local EggController = require(script.Parent.EggController)
 local UiState = require(script.Parent.Parent.Ui.UiState)
@@ -159,7 +159,8 @@ local function onRideStarted(eggId: number, info)
 	local egg = EggController.GetEgg(eggId)
 	if egg then
 		egg.riderUserId = localPlayer.UserId
-		UiState.rideTitle:set(`{egg.rarity} {Zones.List[egg.zone].name} egg`)
+		local about = EggModels.describe(egg.kind)
+		UiState.rideTitle:set(if about then `{egg.rarity} {about.name}` else `{egg.rarity} egg`)
 	else
 		UiState.rideTitle:set("Egg")
 	end
@@ -174,7 +175,8 @@ end
 local function onRideEnded(reason: string, info)
 	if reason == "Claimed" then
 		local color = if Rarities.Info[info.rarity] then rgb(Rarities.Info[info.rarity].color) else nil
-		UiState.showToast(`CLAIMED! +1 {info.rarity} egg`, color, 3)
+		local about = EggModels.describe(info.kind)
+		UiState.showToast(`CLAIMED! +1 {if about then about.name else info.rarity .. " egg"}`, color, 3)
 	elseif reason == "ThrownOff" then
 		UiState.showToast("Out of stamina!", Color3.fromRGB(255, 110, 110))
 	elseif reason == "Cliff" then
