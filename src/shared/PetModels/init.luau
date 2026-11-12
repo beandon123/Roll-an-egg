@@ -48,8 +48,11 @@ export type Model = {
 	zone: number,
 	rarity: string,
 	skeleton: string,
-	-- How it moves: "Walk", "Hop", "Waddle" or "Stomp".
+	-- How it moves: "Walk", "Hop", "Waddle", "Stomp", "Swim" or "Crawl".
 	gait: string,
+	-- How high it floats above the ground, in voxels (0 for pets that stand on it). Designs are drawn standing
+	-- on y = 0; a floating pet is raised by this much when placed.
+	hover: number,
 	-- Studs per voxel.
 	scale: number,
 	limbs: { Limb },
@@ -81,6 +84,24 @@ PetModels.SKELETONS = {
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
 	Biped = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg" },
+	-- Floats and swims: fins (or wings, or forelegs) and a tail.
+	Swimmer = { "Body", "Head", "LeftFin", "RightFin", "Tail" },
+	-- Eight tentacles round a body, with the head (mantle) on top.
+	Tentacled = {
+		"Body",
+		"Head",
+		"Tentacle1",
+		"Tentacle2",
+		"Tentacle3",
+		"Tentacle4",
+		"Tentacle5",
+		"Tentacle6",
+		"Tentacle7",
+		"Tentacle8",
+	},
+	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
+	-- a ripple can run down it.
+	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
 	-- Six legs (scorpions, beetles, crabs). Claws are part of the Head.
 	ManyLegged = {
 		"Body",
@@ -468,6 +489,7 @@ function PetModels.get(kind: string): Model?
 		rarity = rarity,
 		skeleton = design.skeleton,
 		gait = design.gait or "Walk",
+		hover = design.hover or 0,
 		scale = design.scale or PetModels.VOXEL,
 		limbs = limbs,
 		seat = pet.seatPoint or { 0, high[2], 0 },

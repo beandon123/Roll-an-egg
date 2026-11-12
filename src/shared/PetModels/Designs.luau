@@ -5,7 +5,7 @@
 --     limb:box() draws a solid block, limb:paint() colours the surface of blocks already drawn (eyes, bellies),
 --     and the ...Pair versions mirror across the middle of the pet.
 -- Pets have big heads and small bodies, like the eggs they come from, and are themed to match their egg.
--- So far: the Forest, Desert and Snow pets. The other zones' pets come next.
+-- So far: the Forest, Desert, Snow and Ocean pets. The Volcano pets come next.
 -- Secret and Eternal pets are the showpieces, far more detailed than the rest (the tests check this).
 
 type Color = { number }
@@ -15,8 +15,10 @@ type Design = {
 	name: string,
 	-- One of PetModels.SKELETONS: decides which limbs the pet has and so which animations it uses.
 	skeleton: string,
-	-- How it moves: "Walk" (default), "Hop", "Waddle" or "Stomp".
+	-- How it moves: "Walk" (default), "Hop", "Waddle", "Stomp", "Swim" or "Crawl".
 	gait: string?,
+	-- How high it floats, in voxels, for pets that swim through the air.
+	hover: number?,
 	-- Studs per voxel; bigger pets are drawn with more voxels, small ones get a bigger scale to be rideable.
 	scale: number?,
 	draw: (Pet) -> (),
@@ -1810,6 +1812,795 @@ Designs.Yeti = {
 		pet:light(GLOW, 2.6, 18)
 		pet:particles("Snow", GLOW_WHITE, 14)
 		pet:seat(0, 23, -4)
+	end,
+}
+
+----------------------------------------------------------------------------------------------------------------
+-- Ocean
+
+Designs.SeaTurtle = {
+	name = "Sea Turtle",
+	skeleton = "LowSlung",
+	scale = 0.75,
+	draw = function(pet)
+		local SHELL = rgb(98, 168, 84)
+		local SHELL_DARK = rgb(62, 118, 58)
+		local SKIN = rgb(150, 196, 120)
+		local SPOT = rgb(100, 150, 80)
+		local PLASTRON = rgb(232, 218, 156)
+		local BARNACLE = rgb(226, 220, 206)
+		local STAR = rgb(255, 140, 90)
+		local WEED = rgb(60, 140, 90)
+
+		-- A stepped shell of plates with dark seams, a dark rim, a cream belly, barnacles and a starfish.
+		local body = pet:limb("Body", { 0, 3, 0 })
+		body:box(-4, 0, -4, 3, 0, 4, PLASTRON)
+		body:box(-6, 1, -6, 5, 1, 5, SHELL_DARK)
+		body:box(-5, 2, -5, 4, 3, 4, SHELL)
+		body:box(-4, 4, -4, 3, 5, 3, SHELL)
+		body:box(-3, 6, -3, 2, 6, 2, SHELL)
+		body:paint(-1, 6, -3, 0, 6, 2, SHELL_DARK)
+		body:paint(-4, 5, 0, 3, 5, 0, SHELL_DARK)
+		body:paint(-4, 5, -3, 3, 5, -3, SHELL_DARK)
+		body:paintPair(4, 2, -2, 4, 3, -2, SHELL_DARK)
+		body:paintPair(4, 2, 2, 4, 3, 2, SHELL_DARK)
+		body:paint(-2, 2, 4, -2, 3, 4, SHELL_DARK)
+		body:paint(1, 2, 4, 1, 3, 4, SHELL_DARK)
+		body:paint(-2, 2, -5, 1, 3, -5, SHELL_DARK)
+		for _, z in { -5, -1, 3 } do
+			body:paintPair(5, 1, z, 5, 1, z, SHELL)
+		end
+		body:paint(-1, 1, 5, 0, 1, 5, SHELL)
+		body:box(2, 7, -2, 2, 7, -2, BARNACLE)
+		body:box(-3, 6, 3, -3, 6, 3, BARNACLE)
+		body:box(2, 7, 1, 2, 7, 1, BARNACLE)
+		body:box(-2, 7, -1, -2, 7, 1, STAR)
+		body:box(-3, 7, 0, -1, 7, 0, STAR)
+		body:box(1, 0, -7, 1, 0, -7, WEED)
+
+		-- A spotted head with a beaky mouth and a gentle smile.
+		local head = pet:limb("Head", { 0, 2, 5 })
+		head:box(-1, 2, 5, 0, 3, 6, SKIN)
+		head:box(-2, 2, 7, 1, 4, 9, SKIN)
+		head:box(-1, 2, 10, 0, 3, 10, SHELL_DARK)
+		eyes(head, 1, 3, 9, 1, 1)
+		head:paint(-2, 2, 9, 1, 2, 9, SPOT)
+		head:paintPair(1, 4, 8, 1, 4, 8, SPOT)
+		head:paint(-1, 4, 7, 0, 4, 7, SPOT)
+		head:paint(-1, 3, 10, 0, 3, 10, rgb(40, 70, 40))
+		head:paintPair(2, 2, 8, 2, 3, 8, SPOT)
+
+		-- Broad spotted flippers.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 5, 0.5, 3 }, function(leg)
+			leg:box(5, 0, 2, 8, 0, 4, SKIN)
+			leg:box(8, 0, 5, 8, 0, 5, SKIN)
+			leg:paint(6, 0, 3, 6, 0, 3, SPOT)
+			leg:paint(8, 0, 2, 8, 0, 2, SPOT)
+			leg:box(9, 0, 3, 9, 0, 3, SHELL_DARK)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 4, 0.5, -4 }, function(leg)
+			leg:box(4, 0, -5, 6, 0, -3, SKIN)
+			leg:paint(5, 0, -4, 5, 0, -4, SPOT)
+		end)
+
+		local tail = pet:limb("Tail", { 0, 0.5, -6 })
+		tail:box(-1, 0, -7, 0, 0, -6, SKIN)
+
+		pet:seat(0, 7, -1)
+	end,
+}
+
+Designs.Dolphin = {
+	name = "Dolphin",
+	skeleton = "Swimmer",
+	gait = "Swim",
+	hover = 3,
+	scale = 0.55,
+	draw = function(pet)
+		local GREY = rgb(112, 152, 194)
+		local CAPE = rgb(78, 112, 156)
+		local BELLY = rgb(232, 242, 250)
+
+		-- A sleek body, dark along the back and pale underneath, with a swept-back fin.
+		local body = pet:limb("Body", { 0, 3, 0 })
+		body:box(-3, 1, -5, 2, 5, 3, GREY)
+		body:box(-2, 6, -4, 1, 6, 2, CAPE)
+		body:box(-2, 0, -4, 1, 0, 2, BELLY)
+		body:paint(-3, 5, -5, 2, 5, 3, CAPE)
+		body:paint(-3, 1, -5, 2, 1, 3, BELLY)
+		body:paintPair(2, 2, -4, 2, 2, 2, BELLY)
+		body:box(-1, 7, -2, 0, 8, 0, CAPE)
+		body:box(-1, 9, -3, 0, 9, -1, CAPE)
+		body:box(-1, 10, -4, 0, 10, -3, CAPE)
+		body:paint(-1, 7, 0, 0, 8, 0, GREY)
+		body:paintPair(2, 3, -4, 2, 3, -1, rgb(170, 204, 232))
+		body:paintPair(2, 4, 0, 2, 4, 2, rgb(170, 204, 232))
+		body:paint(-1, 0, -2, -1, 0, -2, rgb(200, 214, 230))
+		body:paint(0, 0, 1, 0, 0, 1, rgb(200, 214, 230))
+
+		-- A rounded head, a smiling beak and a blowhole.
+		local head = pet:limb("Head", { 0, 3, 3 })
+		head:box(-2, 1, 4, 1, 5, 7, GREY)
+		head:box(-1, 2, 8, 0, 2, 10, GREY)
+		head:box(-1, 1, 8, 0, 1, 10, BELLY)
+		head:paint(-2, 1, 4, 1, 1, 7, BELLY)
+		head:paint(-2, 5, 4, 1, 5, 7, CAPE)
+		head:paint(-1, 5, 5, 0, 5, 5, rgb(40, 50, 70))
+		eyes(head, 1, 3, 7, 1, 1)
+		head:paintPair(1, 2, 7, 1, 2, 7, rgb(170, 204, 232))
+		head:box(-1, 6, 5, 0, 7, 5, rgb(200, 240, 255), GLASS, 0.3)
+		head:box(-1, 8, 5, 0, 8, 5, rgb(240, 252, 255))
+		head:boxPair(1, 8, 4, 1, 8, 4, rgb(200, 240, 255), GLASS, 0.3)
+		head:boxPair(1, 9, 5, 1, 9, 5, rgb(240, 252, 255))
+
+		pet:limbPair("LeftFin", "RightFin", { 3, 1.5, 1 }, function(fin)
+			fin:box(3, 1, 0, 5, 1, 2, CAPE)
+			fin:box(6, 0, 0, 6, 0, 1, CAPE)
+		end)
+
+		-- A narrow tail ending in wide flukes.
+		local tail = pet:limb("Tail", { 0, 3, -5 })
+		tail:box(-1, 2, -8, 0, 4, -6, GREY)
+		tail:paint(-1, 2, -8, 0, 2, -6, BELLY)
+		tail:paint(-1, 4, -8, 0, 4, -6, CAPE)
+		tail:box(-4, 3, -10, 3, 3, -9, CAPE)
+		tail:boxPair(2, 3, -11, 3, 3, -11, CAPE)
+
+		pet:seat(0, 7, 2)
+	end,
+}
+
+Designs.MantaRay = {
+	name = "Manta Ray",
+	skeleton = "Swimmer",
+	gait = "Swim",
+	hover = 4,
+	scale = 0.55,
+	draw = function(pet)
+		local NAVY = rgb(34, 50, 96)
+		local NAVY_LIGHT = rgb(54, 74, 128)
+		local BELLY = rgb(232, 242, 250)
+		local SPOT = rgb(144, 204, 244)
+		local REMORA = rgb(150, 156, 170)
+
+		-- A flat, broad body, dark above with pale shoulder marks and spots, white below,
+		-- with a little remora fish hitching a ride underneath.
+		local body = pet:limb("Body", { 0, 2, 0 })
+		body:box(-3, 2, -4, 2, 3, 4, NAVY)
+		body:box(-3, 1, -4, 2, 1, 4, BELLY)
+		body:box(-2, 4, -3, 1, 4, 2, NAVY)
+		body:paintPair(1, 4, 1, 1, 4, 2, BELLY)
+		body:paintPair(2, 3, 2, 2, 3, 3, BELLY)
+		body:paint(-1, 4, -2, -1, 4, -2, SPOT)
+		body:paint(0, 4, 0, 0, 4, 0, SPOT)
+		body:paint(-2, 4, -3, -2, 4, -3, SPOT)
+		body:box(-2, 0, 0, -1, 0, 2, REMORA)
+		body:paint(-2, 0, 2, -1, 0, 2, rgb(110, 116, 130))
+		body:box(1, 0, -3, 1, 0, -1, REMORA)
+		for _, z in { 1, 2, 3 } do
+			body:paintPair(1, 1, z, 2, 1, z, rgb(170, 180, 200))
+		end
+		body:paint(1, 4, -2, 1, 4, -2, SPOT)
+		body:paint(-2, 4, 1, -2, 4, 1, SPOT)
+
+		-- Curled head lobes either side of a wide mouth.
+		local head = pet:limb("Head", { 0, 2, 5 })
+		head:box(-3, 1, 5, 2, 2, 6, NAVY)
+		head:paint(-2, 1, 6, 1, 1, 6, rgb(200, 210, 230))
+		eyes(head, 2, 2, 6, 1, 1)
+		head:boxPair(2, 1, 7, 3, 2, 9, NAVY)
+		head:boxPair(2, 3, 9, 2, 3, 9, NAVY)
+		head:paintPair(2, 1, 7, 3, 1, 9, BELLY)
+
+		-- Great wings, dark above and white below, with up-curled tips.
+		pet:limbPair("LeftFin", "RightFin", { 3.5, 2, 0 }, function(wing)
+			wing:box(3, 2, -3, 6, 2, 3, NAVY)
+			wing:box(3, 1, -3, 6, 1, 3, BELLY)
+			wing:box(7, 2, -2, 8, 2, 2, NAVY)
+			wing:box(7, 1, -2, 8, 1, 2, BELLY)
+			wing:box(9, 2, -1, 10, 2, 1, NAVY)
+			wing:box(9, 1, -1, 10, 1, 1, BELLY)
+			wing:box(11, 2, 0, 12, 3, 0, NAVY)
+			wing:paint(5, 2, 1, 5, 2, 1, SPOT)
+			wing:paint(7, 2, -1, 7, 2, -1, SPOT)
+			wing:paint(4, 2, -2, 4, 2, -2, SPOT)
+			wing:paint(3, 2, 2, 4, 2, 3, BELLY)
+			wing:paint(7, 2, -2, 8, 2, -2, NAVY_LIGHT)
+			wing:paint(9, 2, -1, 10, 2, -1, NAVY_LIGHT)
+			wing:paint(6, 2, -3, 6, 2, -3, NAVY_LIGHT)
+			wing:paint(9, 2, 1, 9, 2, 1, SPOT)
+			wing:paint(5, 1, 0, 5, 1, 0, rgb(170, 180, 200))
+			wing:paint(8, 1, 0, 8, 1, 0, rgb(170, 180, 200))
+		end)
+
+		-- A long whip of a tail.
+		local tail = pet:limb("Tail", { 0, 2, -5 })
+		tail:box(-1, 2, -10, 0, 2, -5, NAVY_LIGHT)
+		tail:box(-1, 2, -14, -1, 2, -11, NAVY_LIGHT)
+		tail:boxPair(1, 1, -5, 2, 1, -5, NAVY)
+
+		pet:seat(0, 5, 0)
+	end,
+}
+
+Designs.KingCrab = {
+	name = "King Crab",
+	skeleton = "ManyLegged",
+	scale = 0.55,
+	draw = function(pet)
+		local CRAB = rgb(216, 64, 48)
+		local CRAB_DARK = rgb(156, 38, 30)
+		local BELLY = rgb(250, 178, 128)
+		local SPIKE = rgb(240, 120, 86)
+		local TIP = rgb(48, 32, 32)
+		local GOLD = rgb(255, 200, 60)
+		local RUBY = rgb(220, 30, 80)
+
+		-- A spiky shell with a pale belly, and a little gold crown, because it is the king.
+		local body = pet:limb("Body", { 0, 4, 0 })
+		body:box(-5, 3, -4, 4, 5, 3, CRAB)
+		body:box(-4, 6, -3, 3, 6, 2, CRAB)
+		body:box(-4, 2, -3, 3, 2, 2, BELLY)
+		body:paint(-5, 3, -4, 4, 3, 3, CRAB_DARK)
+		body:boxPair(2, 7, -2, 2, 7, -2, SPIKE)
+		body:boxPair(3, 7, 1, 3, 7, 1, SPIKE)
+		body:boxPair(5, 4, -2, 5, 4, -2, SPIKE)
+		body:boxPair(5, 4, 1, 5, 4, 1, SPIKE)
+		body:boxPair(2, 5, -5, 2, 5, -5, SPIKE)
+		body:box(-2, 7, -1, 1, 7, 1, GOLD)
+		body:boxPair(1, 8, -1, 1, 8, -1, GOLD)
+		body:boxPair(1, 8, 1, 1, 8, 1, GOLD)
+		body:paint(-1, 7, 1, 0, 7, 1, RUBY)
+
+		-- Eyes on stalks, and claws: one big one for show, one small one for eating.
+		local head = pet:limb("Head", { 0, 4, 4 })
+		head:box(-3, 3, 4, 2, 4, 4, CRAB)
+		head:paint(-1, 3, 4, 0, 3, 4, BELLY)
+		head:boxPair(1, 5, 4, 1, 6, 4, CRAB)
+		head:boxPair(1, 7, 4, 1, 7, 4, EYE)
+		head:box(3, 3, 4, 4, 4, 6, CRAB)
+		head:box(4, 3, 7, 5, 4, 8, CRAB)
+		head:box(3, 2, 9, 6, 5, 11, CRAB)
+		head:box(4, 4, 12, 6, 5, 14, CRAB)
+		head:box(4, 2, 12, 5, 2, 13, CRAB_DARK)
+		head:paint(4, 4, 14, 6, 5, 14, TIP)
+		head:paint(3, 5, 9, 6, 5, 11, SPIKE)
+		head:box(-5, 3, 4, -4, 4, 6, CRAB)
+		head:box(-6, 3, 7, -5, 4, 8, CRAB)
+		head:box(-6, 3, 9, -4, 4, 10, CRAB)
+		head:box(-6, 3, 11, -5, 4, 12, CRAB)
+		head:box(-4, 3, 11, -4, 3, 12, CRAB_DARK)
+		head:paint(-6, 4, 12, -5, 4, 12, TIP)
+
+		-- Long spiky legs, bent high at the knee.
+		local function leg(z: number)
+			return function(limb)
+				limb:box(5, 4, z, 6, 5, z, CRAB)
+				limb:box(7, 5, z, 8, 5, z, CRAB)
+				limb:box(9, 1, z, 9, 4, z, CRAB)
+				limb:box(9, 0, z, 9, 0, z, TIP)
+				limb:paint(7, 5, z, 8, 5, z, SPIKE)
+			end
+		end
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 5, 4.5, 2.5 }, leg(2))
+		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", { 5, 4.5, -0.5 }, leg(-1))
+		pet:limbPair("BackLeftLeg", "BackRightLeg", { 5, 4.5, -2.5 }, leg(-3))
+
+		local tail = pet:limb("Tail", { 0, 3, -4 })
+		tail:box(-2, 2, -5, 1, 3, -5, CRAB_DARK)
+
+		pet:seat(0, 8, -3)
+	end,
+}
+
+Designs.Narwhal = {
+	name = "Narwhal",
+	skeleton = "Swimmer",
+	gait = "Swim",
+	hover = 3,
+	scale = 0.55,
+	draw = function(pet)
+		local SLATE = rgb(122, 142, 172)
+		local SLATE_DARK = rgb(82, 100, 136)
+		local BELLY = rgb(232, 242, 250)
+		local IVORY = rgb(250, 242, 220)
+		local IVORY_DARK = rgb(222, 206, 168)
+		local GLOW = rgb(255, 250, 230)
+		local ICE = rgb(170, 230, 255)
+
+		-- A plump whale body, mottled on the back and pale underneath, with a low ridge.
+		local body = pet:limb("Body", { 0, 4, 0 })
+		body:box(-4, 1, -6, 3, 7, 3, SLATE)
+		body:box(-3, 8, -5, 2, 8, 2, SLATE)
+		body:box(-3, 0, -5, 2, 0, 2, BELLY)
+		body:paint(-4, 1, -6, 3, 2, 3, BELLY)
+		body:box(-1, 9, -4, 0, 9, -1, SLATE_DARK)
+		body:box(-1, 10, -3, -1, 11, -3, ICE, GLASS, 0.2)
+		body:box(0, 10, -2, 0, 10, -2, ICE, GLASS, 0.2)
+		body:box(-1, 10, -1, -1, 10, -1, ICE, GLASS, 0.2)
+		body:boxPair(2, 9, -4, 2, 9, -4, ICE, GLASS, 0.2)
+		for _, spot in
+			{
+				{ 3, 6, -4 },
+				{ 3, 4, -1 },
+				{ -4, 5, -3 },
+				{ -4, 6, 1 },
+				{ 1, 8, -3 },
+				{ -2, 8, 0 },
+				{ 3, 5, 2 },
+				{ -4, 3, -5 },
+				{ 0, 7, -6 },
+				{ 3, 7, -2 },
+				{ -4, 7, -1 },
+				{ 2, 8, -5 },
+				{ -3, 8, -4 },
+				{ 3, 3, 0 },
+				{ -4, 4, 2 },
+				{ -2, 6, -6 },
+			}
+		do
+			body:paint(spot[1], spot[2], spot[3], spot[1], spot[2], spot[3], SLATE_DARK)
+		end
+
+		-- A rounded head with a smile, and the long spiral tusk, glowing faintly at its tip.
+		local head = pet:limb("Head", { 0, 4, 4 })
+		head:box(-3, 1, 4, 2, 6, 7, SLATE)
+		head:box(-2, 7, 4, 1, 7, 6, SLATE)
+		head:paint(-3, 1, 4, 2, 1, 7, BELLY)
+		head:paint(-3, 2, 7, 2, 2, 7, SLATE_DARK)
+		eyes(head, 2, 4, 7, 1, 1)
+		head:paintPair(2, 6, 5, 2, 6, 5, SLATE_DARK)
+		head:box(-1, 4, 8, 0, 5, 10, IVORY)
+		head:paint(-1, 5, 8, -1, 5, 8, IVORY_DARK)
+		head:paint(0, 4, 9, 0, 4, 9, IVORY_DARK)
+		head:paint(-1, 5, 10, -1, 5, 10, IVORY_DARK)
+		head:box(0, 5, 11, 0, 5, 13, IVORY)
+		head:paint(0, 5, 12, 0, 5, 12, IVORY_DARK)
+		head:box(0, 6, 14, 0, 6, 17, IVORY)
+		head:paint(0, 6, 15, 0, 6, 15, IVORY_DARK)
+		head:box(0, 6, 18, 0, 6, 18, GLOW, NEON)
+		head:paint(0, 6, 17, 0, 6, 17, IVORY_DARK)
+		head:paint(0, 5, 13, 0, 5, 13, IVORY_DARK)
+		head:paint(-2, 7, 5, -2, 7, 5, SLATE_DARK)
+		head:paint(1, 6, 7, 1, 6, 7, SLATE_DARK)
+		head:paint(-3, 5, 5, -3, 5, 5, SLATE_DARK)
+
+		pet:limbPair("LeftFin", "RightFin", { 4, 1.5, 2 }, function(fin)
+			fin:box(4, 1, 1, 6, 1, 3, SLATE_DARK)
+			fin:box(7, 0, 1, 7, 0, 2, SLATE_DARK)
+			fin:paint(6, 1, 1, 6, 1, 3, BELLY)
+			fin:paint(5, 1, 2, 5, 1, 2, SLATE)
+		end)
+
+		-- A thick tail and broad flukes, with a few chips of ice stuck to them.
+		local tail = pet:limb("Tail", { 0, 4, -6 })
+		tail:box(-2, 2, -9, 1, 5, -7, SLATE)
+		tail:paint(-2, 2, -9, 1, 2, -7, BELLY)
+		tail:box(-1, 3, -11, 0, 4, -10, SLATE)
+		tail:box(-5, 4, -13, 4, 4, -12, SLATE_DARK)
+		tail:boxPair(3, 4, -14, 4, 4, -14, SLATE_DARK)
+		tail:paint(-1, 5, -8, -1, 5, -8, SLATE_DARK)
+		tail:box(-3, 5, -13, -3, 5, -13, ICE, GLASS, 0.2)
+		tail:box(2, 5, -12, 2, 5, -12, ICE, GLASS, 0.2)
+		tail:paintPair(1, 5, -8, 1, 5, -8, SLATE_DARK)
+		tail:paint(-5, 4, -12, -4, 4, -12, SLATE)
+		tail:paint(3, 4, -12, 4, 4, -12, SLATE)
+		tail:paint(-1, 3, -11, 0, 3, -10, BELLY)
+
+		pet:light(ICE, 1.6, 12)
+		pet:seat(0, 9, 1)
+	end,
+}
+
+Designs.Hippocampus = {
+	name = "Hippocampus",
+	skeleton = "Swimmer",
+	gait = "Swim",
+	hover = 3,
+	scale = 0.55,
+	draw = function(pet)
+		local TEAL = rgb(36, 172, 168)
+		local TEAL_DARK = rgb(22, 122, 126)
+		local BELLY = rgb(188, 242, 230)
+		local FIN = rgb(90, 220, 210)
+		local GLOW = rgb(80, 255, 228)
+		local CORAL = rgb(255, 150, 160)
+		local PEARL = rgb(250, 246, 240)
+
+		-- A sea horse's body: ridged, pale-bellied, with a see-through fin down its back.
+		local body = pet:limb("Body", { 0, 6, 0 })
+		body:box(-3, 4, -3, 2, 9, 3, TEAL)
+		body:box(-2, 4, 4, 1, 8, 4, BELLY)
+		body:paint(-2, 5, 4, 1, 5, 4, TEAL_DARK)
+		body:paint(-2, 7, 4, 1, 7, 4, TEAL_DARK)
+		body:paint(-3, 4, -3, 2, 4, 3, BELLY)
+		for _, z in { -2, 0, 2 } do
+			body:paintPair(2, 4, z, 2, 9, z, TEAL_DARK)
+		end
+		body:box(-3, 10, -2, 2, 10, 0, CORAL)
+		body:box(-2, 11, -2, 1, 11, -1, rgb(255, 214, 200))
+		body:paint(-2, 11, -2, 1, 11, -2, CORAL)
+		body:boxPair(3, 9, -1, 3, 10, 0, CORAL)
+		body:boxPair(3, 8, -1, 3, 8, -1, PEARL)
+		body:boxPair(3, 8, 0, 3, 8, 0, PEARL)
+		body:box(-1, 11, 0, 0, 11, 0, PEARL)
+		body:box(-1, 10, -3, 0, 11, -3, FIN, GLASS, 0.3)
+		body:paint(-1, 11, -3, 0, 11, -3, GLOW, NEON)
+		for _, dot in { { 2, 6, -2 }, { 2, 8, 2 }, { -3, 7, -1 }, { -3, 5, 1 }, { 2, 5, 0 }, { -3, 8, 2 } } do
+			body:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+		end
+
+		-- A horse's head on a long neck, with a glassy fin mane, a coral crown and a pearl on its brow.
+		local head = pet:limb("Head", { 0, 9, 3 })
+		head:box(-2, 9, 2, 1, 12, 4, TEAL)
+		head:box(-2, 12, 3, 1, 15, 7, TEAL)
+		head:box(-1, 12, 8, 0, 14, 10, TEAL)
+		head:paint(-1, 12, 10, 0, 12, 10, TEAL_DARK)
+		head:paint(-1, 14, 10, 0, 14, 10, TEAL_DARK)
+		eyes(head, 1, 14, 7, 1)
+		head:box(-1, 15, 8, 0, 15, 8, PEARL)
+		head:box(-1, 9, 1, 0, 12, 1, FIN, GLASS, 0.3)
+		head:box(-1, 13, 2, 0, 16, 2, FIN, GLASS, 0.3)
+		head:box(-1, 16, 3, 0, 17, 5, FIN, GLASS, 0.3)
+		head:paint(-1, 10, 1, 0, 10, 1, GLOW, NEON)
+		head:paint(-1, 14, 2, 0, 14, 2, GLOW, NEON)
+		head:paint(-1, 17, 4, 0, 17, 4, GLOW, NEON)
+		head:boxPair(1, 16, 5, 1, 17, 5, CORAL)
+		head:boxPair(1, 16, 7, 1, 16, 7, CORAL)
+		head:boxPair(2, 15, 4, 2, 16, 4, FIN, GLASS, 0.3)
+		head:box(-1, 12, 0, 0, 12, 0, FIN, GLASS, 0.3)
+		head:paintPair(1, 10, 4, 1, 11, 4, TEAL_DARK)
+		head:paintPair(2, 13, 6, 2, 14, 6, TEAL_DARK)
+		head:box(-2, 13, 9, 1, 13, 9, rgb(70, 150, 90))
+		head:boxPair(2, 11, 6, 2, 12, 8, rgb(70, 150, 90))
+		head:paintPair(2, 12, 7, 2, 12, 7, PEARL)
+
+		-- Horse forelegs ending in webbed fins.
+		pet:limbPair("LeftFin", "RightFin", { 1.5, 6, 2.5 }, function(leg)
+			leg:box(1, 4, 2, 2, 6, 3, TEAL)
+			leg:box(1, 2, 4, 2, 3, 5, TEAL)
+			leg:paint(1, 3, 4, 2, 3, 5, TEAL_DARK)
+			leg:box(1, 1, 6, 3, 2, 7, FIN, GLASS, 0.3)
+			leg:paint(1, 1, 7, 3, 1, 7, GLOW, NEON)
+			leg:box(3, 2, 4, 3, 3, 4, FIN, GLASS, 0.3)
+		end)
+
+		-- A fish tail sweeping down and back, curling up into a great see-through fin.
+		local tail = pet:limb("Tail", { 0, 5, -3 })
+		tail:box(-2, 3, -6, 1, 6, -4, TEAL)
+		tail:box(-2, 1, -8, 1, 3, -7, TEAL)
+		tail:box(-1, 0, -10, 0, 1, -9, TEAL)
+		tail:box(-1, 1, -12, 0, 3, -11, TEAL)
+		tail:box(-1, 4, -12, 0, 5, -12, TEAL)
+		tail:paint(-2, 3, -6, 1, 3, -6, TEAL_DARK)
+		tail:paint(-2, 2, -8, 1, 2, -8, TEAL_DARK)
+		tail:paint(-1, 1, -10, 0, 1, -10, TEAL_DARK)
+		tail:boxPair(2, 2, -8, 2, 3, -7, FIN, GLASS, 0.3)
+		tail:box(-3, 4, -14, 2, 6, -13, FIN, GLASS, 0.3)
+		tail:paint(-3, 5, -14, 2, 5, -14, GLOW, NEON)
+		tail:boxPair(1, 0, -10, 1, 1, -9, FIN, GLASS, 0.3)
+		tail:box(-1, 2, -13, 0, 3, -13, FIN, GLASS, 0.3)
+		tail:paint(-1, 4, -6, 0, 4, -6, GLOW, NEON)
+		tail:paint(-1, 2, -11, 0, 2, -11, TEAL_DARK)
+
+		pet:light(GLOW, 1.8, 13)
+		pet:particles("Bubbles", rgb(226, 250, 246), 6)
+		pet:seat(0, 10, 0)
+	end,
+}
+
+Designs.Kraken = {
+	name = "Kraken",
+	skeleton = "Tentacled",
+	gait = "Crawl",
+	scale = 0.55,
+	draw = function(pet)
+		local PURPLE = rgb(104, 42, 134)
+		local PURPLE_DARK = rgb(70, 26, 96)
+		local MAGENTA = rgb(202, 72, 164)
+		local SUCKER = rgb(255, 186, 224)
+		local GLOW = rgb(255, 120, 220)
+		local EYE_GLOW = rgb(255, 220, 80)
+		local PUPIL = rgb(30, 10, 30)
+		local BEAK = rgb(60, 40, 30)
+		local GOLD = rgb(255, 200, 60)
+		local RUBY = rgb(220, 30, 80)
+		local BARNACLE = rgb(226, 220, 206)
+		local CORAL = rgb(255, 120, 100)
+		local IRON = rgb(92, 98, 112)
+		local RUST = rgb(150, 86, 52)
+
+		-- The body the tentacles grow from, glowing spots round its rim.
+		local body = pet:limb("Body", { 0, 4, 0 })
+		body:box(-4, 3, -4, 3, 6, 3, PURPLE)
+		body:box(-5, 3, -3, 4, 5, 2, PURPLE)
+		body:box(-3, 3, -5, 2, 5, 4, PURPLE)
+		body:paint(-5, 3, -3, 4, 3, 2, PURPLE_DARK)
+		body:paint(-3, 3, -5, 2, 3, 4, PURPLE_DARK)
+		for _, dot in
+			{ { 4, 4, -2 }, { 4, 4, 1 }, { -5, 4, -2 }, { -5, 4, 1 }, { 1, 4, 4 }, { -2, 4, 4 }, { -1, 4, -5 } }
+		do
+			body:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+		end
+
+		-- A towering mantle curving back, ridged and spotted with light, with huge glowing eyes, angry brows and
+		-- a beak, crusted with barnacles and coral, wearing a sunken king's crown askew.
+		local head = pet:limb("Head", { 0, 7, 0 })
+		head:box(-5, 7, -5, 4, 14, 4, PURPLE)
+		head:box(-4, 15, -5, 3, 17, 2, PURPLE)
+		head:box(-3, 18, -6, 2, 19, 0, PURPLE)
+		head:box(-2, 20, -6, 1, 21, -2, PURPLE)
+		head:paint(-5, 14, -5, 4, 14, 4, PURPLE_DARK)
+		head:paint(-4, 17, -5, 3, 17, 2, PURPLE_DARK)
+		head:paintPair(4, 8, -3, 4, 13, -3, MAGENTA)
+		head:paintPair(4, 8, 0, 4, 13, 0, MAGENTA)
+		head:paint(-2, 8, -5, -2, 13, -5, MAGENTA)
+		head:paint(1, 8, -5, 1, 13, -5, MAGENTA)
+		head:paintPair(3, 15, -3, 3, 17, -3, MAGENTA)
+		for _, dot in
+			{
+				{ 4, 12, -2 },
+				{ 4, 9, 2 },
+				{ -5, 11, 1 },
+				{ -5, 8, -4 },
+				{ 3, 16, -1 },
+				{ -4, 16, 0 },
+				{ 0, 19, -6 },
+				{ -2, 10, -5 },
+				{ 2, 18, -4 },
+				{ -3, 19, -2 },
+			}
+		do
+			head:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+		end
+		head:paintPair(2, 10, 4, 4, 12, 4, EYE_GLOW, NEON)
+		head:paintPair(3, 10, 4, 3, 12, 4, PUPIL)
+		head:boxPair(2, 13, 5, 4, 13, 5, PURPLE_DARK)
+		head:boxPair(1, 12, 5, 1, 12, 5, PURPLE_DARK)
+		head:box(-1, 7, 5, 0, 9, 5, BEAK)
+		head:box(-1, 7, 6, 0, 7, 6, BEAK)
+		head:box(2, 20, -1, 2, 20, -1, BARNACLE)
+		head:box(-3, 20, -5, -3, 20, -5, BARNACLE)
+		head:box(2, 20, -5, 2, 20, -5, BARNACLE)
+		head:box(-5, 15, 1, -5, 15, 1, BARNACLE)
+		head:box(4, 15, -2, 4, 17, -2, CORAL)
+		head:box(5, 16, -2, 5, 16, -2, CORAL)
+		head:box(5, 18, -2, 5, 18, -2, CORAL)
+		head:box(-2, 22, -5, 1, 22, -3, GOLD)
+		head:box(-2, 23, -5, -2, 23, -5, GOLD)
+		head:box(1, 23, -5, 1, 24, -5, GOLD)
+		head:box(-2, 23, -3, -2, 23, -3, GOLD)
+		head:box(1, 23, -3, 1, 24, -3, GOLD)
+		head:paint(-1, 22, -3, 0, 22, -3, RUBY)
+		head:paint(1, 22, -5, 1, 22, -5, RUBY)
+		head:box(-3, 20, -4, -3, 22, -4, rgb(60, 140, 90))
+		head:box(2, 20, -4, 2, 21, -4, rgb(60, 140, 90))
+
+		-- Eight thick tentacles spreading over the ground, lined with suckers, their tips curling up and glowing.
+		local function frontTentacle(limb)
+			limb:box(2, 2, 3, 3, 4, 4, PURPLE)
+			limb:box(3, 1, 5, 4, 2, 6, PURPLE)
+			limb:box(4, 0, 7, 5, 1, 9, PURPLE)
+			limb:box(5, 0, 10, 5, 0, 11, PURPLE)
+			limb:box(5, 1, 12, 5, 2, 12, MAGENTA)
+			limb:box(5, 3, 11, 5, 3, 11, GLOW, NEON)
+			limb:paint(4, 1, 7, 4, 1, 7, SUCKER)
+			limb:paint(5, 1, 9, 5, 1, 9, SUCKER)
+			limb:paint(3, 2, 5, 3, 2, 5, SUCKER)
+			limb:paint(5, 0, 11, 5, 0, 11, SUCKER)
+			limb:paint(2, 4, 4, 3, 4, 4, MAGENTA)
+			limb:box(4, 2, 8, 4, 2, 8, BARNACLE)
+		end
+		local function sideTentacle(limb)
+			limb:box(4, 2, 0, 5, 4, 2, PURPLE)
+			limb:box(6, 1, 1, 7, 2, 2, PURPLE)
+			limb:box(8, 0, 1, 10, 1, 2, PURPLE)
+			limb:box(11, 0, 2, 12, 0, 2, PURPLE)
+			limb:box(13, 1, 2, 13, 2, 2, MAGENTA)
+			limb:box(12, 3, 2, 12, 3, 2, GLOW, NEON)
+			limb:paint(6, 2, 2, 6, 2, 2, SUCKER)
+			limb:paint(8, 1, 2, 8, 1, 2, SUCKER)
+			limb:paint(10, 1, 2, 10, 1, 2, SUCKER)
+			limb:paint(12, 0, 2, 12, 0, 2, SUCKER)
+			limb:paint(4, 4, 0, 5, 4, 1, MAGENTA)
+			limb:box(9, 2, 1, 9, 2, 1, BARNACLE)
+		end
+		local function rearSideTentacle(limb)
+			limb:box(4, 2, -3, 5, 4, -2, PURPLE)
+			limb:box(6, 1, -4, 7, 2, -3, PURPLE)
+			limb:box(8, 0, -6, 9, 1, -4, PURPLE)
+			limb:box(10, 0, -8, 10, 0, -6, PURPLE)
+			limb:box(11, 1, -8, 11, 2, -8, MAGENTA)
+			limb:box(11, 3, -7, 11, 3, -7, GLOW, NEON)
+			limb:paint(6, 2, -3, 6, 2, -3, SUCKER)
+			limb:paint(9, 1, -5, 9, 1, -5, SUCKER)
+			limb:paint(10, 0, -7, 10, 0, -7, SUCKER)
+			limb:paint(8, 1, -4, 8, 1, -4, SUCKER)
+			limb:paint(4, 4, -3, 5, 4, -2, MAGENTA)
+		end
+		local function rearTentacle(limb)
+			limb:box(2, 2, -5, 3, 4, -4, PURPLE)
+			limb:box(3, 1, -7, 4, 2, -6, PURPLE)
+			limb:box(4, 0, -10, 5, 1, -8, PURPLE)
+			limb:box(5, 0, -12, 5, 0, -11, PURPLE)
+			limb:box(5, 1, -13, 5, 2, -13, MAGENTA)
+			limb:box(5, 3, -12, 5, 3, -12, GLOW, NEON)
+			limb:paint(4, 1, -9, 4, 1, -9, SUCKER)
+			limb:paint(3, 2, -6, 3, 2, -6, SUCKER)
+			limb:paint(5, 0, -11, 5, 0, -11, SUCKER)
+			limb:paint(2, 4, -5, 3, 4, -4, MAGENTA)
+			limb:box(4, 2, -9, 4, 2, -9, BARNACLE)
+		end
+		local shapes = {
+			{ frontTentacle, { 2.5, 3, 3.5 } },
+			{ sideTentacle, { 4.5, 3, 1 } },
+			{ rearSideTentacle, { 4.5, 3, -2.5 } },
+			{ rearTentacle, { 2.5, 3, -4.5 } },
+		}
+		local grip
+		for index, shape in shapes do
+			local draw, pivot = shape[1], shape[2]
+			draw(pet:limb("Tentacle" .. (index * 2 - 1), pivot))
+			local right = mirrored(pet:limb("Tentacle" .. (index * 2), { -pivot[1], pivot[2], pivot[3] }))
+			draw(right)
+			if index == 2 then
+				grip = right
+			end
+		end
+		-- One tentacle grips a rusted ship's anchor.
+		grip:box(13, 1, 1, 13, 8, 1, IRON)
+		grip:box(11, 7, 1, 15, 7, 1, IRON)
+		grip:box(12, 9, 1, 12, 10, 1, IRON)
+		grip:box(14, 9, 1, 14, 10, 1, IRON)
+		grip:box(13, 11, 1, 13, 11, 1, IRON)
+		grip:box(11, 0, 1, 15, 0, 1, IRON)
+		grip:box(11, 1, 1, 11, 2, 1, IRON)
+		grip:box(15, 1, 1, 15, 2, 1, IRON)
+		grip:paint(13, 4, 1, 13, 5, 1, RUST)
+		grip:paint(14, 0, 1, 15, 0, 1, RUST)
+		grip:paint(11, 7, 1, 11, 7, 1, RUST)
+		grip:box(12, 5, 2, 14, 5, 2, MAGENTA)
+		grip:box(13, 12, 1, 13, 12, 1, IRON)
+		grip:box(12, 13, 1, 12, 13, 1, IRON)
+		grip:box(11, 14, 1, 11, 14, 1, IRON)
+		grip:paint(13, 12, 1, 13, 12, 1, RUST)
+
+		pet:light(GLOW, 2.6, 18)
+		pet:particles("Bubbles", SUCKER, 12)
+		pet:seat(0, 18, 1)
+	end,
+}
+
+Designs.Leviathan = {
+	name = "Leviathan",
+	skeleton = "Serpent",
+	gait = "Swim",
+	scale = 0.55,
+	draw = function(pet)
+		local SCALE = rgb(18, 42, 58)
+		local SCALE_LIGHT = rgb(30, 78, 96)
+		local BELLY = rgb(46, 122, 130)
+		local GLOW = rgb(80, 255, 228)
+		local FIN = rgb(90, 220, 210)
+		local HORN = rgb(196, 222, 226)
+		local FANG = rgb(236, 244, 244)
+		local THROAT = rgb(180, 255, 240)
+
+		-- Scales: a checker of lighter scales over the sides of a block, between two heights.
+		local function scales(limb, x: number, y0: number, y1: number, z0: number, z1: number)
+			for y = y0, y1 do
+				for z = z0, z1 do
+					if (y + z) % 2 == 0 then
+						limb:paintPair(x, y, z, x, y, z, SCALE_LIGHT)
+					end
+				end
+			end
+		end
+
+		-- The front coil rising from the ground into a long neck, pale-bellied, glowing along its flanks.
+		local body = pet:limb("Body", { 0, 4, 4 })
+		body:box(-3, 0, 2, 2, 5, 6, SCALE)
+		body:box(-2, 6, 4, 1, 12, 7, SCALE)
+		body:paint(-2, 6, 7, 1, 12, 7, BELLY)
+		body:paint(-3, 0, 6, 2, 5, 6, BELLY)
+		body:paint(-2, 7, 7, 1, 7, 7, SCALE)
+		body:paint(-2, 10, 7, 1, 10, 7, SCALE)
+		body:paintPair(2, 2, 2, 2, 2, 5, GLOW, NEON)
+		body:paintPair(1, 8, 4, 1, 11, 4, GLOW, NEON)
+		scales(body, 2, 3, 5, 2, 5)
+		scales(body, 1, 6, 7, 5, 6)
+		body:box(-1, 8, 3, 0, 11, 3, FIN, GLASS, 0.3)
+		body:paint(-1, 9, 3, 0, 9, 3, GLOW, NEON)
+		body:box(-1, 6, 3, 0, 6, 3, HORN)
+		scales(body, 1, 8, 12, 5, 6)
+
+		-- A dragon's head with an open jaw: fangs, a glowing throat, glowing eyes, swept-back horns,
+		-- glassy frilled gills and a crest.
+		local head = pet:limb("Head", { 0, 13, 6 })
+		head:box(-3, 13, 5, 2, 17, 10, SCALE)
+		head:box(-2, 13, 11, 1, 15, 14, SCALE)
+		head:box(-2, 10, 9, 1, 11, 13, SCALE)
+		head:box(-1, 12, 9, 0, 12, 11, THROAT, NEON)
+		head:paint(-2, 10, 9, 1, 10, 13, BELLY)
+		head:boxPair(1, 12, 13, 1, 12, 13, FANG)
+		head:boxPair(1, 12, 12, 1, 12, 12, FANG)
+		head:paint(-1, 15, 14, 0, 15, 14, SCALE_LIGHT)
+		head:paintPair(1, 14, 14, 1, 14, 14, GLOW, NEON)
+		head:paintPair(2, 16, 10, 2, 16, 10, GLOW, NEON)
+		head:boxPair(2, 17, 11, 3, 17, 11, HORN)
+		head:boxPair(2, 18, 6, 2, 19, 7, HORN)
+		head:boxPair(2, 20, 4, 2, 21, 5, HORN)
+		head:boxPair(2, 22, 3, 2, 22, 3, GLOW, NEON)
+		head:boxPair(3, 13, 6, 5, 16, 7, FIN, GLASS, 0.3)
+		head:paintPair(4, 13, 7, 4, 16, 7, GLOW, NEON)
+		head:boxPair(6, 14, 6, 6, 15, 6, FIN, GLASS, 0.3)
+		head:box(-1, 18, 5, 0, 19, 9, FIN, GLASS, 0.3)
+		head:paint(-1, 18, 7, 0, 19, 7, GLOW, NEON)
+		scales(head, 2, 13, 16, 5, 9)
+		head:paintPair(2, 13, 11, 2, 13, 13, GLOW, NEON)
+		head:boxPair(1, 12, 10, 1, 12, 10, FANG)
+		head:box(-1, 18, 10, -1, 20, 10, HORN)
+		head:box(-1, 21, 11, -1, 21, 12, HORN)
+		head:box(-1, 19, 13, -1, 20, 13, GLOW, NEON)
+		head:paint(-3, 17, 6, 2, 17, 6, SCALE_LIGHT)
+		head:paintPair(1, 17, 8, 1, 17, 8, GLOW, NEON)
+		head:paintPair(2, 14, 5, 2, 14, 5, GLOW, NEON)
+
+		-- Front flippers with see-through webbing.
+		pet:limbPair("LeftFin", "RightFin", { 3, 3, 4 }, function(fin)
+			fin:box(3, 2, 3, 3, 4, 5, SCALE_LIGHT)
+			fin:box(4, 1, 2, 6, 4, 6, FIN, GLASS, 0.3)
+			fin:paint(5, 1, 3, 5, 4, 3, GLOW, NEON)
+			fin:paint(5, 1, 5, 5, 4, 5, GLOW, NEON)
+		end)
+
+		-- A great arching coil with a glassy crest and glowing stripes.
+		local coil = pet:limb("Segment1", { 0, 3, 1 })
+		coil:box(-3, 0, -1, 2, 5, 1, SCALE)
+		coil:box(-3, 6, -5, 2, 9, -1, SCALE)
+		coil:box(-3, 0, -7, 2, 5, -5, SCALE)
+		coil:paint(-3, 6, -5, 2, 6, -1, BELLY)
+		coil:paint(-3, 0, 1, 2, 5, 1, BELLY)
+		coil:paintPair(2, 7, -5, 2, 7, -1, GLOW, NEON)
+		coil:paintPair(2, 2, -7, 2, 2, -5, GLOW, NEON)
+		coil:paintPair(2, 3, -1, 2, 3, 0, GLOW, NEON)
+		scales(coil, 2, 8, 9, -5, -1)
+		scales(coil, 2, 3, 5, -7, -5)
+		scales(coil, 2, 0, 2, -1, 0)
+		coil:box(-1, 10, -5, 0, 11, -2, FIN, GLASS, 0.3)
+		coil:paint(-1, 10, -4, 0, 11, -4, GLOW, NEON)
+		coil:box(-1, 6, -7, 0, 7, -6, FIN, GLASS, 0.3)
+
+		-- A smaller second coil.
+		local coil2 = pet:limb("Segment2", { 0, 2, -7 }, "Segment1")
+		coil2:box(-2, 0, -9, 1, 4, -8, SCALE)
+		coil2:box(-2, 5, -12, 1, 7, -8, SCALE)
+		coil2:box(-2, 0, -13, 1, 4, -12, SCALE)
+		coil2:paint(-2, 5, -12, 1, 5, -8, BELLY)
+		coil2:paintPair(1, 6, -12, 1, 6, -8, GLOW, NEON)
+		coil2:paintPair(1, 2, -13, 1, 2, -12, GLOW, NEON)
+		scales(coil2, 1, 0, 4, -9, -8)
+		coil2:box(-1, 8, -12, 0, 9, -9, FIN, GLASS, 0.3)
+		coil2:paint(-1, 8, -10, 0, 9, -10, GLOW, NEON)
+		coil2:box(-1, 8, -8, 0, 8, -8, HORN)
+		scales(coil2, 1, 5, 7, -12, -9)
+		scales(coil2, 1, 0, 4, -13, -12)
+
+		-- A tapering tail ending in a tall see-through fin.
+		local tail = pet:limb("Tail", { 0, 2, -13 }, "Segment2")
+		tail:box(-1, 0, -17, 0, 2, -14, SCALE)
+		tail:box(-1, 1, -19, 0, 3, -18, SCALE)
+		tail:paintPair(0, 1, -17, 0, 1, -14, GLOW, NEON)
+		tail:box(-1, 2, -22, 0, 7, -20, FIN, GLASS, 0.3)
+		tail:paint(-1, 3, -21, 0, 7, -21, GLOW, NEON)
+		tail:box(-1, 8, -21, 0, 8, -21, GLOW, NEON)
+		tail:box(-1, 3, -16, 0, 3, -16, HORN)
+		tail:box(-1, 3, -14, 0, 3, -14, HORN)
+		tail:box(-1, 4, -18, 0, 4, -18, HORN)
+
+		pet:light(GLOW, 2.6, 18)
+		pet:particles("Bubbles", GLOW, 12)
+		pet:seat(0, 10, -1)
 	end,
 }
 

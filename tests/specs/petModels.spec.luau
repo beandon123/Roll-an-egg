@@ -16,6 +16,7 @@ return function(harness)
 		{ "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" },
 		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
+		{ "SeaTurtle", "Dolphin", "MantaRay", "KingCrab", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local BUDGET = 120
@@ -44,7 +45,7 @@ return function(harness)
 	end
 
 	describe("PetModels", function()
-		it("has every Forest, Desert and Snow pet, in the order of their eggs", function()
+		it("has every Forest, Desert, Snow and Ocean pet, in the order of their eggs", function()
 			for zoneId, wanted in DONE do
 				local made = {}
 				for _, kind in PetModels.all() do
@@ -94,7 +95,7 @@ return function(harness)
 					end
 				end
 				expect.truthy(
-					({ Walk = true, Hop = true, Waddle = true, Stomp = true })[model.gait],
+					({ Walk = true, Hop = true, Waddle = true, Stomp = true, Swim = true, Crawl = true })[model.gait],
 					model.name .. " gait"
 				)
 			end)

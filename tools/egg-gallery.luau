@@ -92,6 +92,7 @@ for _, kind in PetModels.all() do
 		rarity = model.rarity,
 		skeleton = model.skeleton,
 		gait = model.gait,
+		hover = model.hover,
 		scale = model.scale,
 		size = model.size,
 		center = model.center,

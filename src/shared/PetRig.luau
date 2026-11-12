@@ -8,7 +8,7 @@
 --              or a script setting Motor6D.Transform) turns that limb, and every limb hanging from it.
 --     Blocks   The visible parts, welded to their limb's part.
 -- The pet faces -Z, the way Roblox models face. Attributes on the Model:
---     GroundOffset  how far Root's centre is above the pet's feet, in studs
+--     GroundOffset  how far Root's centre is above the ground, in studs (including any hover for floating pets)
 --     SeatOffset    where a rider sits, relative to Root
 -- Build a pet once and clone it for every copy.
 
@@ -92,7 +92,7 @@ function PetRig.build(kind: string): Model?
 
 	ModelEffects.add(root, design.light, design.particles, scale)
 
-	model:SetAttribute("GroundOffset", design.center[2] * scale)
+	model:SetAttribute("GroundOffset", (design.center[2] + design.hover) * scale)
 	model:SetAttribute("SeatOffset", toStuds(design.seat) - root.CFrame.Position)
 	return model
 end
