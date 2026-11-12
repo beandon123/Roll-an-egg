@@ -5,6 +5,9 @@
 -- eggs perfectly smooth and costs almost no network traffic.
 --
 -- Riders are pinned to this device's copy of the egg, so nobody appears to slide off because of lag.
+--
+-- Each egg's look comes from Shared/EggModels: a blocky model made of parts, different for every zone and rarity.
+-- The parts are welded to one invisible, anchored root part, so moving an egg each frame is a single CFrame write.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,6 +15,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
+local EggModels = Load.shared("EggModels")
 local EggMotion = Load.shared("EggMotion")
 local EggSpec = Load.shared("EggSpec")
 local Net = Load.shared("Net")
@@ -19,7 +23,6 @@ local NumberFormat = Load.shared("NumberFormat")
 local Rarities = Load.shared("Config", "Rarities")
 local Runway = Load.shared("Runway")
 local Tuning = Load.shared("Config", "Tuning")
-local Zones = Load.shared("Config", "Zones")
 
 local localPlayer = Players.LocalPlayer
 
@@ -34,13 +37,8 @@ local CAN_AFFORD_COLOR = Color3.fromRGB(120, 255, 130)
 local CANNOT_AFFORD_COLOR = Color3.fromRGB(255, 95, 95)
 local TAKEN_COLOR = Color3.fromRGB(230, 230, 230)
 
--- Where the three spots sit on the shell: { fraction of half-length along the egg, angle around it }.
--- The spots make the rolling visible and show which zone the egg came from.
-local SPOTS = {
-	{ 0.4, 0 },
-	{ -0.4, math.rad(120) },
-	{ 0, math.rad(240) },
-}
+-- Eggs with an even id lie the other way round (pointed end to the left), so the runway looks less uniform.
+local FLIPPED = CFrame.Angles(0, math.pi, 0)
 
 export type ClientEgg = {
 	id: number,
@@ -57,18 +55,27 @@ export type ClientEgg = {
 	bounceTime: number?,
 	cracking: boolean,
 	model: Model,
-	shell: Part,
+	-- The invisible part every other part is welded to. Moving it moves the whole egg.
+	root: Part,
+	-- Which way round the egg lies.
+	facing: CFrame,
 	needLabel: TextLabel,
 }
 
 local EggController = {}
 
 local eggs: { [number]: ClientEgg } = {}
+-- One finished model per zone + rarity, cloned for every egg of that kind.
+local templates: { [string]: Model } = {}
 local eggFolder: Folder
 local localMaxStamina = Tuning.BASE_MAX_STAMINA
 
 local function rgb(color: { number }): Color3
 	return Color3.fromRGB(color[1], color[2], color[3])
+end
+
+local function sequence(color: Color3): ColorSequence
+	return ColorSequence.new(color)
 end
 
 local function refreshLabel(egg: ClientEgg)
@@ -112,51 +119,116 @@ local function newLabel(parent: Instance, text: string, color: Color3, position:
 	return label
 end
 
--- Placeholder egg: an egg-shaped shell in the rarity's color, lying on its side, with three spots in the
--- zone's color. Final art will replace this.
-local function buildModel(spec, zoneId: number, rarity: string, id: number): (Model, Part, TextLabel)
-	local rarityColor = rgb(Rarities.Info[rarity].color)
-	local zoneColor = rgb(Zones.List[zoneId].accent)
+-- Particle settings by style (see EggModels). Acceleration is in world space, so embers rise and snow falls
+-- whichever way the egg has rolled.
+local PARTICLE_STYLES = {
+	Sparkles = { lifetime = 0.9, speed = 1.5, acceleration = Vector3.zero, size = 0.45, transparency = 0 },
+	Embers = { lifetime = 1.4, speed = 1, acceleration = Vector3.new(0, 7, 0), size = 0.35, transparency = 0 },
+	Bubbles = { lifetime = 1.8, speed = 0.6, acceleration = Vector3.new(0, 4, 0), size = 0.5, transparency = 0.35 },
+	Snow = { lifetime = 2, speed = 0.5, acceleration = Vector3.new(0, -3, 0), size = 0.35, transparency = 0.1 },
+}
+
+-- Builds the model for one kind of egg from its boxes, lying on its side with the pointed top towards +X.
+local function buildTemplate(spec, zoneId: number, rarity: string): Model
+	local design = EggModels.get(zoneId, rarity)
+	assert(design, `no egg model for zone {zoneId} {rarity}`)
+	-- Studs per voxel: the egg's widest layer is EggModels.RADIUS voxels from the middle.
+	local voxel = spec.radius / EggModels.RADIUS
 
 	local model = Instance.new("Model")
-	model.Name = "Egg" .. id
+	model.Name = "Egg"
 
-	local shell = newEggPart("Shell", model)
-	shell.Size = Vector3.new(spec.halfLength * 2, spec.radius * 2, spec.radius * 2)
-	shell.Color = rarityColor
-	local mesh = Instance.new("SpecialMesh")
-	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Parent = shell
-	model.PrimaryPart = shell
+	-- Invisible, anchored, and the size of the egg: what the label sits on and the particles come from.
+	local root = newEggPart("Root", model)
+	root.Size = Vector3.new(spec.halfLength * 2, spec.radius * 2, spec.radius * 2)
+	root.Transparency = 1
+	root.CFrame = CFrame.identity
+	model.PrimaryPart = root
 
-	for index, spot in SPOTS do
-		local along, angle = spot[1], spot[2]
-		-- A point on the surface of the egg-shaped shell.
-		local ring = math.sqrt(1 - along * along)
-		local part = newEggPart("Spot" .. index, model)
-		part.Shape = Enum.PartType.Ball
-		part.Size = Vector3.one * spec.radius * 0.55
-		part.Color = zoneColor
-		part.Position = Vector3.new(
-			along * spec.halfLength,
-			math.cos(angle) * ring * spec.radius * 0.95,
-			math.sin(angle) * ring * spec.radius * 0.95
-		)
+	for index, box in design.boxes do
+		local part = Instance.new("Part")
+		part.Name = "Block" .. index
+		part.Anchored = false
+		part.Massless = true
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.BottomSurface = Enum.SurfaceType.Smooth
+		part.Material = (Enum.Material :: any)[box.material]
+		part.Color = rgb(box.color)
+		part.Transparency = box.transparency
+		-- The designs stand the egg up (y along the egg); on the runway it lies on its side, so the egg's
+		-- y becomes X, and its x becomes -Y.
+		part.Size = Vector3.new(box.sy, box.sx, box.sz) * voxel
+		part.CFrame = CFrame.new(box.y * voxel, -box.x * voxel, box.z * voxel)
+		part.Parent = model
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = part
+		weld.Parent = part
 	end
+
+	if design.light then
+		local light = Instance.new("PointLight")
+		light.Color = rgb(design.light.color)
+		light.Brightness = design.light.brightness
+		light.Range = design.light.range
+		light.Shadows = false
+		light.Parent = root
+	end
+
+	if design.particles then
+		local style = PARTICLE_STYLES[design.particles.style] or PARTICLE_STYLES.Sparkles
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Color = sequence(rgb(design.particles.color))
+		emitter.Rate = design.particles.rate
+		emitter.Lifetime = NumberRange.new(style.lifetime * 0.7, style.lifetime)
+		emitter.Speed = NumberRange.new(style.speed * 0.5, style.speed)
+		emitter.SpreadAngle = Vector2.new(180, 180)
+		emitter.Acceleration = style.acceleration
+		emitter.Size = NumberSequence.new(style.size * voxel * 2, 0)
+		emitter.Transparency = NumberSequence.new(style.transparency, 1)
+		emitter.LightEmission = 1
+		emitter.Parent = root
+	end
+
+	return model
+end
+
+local function getTemplate(spec, zoneId: number, rarity: string): Model
+	local key = zoneId .. ":" .. rarity
+	local template = templates[key]
+	if template == nil then
+		template = buildTemplate(spec, zoneId, rarity)
+		templates[key] = template
+	end
+	return template
+end
+
+-- A copy of the egg's model, with the label that shows its rarity and stamina requirement.
+local function buildModel(spec, zoneId: number, rarity: string, id: number): (Model, Part, TextLabel)
+	local rarityColor = rgb(Rarities.Info[rarity].color)
+
+	local model = getTemplate(spec, zoneId, rarity):Clone()
+	model.Name = "Egg" .. id
+	local root = model:FindFirstChild("Root") :: Part
+	model.PrimaryPart = root
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Label"
-	billboard.Adornee = shell
+	billboard.Adornee = root
 	billboard.Size = UDim2.fromScale(11, 3.6)
 	billboard.StudsOffset = Vector3.new(0, spec.radius + 3.2, 0)
 	billboard.MaxDistance = 260
 	billboard.LightInfluence = 0
-	billboard.Parent = shell
+	billboard.Parent = root
 
 	newLabel(billboard, rarity, rarityColor, UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.55))
 	local needLabel = newLabel(billboard, "", CAN_AFFORD_COLOR, UDim2.fromScale(0, 0.55), UDim2.fromScale(1, 0.45))
 
-	return model, shell, needLabel
+	return model, root, needLabel
 end
 
 -- Where an egg is right now: side-to-side position, height of its centre, distance down the runway.
@@ -178,7 +250,7 @@ local function addEgg(data)
 		return
 	end
 
-	local model, shell, needLabel = buildModel(spec, data.zone, data.rarity, data.id)
+	local model, root, needLabel = buildModel(spec, data.zone, data.rarity, data.id)
 	local egg: ClientEgg = {
 		id = data.id,
 		zone = data.zone,
@@ -193,14 +265,15 @@ local function addEgg(data)
 		bounceTime = data.bounceTime,
 		cracking = data.cracking == true,
 		model = model,
-		shell = shell,
+		root = root,
+		facing = if data.id % 2 == 0 then FLIPPED else CFrame.identity,
 		needLabel = needLabel,
 	}
 	eggs[egg.id] = egg
 	refreshLabel(egg)
 
 	local x, y, z = eggPosition(egg, Workspace:GetServerTimeNow())
-	model:PivotTo(CFrame.new(x, y, z))
+	root.CFrame = CFrame.new(x, y, z) * egg.facing
 	model.Parent = eggFolder
 end
 
@@ -245,8 +318,10 @@ local function removeEgg(eggId: number, reason: string?)
 	-- Everything else fades out quickly.
 	egg.needLabel.Parent.Enabled = false
 	for _, descendant in egg.model:GetDescendants() do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and descendant ~= egg.root then
 			TweenService:Create(descendant, TweenInfo.new(0.25), { Transparency = 1 }):Play()
+		elseif descendant:IsA("ParticleEmitter") or descendant:IsA("Light") then
+			descendant.Enabled = false
 		end
 	end
 	task.delay(0.3, function()
@@ -284,7 +359,7 @@ local function render(deltaTime: number)
 		end
 
 		local angle = EggMotion.rollAngle(z - egg.startZ, egg.spec.radius)
-		egg.model:PivotTo(CFrame.new(x, y, z) * CFrame.Angles(angle, 0, 0))
+		egg.root.CFrame = CFrame.new(x, y, z) * CFrame.Angles(angle, 0, 0) * egg.facing
 
 		if egg.riderUserId ~= nil then
 			pinRider(egg.riderUserId, x, y, z, egg.spec.radius)

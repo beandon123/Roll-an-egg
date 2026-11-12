@@ -1,0 +1,740 @@
+<title>Runway Egg Lineup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a 3D stage for one egg beside its card, then the full lineup as a zone x rarity table. */
+  :root {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --stage-top: #dce6f1;
+    --stage-bottom: #c9d6e4;
+    --ink: #17202e;
+    --muted: #586477;
+    --line: #d3dbe6;
+    --yolk: #f2ac1f;
+    --yolk-ink: #3b2a00;
+    --focus: #2f6fdb;
+    --display: "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151f;
+      --panel: #182030;
+      --stage-top: #1c2638;
+      --stage-bottom: #121a28;
+      --ink: #e8eef7;
+      --muted: #98a5b9;
+      --line: #283346;
+      --yolk: #ffc23d;
+      --yolk-ink: #2d2000;
+      --focus: #7fb0ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151f;
+    --panel: #182030;
+    --stage-top: #1c2638;
+    --stage-bottom: #121a28;
+    --ink: #e8eef7;
+    --muted: #98a5b9;
+    --line: #283346;
+    --yolk: #ffc23d;
+    --yolk-ink: #2d2000;
+    --focus: #7fb0ff;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 48px;
+    display: grid;
+    gap: 28px;
+  }
+
+  header { display: grid; gap: 6px; }
+  .eyebrow {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+  .lede { margin: 0; max-width: 64ch; color: var(--muted); }
+
+  /* Stage */
+  .stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 16px;
+    align-items: stretch;
+  }
+  .viewer {
+    position: relative;
+    min-width: 0;
+    height: clamp(320px, 52vw, 500px);
+    border-radius: 18px;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--stage-top), var(--stage-bottom));
+    touch-action: none;
+    cursor: grab;
+  }
+  .viewer:active { cursor: grabbing; }
+  .viewer canvas { display: block; width: 100%; height: 100%; }
+  .viewer-tools {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .hint {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 10px;
+    pointer-events: none;
+  }
+  .seg {
+    display: inline-flex;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .seg button {
+    font: 600 13px/1 var(--display);
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--yolk); color: var(--yolk-ink); }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px;
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    align-self: start;
+    min-width: 0;
+  }
+  .card h2 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 28px;
+    line-height: 1.1;
+    text-wrap: balance;
+  }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font: 600 12px/1 var(--display);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .chip.rarity { border-color: var(--line); }
+  .facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; }
+  .facts dt { color: var(--muted); font-size: 13px; }
+  .facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tier { margin: 0; font-size: 13px; color: var(--muted); }
+  .step { display: flex; gap: 8px; }
+  .step button {
+    flex: 1;
+    font: 600 13px/1 var(--display);
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    cursor: pointer;
+  }
+  .step button:hover { border-color: var(--muted); }
+
+  /* Lineup table */
+  .lineup { display: grid; gap: 12px; }
+  .lineup h2 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 22px;
+  }
+  .lineup p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .table-wrap { overflow-x: auto; padding-bottom: 6px; }
+  .table {
+    display: grid;
+    grid-template-columns: 92px repeat(8, minmax(96px, 1fr));
+    gap: 8px;
+    min-width: 900px;
+  }
+  .colhead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font: 600 12px/1.2 var(--display);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 4px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .rowhead {
+    display: grid;
+    align-content: center;
+    gap: 4px;
+    font: 700 16px/1.1 var(--display);
+  }
+  .rowhead span { font: 500 12px/1.2 var(--body); color: var(--muted); }
+  .tile {
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto;
+    max-width: 100%;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    padding: 0 0 8px;
+    cursor: pointer;
+    overflow: hidden;
+    background: var(--panel);
+    color: var(--ink);
+  }
+  .tile::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--zone);
+    opacity: 0.22;
+  }
+  .tile img { position: relative; display: block; width: 100%; aspect-ratio: 1; object-fit: contain; }
+  .tile .label {
+    position: relative;
+    padding: 0 6px;
+    min-height: 2.3em;
+    font: 600 12px/1.15 var(--display);
+    text-align: center;
+    text-wrap: balance;
+  }
+  .tile:hover { border-color: var(--line); }
+  .tile[aria-pressed="true"] { border-color: var(--yolk); }
+  .empty {
+    min-height: 100%;
+    border-radius: 14px;
+    border: 1px dashed var(--line);
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  @media (max-width: 820px) {
+    .stage { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">Roll an Egg · egg models</div>
+    <h1>Runway Egg Lineup</h1>
+    <p class="lede">Every egg that can drop on the runway, built from blocks the way the game builds them. Commons
+      are plain, Uncommon and Rare eggs carry a zone pattern, and from Epic up each egg looks like the pet inside.</p>
+  </header>
+
+  <section class="stage" aria-label="Selected egg">
+    <div class="viewer" id="viewer">
+      <canvas id="stage-canvas" aria-label="3D view of the selected egg. Drag to turn it."></canvas>
+      <div class="viewer-tools">
+        <div class="seg" role="group" aria-label="Pose">
+          <button type="button" id="pose-stand" aria-pressed="true">Standing</button>
+          <button type="button" id="pose-roll" aria-pressed="false">Rolling</button>
+        </div>
+      </div>
+      <div class="hint">Drag to turn</div>
+    </div>
+    <article class="card" id="card">
+      <div class="chips" id="egg-chips"></div>
+      <h2 id="egg-name">Egg</h2>
+      <dl class="facts">
+        <dt>Hatches</dt><dd id="egg-hatches">-</dd>
+        <dt>Stamina</dt><dd id="egg-stamina">-</dd>
+        <dt>Size</dt><dd id="egg-size">-</dd>
+        <dt>Parts</dt><dd id="egg-parts">-</dd>
+      </dl>
+      <p class="tier" id="egg-tier"></p>
+      <div class="step">
+        <button type="button" id="prev">Previous egg</button>
+        <button type="button" id="next">Next egg</button>
+      </div>
+    </article>
+  </section>
+
+  <section class="lineup" aria-label="All eggs">
+    <h2>All 33 eggs</h2>
+    <p>Rows are zones in runway order, columns are rarities. A dashed square is a rarity that zone never drops.</p>
+    <div class="table-wrap">
+      <div class="table" id="table"></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const DATA = /*EGG_DATA*/null;
+  const eggs = DATA.eggs;
+  const rarityColor = Object.fromEntries(DATA.rarities.map((r) => [r.name, r.color]));
+  const zoneById = Object.fromEntries(DATA.zones.map((z) => [z.id, z]));
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const TIERS = {
+    Common: "Plain: the zone's colour and one simple mark.",
+    Uncommon: "A zone pattern with a hint of the pets inside.",
+    Rare: "A zone pattern with a hint of the pets inside.",
+    Epic: "Looks like the pet inside.",
+    Legendary: "Looks like the pet inside. Glows.",
+    Mythic: "Looks like the pet inside. Glows and sparkles.",
+    Secret: "Looks like the pet inside. Glows and sparkles.",
+    Eternal: "Looks like the pet inside. Glows and sparkles.",
+  };
+
+  function textOn(hex) {
+    const c = new THREE.Color(hex);
+    const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    return l > 0.5 ? "#16181d" : "#ffffff";
+  }
+  function formatNumber(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(n % 1e3 === 0 ? 0 : 1).replace(/\.0$/, "") + "K";
+    return String(n);
+  }
+
+  // ---------------------------------------------------------------- building eggs
+  const BOX = new THREE.BoxGeometry(1, 1, 1);
+  const materials = new Map();
+  function materialFor(hex, kind, transparency) {
+    const key = hex + kind + transparency;
+    if (materials.has(key)) return materials.get(key);
+    const color = new THREE.Color(hex);
+    let m;
+    if (kind === "Neon") {
+      m = new THREE.MeshBasicMaterial({ color: color.clone().lerp(new THREE.Color("#ffffff"), 0.12) });
+    } else if (kind === "Glass") {
+      m = new THREE.MeshPhongMaterial({
+        color, shininess: 110, specular: new THREE.Color("#8a8a8a"),
+        transparent: transparency > 0, opacity: 1 - transparency,
+      });
+    } else {
+      m = new THREE.MeshLambertMaterial({ color });
+    }
+    materials.set(key, m);
+    return m;
+  }
+
+  // Standing: y is the egg's long axis. Rolling: lying on its side with the top towards +x, as in the game.
+  function buildEgg(egg, lying) {
+    const group = new THREE.Group();
+    for (const b of egg.boxes) {
+      const [x, y, z, sx, sy, sz, hex, kind, tr] = b;
+      const mesh = new THREE.Mesh(BOX, materialFor(hex, kind, tr));
+      if (lying) {
+        mesh.position.set(y, -x, z);
+        mesh.scale.set(sy, sx, sz);
+      } else {
+        mesh.position.set(x, y, z);
+        mesh.scale.set(sx, sy, sz);
+      }
+      mesh.castShadow = kind !== "Glass";
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    }
+    return group;
+  }
+
+  function addLights(scene) {
+    scene.add(new THREE.HemisphereLight(0xf4f8ff, 0x8a8478, 0.62));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.78);
+    sun.position.set(-14, 30, 18);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    const s = sun.shadow.camera;
+    s.left = -30; s.right = 30; s.top = 30; s.bottom = -30; s.near = 1; s.far = 90;
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.22);
+    fill.position.set(18, 8, -14);
+    scene.add(fill);
+  }
+
+  function frameCamera(camera, object, distanceScale, lift) {
+    const box = new THREE.Box3().setFromObject(object);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = size.length() / 2;
+    const dist = (radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) * distanceScale;
+    return { center, dist, radius, box };
+  }
+
+  // ---------------------------------------------------------------- thumbnails
+  function renderThumbnails() {
+    const size = 200;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1);
+    renderer.setSize(size, size, false);
+    renderer.setClearColor(0x000000, 0);
+    const urls = [];
+    for (const egg of eggs) {
+      const scene = new THREE.Scene();
+      addLights(scene);
+      const group = buildEgg(egg, false);
+      scene.add(group);
+      const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 500);
+      const fit = frameCamera(camera, group, 0.92);
+      const dir = new THREE.Vector3(0.62, 0.34, 1).normalize();
+      camera.position.copy(fit.center).addScaledVector(dir, fit.dist);
+      camera.lookAt(fit.center.x, fit.center.y - fit.radius * 0.06, fit.center.z);
+      renderer.render(scene, camera);
+      urls.push(renderer.domElement.toDataURL("image/png"));
+    }
+    renderer.dispose();
+    if (renderer.forceContextLoss) renderer.forceContextLoss();
+    return urls;
+  }
+
+  // ---------------------------------------------------------------- stage
+  const viewer = document.getElementById("viewer");
+  const canvas = document.getElementById("stage-canvas");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  addLights(scene);
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 800);
+
+  function stripeTexture(hex) {
+    const c = document.createElement("canvas");
+    c.width = 64; c.height = 64;
+    const g = c.getContext("2d");
+    const base = new THREE.Color(hex);
+    g.fillStyle = "#" + base.getHexString();
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = "#" + base.clone().multiplyScalar(0.88).getHexString();
+    g.fillRect(0, 0, 64, 32);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.magFilter = THREE.NearestFilter;
+    return t;
+  }
+
+  function glowTexture() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.5)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  const GLOW = glowTexture();
+
+  const state = { index: eggs.findIndex((e) => e.name === "Magma Dragon Egg"), lying: false, yaw: 0.38, pitch: 0.22 };
+  if (state.index < 0) state.index = 0;
+  let current = null;
+
+  function makeParticles(info, radius) {
+    const count = 46;
+    const positions = new Float32Array(count * 3);
+    const seeds = [];
+    for (let i = 0; i < count; i++) {
+      seeds.push({ a: Math.random() * Math.PI * 2, r: radius * (0.7 + Math.random() * 0.7), h: Math.random(), s: 0.6 + Math.random() * 0.8 });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: new THREE.Color(info.color), size: info.style === "Bubbles" ? 1.3 : 1.0, map: GLOW,
+      transparent: true, depthWrite: false,
+      blending: info.style === "Bubbles" ? THREE.NormalBlending : THREE.AdditiveBlending,
+    });
+    const points = new THREE.Points(geo, mat);
+    points.userData = { seeds, style: info.style, radius };
+    return points;
+  }
+
+  function updateParticles(points, time) {
+    const { seeds, style, radius } = points.userData;
+    const pos = points.geometry.attributes.position.array;
+    seeds.forEach((s, i) => {
+      let h = (s.h + time * 0.12 * s.s) % 1;
+      let y;
+      let r = s.r;
+      if (style === "Embers" || style === "Bubbles") {
+        y = -radius * 0.8 + h * radius * 3;
+        r = s.r * (1 - h * 0.35);
+      } else if (style === "Snow") {
+        y = radius * 2 - h * radius * 3.4;
+      } else {
+        y = (Math.sin(time * s.s + s.a * 3) * 0.5 + 0.5) * radius * 2.4 - radius * 1.1;
+      }
+      const a = s.a + time * 0.25 * s.s;
+      pos[i * 3] = Math.cos(a) * r;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = Math.sin(a) * r;
+    });
+    points.geometry.attributes.position.needsUpdate = true;
+  }
+
+  function show(index) {
+    state.index = (index + eggs.length) % eggs.length;
+    const egg = eggs[state.index];
+    if (current) {
+      scene.remove(current.root);
+      current.ground.geometry.dispose();
+      current.ground.material.map.dispose();
+      current.ground.material.dispose();
+    }
+    const root = new THREE.Group();
+    const pivot = new THREE.Group();
+    const model = buildEgg(egg, state.lying);
+    pivot.add(model);
+    root.add(pivot);
+
+    const zone = zoneById[egg.zone];
+    const box = new THREE.Box3().setFromObject(model);
+    const groundY = state.lying ? -DATA.radius : box.min.y;
+    const texture = stripeTexture(zone.ground);
+    texture.repeat.set(1, 24);
+    const ground = new THREE.Mesh(
+      new THREE.BoxGeometry(46, 1, 140),
+      new THREE.MeshLambertMaterial({ map: texture })
+    );
+    ground.position.set(0, groundY - 0.5, 0);
+    ground.receiveShadow = true;
+    root.add(ground);
+
+    let halo = null;
+    if (egg.light) {
+      halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: GLOW, color: new THREE.Color(egg.light.color), transparent: true,
+        opacity: 0.22 + egg.light.brightness * 0.05, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      halo.scale.setScalar(34);
+      halo.position.set(0, state.lying ? 0 : (box.min.y + box.max.y) / 2, -2);
+      root.add(halo);
+      const light = new THREE.PointLight(new THREE.Color(egg.light.color), egg.light.brightness * 0.5, 40);
+      light.position.set(0, 0, 8);
+      root.add(light);
+    }
+    let particles = null;
+    if (egg.particles) {
+      particles = makeParticles(egg.particles, DATA.radius * 1.2);
+      particles.position.y = state.lying ? 0 : (box.min.y + box.max.y) / 2;
+      root.add(particles);
+    }
+
+    scene.add(root);
+    const center = new THREE.Vector3(0, state.lying ? -1 : (box.min.y + box.max.y) / 2 - 1, 0);
+    const size = box.getSize(new THREE.Vector3());
+    current = { root, pivot, model, ground, texture, particles, center, radius: Math.max(size.x, size.y, size.z) * 0.62 + 3 };
+    resize();
+    updateCard(egg);
+    updateTiles();
+  }
+
+  function updateCard(egg) {
+    document.getElementById("egg-name").textContent = egg.name;
+    document.getElementById("egg-hatches").textContent = egg.hatches;
+    document.getElementById("egg-stamina").textContent = "Needs " + formatNumber(egg.stamina);
+    document.getElementById("egg-size").textContent = egg.size.toFixed(2).replace(/0$/, "") + "x";
+    document.getElementById("egg-parts").textContent = String(egg.boxes.length + 1);
+    document.getElementById("egg-tier").textContent = TIERS[egg.rarity] || "";
+    const chips = document.getElementById("egg-chips");
+    chips.replaceChildren();
+    const zoneChip = document.createElement("span");
+    zoneChip.className = "chip";
+    zoneChip.textContent = egg.zoneName;
+    const rarityChip = document.createElement("span");
+    rarityChip.className = "chip rarity";
+    rarityChip.textContent = egg.rarity;
+    rarityChip.style.background = rarityColor[egg.rarity];
+    rarityChip.style.color = textOn(rarityColor[egg.rarity]);
+    chips.append(zoneChip, rarityChip);
+  }
+
+  function resize() {
+    const w = viewer.clientWidth, h = viewer.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  // Drag to orbit.
+  let dragging = false, lastX = 0, lastY = 0, idle = 0;
+  viewer.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    viewer.setPointerCapture(e.pointerId);
+  });
+  viewer.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    state.yaw -= (e.clientX - lastX) * 0.008;
+    state.pitch = Math.max(-0.15, Math.min(1.2, state.pitch + (e.clientY - lastY) * 0.006));
+    lastX = e.clientX; lastY = e.clientY; idle = 0;
+  });
+  const stopDrag = () => { dragging = false; };
+  viewer.addEventListener("pointerup", stopDrag);
+  viewer.addEventListener("pointercancel", stopDrag);
+
+  let last = performance.now(), time = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    time += dt;
+    idle += dt;
+    if (current) {
+      if (!dragging && idle > 1.2 && !reduceMotion && !state.lying) state.yaw += dt * 0.35;
+      if (state.lying && !reduceMotion) {
+        // Rolls down the runway (+z) like in the game: spin around x, ground sliding past.
+        current.pivot.rotation.x += dt * 2.2;
+        current.texture.offset.y -= dt * 2.2 * DATA.radius / 140 * 24 / 1;
+      }
+      if (current.particles) updateParticles(current.particles, time);
+      const r = current.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * (camera.aspect < 1 ? 1.1 : 0.8);
+      camera.position.set(
+        current.center.x + Math.sin(state.yaw) * Math.cos(state.pitch) * r,
+        current.center.y + Math.sin(state.pitch) * r,
+        current.center.z + Math.cos(state.yaw) * Math.cos(state.pitch) * r
+      );
+      camera.lookAt(current.center);
+    }
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------------------------------------------------------- table
+  const table = document.getElementById("table");
+  const tiles = [];
+  function buildTable(urls) {
+    const corner = document.createElement("div");
+    table.append(corner);
+    for (const r of DATA.rarities) {
+      const head = document.createElement("div");
+      head.className = "colhead";
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = r.color;
+      head.append(dot, document.createTextNode(r.name));
+      table.append(head);
+    }
+    for (const zone of DATA.zones) {
+      const head = document.createElement("div");
+      head.className = "rowhead";
+      const count = eggs.filter((e) => e.zone === zone.id).length;
+      head.innerHTML = "";
+      head.append(document.createTextNode(zone.name));
+      const sub = document.createElement("span");
+      sub.textContent = count + " eggs";
+      head.append(sub);
+      table.append(head);
+      for (const r of DATA.rarities) {
+        const index = eggs.findIndex((e) => e.zone === zone.id && e.rarity === r.name);
+        if (index < 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.setAttribute("aria-hidden", "true");
+          table.append(empty);
+          continue;
+        }
+        const egg = eggs[index];
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "tile";
+        tile.style.setProperty("--zone", zone.ground);
+        tile.setAttribute("aria-label", egg.name + ", " + egg.rarity + " " + zone.name + " egg");
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = urls[index];
+        const label = document.createElement("span");
+        label.className = "label";
+        label.textContent = egg.name.replace(/ Egg$/, "");
+        tile.append(img, label);
+        tile.addEventListener("click", () => {
+          show(index);
+          viewer.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+        });
+        tiles[index] = tile;
+        table.append(tile);
+      }
+    }
+  }
+  function updateTiles() {
+    tiles.forEach((tile, i) => tile && tile.setAttribute("aria-pressed", i === state.index ? "true" : "false"));
+  }
+
+  // ---------------------------------------------------------------- controls
+  const standBtn = document.getElementById("pose-stand");
+  const rollBtn = document.getElementById("pose-roll");
+  function setPose(lying) {
+    state.lying = lying;
+    standBtn.setAttribute("aria-pressed", String(!lying));
+    rollBtn.setAttribute("aria-pressed", String(lying));
+    state.yaw = lying ? 0.9 : 0.38;
+    state.pitch = lying ? 0.32 : 0.22;
+    show(state.index);
+  }
+  standBtn.addEventListener("click", () => setPose(false));
+  rollBtn.addEventListener("click", () => setPose(true));
+  document.getElementById("prev").addEventListener("click", () => show(state.index - 1));
+  document.getElementById("next").addEventListener("click", () => show(state.index + 1));
+
+  buildTable(renderThumbnails());
+  show(state.index);
+  requestAnimationFrame(frame);
+})();
+</script>

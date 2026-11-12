@@ -119,7 +119,12 @@ fakeGame = {
 
 -- Loads a module by its path from the repository root, without the extension:
 -- harness.load("src/shared/EggMotion")
+-- A folder with an init.luau loads as one module, the way Rojo makes it a ModuleScript with children:
+-- harness.load("src/shared/EggModels")
 function harness.load(path: string)
+	if dirs[path] then
+		return fakeRequire(makeInstance(path, true))
+	end
 	return fakeRequire(makeInstance(path .. ".luau", false))
 end
 

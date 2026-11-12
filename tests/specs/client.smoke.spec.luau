@@ -125,22 +125,67 @@ return function(harness)
 			expect.equal(#parts.eggFolder:GetChildren(), 2)
 
 			local model = parts.eggFolder.Egg1
-			expect.truthy(model.PrimaryPart == model.Shell, "PrimaryPart")
-			expect.truthy(model.Spot1 and model.Spot2 and model.Spot3, "spots")
+			expect.truthy(model.PrimaryPart == model.Root, "PrimaryPart")
 			local _, spec = eggCenter(session, first)
-			expect.near(model.Shell.Size.Y, spec.radius * 2, 1e-3)
-			expect.near(model.Shell.Size.X, spec.halfLength * 2, 1e-3)
+			expect.near(model.Root.Size.Y, spec.radius * 2, 1e-3)
+			expect.near(model.Root.Size.X, spec.halfLength * 2, 1e-3)
+			expect.equal(model.Root.Transparency, 1)
+			expect.equal(model.Root.Anchored, true)
 
 			-- Labels: rarity, then the stamina needed (green if the player has enough, red if not).
-			local labels = model.Shell.Label:GetChildren()
+			local labels = model.Root.Label:GetChildren()
 			expect.equal(labels[1].Text, "Common")
 			expect.equal(labels[2].Text, "Needs 50")
-			local mythicLabels = parts.eggFolder.Egg2.Shell.Label:GetChildren()
+			local mythicLabels = parts.eggFolder.Egg2.Root.Label:GetChildren()
 			expect.equal(mythicLabels[2].Text, "Needs 1.8K")
 			expect.truthy(
 				labels[2].TextColor3 ~= mythicLabels[2].TextColor3,
 				"affordable and not are colored differently"
 			)
+		end)
+
+		it("builds each egg from its blocky model, welded to the root", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common"))
+			session:fromServer("EggSpawned", eggData(session, 3, 1, "Common", 5, 8))
+			session:fromServer("EggSpawned", eggData(session, 2, 5, "Secret", 5, -8))
+
+			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
+			local common = parts.eggFolder.Egg1
+			local blocks = {}
+			for _, child in common:GetChildren() do
+				if child:IsA("BasePart") and child ~= common.Root then
+					table.insert(blocks, child)
+				end
+			end
+			expect.equal(#blocks, #EggModels.get(1, "Common").boxes, "one part per box")
+			for _, block in blocks do
+				local weld = block:FindFirstChildOfClass("WeldConstraint")
+				expect.truthy(weld, block.Name .. " is welded")
+				expect.equal(block.Anchored, false)
+				expect.equal(block.CanCollide, false)
+			end
+
+			-- A second egg of the same kind is a copy of the same model.
+			expect.equal(#parts.eggFolder.Egg3:GetChildren(), #common:GetChildren())
+
+			-- Rare eggs glow and give off particles; a Common egg does neither.
+			local secret = parts.eggFolder.Egg2
+			expect.truthy(secret.Root:FindFirstChildOfClass("PointLight"), "light")
+			expect.truthy(secret.Root:FindFirstChildOfClass("ParticleEmitter"), "particles")
+			expect.falsy(common.Root:FindFirstChildOfClass("PointLight"), "no light on a Common egg")
+			local neon = 0
+			for _, child in secret:GetChildren() do
+				if child:IsA("BasePart") and child.Material == Enum.Material.Neon then
+					neon += 1
+				end
+			end
+			expect.truthy(neon > 0, "glowing lava")
+
+			-- Eggs with even ids lie the other way round.
+			session:renderFrame(1 / 60)
+			expect.truthy(common.Root.CFrame.RightVector.X > 0.99, "Egg1 points +X")
+			expect.truthy(parts.eggFolder.Egg2.Root.CFrame.RightVector.X < -0.99, "Egg2 points -X")
 		end)
 
 		it("loads eggs from the server snapshot at startup", function()
@@ -167,7 +212,7 @@ return function(harness)
 			session:fromServer("EggSpawned", egg)
 			session:renderFrame(1 / 60, 30)
 			local expected = eggCenter(session, egg)
-			local position = parts.eggFolder.Egg1.Shell.CFrame.Position
+			local position = parts.eggFolder.Egg1.Root.CFrame.Position
 			expect.near(position.Z, expected.Z, 1e-3, "z")
 			expect.near(position.Y, expected.Y, 1e-3, "y")
 			expect.near(position.X, 3, 1e-3, "x")
@@ -192,7 +237,7 @@ return function(harness)
 		it("shows when an egg is taken and turns labels green as stamina grows", function()
 			local session, parts = startClient()
 			session:fromServer("EggSpawned", eggData(session, 1, 2, "Common")) -- needs 500
-			local need = parts.eggFolder.Egg1.Shell.Label:GetChildren()[2]
+			local need = parts.eggFolder.Egg1.Root.Label:GetChildren()[2]
 			local red = need.TextColor3
 
 			session:fromServer("StaminaChanged", 100, session.clock, 60, 500)
@@ -270,7 +315,7 @@ return function(harness)
 			task.wait(0.3)
 			session:renderFrame(1 / 60)
 			local model = session:service("Workspace").Eggs.Egg1
-			expect.truthy(model.Shell.CFrame.Position.X < -5, "egg moved: " .. model.Shell.CFrame.Position.X)
+			expect.truthy(model.Root.CFrame.Position.X < -5, "egg moved: " .. model.Root.CFrame.Position.X)
 			local report = session:lastSent("RideLateral", "server")
 			expect.truthy(report, "RideLateral")
 			expect.truthy(report.args[1] < 0)
@@ -278,7 +323,7 @@ return function(harness)
 			-- It cannot be steered off the side of the runway.
 			session:renderFrame(1, 30)
 			local limit = shared(session).Runway.maxLateral(spec.halfLength)
-			expect.near(model.Shell.CFrame.Position.X, -limit, 1e-3)
+			expect.near(model.Root.CFrame.Position.X, -limit, 1e-3)
 		end)
 
 		it("hops off on a fresh jump press", function()

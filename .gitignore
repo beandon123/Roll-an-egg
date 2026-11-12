@@ -17,3 +17,6 @@ Thumbs.db
 
 # Test output
 /tests/.tmp/
+
+# Egg gallery output (make it with: lune run tools/egg-gallery)
+/tools/out/

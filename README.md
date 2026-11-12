@@ -8,7 +8,8 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 The first playable slice: **the runway and riding**.
 
 - A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
-- Eggs drop in every zone and roll down the runway. Rarity sets their size, speed, color and stamina requirement.
+- Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
+- Every egg has its own blocky model, built from parts: 33 designs, one per zone and rarity (see below).
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
@@ -16,7 +17,7 @@ The first playable slice: **the runway and riding**.
 - Claimed eggs are saved to the player's data (ProfileStore).
 - A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
 
-Everything visual is a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
+The eggs have their real look; everything else visual is still a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
 pets and mounts, coins and upgrades, teleport pads, server events, the tutorial, and all final art and sound.
 
 ## Try it in Roblox Studio
@@ -55,6 +56,26 @@ In Studio a small panel appears on the right of the screen. Its buttons only wor
 - **Reset stamina**: back to 100.
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
 
+## Egg models
+
+Eggs are blocky, voxel-style models built from parts in code, so they need no uploaded meshes. Every zone + rarity
+has its own design in `src/shared/EggModels/Designs.luau`:
+
+- **Common**: plain, the zone's colour and one simple mark.
+- **Uncommon, Rare**: a zone pattern with a hint of the pets inside (an acorn, a turtle shell, a knitted sweater).
+- **Epic and up**: the egg looks like its pet: ears, horns, tusks, fins and markings. A Magma Dragon egg is black
+  scales split by glowing lava cracks, with fire-tipped horns.
+- **Legendary and up** glow in their rarity colour; **Mythic and up** also give off particles.
+
+Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom to the point; x and z from -6 to 5).
+On the runway the egg lies on its side and rolls. To see every egg in 3D without opening Studio:
+
+```bash
+lune run tools/egg-gallery
+```
+
+Then open `tools/out/egg-gallery.html` in a browser.
+
 ## Project layout
 
 ```
@@ -69,6 +90,7 @@ src/client/            StarterPlayerScripts.Client
   Controllers/           Egg drawing, riding, HUD updates
   Ui/                    The Fusion HUD
 tests/                 Automated tests (see below)
+tools/                 egg-gallery.luau: builds a web page that shows every egg model in 3D
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```
 
@@ -89,7 +111,8 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures).
+  stamina, bounces, closures), and that every egg model exists, is unique, has nothing floating loose, and stays
+  within its part budget.
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
 

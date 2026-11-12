@@ -242,11 +242,13 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 
 ## Design Requests
 - [ ] Art style: original, bright, stylized low-poly cartoon
-- [ ] All 3D art made by Claude in Blender (decided): pets, eggs, obstacles, zone kits, hub, plots, pens, nests,
+- [ ] All 3D art made by Claude in Blender (decided): pets, obstacles, zone kits, hub, plots, pens, nests,
       teleport pads
-    - [ ] Eggs: one base shape x zone material (moss, sandstone, ice, coral, obsidian) x rarity color/glow/size
-          (33 combinations), plus 5 zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon yolk splat
-          (no gore)
+    - [ ] Eggs (decided): blocky voxel-style eggs built from parts (no meshes), every zone + rarity egg its own
+          design (33): Commons plain, Uncommon/Rare a zone pattern hinting at the pets inside, Epic and up
+          looking like the pet that hatches (e.g. a lava egg for the Magma Dragon); Legendary+ glow, Mythic+ give
+          off particles. Still to do: 5 zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon
+          yolk splat (no gore)
     - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
@@ -317,7 +319,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   up to 18 pets x 8 pens; only nearby pens animate; distant pets freeze or switch to low-detail models
 - StreamingEnabled on: client code tolerates parts that haven't loaded yet; hub, plots, teleport pads, and zone signposts
   set to Persistent
-- Performance: reuse egg/VFX objects; cap active eggs per zone; eggs <= 1k triangles, pets <= 4k triangles with LODs;
+- Performance: reuse egg/VFX objects; cap active eggs per zone; Common/Uncommon eggs <= 70 parts (about 800
+  triangles), rarer eggs up to ~230 parts since few are on screen at once; pets <= 4k triangles with LODs;
   VFX on players' devices only; test on low-end mobile
 - Art pipeline: Claude scripts models in Blender (Python) -> shared skeletons -> FBX -> import/upload to Roblox ->
   asset IDs in Shared/Config/Assets; meshes can't sync through Rojo, so models live in the repo as .rbxm files that

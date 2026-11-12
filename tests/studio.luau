@@ -277,6 +277,8 @@ function Session:environment(scriptInstance)
 		UDim2 = roblox.UDim2,
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
+		NumberSequence = roblox.NumberSequence,
+		ColorSequence = roblox.ColorSequence,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }
