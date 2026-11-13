@@ -4448,97 +4448,130 @@ Designs.Narwhal = {
 	skeleton = "Swimmer",
 	gait = "Swim",
 	hover = 3,
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local SLATE = rgb(122, 142, 172)
-		local SLATE_DARK = rgb(82, 100, 136)
-		local BELLY = rgb(232, 242, 250)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with its tusk and ice chips of parts
+		-- at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local SLATE = look(122, 142, 172)
+		local SLATE_DARK = look(82, 100, 136)
+		local BELLY = look(232, 242, 250)
 		local IVORY = rgb(250, 242, 220)
-		local IVORY_DARK = rgb(222, 206, 168)
+		local IVORY_DARK = rgb(214, 196, 158)
 		local GLOW = rgb(255, 250, 230)
 		local ICE = rgb(170, 230, 255)
 
-		-- A plump whale body, mottled on the back and pale underneath, with a low ridge.
-		local body = pet:limb("Body", { 0, 4, 0 })
-		body:box(-4, 1, -6, 3, 7, 3, SLATE)
-		body:box(-3, 8, -5, 2, 8, 2, SLATE)
-		body:box(-3, 0, -5, 2, 0, 2, BELLY)
-		body:paint(-4, 1, -6, 3, 2, 3, BELLY)
-		body:box(-1, 9, -4, 0, 9, -1, SLATE_DARK)
-		body:box(-1, 10, -3, -1, 11, -3, ICE, GLASS, 0.2)
-		body:box(0, 10, -2, 0, 10, -2, ICE, GLASS, 0.2)
-		body:box(-1, 10, -1, -1, 10, -1, ICE, GLASS, 0.2)
-		body:boxPair(2, 9, -4, 2, 9, -4, ICE, GLASS, 0.2)
-		for _, spot in
-			{
-				{ 3, 6, -4 },
-				{ 3, 4, -1 },
-				{ -4, 5, -3 },
-				{ -4, 6, 1 },
-				{ 1, 8, -3 },
-				{ -2, 8, 0 },
-				{ 3, 5, 2 },
-				{ -4, 3, -5 },
-				{ 0, 7, -6 },
-				{ 3, 7, -2 },
-				{ -4, 7, -1 },
-				{ 2, 8, -5 },
-				{ -3, 8, -4 },
-				{ 3, 3, 0 },
-				{ -4, 4, 2 },
-				{ -2, 6, -6 },
-			}
-		do
-			body:paint(spot[1], spot[2], spot[3], spot[1], spot[2], spot[3], SLATE_DARK)
+		-- Mottled slate above, pale below.
+		local function hide(p: Vec, open: (number, number, number) -> boolean, belly: number): Look?
+			if p[2] < belly and (open(0, -1, 0) or open(1, 0, 0) or open(-1, 0, 0) or open(0, 0, 1)) then
+				return BELLY
+			end
+			if noise(p) < 0.16 then
+				return SLATE_DARK
+			end
+			return nil
 		end
 
-		-- A rounded head with a smile, and the long spiral tusk, glowing faintly at its tip.
-		local head = pet:limb("Head", { 0, 4, 4 })
-		head:box(-3, 1, 4, 2, 6, 7, SLATE)
-		head:box(-2, 7, 4, 1, 7, 6, SLATE)
-		head:paint(-3, 1, 4, 2, 1, 7, BELLY)
-		head:paint(-3, 2, 7, 2, 2, 7, SLATE_DARK)
-		eyes(head, 2, 4, 7, 1, 1)
-		head:paintPair(2, 6, 5, 2, 6, 5, SLATE_DARK)
-		head:box(-1, 4, 8, 0, 5, 10, IVORY)
-		head:paint(-1, 5, 8, -1, 5, 8, IVORY_DARK)
-		head:paint(0, 4, 9, 0, 4, 9, IVORY_DARK)
-		head:paint(-1, 5, 10, -1, 5, 10, IVORY_DARK)
-		head:box(0, 5, 11, 0, 5, 13, IVORY)
-		head:paint(0, 5, 12, 0, 5, 12, IVORY_DARK)
-		head:box(0, 6, 14, 0, 6, 17, IVORY)
-		head:paint(0, 6, 15, 0, 6, 15, IVORY_DARK)
-		head:box(0, 6, 18, 0, 6, 18, GLOW, NEON)
-		head:paint(0, 6, 17, 0, 6, 17, IVORY_DARK)
-		head:paint(0, 5, 13, 0, 5, 13, IVORY_DARK)
-		head:paint(-2, 7, 5, -2, 7, 5, SLATE_DARK)
-		head:paint(1, 6, 7, 1, 6, 7, SLATE_DARK)
-		head:paint(-3, 5, 5, -3, 5, 5, SLATE_DARK)
-
-		pet:limbPair("LeftFin", "RightFin", { 4, 1.5, 2 }, function(fin)
-			fin:box(4, 1, 1, 6, 1, 3, SLATE_DARK)
-			fin:box(7, 0, 1, 7, 0, 2, SLATE_DARK)
-			fin:paint(6, 1, 1, 6, 1, 3, BELLY)
-			fin:paint(5, 1, 2, 5, 1, 2, SLATE)
+		-- A plump whale body with a low ridge down its back and chips of ice stuck to it.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 4.4, -2 }, { 5.2, 5, 9 }), SLATE)
+		for _, z in { 2, -1.6, -5.2 } do
+			body:add(ellipsoid({ 0, topOf(body, z) - 0.4, z }, { 0.9, 0.8, 1.4 }), SLATE_DARK)
+		end
+		body:coat(function(p, open)
+			return hide(p, open, 2.6)
 		end)
 
-		-- A thick tail and broad flukes, with a few chips of ice stuck to them.
-		local tail = pet:limb("Tail", { 0, 4, -6 })
-		tail:box(-2, 2, -9, 1, 5, -7, SLATE)
-		tail:paint(-2, 2, -9, 1, 2, -7, BELLY)
-		tail:box(-1, 3, -11, 0, 4, -10, SLATE)
-		tail:box(-5, 4, -13, 4, 4, -12, SLATE_DARK)
-		tail:boxPair(3, 4, -14, 4, 4, -14, SLATE_DARK)
-		tail:paint(-1, 5, -8, -1, 5, -8, SLATE_DARK)
-		tail:box(-3, 5, -13, -3, 5, -13, ICE, GLASS, 0.2)
-		tail:box(2, 5, -12, 2, 5, -12, ICE, GLASS, 0.2)
-		tail:paintPair(1, 5, -8, 1, 5, -8, SLATE_DARK)
-		tail:paint(-5, 4, -12, -4, 4, -12, SLATE)
-		tail:paint(3, 4, -12, 4, 4, -12, SLATE)
-		tail:paint(-1, 3, -11, 0, 3, -10, BELLY)
+		-- A round head with a gentle smile.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 4.8, 7.2 }, { 4.8, 4.6, 4.6 }), SLATE)
+		head:add(ellipsoid({ 0, 6.6, 7.6 }, { 3.6, 2.8, 3.6 }), SLATE)
+		head:coat(function(p, open)
+			return hide(p, open, 3.4)
+		end)
+		for _, side in { 1, -1 } do
+			head:trace({ { 0, 3.8, 9.6 }, { 0, 3.2, 8.2 }, { 0, 3.6, 6.4 } }, { -side, 0, 0 }, SLATE_DARK)
+		end
 
-		pet:light(ICE, 1.6, 12)
-		pet:seat(0, 9, 1)
+		-- Flippers, pale underneath.
+		local flipper = newSculpt(U)
+		local frame = { origin = { 6.4, 1.4, 3 }, yaw = 0.5, roll = -0.4 }
+		flipper:add(ellipsoid({ 0, 0, 0 }, { 3.4, 0.8, 1.8 }), SLATE_DARK, frame)
+		flipper:add(rod({ { 4.2, 2.6, 3.4, 1.4 }, { 5.6, 1.8, 3.2, 1 } }), SLATE)
+		flipper:coat(function(_, open)
+			return if open(0, -1, 0) then BELLY else nil
+		end)
+
+		-- A thick tail and broad flukes.
+		local tail = newSculpt(U)
+		tail:add(rod({ { 0, 4.4, -10.4, 3.9 }, { 0, 5, -16, 2.6 }, { 0, 5.4, -20.6, 1.6 } }), SLATE)
+		for _, s in { 1, -1 } do
+			tail:add(
+				ellipsoid({ 0, 0, 0 }, { 3.6, 0.75, 2 }),
+				SLATE_DARK,
+				{ origin = { 3 * s, 5.6, -22.4 }, yaw = 0.35 * s }
+			)
+		end
+		tail:coat(function(p, open)
+			return hide(p, open, 2.8)
+		end)
+
+		local flipperMirror = flipper:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 4.4, 0 }))
+		body:draw(bodyLimb, { head, flipper, flipperMirror, tail }, SLATE)
+		for _, chip in { { -1.2, -3.6, 1.6 }, { 1.4, -0.6, 1.2 }, { -0.4, 2.6, 1 }, { 2.2, -6, 1 } } do
+			local x, z = chip[1], chip[2]
+			local y = topOf(body, z, x)
+			T.taper(
+				bodyLimb,
+				{ x, y - 0.4, z },
+				{ x + 0.3, y + chip[3] * 1.4, z - 0.4 },
+				chip[3],
+				chip[3],
+				{ 0, 0, 1 },
+				ICE,
+				GLASS
+			)
+		end
+		local headLimb = pet:limb("Head", T.at({ 0, 4.8, 4 }))
+		head:draw(headLimb, { body }, SLATE)
+		roundEyes(headLimb, head, 5.2, 9.6, 1.05)
+		-- The long spiral tusk, twisting in bands, glowing at its tip.
+		local root, tip = { 0.8, 6, 11.2 }, { 1.4, 8.2, 27 }
+		for index = 0, 7 do
+			local a, b = vlerp(root, tip, index / 8), vlerp(root, tip, (index + 1) / 8)
+			local width = 1.5 - index * 0.13
+			local angle = index * 0.8
+			local facing = { math.cos(angle), math.sin(angle), 0 }
+			if index == 7 then
+				T.taper(headLimb, a, b, width, width, facing, IVORY)
+			else
+				T.blade(headLimb, a, b, width, width, facing, if index % 2 == 0 then IVORY else IVORY_DARK)
+			end
+		end
+		T.ball(headLimb, tip, 0.8, GLOW, NEON)
+		pet:limbPair("LeftFin", "RightFin", T.at({ 4.6, 2.6, 3.4 }), function(limb)
+			flipper:draw(limb, { body }, SLATE)
+		end)
+		local tailLimb = pet:limb("Tail", T.at({ 0, 4.4, -10 }))
+		tail:draw(tailLimb, { body }, SLATE)
+		for _, chip in { { -3.6, -22.4 }, { 3, -23 } } do
+			local y = topOf(tail, chip[2], chip[1])
+			T.taper(
+				tailLimb,
+				{ chip[1], y - 0.3, chip[2] },
+				{ chip[1], y + 1.3, chip[2] - 0.3 },
+				0.9,
+				0.9,
+				{ 0, 0, 1 },
+				ICE,
+				GLASS
+			)
+		end
+
+		pet:light(ICE, 1.8, 14)
+		pet:seat(0, 9.8 / U, 0)
 	end,
 }
 
@@ -4547,95 +4580,155 @@ Designs.Hippocampus = {
 	skeleton = "Swimmer",
 	gait = "Swim",
 	hover = 3,
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local TEAL = rgb(36, 172, 168)
-		local TEAL_DARK = rgb(22, 122, 126)
-		local BELLY = rgb(188, 242, 230)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with its glassy fins, coral and
+		-- pearls of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local TEAL = look(36, 172, 168)
+		local TEAL_DARK = look(22, 122, 126)
+		local BELLY = look(188, 242, 230)
+		local DOT = look(80, 255, 228, NEON)
+		local WEED = look(70, 150, 90)
 		local FIN = rgb(90, 220, 210)
 		local GLOW = rgb(80, 255, 228)
 		local CORAL = rgb(255, 150, 160)
 		local PEARL = rgb(250, 246, 240)
 
-		-- A sea horse's body: ridged, pale-bellied, with a see-through fin down its back.
-		local body = pet:limb("Body", { 0, 6, 0 })
-		body:box(-3, 4, -3, 2, 9, 3, TEAL)
-		body:box(-2, 4, 4, 1, 8, 4, BELLY)
-		body:paint(-2, 5, 4, 1, 5, 4, TEAL_DARK)
-		body:paint(-2, 7, 4, 1, 7, 4, TEAL_DARK)
-		body:paint(-3, 4, -3, 2, 4, 3, BELLY)
-		for _, z in { -2, 0, 2 } do
-			body:paintPair(2, 4, z, 2, 9, z, TEAL_DARK)
+		-- Ridged like a sea horse: dark rings, a pale belly, glowing dots.
+		local function hide(p: Vec, open: (number, number, number) -> boolean): Look?
+			if open(0, 0, 1) and math.abs(p[1]) < 2.2 then
+				return BELLY
+			end
+			if p[2] % 1.8 < 0.45 then
+				return TEAL_DARK
+			end
+			if noise(p) < 0.05 then
+				return DOT
+			end
+			return nil
 		end
-		body:box(-3, 10, -2, 2, 10, 0, CORAL)
-		body:box(-2, 11, -2, 1, 11, -1, rgb(255, 214, 200))
-		body:paint(-2, 11, -2, 1, 11, -2, CORAL)
-		body:boxPair(3, 9, -1, 3, 10, 0, CORAL)
-		body:boxPair(3, 8, -1, 3, 8, -1, PEARL)
-		body:boxPair(3, 8, 0, 3, 8, 0, PEARL)
-		body:box(-1, 11, 0, 0, 11, 0, PEARL)
-		body:box(-1, 10, -3, 0, 11, -3, FIN, GLASS, 0.3)
-		body:paint(-1, 11, -3, 0, 11, -3, GLOW, NEON)
-		for _, dot in { { 2, 6, -2 }, { 2, 8, 2 }, { -3, 7, -1 }, { -3, 5, 1 }, { 2, 5, 0 }, { -3, 8, 2 } } do
-			body:paint(dot[1], dot[2], dot[3], dot[1], dot[2], dot[3], GLOW, NEON)
+		local function fin(limb: Limb, a: Vec, b: Vec, c: Vec)
+			T.triangle(limb, a, b, c, 0.4, FIN, GLASS)
+			T.blade(limb, b, c, 0.3, 0.5, vnorm(vcross(vsub(b, a), vsub(c, a))), GLOW, NEON)
 		end
 
-		-- A horse's head on a long neck, with a glassy fin mane, a coral crown and a pearl on its brow.
-		local head = pet:limb("Head", { 0, 9, 3 })
-		head:box(-2, 9, 2, 1, 12, 4, TEAL)
-		head:box(-2, 12, 3, 1, 15, 7, TEAL)
-		head:box(-1, 12, 8, 0, 14, 10, TEAL)
-		head:paint(-1, 12, 10, 0, 12, 10, TEAL_DARK)
-		head:paint(-1, 14, 10, 0, 14, 10, TEAL_DARK)
-		eyes(head, 1, 14, 7, 1)
-		head:box(-1, 15, 8, 0, 15, 8, PEARL)
-		head:box(-1, 9, 1, 0, 12, 1, FIN, GLASS, 0.3)
-		head:box(-1, 13, 2, 0, 16, 2, FIN, GLASS, 0.3)
-		head:box(-1, 16, 3, 0, 17, 5, FIN, GLASS, 0.3)
-		head:paint(-1, 10, 1, 0, 10, 1, GLOW, NEON)
-		head:paint(-1, 14, 2, 0, 14, 2, GLOW, NEON)
-		head:paint(-1, 17, 4, 0, 17, 4, GLOW, NEON)
-		head:boxPair(1, 16, 5, 1, 17, 5, CORAL)
-		head:boxPair(1, 16, 7, 1, 16, 7, CORAL)
-		head:boxPair(2, 15, 4, 2, 16, 4, FIN, GLASS, 0.3)
-		head:box(-1, 12, 0, 0, 12, 0, FIN, GLASS, 0.3)
-		head:paintPair(1, 10, 4, 1, 11, 4, TEAL_DARK)
-		head:paintPair(2, 13, 6, 2, 14, 6, TEAL_DARK)
-		head:box(-2, 13, 9, 1, 13, 9, rgb(70, 150, 90))
-		head:boxPair(2, 11, 6, 2, 12, 8, rgb(70, 150, 90))
-		head:paintPair(2, 12, 7, 2, 12, 7, PEARL)
+		-- An upright, curving body.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 13, 2 }, { 3.6, 4.6, 4 }), TEAL)
+		body:add(ellipsoid({ 0, 10.2, 1.2 }, { 3.2, 3.4, 3.4 }), TEAL)
+		body:coat(hide)
 
-		-- Horse forelegs ending in webbed fins.
-		pet:limbPair("LeftFin", "RightFin", { 1.5, 6, 2.5 }, function(leg)
-			leg:box(1, 4, 2, 2, 6, 3, TEAL)
-			leg:box(1, 2, 4, 2, 3, 5, TEAL)
-			leg:paint(1, 3, 4, 2, 3, 5, TEAL_DARK)
-			leg:box(1, 1, 6, 3, 2, 7, FIN, GLASS, 0.3)
-			leg:paint(1, 1, 7, 3, 1, 7, GLOW, NEON)
-			leg:box(3, 2, 4, 3, 3, 4, FIN, GLASS, 0.3)
+		-- A horse's head on a long neck: a pale muzzle in a bridle of sea-weed, small ears, a pearl on its brow.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 15.5, 2.6, 2.7 }, { 0, 19.6, 4, 2.2 } }), TEAL)
+		head:add(ellipsoid({ 0, 21.6, 6 }, { 2.4, 2.6, 3.1 }), TEAL)
+		head:add(ellipsoid({ 0, 20.6, 9.4 }, { 1.7, 1.9, 2.3 }), TEAL)
+		head:coat(function(p, open)
+			local y, z = p[2], p[3]
+			if z > 10.4 and y < 21.4 then
+				return BELLY
+			end
+			if math.abs(z - 8.4) < 0.5 and y < 22.6 then
+				return WEED
+			end
+			return hide(p, open)
 		end)
 
-		-- A fish tail sweeping down and back, curling up into a great see-through fin.
-		local tail = pet:limb("Tail", { 0, 5, -3 })
-		tail:box(-2, 3, -6, 1, 6, -4, TEAL)
-		tail:box(-2, 1, -8, 1, 3, -7, TEAL)
-		tail:box(-1, 0, -10, 0, 1, -9, TEAL)
-		tail:box(-1, 1, -12, 0, 3, -11, TEAL)
-		tail:box(-1, 4, -12, 0, 5, -12, TEAL)
-		tail:paint(-2, 3, -6, 1, 3, -6, TEAL_DARK)
-		tail:paint(-2, 2, -8, 1, 2, -8, TEAL_DARK)
-		tail:paint(-1, 1, -10, 0, 1, -10, TEAL_DARK)
-		tail:boxPair(2, 2, -8, 2, 3, -7, FIN, GLASS, 0.3)
-		tail:box(-3, 4, -14, 2, 6, -13, FIN, GLASS, 0.3)
-		tail:paint(-3, 5, -14, 2, 5, -14, GLOW, NEON)
-		tail:boxPair(1, 0, -10, 1, 1, -9, FIN, GLASS, 0.3)
-		tail:box(-1, 2, -13, 0, 3, -13, FIN, GLASS, 0.3)
-		tail:paint(-1, 4, -6, 0, 4, -6, GLOW, NEON)
-		tail:paint(-1, 2, -11, 0, 2, -11, TEAL_DARK)
+		-- Horse's forelegs ending in webbed fins.
+		local leg = newSculpt(U)
+		leg:add(rod({ { 2.2, 12, 3.6, 1.4 }, { 2.6, 8.6, 6.2, 1.1 }, { 2.6, 6.6, 8, 0.9 } }), TEAL)
+		leg:coat(function(p)
+			return if p[2] % 1.8 < 0.45 then TEAL_DARK else nil
+		end)
 
-		pet:light(GLOW, 1.8, 13)
-		pet:particles("Bubbles", rgb(226, 250, 246), 6)
-		pet:seat(0, 10, 0)
+		-- A fish's tail sweeping down and back, curling up at the end.
+		local tail = newSculpt(U)
+		tail:add(
+			rod({
+				{ 0, 9, -1.4, 3.2 },
+				{ 0, 6.2, -4.4, 2.6 },
+				{ 0, 3.6, -7.8, 2.1 },
+				{ 0, 2, -11.6, 1.6 },
+				{ 0, 3.2, -15, 1.15 },
+				{ 0, 5.6, -17, 0.85 },
+			}),
+			TEAL
+		)
+		tail:coat(hide)
+
+		local legMirror = leg:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 12, 0 }))
+		body:draw(bodyLimb, { head, leg, legMirror, tail }, TEAL)
+		-- A glassy fin down its back, and coral and pearls growing on it.
+		for _, rib in { { 16, -0.6, 17.6, -3.6 }, { 13.4, -1.8, 13.8, -5.4 }, { 10.6, -2, 10, -5.6 } } do
+			fin(bodyLimb, { 0, rib[1], rib[2] }, { 0, rib[1] + 2.4, rib[2] - 2.6 }, { 0, rib[3], rib[4] - 1.2 })
+		end
+		for _, coral in { { 1.8, 3, 1 }, { -1.6, 0.6, 0.8 } } do
+			local x, z = coral[1], coral[2]
+			local y = topOf(body, z, x)
+			local base = { x, y - 0.4, z }
+			T.branch(
+				bodyLimb,
+				{ base, vadd(base, { 0.4, 1.6, 0 }), vadd(base, { 1, 2.8, 0.4 }) },
+				0.6 * coral[3],
+				{ 0, 0, 1 },
+				CORAL
+			)
+			T.branch(
+				bodyLimb,
+				{ vadd(base, { 0.4, 1.4, 0 }), vadd(base, { -0.6, 2.6, -0.2 }) },
+				0.45 * coral[3],
+				{ 0, 0, 1 },
+				CORAL
+			)
+			T.ball(bodyLimb, vadd(base, { 0, 0.4, 0.8 }), 0.8, PEARL)
+		end
+
+		local headLimb = pet:limb("Head", T.at({ 0, 15.5, 2.6 }))
+		head:draw(headLimb, { body }, TEAL)
+		roundEyes(headLimb, head, 22.2, 7.6, 1)
+		-- A mane of glassy fins down its neck, small ears, a coral crown and a pearl on its brow.
+		for _, rib in { { 23.4, 4.6 }, { 21.4, 3 }, { 19, 1.8 }, { 16.6, 1 } } do
+			fin(headLimb, { 0, rib[1], rib[2] }, { 0, rib[1] + 2.2, rib[2] - 3.6 }, { 0, rib[1] - 3, rib[2] - 2.6 })
+		end
+		for _, s in { 1, -1 } do
+			T.taper(headLimb, { 1.2 * s, 23.4, 5.4 }, { 1.6 * s, 25.4, 4.8 }, 0.8, 0.5, { 0, 0, 1 }, TEAL.color)
+			T.branch(
+				headLimb,
+				{ { 0.9 * s, 23.6, 6.4 }, { 1.6 * s, 25.2, 6.8 }, { 2.4 * s, 26.2, 6.2 } },
+				0.55,
+				{ 0, 0, 1 },
+				CORAL
+			)
+			T.ball(headLimb, { sideOf(head, 20.6, 8.4) * s, 20.6, 8.4 }, 0.7, PEARL)
+		end
+		T.ball(headLimb, { 0, topOf(head, 7.8) - 0.1, 7.8 }, 0.9, PEARL)
+		pet:limbPair("LeftFin", "RightFin", T.at({ 2.2, 12, 3.6 }), function(limb)
+			leg:draw(limb, { body }, TEAL)
+			fin(limb, { 2.6, 6.8, 7.6 }, { 4.2, 5, 10.2 }, { 1.4, 4.8, 10.6 })
+		end)
+		local tailLimb = pet:limb("Tail", T.at({ 0, 9, -1.4 }))
+		tail:draw(tailLimb, { body }, TEAL)
+		-- The tail ends in a great glassy fan, with smaller fins along it.
+		local tip = { 0, 5.6, -17 }
+		for _, edge in
+			{
+				{ { 0, 11, -18.4 }, { 0, 9.6, -21.4 } },
+				{ { 0, 9.6, -21.4 }, { 0, 6.4, -22.6 } },
+				{ { 0, 6.4, -22.6 }, { 0, 3.6, -20.6 } },
+			}
+		do
+			fin(tailLimb, tip, edge[1], edge[2])
+		end
+		for _, s in { 1, -1 } do
+			fin(tailLimb, { 1.6 * s, 4.4, -8 }, { 4 * s, 3.4, -10.4 }, { 1.4 * s, 3, -11 })
+		end
+
+		pet:light(GLOW, 2, 15)
+		pet:particles("Bubbles", rgb(226, 250, 246), 8)
+		pet:seat(0, 18 / U, 0)
 	end,
 }
 
