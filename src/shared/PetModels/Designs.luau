@@ -1233,9 +1233,9 @@ end
 -- How far the clay reaches forward at a point across and a height (design units): where its front surface is.
 local function frontOf(s: Sculpt, x: number, y: number): number
 	local u = s.unit
-	local cx, cy, cz = math.floor(x / u), math.floor(y / u), 0
-	while s:has(cx, cy, cz + 1) do
-		cz += 1
+	local cx, cy, cz = math.floor(x / u), math.floor(y / u), math.floor(90 / u)
+	while cz > -90 / u and not s:has(cx, cy, cz) do
+		cz -= 1
 	end
 	return (cz + 1) * u
 end
@@ -2469,155 +2469,249 @@ Designs.Camel = {
 Designs.GiantScorpion = {
 	name = "Giant Scorpion",
 	skeleton = "ManyLegged",
-	scale = 0.55,
+	scale = 0.5,
 	draw = function(pet)
-		local AMBER = rgb(176, 98, 44)
-		local DARK = rgb(112, 58, 28)
-		local LIGHT = rgb(214, 140, 70)
-		local VENOM = rgb(150, 255, 90)
+		-- Sculpted in the units it is built in (one to a block); legs, pincer fingers and stinger are parts at any
+		-- angle, so they stay sharp however big it is shown.
+		local U = 1
+		local T = inUnits(U)
+		local AMBER = look(176, 98, 44)
+		local DARK = look(112, 58, 28)
+		local LIGHT = look(214, 140, 70)
+		local BELLY = look(226, 170, 104)
+		local VENOM = look(150, 255, 90, NEON)
+		local CLAW = rgb(70, 36, 18)
 
-		-- A low body of overlapping plates, with a keel down the middle and pale spots.
-		local body = pet:limb("Body", { 0, 3, 0 })
-		body:box(-4, 2, -5, 3, 4, 4, AMBER)
-		body:box(-3, 5, -5, 2, 5, -4, AMBER)
-		body:box(-3, 5, -2, 2, 5, -1, AMBER)
-		body:box(-3, 5, 1, 2, 5, 3, AMBER)
-		body:paint(-4, 4, -3, 3, 4, -3, DARK)
-		body:paint(-4, 4, 0, 3, 4, 0, DARK)
-		body:paint(-1, 5, -5, 0, 5, -4, LIGHT)
-		body:paint(-1, 5, -2, 0, 5, -1, LIGHT)
-		body:paint(-1, 5, 1, 0, 5, 3, LIGHT)
-		body:paintPair(3, 2, -5, 3, 2, 4, DARK)
-		body:paintPair(2, 5, -5, 2, 5, -5, LIGHT)
-		body:paintPair(2, 5, 2, 2, 5, 2, LIGHT)
+		-- A low body armoured in overlapping plates, dark at the seams, a pale ridge down the middle.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 4.4, 3 }, { 4.4, 2.2, 3.4 }), AMBER)
+		local plates = { { -0.6, 5 }, { -3.2, 5.2 }, { -5.8, 5 }, { -8.4, 4.5 }, { -10.6, 3.8 } }
+		for _, plate in plates do
+			body:add(ellipsoid({ 0, 4.6, plate[1] }, { plate[2], 2.4, 1.7 }), AMBER)
+		end
+		body:coat(function(p, open)
+			local x, z = p[1], p[3]
+			if open(0, -1, 0) then
+				return BELLY
+			end
+			for _, plate in plates do
+				if math.abs(z - (plate[1] + 1.35)) < 0.45 then
+					return DARK
+				end
+			end
+			if math.abs(x) < 0.8 and open(0, 1, 0) then
+				return LIGHT
+			end
+			return nil
+		end)
 
-		-- A head with a mound of eyes, little fangs, and huge pincers with toothed edges.
-		local head = pet:limb("Head", { 0, 3, 5 })
-		head:box(-3, 2, 5, 2, 4, 6, AMBER)
-		head:box(-1, 5, 5, 0, 5, 6, DARK)
-		head:paint(-1, 5, 6, 0, 5, 6, VENOM, NEON)
-		eyes(head, 1, 3, 6, 1)
-		head:boxPair(0, 2, 7, 0, 3, 7, DARK)
-		head:boxPair(3, 3, 5, 4, 3, 7, AMBER)
-		head:boxPair(4, 3, 8, 5, 3, 9, AMBER)
-		head:boxPair(3, 2, 10, 6, 4, 12, AMBER)
-		head:boxPair(5, 3, 13, 6, 4, 15, AMBER)
-		head:boxPair(3, 2, 13, 3, 3, 15, DARK)
-		head:paintPair(5, 3, 13, 5, 3, 15, LIGHT)
-		head:paintPair(5, 4, 15, 6, 4, 15, DARK)
-		head:paintPair(4, 4, 10, 5, 4, 11, LIGHT)
+		-- A flat head with great pincers on jointed arms, and small dark mouthparts.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 4.4, 6.6 }, { 3.4, 1.9, 2.4 }), AMBER)
+		for _, s in { 1, -1 } do
+			head:add(
+				rod({ { 2.4 * s, 4.2, 7.4, 1.15 }, { 5.4 * s, 4.8, 9.6, 1.1 }, { 6.4 * s, 4.8, 12.6, 1.15 } }),
+				AMBER
+			)
+			head:add(ellipsoid({ 5.4 * s, 4.8, 9.6 }, { 1.4, 1.3, 1.4 }), DARK)
+			head:add(ellipsoid({ 6.4 * s, 4.9, 14.8 }, { 1.9, 1.6, 2.7 }), AMBER)
+			head:add(ellipsoid({ 0.7 * s, 3.8, 8.9 }, { 0.65, 0.65, 0.75 }), DARK)
+		end
+		head:coat(function(p, open)
+			if open(0, -1, 0) then
+				return BELLY
+			end
+			if open(0, 1, 0) and noise(p) < 0.18 then
+				return LIGHT
+			end
+			return nil
+		end)
 
-		-- Six legs, each bent at a dark joint.
-		local function leg(z: number)
-			return function(limb)
-				limb:box(4, 3, z, 5, 4, z, AMBER)
-				limb:box(6, 4, z, 6, 4, z, DARK)
-				limb:box(7, 1, z, 7, 3, z, AMBER)
-				limb:box(7, 0, z, 8, 0, z, DARK)
+		-- A segmented tail curling up over its back, dark at every joint, to a glowing venom bulb and stinger.
+		local tail = newSculpt(U)
+		local curl = {
+			{ 0, 4.8, -11.6, 1.75 },
+			{ 0, 6.8, -14.1, 1.6 },
+			{ 0, 9.8, -15.4, 1.5 },
+			{ 0, 12.9, -14.7, 1.4 },
+			{ 0, 15.1, -12.3, 1.3 },
+			{ 0, 15.9, -9.6, 1.25 },
+		}
+		for index = 1, #curl - 1 do
+			local a, b = curl[index], curl[index + 1]
+			tail:add(rod({ { a[1], a[2], a[3], a[4] * 0.7 }, { b[1], b[2], b[3], b[4] * 0.7 } }), DARK)
+		end
+		for _, c in curl do
+			tail:add(ellipsoid({ c[1], c[2], c[3] }, { c[4], c[4], c[4] }), AMBER)
+		end
+		tail:add(ellipsoid({ 0, 15.3, -7.3 }, { 1.5, 1.7, 2 }), VENOM)
+
+		body:draw(pet:limb("Body", T.at({ 0, 4, 0 })), { head, tail }, AMBER)
+		local headLimb = pet:limb("Head", T.at({ 0, 4.2, 5 }))
+		head:draw(headLimb, { body }, AMBER)
+		for _, s in { 1, -1 } do
+			T.taper(headLimb, { 6 * s, 5.3, 16.4 }, { 5.1 * s, 5.5, 19.8 }, 1.1, 1, { 0, 1, 0 }, AMBER.color)
+			T.taper(headLimb, { 6.9 * s, 4.5, 16.4 }, { 6.7 * s, 4, 19.4 }, 1, 0.9, { 0, 1, 0 }, DARK.color)
+			T.ball(headLimb, { 0.55 * s, topOf(head, 6.4, 0.55 * s) - 0.05, 6.4 }, 0.65, EYE)
+			T.ball(headLimb, { 2.6 * s, topOf(head, 7.8, 2.6 * s) - 0.2, 7.8 }, 0.45, EYE)
+		end
+		T.ball(headLimb, { 0, topOf(head, 5.4, 0) - 0.1, 5.4 }, { 0.9, 0.5, 1.6 }, VENOM.color, NEON)
+
+		local function leg(z: number, spread: number)
+			return function(limb: Limb)
+				local hip, knee = { 4, 4.2, z }, { 7, 6.8, z + spread * 0.5 }
+				local ankle, foot = { 9.4, 3, z + spread }, { 10.2, 0.2, z + spread * 1.4 }
+				T.blade(limb, hip, knee, 1, 1, { 0, 0, 1 }, AMBER.color)
+				T.blade(limb, knee, ankle, 0.9, 0.9, { 0, 0, 1 }, AMBER.color)
+				T.taper(limb, ankle, foot, 0.8, 0.8, { 0, 0, 1 }, DARK.color)
+				T.ball(limb, knee, 1.3, DARK.color)
+				T.ball(limb, ankle, 1.1, DARK.color)
 			end
 		end
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 4, 3.5, 3.5 }, leg(3))
-		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", { 4, 3.5, 0.5 }, leg(0))
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 4, 3.5, -2.5 }, leg(-3))
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 4, 4.2, 1.6 }), leg(1.6, 1.2))
+		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", T.at({ 4.4, 4.2, -1.6 }), leg(-1.6, 0))
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 4.2, 4.2, -4.8 }), leg(-4.8, -1.2))
 
-		-- A tail of shrinking segments arching over its back, with a venom bulb and a dripping stinger.
-		local tail = pet:limb("Tail", { 0, 4, -5 })
-		tail:box(-2, 3, -7, 1, 5, -6, AMBER)
-		tail:box(-1, 6, -8, 0, 8, -7, AMBER)
-		tail:box(-1, 9, -8, 0, 10, -7, AMBER)
-		tail:box(-1, 11, -7, 0, 12, -6, AMBER)
-		tail:box(-1, 13, -6, 0, 13, -4, AMBER)
-		tail:box(-1, 13, -3, 0, 13, -2, DARK)
-		tail:paint(-2, 5, -7, 1, 5, -7, DARK)
-		tail:paint(-1, 8, -8, 0, 8, -8, DARK)
-		tail:paint(-1, 10, -8, 0, 10, -8, DARK)
-		tail:paint(-1, 12, -7, 0, 12, -7, DARK)
-		tail:box(-1, 11, -1, 0, 13, 0, LIGHT)
-		tail:box(-1, 9, 1, 0, 10, 1, VENOM, NEON)
-		tail:box(-1, 8, 2, 0, 8, 2, VENOM, NEON)
-		tail:box(-1, 6, 2, -1, 7, 2, VENOM, NEON)
+		local tailLimb = pet:limb("Tail", T.at({ 0, 4.6, -11 }))
+		tail:draw(tailLimb, { body }, AMBER)
+		T.taper(tailLimb, { 0, 14.7, -5.8 }, { 0, 12.2, -3.8 }, 0.9, 0.9, { 1, 0, 0 }, CLAW)
+		T.ball(tailLimb, { 0, 11.9, -3.6 }, 0.55, VENOM.color, NEON)
 
-		pet:seat(0, 6, 0)
+		pet:seat(0, 7.4 / U, -3 / U)
 	end,
 }
 
 Designs.PharaohJackal = {
 	name = "Pharaoh Jackal",
 	skeleton = "Quadruped",
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local BLACK = rgb(38, 34, 42)
-		local SHEEN = rgb(66, 60, 76)
-		local GOLD = rgb(255, 196, 56)
-		local LAPIS = rgb(40, 86, 196)
-		local TEAL = rgb(56, 180, 176)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with ears, eyes and its cobra crown
+		-- of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local BLACK = look(38, 34, 42)
+		local SHEEN = look(68, 62, 80)
+		local NOSE = look(20, 18, 22)
+		local GOLD = look(255, 196, 56)
+		local LAPIS = look(40, 86, 196)
+		local TEAL = look(56, 180, 176)
 		local RED = rgb(196, 48, 52)
 
-		-- A sleek black body: deep chest, slim waist, a gold-and-lapis sash.
-		local body = pet:limb("Body", { 0, 7, 0 })
-		body:box(-3, 6, 1, 2, 10, 4, BLACK)
-		body:box(-2, 6, -4, 1, 9, 0, BLACK)
-		body:box(-3, 6, -7, 2, 10, -5, BLACK)
-		body:paintPair(2, 8, -7, 2, 9, -6, SHEEN)
-		body:paint(-1, 10, -7, 0, 10, -5, SHEEN)
-		body:box(-3, 7, -3, 2, 10, -2, GOLD)
-		body:paint(-3, 8, -3, 2, 8, -2, LAPIS)
-		-- A broad collar in gold, teal and lapis, with an ankh hanging from it.
-		body:box(-4, 9, 2, 3, 11, 5, GOLD)
-		body:paint(-4, 10, 2, 3, 10, 5, TEAL)
-		body:paint(-4, 9, 2, 3, 9, 5, LAPIS)
-		body:box(-1, 9, 6, 0, 10, 6, GOLD)
-		body:box(-2, 8, 6, 1, 8, 6, GOLD)
-		body:box(-1, 6, 6, 0, 7, 6, GOLD)
+		local function sheen(p: Vec): Look?
+			return if noise(p) < 0.12 then SHEEN else nil
+		end
+		local function jewels(v: number, period: number): Look
+			local k = math.floor(v / period) % 4
+			return if k == 0 then LAPIS elseif k == 2 then TEAL else GOLD
+		end
+		local function stripes(v: number, period: number): Look
+			return if math.floor(v / period) % 2 == 0 then LAPIS else GOLD
+		end
 
-		-- A long muzzle, glowing gold eyes lined in kohl, a striped headdress and tall ears.
-		local head = pet:limb("Head", { 0, 11, 4 })
-		head:box(-2, 12, 3, 1, 12, 5, BLACK)
-		head:box(-2, 13, 3, 1, 16, 7, BLACK)
-		head:box(-1, 13, 8, 0, 14, 11, BLACK)
-		head:paint(-1, 13, 9, 0, 13, 11, SHEEN)
-		head:box(-1, 14, 12, 0, 14, 12, SHEEN)
-		head:paintPair(1, 15, 7, 1, 15, 7, GOLD, NEON)
-		head:paintPair(1, 15, 5, 1, 15, 6, GOLD)
-		head:box(-3, 17, 2, 2, 18, 7, GOLD)
-		head:paint(-3, 18, 2, 2, 18, 2, LAPIS)
-		head:paint(-3, 18, 4, 2, 18, 4, LAPIS)
-		head:paint(-3, 18, 6, 2, 18, 6, LAPIS)
-		head:paintPair(2, 17, 2, 2, 17, 7, LAPIS)
-		head:paint(-1, 17, 7, 0, 17, 7, RED)
-		head:boxPair(2, 12, 2, 2, 16, 3, GOLD)
-		head:paintPair(2, 13, 2, 2, 13, 3, LAPIS)
-		head:paintPair(2, 15, 2, 2, 15, 3, LAPIS)
-		head:box(-2, 12, 1, 1, 16, 1, GOLD)
-		head:paint(-2, 13, 1, 1, 13, 1, LAPIS)
-		head:paint(-2, 15, 1, 1, 15, 1, LAPIS)
-		head:boxPair(1, 19, 4, 2, 21, 5, BLACK)
-		head:boxPair(2, 22, 4, 2, 23, 5, BLACK)
-		head:paintPair(1, 19, 5, 1, 21, 5, GOLD)
-
-		-- Slender legs with gold armbands.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 2, 7, 2.5 }, function(leg)
-			leg:box(1, 1, 2, 2, 5, 3, BLACK)
-			leg:box(1, 0, 2, 2, 0, 4, BLACK)
-			leg:paint(1, 4, 2, 2, 4, 3, GOLD)
-			leg:paint(1, 1, 2, 2, 1, 3, LAPIS)
-		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 2, 7, -6 }, function(leg)
-			leg:box(1, 3, -7, 2, 6, -5, BLACK)
-			leg:box(1, 0, -7, 2, 2, -6, BLACK)
-			leg:box(1, 0, -5, 2, 0, -5, BLACK)
-			leg:paint(1, 1, -7, 2, 1, -6, GOLD)
+		-- A sleek black body with a broad jewelled collar over its chest and a gold belt.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 16.5, 4 }, { 4, 4.8, 5.2 }), BLACK)
+		body:add(ellipsoid({ 0, 16, -2 }, { 3.4, 3.8, 5 }), BLACK)
+		body:add(ellipsoid({ 0, 16.6, -7.5 }, { 3.8, 4.2, 4.2 }), BLACK)
+		body:add(ellipsoid({ 0, 18.2, 7.2 }, { 4.6, 3.6, 3.3 }), GOLD)
+		body:coat(function(p)
+			local x, y, z = p[1], p[2], p[3]
+			if (x / 4.7) ^ 2 + ((y - 18.2) / 3.7) ^ 2 + ((z - 7.2) / 3.4) ^ 2 <= 1.05 then
+				return jewels(math.sqrt((y - 21.8) ^ 2 + ((z - 8.6) * 0.8) ^ 2), 0.75)
+			end
+			if z > -3.6 and z < -1.8 then
+				return if math.abs(z + 2.7) < 0.35 then LAPIS else GOLD
+			end
+			return sheen(p)
 		end)
 
-		-- A long tail with gold rings.
-		local tail = pet:limb("Tail", { 0, 9, -7 })
-		tail:box(-1, 8, -9, 0, 9, -8, BLACK)
-		tail:box(-1, 6, -10, 0, 8, -10, BLACK)
-		tail:box(-1, 3, -11, 0, 6, -11, BLACK)
-		tail:paint(-1, 7, -10, 0, 7, -10, GOLD)
-		tail:paint(-1, 4, -11, 0, 4, -11, GOLD)
+		-- A long, narrow head: striped headdress lappets down each side of its neck, a gold band round its brow.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 18.5, 7.5, 2.8 }, { 0, 22.2, 9.2, 2.3 } }), BLACK)
+		head:add(ellipsoid({ 0, 24, 10.4 }, { 2.6, 2.6, 3 }), BLACK)
+		head:add(ellipsoid({ 0, 23.1, 14.2 }, { 1.3, 1.4, 3.3 }), BLACK)
+		head:add(ellipsoid({ 0, 23.6, 17.3 }, { 0.75, 0.65, 0.55 }), NOSE)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 2.7 * s, 21.2, 8.6 }, { 0.95, 3.4, 1.9 }), GOLD)
+		end
+		head:coat(function(p)
+			local x, y, z = p[1], p[2], p[3]
+			if ((math.abs(x) - 2.7) / 1) ^ 2 + ((y - 21.2) / 3.45) ^ 2 + ((z - 8.6) / 1.95) ^ 2 <= 1 then
+				return stripes(y, 0.8)
+			end
+			if y > 25.4 and z > 9.6 and z < 11.4 then
+				return GOLD
+			end
+			return sheen(p)
+		end)
 
-		pet:seat(0, 11, -2)
+		-- Slender legs with gold and lapis anklets.
+		local front = newSculpt(U)
+		front:add(rod({ { 2.8, 15, 5, 1.8 }, { 3, 8, 5.6, 1.25 }, { 3, 2, 5.4, 1 } }), BLACK)
+		front:add(ellipsoid({ 3, 0.9, 6.2 }, { 1.25, 0.9, 1.6 }), BLACK)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 2.8, 15.6, -7.6 }, { 2.1, 3.8, 3 }), BLACK)
+		back:add(rod({ { 3, 12, -9, 1.45 }, { 3.1, 7, -10.2, 1.05 }, { 3.1, 2, -9, 0.95 } }), BLACK)
+		back:add(ellipsoid({ 3.1, 0.9, -8.4 }, { 1.25, 0.9, 1.6 }), BLACK)
+		for _, leg in { front, back } do
+			leg:coat(function(p)
+				if p[2] > 2.6 and p[2] < 4.4 then
+					return if p[2] < 3.2 then LAPIS else GOLD
+				end
+				return sheen(p)
+			end)
+		end
+
+		-- A long tail hanging low, banded in gold.
+		local tail = newSculpt(U)
+		tail:add(
+			rod({ { 0, 18, -10.6, 1.25 }, { 0, 15, -13, 1.1 }, { 0, 10.4, -13.8, 0.9 }, { 0, 6.6, -13.2, 0.7 } }),
+			BLACK
+		)
+		tail:coat(function(p)
+			if p[2] < 14 and math.floor(p[2] / 1.6) % 2 == 0 then
+				return GOLD
+			end
+			return sheen(p)
+		end)
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		body:draw(pet:limb("Body", T.at({ 0, 16, 0 })), { head, front, frontMirror, back, backMirror, tail }, BLACK)
+		local headLimb = pet:limb("Head", T.at({ 0, 18.5, 7.5 }))
+		head:draw(headLimb, { body }, BLACK)
+		slitEyes(headLimb, head, { 24.5, 12.6 }, { 25.1, 10.6 }, 0.6, GOLD.color, NEON)
+		for _, s in { 1, -1 } do
+			T.triangle(
+				headLimb,
+				{ 1.1 * s, 25.8, 11.4 },
+				{ 2.5 * s, 31.6, 9.8 },
+				{ 2.5 * s, 25.4, 9 },
+				0.6,
+				BLACK.color
+			)
+			T.triangle(
+				headLimb,
+				{ 1.4 * s, 26.4, 11.4 },
+				{ 2.4 * s, 30.6, 10.3 },
+				{ 2.35 * s, 26.2, 9.9 },
+				0.35,
+				GOLD.color
+			)
+		end
+		T.branch(headLimb, { { 0, 26.2, 12.2 }, { 0, 27.6, 12.8 }, { 0, 28.4, 12.4 } }, 0.65, { 0, 0, 1 }, GOLD.color)
+		T.ball(headLimb, { 0, 27.4, 13.2 }, { 1, 1.1, 0.5 }, GOLD.color)
+		T.ball(headLimb, { 0, 27.6, 13.4 }, 0.45, RED)
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 2.8, 15, 5 }), function(limb)
+			front:draw(limb, { body }, BLACK)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 2.8, 15, -7.6 }), function(limb)
+			back:draw(limb, { body }, BLACK)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 18, -10 })), { body }, BLACK)
+
+		pet:light(GOLD.color, 1.8, 14)
+		pet:seat(0, 21 / U, -2 / U)
 	end,
 }
 
@@ -2625,195 +2719,331 @@ Designs.Sphinx = {
 	name = "Sphinx",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local STONE = rgb(226, 192, 124)
-		local STONE_LIGHT = rgb(242, 216, 164)
-		local STONE_DARK = rgb(184, 148, 88)
-		local CARVING = rgb(146, 112, 62)
-		local GOLD = rgb(255, 196, 56)
-		local LAPIS = rgb(40, 86, 196)
-		local TEAL = rgb(56, 180, 176)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with wings, eyes and crown of parts
+		-- at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local STONE = look(226, 192, 124)
+		local STONE_LIGHT = look(242, 216, 164)
+		local STONE_DARK = look(184, 148, 88)
+		local CARVING = look(146, 112, 62)
+		local GOLD = look(255, 196, 56)
+		local LAPIS = look(40, 86, 196)
+		local TEAL = look(56, 180, 176)
+		local GLOW = rgb(90, 240, 220)
 
-		-- A stone lion: deep chest, narrow waist, strong haunches, a ridge down its spine.
-		local body = pet:limb("Body", { 0, 7, 0 })
-		body:box(-4, 6, 1, 3, 12, 5, STONE)
-		body:box(-3, 6, -5, 2, 10, 0, STONE)
-		body:box(-4, 6, -8, 3, 11, -6, STONE)
-		body:box(-1, 11, -5, 0, 11, 0, STONE_LIGHT)
-		body:paint(-3, 6, -5, 2, 6, 0, STONE_DARK)
-		-- Carved marks along its flanks, and lighter muscle on its haunches.
-		body:paintPair(2, 8, -4, 2, 9, -4, CARVING)
-		body:paintPair(2, 9, -2, 2, 9, -1, CARVING)
-		body:paintPair(2, 7, -2, 2, 7, -2, CARVING)
-		body:paintPair(3, 9, -8, 3, 10, -7, STONE_LIGHT)
-		-- A broad jewelled collar with an amulet.
-		body:box(-5, 9, 2, 4, 11, 6, GOLD)
-		body:paint(-5, 10, 2, 4, 10, 6, TEAL)
-		body:paint(-5, 9, 2, 4, 9, 6, LAPIS)
-		body:box(-1, 8, 7, 0, 9, 7, GOLD)
-		body:box(-1, 8, 8, 0, 8, 8, TEAL, NEON)
-		-- Great feathered wings rising from its shoulders, banded gold and lapis.
-		body:boxPair(4, 10, -1, 5, 12, 1, STONE)
-		body:boxPair(5, 17, -3, 5, 17, 0, GOLD)
-		body:boxPair(5, 16, -5, 5, 16, 1, LAPIS)
-		body:boxPair(5, 15, -7, 5, 15, 1, GOLD)
-		body:boxPair(5, 14, -8, 5, 14, 0, STONE_LIGHT)
-		body:boxPair(5, 13, -9, 5, 13, -1, STONE_LIGHT)
-		body:boxPair(5, 12, -9, 5, 12, -3, STONE_LIGHT)
-		body:boxPair(5, 11, -8, 5, 11, -5, STONE_LIGHT)
-		body:paintPair(5, 11, -7, 5, 14, -7, STONE_DARK)
-		body:paintPair(5, 12, -4, 5, 14, -4, STONE_DARK)
-		body:paintPair(5, 13, -9, 5, 13, -9, TEAL)
-		body:paintPair(5, 12, -9, 5, 12, -9, TEAL)
+		local function weathered(p: Vec): Look?
+			local n = noise(p)
+			if n < 0.1 then
+				return STONE_LIGHT
+			elseif n > 0.9 then
+				return STONE_DARK
+			end
+			return nil
+		end
+		local function stripes(v: number, period: number): Look
+			return if math.floor(v / period) % 2 == 0 then GOLD else LAPIS
+		end
 
-		-- A calm face with glowing eyes, framed by a striped headdress, a rearing cobra and a gold beard.
-		local head = pet:limb("Head", { 0, 12, 5 })
-		head:box(-2, 11, 5, 1, 12, 5, STONE)
-		head:box(-3, 13, 5, 2, 18, 9, STONE)
-		head:box(-1, 13, 10, 0, 15, 10, STONE)
-		head:paint(-1, 15, 10, 0, 15, 10, STONE_DARK)
-		head:paint(-1, 13, 10, 0, 13, 10, CARVING)
-		head:paintPair(2, 16, 9, 2, 16, 9, LAPIS)
-		head:paintPair(1, 16, 9, 1, 16, 9, TEAL, NEON)
-		head:box(-4, 18, 4, 3, 19, 10, GOLD)
-		head:paint(-4, 19, 4, 3, 19, 4, LAPIS)
-		head:paint(-4, 19, 6, 3, 19, 6, LAPIS)
-		head:paint(-4, 19, 8, 3, 19, 8, LAPIS)
-		head:boxPair(3, 11, 6, 3, 17, 8, GOLD)
-		head:boxPair(3, 10, 6, 4, 10, 8, GOLD)
-		head:paintPair(3, 12, 6, 3, 12, 8, LAPIS)
-		head:paintPair(3, 15, 6, 3, 15, 8, LAPIS)
-		head:box(-3, 13, 4, 2, 18, 4, GOLD)
-		head:paint(-3, 14, 4, 2, 14, 4, LAPIS)
-		head:paint(-3, 16, 4, 2, 16, 4, LAPIS)
-		head:box(-1, 19, 10, 0, 20, 10, GOLD)
-		head:box(-1, 21, 10, 0, 21, 11, GOLD)
-		head:box(-1, 20, 11, 0, 20, 11, TEAL, NEON)
-		head:box(-1, 10, 9, 0, 12, 9, GOLD)
-		head:paint(-1, 11, 9, 0, 11, 9, LAPIS)
-		head:box(-1, 10, 10, 0, 10, 10, GOLD)
-
-		-- Lion legs with big paws, gold bands on the front ones.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 7, 3 }, function(leg)
-			leg:box(2, 3, 2, 3, 7, 4, STONE)
-			leg:box(2, 0, 3, 3, 2, 4, STONE)
-			leg:box(2, 0, 5, 4, 1, 6, STONE)
-			leg:paint(3, 1, 5, 3, 1, 6, STONE_DARK)
-			leg:paint(2, 0, 6, 4, 0, 6, CARVING)
-			leg:paint(2, 5, 2, 3, 5, 4, GOLD)
+		-- A lion's body of carved sandstone: a deep chest under a jewelled collar, carved ribs, weathered speckles.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 16, 4.5 }, { 5, 5.4, 5.6 }), STONE)
+		body:add(ellipsoid({ 0, 15.6, -2 }, { 4.3, 4.4, 5.2 }), STONE)
+		body:add(ellipsoid({ 0, 16.2, -8 }, { 4.6, 5, 4.6 }), STONE)
+		body:coat(function(p, open)
+			local y, z = p[2], p[3]
+			if z > 6.6 and y > 14 and open(0, 0, 1) then
+				local k = math.floor(y - 14) % 3
+				return if k == 0 then GOLD elseif k == 1 then TEAL else LAPIS
+			end
+			if open(0, -1, 0) then
+				return STONE_DARK
+			end
+			return weathered(p)
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 7, -6 }, function(leg)
-			leg:box(3, 3, -8, 4, 9, -5, STONE)
-			leg:box(2, 0, -7, 3, 2, -6, STONE)
-			leg:box(2, 0, -5, 3, 0, -4, STONE)
-			leg:paint(2, 0, -4, 3, 0, -4, CARVING)
+		for _, s in { 1, -1 } do
+			for _, z in { 1, -1.6, -4.2 } do
+				body:trace({ { 0, 18.4, z }, { 0, 15.4, z - 0.6 }, { 0, 12.6, z - 0.2 } }, { -s, 0, 0 }, CARVING)
+			end
+		end
+
+		-- A pharaoh's head: a calm stone face framed by a striped headdress, a long striped beard, glowing eyes
+		-- lined in kohl, and a cobra rearing at its brow.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 18.5, 7.6, 3 }, { 0, 22, 9.4, 2.6 } }), STONE)
+		head:add(ellipsoid({ 0, 26.4, 9.8 }, { 4.2, 3.6, 3.6 }), GOLD)
+		head:carve(ellipsoid({ 0, 24.6, 13.8 }, { 2.7, 3.2, 2.7 }))
+		head:add(ellipsoid({ 0, 24.6, 11 }, { 2.8, 3.2, 2.9 }), STONE)
+		head:add(ellipsoid({ 0, 24.4, 13.7 }, { 0.6, 0.95, 0.7 }), STONE)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 3.1 * s, 21.6, 11 }, { 0.85, 3.6, 1.15 }), GOLD)
+		end
+		head:add(rod({ { 0, 22, 12.4, 0.95 }, { 0, 19, 13, 0.8 } }), GOLD)
+		head:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if math.abs(x) < 1.1 and y < 22.2 and z > 11.6 then
+				return stripes(y, 0.6)
+			end
+			local face = (x / 2.85) ^ 2 + ((y - 24.6) / 3.25) ^ 2 + ((z - 11) / 2.95) ^ 2 <= 1
+				or (x / 0.65) ^ 2 + ((y - 24.4) / 1) ^ 2 + ((z - 13.7) / 0.75) ^ 2 <= 1
+			if not face and y > 17.5 then
+				if y > 26.4 and z > 10.6 and z < 12.6 then
+					return GOLD
+				end
+				return stripes(y, 0.85)
+			end
+			return weathered(p)
 		end)
 
-		-- A lion's tail curling up over its rump, with a gold band and a dark tuft.
-		local tail = pet:limb("Tail", { 0, 9, -8 })
-		tail:box(-1, 8, -10, 0, 9, -9, STONE)
-		tail:box(-1, 10, -11, 0, 12, -11, STONE)
-		tail:box(-1, 13, -11, 0, 13, -10, STONE)
-		tail:box(-2, 13, -9, 1, 15, -8, STONE_DARK)
-		tail:paint(-1, 10, -11, 0, 10, -11, GOLD)
+		-- Lion's legs on big paws, carved toes and gold anklets.
+		local front = newSculpt(U)
+		front:add(rod({ { 3.4, 14.5, 5.4, 2.4 }, { 3.6, 8, 6.2, 1.9 }, { 3.6, 2.6, 6.4, 1.8 } }), STONE)
+		front:add(ellipsoid({ 3.6, 1.5, 7.6 }, { 2.1, 1.5, 2.6 }), STONE)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 3.6, 15.2, -8 }, { 2.8, 4.6, 3.8 }), STONE)
+		back:add(rod({ { 3.8, 11, -9.6, 2 }, { 3.9, 6, -10.6, 1.5 }, { 3.9, 2.6, -9.6, 1.6 } }), STONE)
+		back:add(ellipsoid({ 3.9, 1.5, -8.6 }, { 2, 1.5, 2.4 }), STONE)
+		for _, leg in { front, back } do
+			leg:coat(function(p)
+				if p[2] > 3.4 and p[2] < 4.8 then
+					return if p[2] < 4 then LAPIS else GOLD
+				end
+				return weathered(p)
+			end)
+		end
+		for _, dx in { -0.7, 0.7 } do
+			front:trace({ { 3.6 + dx, 2.8, 0 }, { 3.6 + dx, 0.4, 0 } }, { 0, 0, -1 }, CARVING)
+		end
 
-		pet:light(GOLD, 2, 14)
-		pet:particles("Sparkles", GOLD, 6)
-		pet:seat(0, 12, -3)
+		-- A lion's tail curling up at the end into a tuft.
+		local tail = newSculpt(U)
+		tail:add(
+			rod({ { 0, 18, -12, 1.15 }, { 0, 15, -14.6, 1 }, { 0, 11, -15.6, 0.85 }, { 0, 9.4, -14, 0.75 } }),
+			STONE
+		)
+		tail:add(ellipsoid({ 0, 9.8, -12.6 }, { 1.3, 1.5, 1.5 }), STONE_DARK)
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 16, 0 }))
+		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, STONE)
+		-- Stone wings folded up over its back like a fan, long feathers inlaid with teal and gold at their tips.
+		for _, s in { 1, -1 } do
+			T.triangle(bodyLimb, { 3.2 * s, 21.2, 4.6 }, { 4.6 * s, 27, -6.5 }, { 4.2 * s, 19.6, -7 }, 0.9, STONE.color)
+			for index = 0, 6 do
+				local t = index / 6
+				local root = vlerp({ 3.3 * s, 21.6, 4.4 }, { 3.9 * s, 20.4, -2 }, t)
+				local direction = { 0.12 * s, 0.62 - t * 0.6, -1 }
+				local length = 11.5 - index * 0.35
+				feather(bodyLimb, T.at(root), direction, length / U, 2.5 / U, 0.6 / U, { s, 0.3, 0 }, {
+					{ color = STONE_LIGHT.color, to = 0.7 },
+					{ color = TEAL.color, to = 0.85 },
+					{ color = GOLD.color, to = 1 },
+				})
+			end
+			for index = 0, 3 do
+				local root = vlerp({ 3.1 * s, 22.2, 4.8 }, { 3.5 * s, 21.6, 0.4 }, index / 3)
+				feather(
+					bodyLimb,
+					T.at(root),
+					{ 0.1 * s, 0.5 - index * 0.1, -1 },
+					5.4 / U,
+					2.4 / U,
+					0.7 / U,
+					{ s, 0.3, 0 },
+					{
+						{ color = STONE.color, to = 0.78 },
+						{ color = LAPIS.color, to = 1 },
+					}
+				)
+			end
+		end
+		local headLimb = pet:limb("Head", T.at({ 0, 18.5, 7.6 }))
+		head:draw(headLimb, { body }, STONE)
+		for _, s in { 1, -1 } do
+			local z = frontOf(head, 1.15 * s, 25.4)
+			T.blade(headLimb, { 0.45 * s, 25.4, z - 0.15 }, { 2.1 * s, 25.6, z - 0.45 }, 0.95, 0.4, { 0, 0, 1 }, EYE)
+			T.taper(headLimb, { 2.1 * s, 25.6, z - 0.45 }, { 2.9 * s, 25.4, z - 0.9 }, 0.95, 0.4, { 0, 0, 1 }, EYE)
+			T.blade(
+				headLimb,
+				{ 0.65 * s, 25.4, z - 0.05 },
+				{ 1.9 * s, 25.55, z - 0.3 },
+				0.6,
+				0.4,
+				{ 0, 0, 1 },
+				GLOW,
+				NEON
+			)
+			T.blade(
+				headLimb,
+				{ 0.4 * s, 26.5, z - 0.2 },
+				{ 2.4 * s, 26.6, z - 0.6 },
+				0.35,
+				0.4,
+				{ 0, 0, 1 },
+				CARVING.color
+			)
+		end
+		local chin = frontOf(head, 0, 23)
+		T.blade(headLimb, { -0.8, 22.9, chin - 0.1 }, { 0.8, 22.9, chin - 0.1 }, 0.3, 0.3, { 0, 0, 1 }, CARVING.color)
+		T.branch(headLimb, { { 0, 27.8, 12.4 }, { 0, 29, 13 }, { 0, 29.8, 12.6 } }, 0.7, { 0, 0, 1 }, GOLD.color)
+		T.ball(headLimb, { 0, 29, 13.3 }, { 1.2, 1.3, 0.5 }, GOLD.color)
+		T.ball(headLimb, { 0, 29.2, 13.5 }, 0.55, GLOW, NEON)
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.4, 14.5, 5.4 }), function(limb)
+			front:draw(limb, { body }, STONE)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.6, 15, -8 }), function(limb)
+			back:draw(limb, { body }, STONE)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 18, -11.5 })), { body }, STONE)
+
+		pet:light(GOLD.color, 2, 16)
+		pet:particles("Sparkles", GOLD.color, 8)
+		pet:seat(0, 21.4 / U, -3 / U)
 	end,
 }
 
 Designs.GoldenScarab = {
 	name = "Golden Scarab",
 	skeleton = "ManyLegged",
-	scale = 0.6,
+	scale = 0.5,
 	draw = function(pet)
-		local SCARAB = rgb(240, 186, 50)
-		local GOLD_LIGHT = rgb(255, 224, 120)
-		local BRONZE = rgb(196, 128, 38)
-		local BRONZE_DARK = rgb(120, 76, 24)
-		local TEAL = rgb(56, 180, 176)
-		local LAPIS = rgb(40, 86, 196)
-		local SEAM = rgb(86, 56, 20)
+		-- Sculpted in the units it is built in (one to a block); wings, legs, the rake of its head and the rays of
+		-- its sun are parts at any angle.
+		local U = 1
+		local T = inUnits(U)
+		local SCARAB = look(240, 186, 50)
+		local GOLD_LIGHT = look(255, 224, 120)
+		local BRONZE = look(196, 128, 38)
+		local BRONZE_DARK = look(120, 76, 24)
+		local TEAL = look(56, 180, 176)
+		local LAPIS = look(40, 86, 196)
+		local SEAM = look(86, 56, 20)
 		local SUN = rgb(255, 196, 60)
 		local SUN_CORE = rgb(255, 240, 170)
 
-		-- A rounded golden shell, split down the middle, inlaid with teal and lapis bands.
-		local body = pet:limb("Body", { 0, 3, 0 })
-		body:box(-4, 2, -6, 3, 5, 2, SCARAB)
-		body:box(-5, 3, -5, 4, 4, 1, SCARAB)
-		body:box(-3, 6, -5, 2, 6, 1, SCARAB)
-		body:box(-2, 7, -4, 1, 7, 0, SCARAB)
-		body:box(-3, 3, -7, 2, 5, -7, SCARAB)
-		body:box(-1, 8, -4, 0, 8, 0, BRONZE)
-		body:paint(-1, 2, -7, 0, 5, -7, SEAM)
-		for _, band in { { -3, TEAL }, { -1, LAPIS } } do
-			local z, color = band[1], band[2]
-			body:paint(-5, 3, z, 4, 4, z, color)
-			body:paint(-4, 5, z, 3, 5, z, color)
-			body:paint(-3, 6, z, 2, 6, z, color)
-		end
-		body:paint(-2, 7, -4, -2, 7, -4, GOLD_LIGHT)
-		body:paint(1, 7, -2, 1, 7, -2, GOLD_LIGHT)
-		-- A bronze plate behind its head, rimmed in pale gold.
-		body:box(-4, 2, 3, 3, 5, 5, BRONZE)
-		body:box(-3, 6, 3, 2, 6, 4, BRONZE)
-		body:paint(-4, 5, 5, 3, 5, 5, GOLD_LIGHT)
-		-- Jewelled wings spread out from under its shell, like on a temple wall.
-		body:boxPair(5, 4, -4, 7, 4, 1, SCARAB)
-		body:boxPair(8, 4, -6, 9, 4, 0, LAPIS)
-		body:boxPair(10, 4, -6, 10, 4, -2, TEAL)
-		body:boxPair(11, 4, -5, 11, 4, -3, TEAL)
-		body:boxPair(8, 5, -5, 10, 5, -3, GOLD_LIGHT)
-		body:paintPair(8, 4, -3, 9, 4, -3, SCARAB)
-		body:paintPair(10, 4, -6, 11, 4, -6, SCARAB)
-
-		-- A shovel head with a toothed edge, clubbed feelers, and a horn holding up a blazing sun.
-		local head = pet:limb("Head", { 0, 3, 6 })
-		head:box(-3, 2, 6, 2, 4, 7, BRONZE_DARK)
-		head:box(-3, 2, 8, 2, 2, 8, BRONZE)
-		head:boxPair(2, 2, 9, 2, 2, 9, BRONZE)
-		head:boxPair(0, 2, 9, 0, 2, 9, BRONZE)
-		eyes(head, 2, 3, 7, 1, 1)
-		head:boxPair(2, 5, 7, 2, 5, 7, BRONZE_DARK)
-		head:boxPair(3, 6, 7, 3, 6, 7, BRONZE_DARK)
-		head:boxPair(3, 6, 8, 3, 7, 8, GOLD_LIGHT)
-		head:box(-1, 5, 6, 0, 8, 6, BRONZE_DARK)
-		head:box(-1, 9, 6, 0, 9, 7, SUN, NEON)
-		head:box(-2, 10, 6, 1, 10, 7, SUN, NEON)
-		head:box(-3, 11, 6, 2, 12, 7, SUN, NEON)
-		head:box(-2, 13, 6, 1, 13, 7, SUN, NEON)
-		head:box(-1, 14, 6, 0, 14, 7, SUN, NEON)
-		head:paint(-2, 11, 7, 1, 12, 7, SUN_CORE, NEON)
-		head:paint(-1, 10, 7, 0, 13, 7, SUN_CORE, NEON)
-		head:boxPair(3, 11, 6, 4, 12, 6, SUN, NEON)
-		head:box(-1, 15, 6, 0, 16, 6, SUN, NEON)
-		head:boxPair(2, 14, 6, 2, 14, 6, SUN, NEON)
-
-		-- Six spiny legs; the front pair are toothed for digging.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 4, 3, 4.5 }, function(leg)
-			leg:box(4, 2, 4, 5, 3, 4, BRONZE_DARK)
-			leg:box(6, 0, 5, 6, 3, 5, BRONZE_DARK)
-			leg:box(7, 1, 5, 7, 1, 5, BRONZE)
-			leg:box(7, 3, 5, 7, 3, 5, BRONZE)
+		-- A domed golden shell banded in teal and lapis enamel, split by a dark seam, behind a bronze shield.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 5.6, -2.4 }, { 5.4, 3.8, 6 }), SCARAB)
+		body:add(ellipsoid({ 0, 5.2, 4.2 }, { 4.4, 2.8, 2.6 }), BRONZE)
+		body:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if z < 1.7 then
+				if math.abs(x) < 0.55 and open(0, 1, 0) then
+					return SEAM
+				end
+				if math.abs(z + 0.7) < 0.55 then
+					return TEAL
+				elseif math.abs(z + 3.9) < 0.55 then
+					return LAPIS
+				elseif math.abs(z + 6.6) < 0.45 then
+					return TEAL
+				end
+				if open(0, -1, 0) then
+					return BRONZE_DARK
+				end
+				return if noise(p) < 0.1 then GOLD_LIGHT else nil
+			end
+			if y > 6.8 or (math.abs(x) > 3.6 and open(0, 1, 0)) then
+				return SCARAB
+			end
+			return nil
 		end)
-		local function leg(z: number)
-			return function(limb)
-				limb:box(5, 3, z, 6, 3, z, BRONZE_DARK)
-				limb:box(7, 0, z, 7, 3, z, BRONZE_DARK)
-				limb:box(8, 2, z, 8, 2, z, BRONZE)
+
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 4.4, 7.3 }, { 2.9, 1.8, 1.9 }), BRONZE_DARK)
+
+		local tail = newSculpt(U)
+		tail:add(rod({ { 0, 4, -7.6, 1.4 }, { 0, 3.4, -9.4, 0.9 } }), BRONZE)
+
+		local bodyLimb = pet:limb("Body", T.at({ 0, 4.5, 0 }))
+		body:draw(bodyLimb, { head, tail }, SCARAB)
+		-- Jewelled wings spread out at its sides: long feathers banded in lapis, teal and gold.
+		for _, s in { 1, -1 } do
+			for index, tip in { { 13.4, 6.8, 0.4 }, { 13.8, 6.2, -2.4 }, { 13, 5.6, -5 }, { 11.4, 5.2, -7.4 } } do
+				local root = { 4.4 * s, 5.8, 0.2 - index * 0.9 }
+				local target = { tip[1] * s, tip[2], tip[3] }
+				local d = vsub(target, root)
+				feather(bodyLimb, T.at(root), d, vlength(d) / U, (2 - index * 0.15) / U, 0.5 / U, { 0, 1, 0 }, {
+					{ color = LAPIS.color, to = 0.4 },
+					{ color = TEAL.color, to = 0.62 },
+					{ color = SCARAB.color, to = 0.86 },
+					{ color = GOLD_LIGHT.color, to = 1 },
+				})
+			end
+			T.triangle(bodyLimb, { 4.2 * s, 6, 1.6 }, { 9.4 * s, 7, 0.6 }, { 4.4 * s, 5.6, -2.6 }, 0.7, SCARAB.color)
+		end
+		-- A bronze head with dark eyes and a rake of golden teeth, pushing a blazing sun.
+		local headLimb = pet:limb("Head", T.at({ 0, 4.4, 6 }))
+		head:draw(headLimb, { body }, SCARAB)
+		for _, s in { 1, -1 } do
+			T.ball(headLimb, { 2.6 * s, 4.7, 7.6 }, 0.95, EYE)
+			for _, tooth in { 0.5, 1.5, 2.4 } do
+				T.taper(
+					headLimb,
+					{ tooth * s, 4.2, 8.6 },
+					{ tooth * 1.15 * s, 4, 10.2 },
+					0.7,
+					0.5,
+					{ 0, 1, 0 },
+					GOLD_LIGHT.color
+				)
+			end
+			T.branch(
+				headLimb,
+				{ { 1.6 * s, 5.4, 8.2 }, { 2.8 * s, 6.8, 9.4 }, { 3.6 * s, 7.4, 9.8 } },
+				0.4,
+				{ 0, 0, 1 },
+				BRONZE.color
+			)
+			T.ball(headLimb, { 3.7 * s, 7.5, 9.9 }, 0.7, BRONZE.color)
+		end
+		T.blade(headLimb, { 0, 5.4, 7.4 }, { 0, 8.4, 8.4 }, 0.8, 0.8, { 0, 0, 1 }, BRONZE.color)
+		T.ball(headLimb, { 0, 10.4, 8.8 }, { 5, 5, 1.4 }, SUN, NEON)
+		T.ball(headLimb, { 0, 10.4, 9.4 }, { 3, 3, 0.8 }, SUN_CORE, NEON)
+		for ray = 0, 7 do
+			local angle = ray * math.pi / 4
+			local out = { math.cos(angle), math.sin(angle), 0 }
+			T.taper(
+				headLimb,
+				vadd({ 0, 10.4, 8.8 }, vscale(out, 2.2)),
+				vadd({ 0, 10.4, 8.8 }, vscale(out, 4.4)),
+				0.8,
+				0.4,
+				{ 0, 0, 1 },
+				SUN,
+				NEON
+			)
+		end
+
+		local function leg(z: number, spread: number)
+			return function(limb: Limb)
+				local hip, knee = { 4, 4.2, z }, { 6.8, 5.6, z + spread * 0.5 }
+				local ankle, foot = { 8.6, 2.6, z + spread }, { 9.4, 0.25, z + spread * 1.5 }
+				T.blade(limb, hip, knee, 1.1, 0.9, { 0, 1, 0 }, BRONZE_DARK.color)
+				T.blade(limb, knee, ankle, 1, 0.8, { 0, 0, 1 }, BRONZE.color)
+				T.taper(limb, ankle, foot, 0.8, 0.7, { 0, 0, 1 }, BRONZE_DARK.color)
+				T.taper(
+					limb,
+					vlerp(knee, ankle, 0.5),
+					vadd(vlerp(knee, ankle, 0.5), { 1, 0.6, 0.3 }),
+					0.4,
+					0.3,
+					{ 0, 0, 1 },
+					GOLD_LIGHT.color
+				)
+				T.ball(limb, knee, 1.1, SCARAB.color)
 			end
 		end
-		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", { 5, 3.5, 0.5 }, leg(0))
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 5, 3.5, -3.5 }, leg(-4))
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 4, 4.2, 3.6 }), leg(3.6, 1.4))
+		pet:limbPair("MiddleLeftLeg", "MiddleRightLeg", T.at({ 4.4, 4.2, -0.6 }), leg(-0.6, 0))
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 4.2, 4.2, -4.4 }), leg(-4.4, -1.4))
+		tail:draw(pet:limb("Tail", T.at({ 0, 4, -7.4 })), { body }, SCARAB)
 
-		local tail = pet:limb("Tail", { 0, 3, -7 })
-		tail:box(-1, 2, -8, 0, 3, -8, BRONZE)
-
-		pet:light(SUN, 2.2, 14)
-		pet:particles("Sparkles", SUN, 8)
-		pet:seat(0, 9, -2)
+		pet:light(SUN, 2.4, 16)
+		pet:particles("Sparkles", SUN, 10)
+		pet:seat(0, 9.6 / U, -2.4 / U)
 	end,
 }
 
