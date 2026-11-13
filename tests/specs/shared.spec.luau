@@ -6,6 +6,8 @@ return function(harness)
 
 	local CycleClock = harness.load("src/shared/CycleClock")
 	local EggMotion = harness.load("src/shared/EggMotion")
+	local EggSpec = harness.load("src/shared/EggSpec")
+	local LuckBoost = harness.load("src/shared/LuckBoost")
 	local NumberFormat = harness.load("src/shared/NumberFormat")
 	local Runway = harness.load("src/shared/Runway")
 	local StaminaMath = harness.load("src/shared/StaminaMath")
@@ -144,6 +146,102 @@ return function(harness)
 			expect.equal(NumberFormat.clock(0), "0:00")
 			expect.equal(NumberFormat.clock(9.2), "0:10")
 			expect.equal(NumberFormat.clock(133), "2:13")
+		end)
+	end)
+
+	describe("LuckBoost", function()
+		it("runs a boost for its duration", function()
+			local boosts = LuckBoost.add({}, 2, 900, 100)
+			expect.equal(LuckBoost.current(boosts, 100), 2)
+			local luck, endsAt = LuckBoost.current(boosts, 500)
+			expect.equal(luck, 2)
+			expect.equal(endsAt, 1000)
+			expect.equal(LuckBoost.current(boosts, 1000), 1)
+			expect.equal(select(2, LuckBoost.current(boosts, 1000)), nil)
+		end)
+
+		it("adds the time of a boost bought while the same one is running", function()
+			local boosts = LuckBoost.add({}, 2, 900, 0)
+			LuckBoost.add(boosts, 2, 900, 300)
+			expect.equal(#boosts, 1)
+			expect.equal(boosts[1].endsAt, 1800)
+		end)
+
+		it("uses the strongest boost, keeping a weaker one waiting underneath", function()
+			local boosts = LuckBoost.add({}, 2, 900, 0)
+			LuckBoost.add(boosts, 4, 300, 100)
+			local luck, endsAt = LuckBoost.current(boosts, 200)
+			expect.equal(luck, 4)
+			expect.equal(endsAt, 400)
+			-- The x4 runs out; the x2 still has its time left.
+			luck, endsAt = LuckBoost.current(boosts, 401)
+			expect.equal(luck, 2)
+			expect.equal(endsAt, 900)
+		end)
+
+		it("forgets boosts that have run out", function()
+			local boosts = LuckBoost.add({}, 2, 10, 0)
+			LuckBoost.add(boosts, 4, 100, 0)
+			LuckBoost.prune(boosts, 50)
+			expect.equal(#boosts, 1)
+			expect.equal(boosts[1].multiplier, 4)
+			-- An expired boost bought again starts fresh.
+			LuckBoost.add(boosts, 4, 100, 500)
+			expect.equal(boosts[1].endsAt, 600)
+		end)
+	end)
+
+	describe("EggSpec luck", function()
+		local function countRare(zoneId, luck)
+			local rare = 0
+			for step = 0, 9999 do
+				if EggSpec.rollRarity(zoneId, step / 10000, luck) ~= "Common" then
+					rare += 1
+				end
+			end
+			return rare
+		end
+
+		it("changes nothing at luck 1", function()
+			for step = 0, 999 do
+				expect.equal(EggSpec.rollRarity(2, step / 1000, 1), EggSpec.rollRarity(2, step / 1000))
+			end
+		end)
+
+		it("makes rarer eggs more likely without breaking the zone's rarity cap", function()
+			local normal, lucky, luckier = countRare(1, 1), countRare(1, 2), countRare(1, 4)
+			expect.truthy(lucky > normal, "x2 beats x1")
+			expect.truthy(luckier > lucky, "x4 beats x2")
+			for step = 0, 999 do
+				local rarity = EggSpec.rollRarity(1, step / 1000, 4)
+				expect.truthy(rarity ~= "Mythic" and rarity ~= "Secret" and rarity ~= "Eternal", rarity)
+			end
+		end)
+	end)
+
+	describe("Runway wall gaps", function()
+		it("puts gaps in both walls of every zone, clear of the zone's start and end", function()
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local startZ = Runway.zoneStartZ(zoneId)
+				local sides = {}
+				local lastEnd = { [1] = -math.huge, [-1] = -math.huge }
+				for _, gap in Runway.wallGaps(zoneId) do
+					expect.truthy(gap.side == 1 or gap.side == -1, "side")
+					sides[gap.side] = true
+					expect.near(gap.endZ - gap.startZ, Runway.WALL_GAP_LENGTH)
+					expect.truthy(gap.startZ >= startZ + 60, "clear of the sign and egg drop")
+					expect.truthy(gap.endZ <= startZ + Runway.ZONE_LENGTH - 30, "clear of the next zone")
+					expect.truthy(gap.startZ > lastEnd[gap.side], "gaps on one side do not overlap")
+					lastEnd[gap.side] = gap.endZ
+				end
+				expect.truthy(sides[1] and sides[-1], "zone " .. zoneId .. " has gaps on both sides")
+			end
+		end)
+
+		it("does not repeat the same pattern in neighbouring zones", function()
+			for zoneId = 2, Runway.ZONE_COUNT do
+				expect.truthy(Runway.wallGaps(zoneId)[1].side ~= Runway.wallGaps(zoneId - 1)[1].side, "zone " .. zoneId)
+			end
 		end)
 	end)
 end

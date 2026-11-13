@@ -10,6 +10,8 @@ local ORDER = {
 	"EggController",
 	"RideController",
 	"HudController",
+	"ShopController",
+	"SettingsController",
 }
 
 local loaded = {}

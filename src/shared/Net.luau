@@ -14,14 +14,20 @@ local EVENTS = {
 	"EggMounted", -- (eggId, userId, time)
 	"EggLeft", -- (eggId, time, bouncesLeft, lateral)
 	"Announce", -- (text, colorRgb?)
+	"LuckChanged", -- (boosts): see LuckBoost
 	-- Server -> one player
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
 	"RideEnded", -- (reason, { eggId, zone, rarity })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"InventoryUpdated", -- (eggCount)
+	"PlayerStateUpdated", -- ({ coins, penLevel, passes }): sent whenever any of them changes
+	"PurchaseResult", -- (itemId, ok, message)
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
+	"RequestPurchase", -- (itemId) a Robux item from Config/Shop; the server shows Roblox's purchase prompt
+	"BuyWithCoins", -- (itemId) an item with a coin price
+	"SaveSettings", -- ({ [key]: value }) see Config/Settings
 	"DevCommand", -- (command) Studio only
 }
 
@@ -33,6 +39,8 @@ local UNRELIABLE_EVENTS = {
 
 local FUNCTIONS = {
 	"GetSnapshot", -- player -> server: () -> { eggs }
+	"GetShopState", -- player -> server: () -> { coins, penLevel, passes, luck }
+	"GetSettings", -- player -> server: () -> { [key]: value }
 }
 
 local Net = {}

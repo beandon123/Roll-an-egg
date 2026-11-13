@@ -1,4 +1,5 @@
--- Builds the placeholder map out of plain parts: the hub, the five zone slabs, and the zone signs.
+-- Builds the placeholder map out of plain parts: the hub, the start zone, the five walled zone slabs, and the
+-- zone signs.
 -- Final art will replace this; gameplay does not depend on any of these parts (it reads positions from
 -- Shared/Runway), so swapping the map never breaks the rules.
 --
@@ -17,8 +18,13 @@ local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
 local SLAB_THICKNESS = 4
-local SIGN_HEIGHT = 26
+local SIGN_HEIGHT = 30
 local PLOT_COUNT = 8
+-- The walls down both sides of the runway.
+local WALL_HEIGHT = 22
+local WALL_THICKNESS = 8
+-- The painted strip just before the runway where players line up.
+local START_ZONE_DEPTH = 26
 
 local MapService = {}
 
@@ -116,6 +122,148 @@ local function buildHub(map: Instance)
 	end
 end
 
+-- Text painted flat on top of a part, readable by someone standing at the hub looking down the runway.
+local function addFloorText(part: Part, text: string)
+	local gui = Instance.new("SurfaceGui")
+	-- The part is laid with its Front face pointing up and its top edge pointing down the runway; see buildStartZone.
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 12
+	gui.LightInfluence = 0.3
+	gui.Parent = part
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.62, 0.62)
+	label.Font = Enum.Font.LuckiestGuy
+	label.Text = text
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextScaled = true
+	label.Parent = gui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(40, 28, 20)
+	stroke.Thickness = 6
+	stroke.Parent = label
+end
+
+-- A painted strip on the hub floor right where the runway begins, like a race's starting line.
+local function buildStartZone(map: Instance)
+	local folder = Instance.new("Folder")
+	folder.Name = "StartZone"
+	folder.Parent = map
+
+	local centerZ = -START_ZONE_DEPTH / 2 - 1
+	-- Front face up, top edge pointing down the runway (+z): text on the Front face then reads the right way
+	-- round for players walking from the hub to the runway.
+	local function flat(name: string, size: Vector2, lift: number, color: Color3): Part
+		local part = newPart(name, folder)
+		part.Size = Vector3.new(size.X, size.Y, 0.2)
+		local center = Vector3.new(0, Runway.BASE_Y + lift, centerZ)
+		part.CFrame = CFrame.lookAt(center, center + Vector3.yAxis, Vector3.zAxis)
+		part.Color = color
+		part.CanCollide = false
+		part.CanQuery = false
+		return part
+	end
+
+	flat("Border", Vector2.new(Runway.WIDTH + 4, START_ZONE_DEPTH + 4), 0.05, Color3.fromRGB(255, 255, 255))
+	local strip = flat("Strip", Vector2.new(Runway.WIDTH, START_ZONE_DEPTH), 0.12, Color3.fromRGB(238, 214, 160))
+	addFloorText(strip, "START ZONE")
+
+	-- Two yolk-yellow lane marks either side of the words.
+	for _, side in { -1, 1 } do
+		local mark =
+			flat(if side < 0 then "MarkRight" else "MarkLeft", Vector2.new(14, 5), 0.2, Color3.fromRGB(255, 196, 40))
+		local center = Vector3.new(side * Runway.WIDTH * 0.4, Runway.BASE_Y + 0.2, centerZ)
+		mark.CFrame = CFrame.lookAt(center, center + Vector3.yAxis, Vector3.zAxis)
+	end
+end
+
+-- A part lying along the runway between two distances down it, following the slope. `lateral` is its centre's
+-- sideways position and `lift` how far its centre sits above the runway surface.
+local function slopedPart(
+	name: string,
+	parent: Instance,
+	fromZ: number,
+	toZ: number,
+	lateral: number,
+	lift: number,
+	size: Vector2
+): Part
+	local angle = math.atan(Runway.SLOPE)
+	local along = Vector3.new(0, -math.sin(angle), math.cos(angle))
+	local normal = Vector3.new(0, math.cos(angle), math.sin(angle))
+	local middleZ = (fromZ + toZ) / 2
+	local center = Vector3.new(lateral, Runway.surfaceY(middleZ), middleZ) + normal * lift
+	local part = newPart(name, parent)
+	part.Size = Vector3.new(size.X, size.Y, (toZ - fromZ) / math.cos(angle))
+	part.CFrame = CFrame.lookAt(center, center + along, normal)
+	return part
+end
+
+-- The walls down both sides of one zone, broken by the gaps in Shared/Runway. Each gap has a red strip along the
+-- runway's edge, so it is easy to spot before walking into it.
+local function buildWalls(folder: Instance, zone)
+	local startZ = Runway.zoneStartZ(zone.id)
+	local gaps = Runway.wallGaps(zone.id)
+	for _, side in { -1, 1 } do
+		local sideName = if side < 0 then "Right" else "Left"
+		local lateral = side * (Runway.WIDTH / 2 + WALL_THICKNESS / 2)
+
+		-- The stretches of wall between this side's gaps.
+		local stretches = {}
+		local from = startZ
+		for _, gap in gaps do
+			if gap.side == side then
+				table.insert(stretches, { from, gap.startZ })
+				from = gap.endZ
+
+				local strip = slopedPart(
+					"GapWarning" .. sideName,
+					folder,
+					gap.startZ,
+					gap.endZ,
+					side * (Runway.WIDTH / 2 - 1),
+					0.1,
+					Vector2.new(2, 0.2)
+				)
+				strip.Color = Color3.fromRGB(255, 70, 60)
+				strip.Material = Enum.Material.Neon
+				strip.CanCollide = false
+				strip.CanQuery = false
+			end
+		end
+		table.insert(stretches, { from, startZ + Runway.ZONE_LENGTH })
+
+		for index, stretch in stretches do
+			local wall = slopedPart(
+				`Wall{sideName}{index}`,
+				folder,
+				stretch[1],
+				stretch[2],
+				lateral,
+				(WALL_HEIGHT - SLAB_THICKNESS) / 2,
+				Vector2.new(WALL_THICKNESS, WALL_HEIGHT + SLAB_THICKNESS)
+			)
+			wall.Color = rgb(zone.accent)
+
+			local cap = slopedPart(
+				`Cap{sideName}{index}`,
+				folder,
+				stretch[1],
+				stretch[2],
+				lateral,
+				WALL_HEIGHT + 0.75,
+				Vector2.new(WALL_THICKNESS + 2, 1.5)
+			)
+			cap.Color = rgb(zone.ground)
+		end
+	end
+end
+
 local function buildRunway(map: Instance)
 	local angle = math.atan(Runway.SLOPE)
 	-- Unit vectors along the slope (downhill) and straight out of its surface.
@@ -131,24 +279,33 @@ local function buildRunway(map: Instance)
 		local middleZ = startZ + Runway.ZONE_LENGTH / 2
 
 		local slab = newPart("Ground", folder)
-		slab.Size = Vector3.new(Runway.WIDTH, SLAB_THICKNESS, Runway.ZONE_LENGTH / math.cos(angle))
+		local slopeLength = Runway.ZONE_LENGTH / math.cos(angle)
+		slab.Size = Vector3.new(Runway.WIDTH, SLAB_THICKNESS, slopeLength)
 		local surfaceMiddle = Vector3.new(0, Runway.surfaceY(middleZ), middleZ)
 		local center = surfaceMiddle - normal * (SLAB_THICKNESS / 2)
 		slab.CFrame = CFrame.lookAt(center, center + along, normal)
 		slab.Color = rgb(zone.ground)
 
-		-- A sign over the start of the zone: its name and the stamina its eggs need.
+		buildWalls(folder, zone)
+
+		-- A sign over the start of the zone, held up by posts standing on the walls: the zone's name and the
+		-- stamina its eggs need.
 		local surfaceStart = Runway.surfaceY(startZ)
+		local signTop = SIGN_HEIGHT + 4.5
 		for _, side in { -1, 1 } do
 			local post = newPart("SignPost", folder)
-			post.Size = Vector3.new(3, SIGN_HEIGHT + 8, 3)
-			post.Position = Vector3.new(side * (Runway.WIDTH / 2 + 3), surfaceStart + (SIGN_HEIGHT + 8) / 2 - 4, startZ)
+			post.Size = Vector3.new(3, signTop - WALL_HEIGHT, 3)
+			post.Position = Vector3.new(
+				side * (Runway.WIDTH / 2 + WALL_THICKNESS / 2),
+				surfaceStart + (WALL_HEIGHT + signTop) / 2,
+				startZ + 2
+			)
 			post.Color = rgb(zone.accent)
 		end
 
 		local sign = newPart("Sign", folder)
-		sign.Size = Vector3.new(Runway.WIDTH + 9, 9, 1.5)
-		sign.Position = Vector3.new(0, surfaceStart + SIGN_HEIGHT, startZ)
+		sign.Size = Vector3.new(Runway.WIDTH + WALL_THICKNESS + 4, 9, 1.5)
+		sign.Position = Vector3.new(0, surfaceStart + SIGN_HEIGHT, startZ + 2)
 		sign.Color = rgb(zone.accent)
 		local low, high = staminaRange(zone)
 		local subtitle = `Eggs need {NumberFormat.abbreviate(low)} - {NumberFormat.abbreviate(high)} stamina`
@@ -192,6 +349,7 @@ function MapService.Init()
 	map.Name = "Map"
 
 	buildHub(map)
+	buildStartZone(map)
 	buildRunway(map)
 
 	map.Parent = Workspace

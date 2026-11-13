@@ -15,6 +15,7 @@ local CycleClock = require(Shared.CycleClock)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
+local Shop = require(Shared.Config.Shop)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -76,6 +77,15 @@ local function updateFocusParts(time: number)
 			end
 		end
 	end
+end
+
+-- Max Stamina from what the player owns: the base plus Max Stamina bought in the shop, times their doublings.
+local function maxStaminaOf(player: Player): number
+	local data = DataService.GetData(player)
+	if data == nil then
+		return Tuning.BASE_MAX_STAMINA
+	end
+	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, data.MaxStaminaBonus, data.StaminaMultiplier)
 end
 
 local function killCharacter(player: Player)
@@ -246,7 +256,7 @@ end
 local function onDataLoaded(player: Player, _data)
 	playersByUserId[player.UserId] = player
 	createFocus(player)
-	sim:addRider(player.UserId, Tuning.BASE_MAX_STAMINA, Tuning.BASE_AGILITY, now())
+	sim:addRider(player.UserId, maxStaminaOf(player), Tuning.BASE_AGILITY, now())
 
 	player.CharacterAdded:Connect(function(character)
 		hookCharacter(player, character)
@@ -273,7 +283,17 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other services
 
--- Changes a player's Max Stamina (upgrades will call this; for now only the Studio test panel does).
+-- Works a player's Max Stamina out again from what they own. Call after anything that changes it.
+function RunwayService.RefreshMaxStamina(player: Player)
+	sim:setMaxStamina(player.UserId, maxStaminaOf(player), now())
+end
+
+-- Server luck for every egg dropped from now on (1 = normal). See Shared/LuckBoost.
+function RunwayService.SetLuck(luck: number)
+	sim:setLuck(luck)
+end
+
+-- Sets a player's Max Stamina directly, ignoring what they own (only the Studio test panel does this).
 function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
 end

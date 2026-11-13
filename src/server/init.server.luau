@@ -10,6 +10,9 @@ local ORDER = {
 	"DataService",
 	"RunwayService",
 	"MapService",
+	"ShopService",
+	"SettingsService",
+	"LeaderboardService",
 	"DevService",
 }
 

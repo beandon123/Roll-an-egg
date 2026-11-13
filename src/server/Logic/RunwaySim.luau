@@ -113,6 +113,8 @@ export type RunwaySim = typeof(setmetatable(
 		nextSpawnAt: { [number]: number },
 		phase: Phase,
 		spawnRateMultiplier: number,
+		-- Server luck (1 = normal): rarer eggs drop more often. See Shared/LuckBoost.
+		luck: number,
 		events: { Event },
 	},
 	RunwaySim
@@ -128,6 +130,7 @@ function RunwaySim.new(random: () -> number): RunwaySim
 		nextSpawnAt = {},
 		phase = "Open" :: Phase,
 		spawnRateMultiplier = 1,
+		luck = 1,
 		events = {},
 	}, RunwaySim)
 	return self
@@ -187,7 +190,7 @@ end
 
 -- Drops a new egg at the start of a zone. `forcedRarity` skips the random roll.
 function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forcedRarity: string?): Egg?
-	local rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
+	local rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random(), self.luck)
 	local spec = EggSpec.get(zoneId, rarity)
 	if spec == nil then
 		return nil
@@ -483,6 +486,11 @@ end
 
 ----------------------------------------------------------------------------------------------------------------
 -- The clock
+
+-- Sets the server luck used for every egg dropped from now on (1 = normal).
+function RunwaySim.setLuck(self: RunwaySim, luck: number)
+	self.luck = if luck == luck then math.max(1, luck) else 1
+end
 
 -- Tells the rules which part of the runway cycle it is.
 function RunwaySim.setPhase(self: RunwaySim, phase: Phase)
