@@ -8,6 +8,7 @@ return function(harness)
 
 	local EggModels = harness.load("src/shared/EggModels")
 	local PetModels = harness.load("src/shared/PetModels")
+	local PetAnimations = harness.load("src/shared/PetAnimations")
 	local Rarities = harness.load("src/shared/Config/Rarities")
 	local Zones = harness.load("src/shared/Config/Zones")
 
@@ -196,6 +197,60 @@ return function(harness)
 				local order = Rarities.Info[model.rarity].order
 				expect.equal(model.light ~= nil, order >= 5, model.name .. " light")
 				expect.equal(model.particles ~= nil, order >= 6, model.name .. " particles")
+			end)
+		end)
+	end)
+
+	describe("PetAnimations", function()
+		it("gives every skeleton an idle and a way to get about, moving only limbs it has", function()
+			for skeleton, limbs in PetModels.SKELETONS do
+				local moves = PetAnimations.MOVES[skeleton]
+				expect.truthy(moves, skeleton .. " has moves")
+				expect.truthy(moves.Idle, skeleton .. " idles")
+				expect.truthy(PetAnimations.moveFor(skeleton, "Walk") ~= "Idle", skeleton .. " gets about")
+				for name, waves in moves do
+					for _, w in waves do
+						expect.truthy(table.find(limbs, w.limb), `{skeleton} {name} moves a {w.limb}`)
+						expect.truthy(({ rx = 1, ry = 1, rz = 1, px = 1, py = 1, pz = 1 })[w.channel], w.channel)
+					end
+				end
+			end
+		end)
+
+		it("has every pet's gait as a move, or a sensible stand-in", function()
+			each(function(model)
+				local move = PetAnimations.moveFor(model.skeleton, model.gait)
+				expect.truthy(PetAnimations.MOVES[model.skeleton][move], model.name .. " " .. move)
+				expect.truthy(move ~= "Idle", model.name .. " gets about")
+			end)
+		end)
+
+		it("flies and hovers winged pets off the ground, wings spread and beating", function()
+			each(function(model)
+				if model.skeleton ~= "Winged" then
+					return
+				end
+				expect.equal(PetAnimations.defaultMove(model.skeleton, model.gait), "Hover")
+				for _, move in { "Fly", "Hover" } do
+					local lowest, beat = math.huge, {}
+					for step = 0, 40 do
+						local pose =
+							PetAnimations.pose(model.skeleton, move, step * 0.05, model.wingSpread, model.size[2])
+						lowest = math.min(lowest, pose.Body[5])
+						table.insert(beat, pose.LeftWing[3])
+						-- The wings stay mirror images of each other.
+						expect.near(pose.LeftWing[3], -pose.RightWing[3], 1e-9, model.name .. " wings mirrored")
+					end
+					expect.truthy(lowest > model.size[2] * 0.15, `{model.name} stays up while it {move}s: {lowest}`)
+					expect.truthy(
+						math.max(table.unpack(beat)) - math.min(table.unpack(beat)) > 0.8,
+						model.name .. " beats its wings"
+					)
+				end
+				-- Folded wings open out for flight.
+				local resting = PetAnimations.pose(model.skeleton, "Idle", 0, model.wingSpread).LeftWing[3]
+				local flying = PetAnimations.pose(model.skeleton, "Hover", 0, model.wingSpread).LeftWing[3]
+				expect.truthy(flying - resting >= model.wingSpread, model.name .. " spreads its wings to fly")
 			end)
 		end)
 	end)

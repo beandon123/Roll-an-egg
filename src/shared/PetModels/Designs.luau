@@ -25,6 +25,8 @@ type Design = {
 	hover: number?,
 	-- Studs per voxel; bigger pets are drawn with more voxels, small ones get a bigger scale to be rideable.
 	scale: number?,
+	-- For winged pets: how far (radians) each wing turns out from how it is drawn to be spread for flight.
+	wingSpread: number?,
 	draw: (Pet) -> (),
 }
 
@@ -752,9 +754,32 @@ function Sculpt.mirror(self: Sculpt): Sculpt
 	return copy
 end
 
+-- Recolours the cells that show by a rule: `rule` is given each one's middle (in design units) and a test of
+-- whether the cell beside it in a direction is empty (so which way it faces), and returns a look or nil to leave it.
+function Sculpt.coat(self: Sculpt, rule: (point: { number }, open: (number, number, number) -> boolean) -> Look?)
+	local unit = self.unit
+	local changes = {}
+	for key in self.cells do
+		local x, y, z = cellAt(key)
+		if self:showing(x, y, z) then
+			local look = rule({ (x + 0.5) * unit, (y + 0.5) * unit, (z + 0.5) * unit }, function(dx, dy, dz)
+				return not self:has(x + dx, y + dy, z + dz)
+			end)
+			if look then
+				changes[key] = look
+			end
+		end
+	end
+	for key, look in changes do
+		self.cells[key] = look
+	end
+end
+
 -- `others` are the sculpts of the limbs that overlap this one: where they fill a cell too, it is hidden inside.
--- Hidden cells all take `inside` (by default the commonest look); limbs that overlap should share it.
-function Sculpt.draw(self: Sculpt, limb: Limb, others: { Sculpt }?, inside: Look?)
+-- Hidden cells all take `inside` (by default the commonest look); limbs that overlap should share it. With `asParts`,
+-- the blocks are placed in the design's own units (cells `unit` across) rather than one voxel to a cell, so clay
+-- can be finer than the rest of the pet.
+function Sculpt.draw(self: Sculpt, limb: Limb, others: { Sculpt }?, inside: Look?, asParts: boolean?)
 	-- Thin tips can end in cells touching the rest only at a corner, which would float: keep only the cells
 	-- joined, face to face or edge to edge, to the biggest piece.
 	local neighbours = {}
@@ -999,7 +1024,19 @@ function Sculpt.draw(self: Sculpt, limb: Limb, others: { Sculpt }?, inside: Look
 	for _, name in names2 do
 		local look = looks[name]
 		for _, b in cover(sets[name]) do
-			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], look.color, look.material, look.transparency)
+			if asParts then
+				local unit = self.unit
+				limb:part(
+					{ (b[1] + b[4] + 1) / 2 * unit, (b[2] + b[5] + 1) / 2 * unit, (b[3] + b[6] + 1) / 2 * unit },
+					{ (b[4] - b[1] + 1) * unit, (b[5] - b[2] + 1) * unit, (b[6] - b[3] + 1) * unit },
+					{ { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } },
+					look.color,
+					look.material,
+					look.transparency
+				)
+			else
+				limb:box(b[1], b[2], b[3], b[4], b[5], b[6], look.color, look.material, look.transparency)
+			end
 		end
 	end
 end
@@ -1057,15 +1094,6 @@ local function axesAlong(along: Vec, facing: Vec): { Vec }
 	local x = vcross(y, facing)
 	x = if vdot(x, x) < 1e-6 then squareTo(y) else vnorm(x)
 	return { x, y, vcross(x, y) }
-end
-
--- Axes for a part whose own z points along `facing`, with its own y as near to `up` (default straight up) as it can
--- be.
-local function axesFacing(facing: Vec, up: Vec?): { Vec }
-	local z = vnorm(facing)
-	local x = vcross(up or { 0, 1, 0 }, z)
-	x = if vdot(x, x) < 1e-6 then squareTo(z) else vnorm(x)
-	return { x, vcross(z, x), z }
 end
 
 -- A flat blade (a block) from `a` to `b`, `width` across and `thickness` through, its broad face towards `facing`.
@@ -1351,6 +1379,8 @@ Designs.Owl = {
 	skeleton = "Winged",
 	gait = "Waddle",
 	scale = 0.5,
+	-- Its wings hang folded at its sides: they turn out this far to fly.
+	wingSpread = 1.35,
 	draw = function(pet)
 		local BROWN = rgb(140, 98, 62)
 		local DARK = rgb(96, 64, 40)
@@ -2589,6 +2619,8 @@ Designs.AuroraOwl = {
 	skeleton = "Winged",
 	gait = "Waddle",
 	scale = 0.55,
+	-- Its wings hang folded at its sides: they turn out this far to fly.
+	wingSpread = 1.35,
 	draw = function(pet)
 		local NIGHT = rgb(30, 40, 92)
 		local NIGHT_LIGHT = rgb(52, 66, 132)
@@ -5091,79 +5123,117 @@ Designs.EternalPhoenix = {
 			end
 		end
 
-		-- A fierce golden head: a red crown, hooded brows over glowing red eyes, a hooked beak open on a throat of
-		-- fire, and a great crest of flame feathers sweeping up and back, burning at its tip.
+		-- A fierce eagle's head, sculpted in fine blocks as one solid piece: a flat crown, a hard brow jutting over
+		-- the eyes, angular cheeks, and a long hooked beak growing out of the face, parted on the fire in its throat.
+		-- The eyes are painted flat on the face, narrow and pointed, slanting up and back under the brow. A crest of
+		-- five flame plumes sweeps back from the crown, burning at its tip.
 		local head = pet:limb("Head", { 0, 24, 2.5 })
-		egg(head, { 0, 27.5, 3.6 }, { 6.6, 6.2, 7.4 }, nil, GOLD)
-		egg(head, { 0, 28.9, 2.6 }, { 6, 4.2, 6.6 }, nil, RED)
+		local function look(color: Color, material: string?): Look
+			return { color = color, material = material }
+		end
+		local FACE, FACE_DEEP, NAPE = look(rgb(255, 206, 62)), look(rgb(240, 160, 34)), look(RED)
+		local BILL, HOOK, CERE = look(BEAK), look(BEAK_TIP), look(rgb(255, 228, 120))
+		local GAPE, LID = look(rgb(90, 30, 18)), look(rgb(70, 10, 12))
+		-- Narrower from side to side than it is round: a raptor's beak.
+		local function narrow(s: Shape, squeeze: number): Shape
+			return shape(s.centre, s.radius, function(x, y, z)
+				return s.inside(x * squeeze, y, z)
+			end)
+		end
+		local skull = newSculpt(0.5)
+		skull:add(ellipsoid({ 0, 27.6, 3.4 }, { 3.1, 2.8, 3.9 }), FACE)
+		skull:add(ellipsoid({ 0, 26.2, 4.7 }, { 2.7, 1.9, 3.2 }), FACE)
+		skull:add(ellipsoid({ 0, 26.9, 1 }, { 2.8, 2.8, 2.6 }), NAPE)
+		skull:carve(shape({ 0, 31, 3 }, 6, function(x, y)
+			return y > 30.1 + math.abs(x) * 0.1
+		end))
+		-- The brow: a hard shelf over each eye, low at the beak and rising back, frowning.
 		for _, s in { 1, -1 } do
-			egg(head, { 2.1 * s, 26.6, 4.6 }, { 3, 3.4, 3.6 }, nil, GOLD)
-			-- The eye: a dark rim, a glowing red eye, a slit pupil and a white glint.
-			local normal = vnorm({ 0.8 * s, 0.12, 0.6 })
-			local at = { 2.75 * s, 27.9, 5.4 }
-			local axes = axesFacing(normal)
-			egg(head, at, { 3, 2.7, 0.9 }, axes, RED_DARK)
-			egg(head, vadd(at, vscale(normal, 0.25)), { 2.4, 2.2, 0.8 }, axes, EYE_RED, NEON)
-			egg(head, vadd(at, vscale(normal, 0.5)), { 0.85, 1.7, 0.5 }, axes, PUPIL)
-			local glint = vadd(vadd(at, vscale(normal, 0.6)), vadd(vscale(axes[2], 0.45), vscale(axes[1], 0.4 * s)))
-			egg(head, glint, { 0.55, 0.55, 0.3 }, axes, WHITE, NEON)
-			-- A heavy brow slanting down to the beak.
-			blade(head, { 1.2 * s, 29.1, 6.5 }, { 3.5 * s, 29.8, 4.2 }, 1.2, 1, UP, RED_DARK)
-			-- A red streak swept back from the eye, and small feathers over the brow.
-			egg(head, { 3.25 * s, 26.6, 3.4 }, { 0.7, 1, 3.4 }, axesFacing({ s, 0, 0.25 }), RED)
-			for index, x in { 0.9, 2.1 } do
-				local top = { x * s, 30.3 - index * 0.2, 5.6 - index * 0.5 }
-				taper(
-					head,
-					top,
-					vadd(top, { 0.2 * s, -0.3, 1.7 }),
-					1.2,
-					0.4,
-					{ 0.3 * s, 1, 0.3 },
-					if index == 1 then ORANGE else RED
-				)
+			skull:add(
+				rod({ { 1 * s, 29, 6.3, 0.6 }, { 2.3 * s, 29.2, 5.3, 0.65 }, { 3 * s, 29.4, 3.9, 0.5 } }),
+				FACE_DEEP
+			)
+		end
+		skull:add(
+			narrow(
+				rod({
+					{ 0, 27.5, 6.4, 1.45 },
+					{ 0, 27.2, 8.6, 1.1 },
+					{ 0, 26.4, 10.3, 0.75 },
+					{ 0, 25.2, 11, 0.45 },
+					{ 0, 24.4, 10.7, 0.3 },
+				}),
+				1.35
+			),
+			BILL
+		)
+		skull:add(narrow(rod({ { 0, 25.4, 6.8, 0.85 }, { 0, 25.1, 9.2, 0.5 } }), 1.3), BILL)
+		skull:carve(shape({ 0, 25.9, 8.6 }, 3, function(x, y, z)
+			return math.abs(y - 25.9) < 0.3 and z > 7.4 and z < 10 and math.abs(x) < 1.2
+		end))
+		skull:add(ellipsoid({ 0, 25.9, 7.4 }, { 0.9, 0.35, 0.6 }), look(ORANGE, NEON))
+		skull:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			local side = if x > 0 then 1 else -1
+			-- The hooked tip, darker; the waxy band at the base of the beak; the nostrils.
+			if z > 9.4 and y < 26.2 and math.abs(x) < 1.3 then
+				return HOOK
 			end
-			-- Cheek feathers sweeping back.
-			feather(head, { 2.6 * s, 26.2, 2.5 }, { 0.5 * s, 0.25, -1 }, 4.5, 1.6, 0.5, { s, 0.2, 0 }, COVERT)
-		end
-		-- A long hooked beak, its jaws parted on the fire inside.
-		egg(head, { 0, 27, 7.3 }, { 3.2, 2.8, 3.2 }, nil, BEAK)
-		blade(head, { 0, 27.5, 7.6 }, { 0, 26.7, 10.9 }, 2.1, 1.7, UP, BEAK)
-		taper(head, { 0, 26.7, 10.7 }, { 0, 24.2, 11.8 }, 1.6, 1.3, FRONT, BEAK_TIP)
-		blade(head, { 0, 25.5, 7.6 }, { 0, 24.9, 9.9 }, 1.5, 0.9, UP, BEAK)
-		taper(head, { 0, 24.9, 9.7 }, { 0, 24.6, 10.7 }, 1.2, 0.7, UP, BEAK_TIP)
-		egg(head, { 0, 26, 8.6 }, { 1.4, 0.75, 2.6 }, nil, ORANGE, NEON)
-		for _, s in { 1, -1 } do
-			egg(head, { 0.6 * s, 28.25, 9 }, { 0.45, 0.35, 0.8 }, nil, BEAK_TIP)
-		end
-		for k = -3, 3 do
-			local a = math.abs(k)
-			local root = { k * 0.6, 30.2, 3.4 - a * 0.3 }
-			local mid = { k * 1.3, 35 + (3 - a) * 1.2, 0.2 - a * 0.4 }
-			local tip = { k * 2, 39 + (3 - a) * 2.2, -4.5 - a * 0.5 }
-			local facing = vnorm({ k * 0.15, 0.2, 1 })
-			blade(head, root, mid, 1.9 - a * 0.1, 0.6, facing, RED)
-			local three = vlerp(mid, tip, 0.45)
-			blade(head, mid, three, 1.6 - a * 0.1, 0.55, facing, ORANGE)
-			taper(head, three, tip, 1.4 - a * 0.1, 0.5, facing, if k == 0 then ETERNAL else YELLOW, NEON)
-		end
+			if z > 6.2 and z < 7.1 and y > 26.2 and math.abs(x) < 1.4 then
+				return CERE
+			end
+			if z > 7.6 and z < 8.3 and y > 27.1 and y < 27.7 and math.abs(x) > 0.45 and open(side, 0, 0) then
+				return GAPE
+			end
+			-- The line of the mouth running back under the eye.
+			if math.abs(y - 25.95) < 0.3 and z > 5.2 and z < 7.6 and open(side, 0, 0) then
+				return GAPE
+			end
+			-- The eye: flat on the side of the face, pointed at both ends, slanting up towards the back, with a
+			-- dark rim round it and a slit pupil.
+			if math.abs(x) > 1.6 and open(side, 0, 0) and z > 3 and z < 6.6 then
+				local t = (6.3 - z) / 3
+				local top = 27.95 + 0.55 * t
+				local thick = 0.95 * math.max(0, math.sin(math.pi * math.clamp(t, 0, 1))) ^ 0.7
+				if t >= 0 and t <= 1 and y <= top and y >= top - thick then
+					if z > 4.7 and z < 5.1 then
+						return look(PUPIL)
+					end
+					if z >= 5.1 and z < 5.5 and y > top - 0.45 then
+						return look(WHITE, NEON)
+					end
+					return look(EYE_RED, NEON)
+				end
+				if t >= -0.12 and t <= 1.12 and y <= top + 0.35 and y >= top - thick - 0.3 then
+					return LID
+				end
+			end
+			-- Red feathers at the back of the head, in a point down the nape.
+			if z < 2 - (y - 26) * 0.35 then
+				return NAPE
+			end
+			return nil
+		end)
+		skull:draw(head, nil, FACE, true)
+		-- The crest: five plumes sweeping back from the crown, the middle one longest and burning at its tip.
 		for k = -2, 2 do
 			local a = math.abs(k)
-			local root = { k * 0.9, 29.8, 4.4 }
-			local mid = { k * 1.5, 33 + (2 - a) * 0.8, 2.6 }
-			local tip = { k * 2.3, 35.5 + (2 - a) * 1.4, -0.6 }
-			local facing = vnorm({ k * 0.2, 0.35, 1 })
-			blade(head, root, mid, 1.5, 0.5, facing, ORANGE)
-			taper(head, mid, tip, 1.3, 0.45, facing, YELLOW, NEON)
+			local root = { k * 0.9, 29.4, 2.4 - a * 0.4 }
+			local reach = 1 - a * 0.25
+			local mid = { k * 1.3, 32 + 2.5 * reach, -0.8 - a * 0.3 }
+			local tip = { k * 1.7, 34 + 6 * reach, -5.5 - a * 0.6 }
+			local facing = vnorm({ k * 0.25, 0.6, 1 })
+			blade(head, root, mid, 1.6, 0.5, facing, RED)
+			local three = vlerp(mid, tip, 0.5)
+			blade(head, mid, three, 1.35, 0.45, facing, ORANGE)
+			taper(head, three, tip, 1.15, 0.45, facing, if k == 0 then ETERNAL else YELLOW, NEON)
 		end
-		head:fire({ 0, 46, -4.5 }, 10, ORANGE, YELLOW)
-		head:fire({ 4, 41.5, -5.5 }, 5, ORANGE, YELLOW)
-		head:fire({ -4, 41.5, -5.5 }, 5, ORANGE, YELLOW)
+		head:fire({ 0, 40.6, -6.2 }, 9, ORANGE, YELLOW)
 
 		-- Great wings spread wide, layer over layer: short red coverts along the arm, then long secondaries, then
 		-- the longest flight feathers fanning out at the tip, each burning from red to a glowing yellow tip.
 		pet:limbPair("LeftWing", "RightWing", { 4.2, 21, -1 }, function(wing)
-			local arm = { { 4.2, 21, -1 }, { 11, 23.5, -2.4 }, { 18, 23.2, -3.6 }, { 25, 21.5, -4.6 } }
+			local arm = { { 4.2, 21, -1 }, { 10.5, 23, -2.6 }, { 16.5, 22.4, -4 }, { 22, 20.4, -5.4 } }
 			local function along(t: number): Vec
 				local f = t * (#arm - 1)
 				local index = math.min(#arm - 1, math.floor(f) + 1)
@@ -5178,7 +5248,7 @@ Designs.EternalPhoenix = {
 			for index = 0, 11 do
 				local t = 0.04 + index * 0.08
 				local root = vadd(along(t), { 0, -0.6, 0.55 + (index % 2) * 0.14 })
-				local tilt = vnorm({ 0.15 + t * 0.6, -1, -0.1 })
+				local tilt = vnorm({ 0.1 + t * 0.4, -1, -0.15 })
 				feather(
 					wing,
 					root,
@@ -5193,7 +5263,7 @@ Designs.EternalPhoenix = {
 			for index = 0, 5 do
 				local t = 0.05 + index * 0.1
 				local root = vadd(along(t), { 0, -2.2, 0.1 + (index % 2) * 0.14 })
-				local tilt = vnorm({ 0.2 + t * 0.7, -1, -0.15 })
+				local tilt = vnorm({ 0.12 + t * 0.45, -1, -0.2 })
 				feather(
 					wing,
 					root,
@@ -5209,7 +5279,7 @@ Designs.EternalPhoenix = {
 				local t = 0.58 + index * 0.07
 				local root = vadd(along(t), { 0, -1.2, -0.35 + (index % 2) * 0.14 })
 				local fan = index / 6
-				local tilt = vnorm({ 0.5 + fan * 0.95, -1 + fan * 0.4, -0.15 })
+				local tilt = vnorm({ 0.3 + fan * 0.55, -1 + fan * 0.22, -0.25 })
 				feather(
 					wing,
 					root,

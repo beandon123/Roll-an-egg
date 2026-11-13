@@ -449,6 +449,42 @@ return function(harness)
 	end)
 
 	describe("Client: HUD", function()
+		it("animates rigged pets: winged ones hover, beating their wings, and play the move they are given", function()
+			local session = startClient()
+			local workspace = session:service("Workspace")
+			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			local folder = roblox.Instance.new("Folder")
+			folder.Name = "StudioPets"
+			folder.Parent = workspace
+			session:fire(workspace, "ChildAdded", folder)
+			local phoenix = PetRig.build("EternalPhoenix")
+			phoenix.Parent = folder
+			session:fire(folder, "ChildAdded", phoenix)
+			local fox = PetRig.build("Fox")
+			fox.Parent = folder
+			session:fire(folder, "ChildAdded", fox)
+
+			session:renderFrame(0.1, 3)
+			local lift = phoenix.Root.Body.Transform.Position.Y
+			expect.truthy(lift > 1, "the phoenix rises off the ground to hover: " .. lift)
+			local wing = phoenix.Body.LeftWing.Transform
+			session:renderFrame(0.1)
+			expect.truthy(phoenix.Body.LeftWing.Transform ~= wing, "its wings beat")
+			-- The fox walks on the spot: its legs swing.
+			local leg = fox.Body.FrontLeftLeg.Transform
+			session:renderFrame(0.1)
+			expect.truthy(fox.Body.FrontLeftLeg.Transform ~= leg, "the fox's legs swing")
+
+			phoenix:SetAttribute("Move", "Idle")
+			session:renderFrame(0.1)
+			expect.truthy(phoenix.Root.Body.Transform.Position.Y < 0.5, "standing idle, it is back on the ground")
+			phoenix:SetAttribute("Move", "Fly")
+			session:renderFrame(0.1)
+			local _, _, _, _, _, _, _, _, _, _, forward = phoenix.Root.Body.Transform:GetComponents()
+			expect.truthy(phoenix.Root.Body.Transform.Position.Y > 1, "flying, it is up in the air")
+			expect.truthy(forward < 0.99, "and tipped forward")
+		end)
+
 		it("builds the HUD with Fusion", function()
 			local _, parts = startClient()
 			local root = hud(parts)

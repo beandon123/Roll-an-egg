@@ -112,9 +112,19 @@ them) plus Roblox `Fire`, so it keeps its detail however big a pet is shown. `Pe
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, winged, two legs, six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a
 chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its
-joint, so pets that share a skeleton can share their walk animations. The gallery shows each pet walking.
+joint, so pets that share a skeleton can share their animations.
 
-In Studio, **Show this zone's pets** on the test panel stands the zone's pets in front of you.
+How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
+Crawl, Swim), each a set of waves that turn or shift its limbs. Winged pets (the owls and the Eternal Phoenix) also
+**Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
+on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
+(`wingSpread`), so owls that fold their wings at their sides open them to fly. The same moves drive the gallery
+(pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on rigged
+pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can
+fly and walks (or swims, or crawls) on the spot if not.
+
+In Studio, **Show this zone's pets** on the test panel stands the zone's pets in front of you. They move as they would in
+the game; set a pet's `Move` attribute in the Properties window (for example to `Fly`) to see its other moves.
 
 ## Project layout
 

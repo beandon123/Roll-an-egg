@@ -14,6 +14,7 @@ local harness = require("../tests/harness")
 
 local EggModels = harness.load("src/shared/EggModels")
 local PetModels = harness.load("src/shared/PetModels")
+local PetAnimations = harness.load("src/shared/PetAnimations")
 local Rarities = harness.load("src/shared/Config/Rarities")
 local Zones = harness.load("src/shared/Config/Zones")
 
@@ -101,6 +102,9 @@ for _, kind in PetModels.all() do
 		gait = model.gait,
 		hover = model.hover,
 		scale = model.scale,
+		wingSpread = model.wingSpread,
+		moveNames = PetAnimations.movesOf(model.skeleton),
+		move = PetAnimations.defaultMove(model.skeleton, model.gait),
 		size = model.size,
 		center = model.center,
 		limbs = limbs,
@@ -141,8 +145,14 @@ for _, rarity in Rarities.Order do
 	table.insert(rarities, { name = rarity, color = hex(Rarities.Info[rarity].color) })
 end
 
-local data =
-	serde.encode("json", { eggs = eggs, pets = pets, zones = zones, rarities = rarities, radius = EggModels.RADIUS })
+local data = serde.encode("json", {
+	eggs = eggs,
+	pets = pets,
+	zones = zones,
+	rarities = rarities,
+	radius = EggModels.RADIUS,
+	moves = PetAnimations.MOVES,
+})
 local template = fs.readFile("tools/egg-gallery.html")
 local page = string.gsub(template, "/%*EGG_DATA%*/null", function()
 	return data

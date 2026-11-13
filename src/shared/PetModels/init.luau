@@ -64,6 +64,8 @@ export type Model = {
 	hover: number,
 	-- Studs per voxel.
 	scale: number,
+	-- For winged pets: how far each wing turns out to be spread for flight (see PetAnimations).
+	wingSpread: number,
 	limbs: { Limb },
 	-- Where a rider sits, in voxels.
 	seat: { number },
@@ -630,6 +632,7 @@ function PetModels.get(kind: string): Model?
 		gait = design.gait or "Walk",
 		hover = design.hover or 0,
 		scale = design.scale or PetModels.VOXEL,
+		wingSpread = design.wingSpread or 0,
 		limbs = limbs,
 		seat = pet.seatPoint or { 0, high[2], 0 },
 		size = { high[1] - low[1], high[2] - low[2], high[3] - low[3] },
