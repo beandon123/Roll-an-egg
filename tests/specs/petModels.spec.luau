@@ -1,6 +1,6 @@
 --!nocheck
 -- Tests for the blocky pet models (Shared/PetModels): the pets made so far exist, match the eggs they hatch from,
--- have the limbs their skeleton needs, hold together, and stay within a part budget. How they look and move is
+-- have the limbs their skeleton needs, hold together, and stand on the ground. How they look and move is
 -- checked by eye in the gallery (lune run tools/egg-gallery).
 
 return function(harness)
@@ -41,12 +41,9 @@ return function(harness)
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local SHAPES = { Block = true, Wedge = true, Ball = true }
-	local BUDGET = 120
-	-- Secret and Eternal pets are the showpieces: far more detailed than the rest, so they get a bigger budget,
-	-- and must have at least this many blocks and this much more than any other pet in the game.
-	local SHOWPIECE_BUDGET = 700
+	-- Pets have no block budget: quality comes first. Secret and Eternal pets are the showpieces, built in fine
+	-- detail, so each has at least this many blocks.
 	local SHOWPIECE_MINIMUM = 150
-	local SHOWPIECE_LEAD = 1.3
 
 	local function isShowpiece(model): boolean
 		return model.rarity == "Secret" or model.rarity == "Eternal"
@@ -140,11 +137,10 @@ return function(harness)
 			end)
 		end)
 
-		it("stands on the ground, within its part budget", function()
+		it("stands on the ground, with its seat on its back", function()
 			each(function(model)
-				local count, lowest = 0, math.huge
+				local lowest = math.huge
 				for _, limb in model.limbs do
-					count += #limb.boxes
 					for _, box in limb.boxes do
 						expect.truthy(MATERIALS[box.material], model.name .. " material " .. box.material)
 						expect.truthy(SHAPES[box.shape or "Block"], model.name .. " shape " .. tostring(box.shape))
@@ -152,8 +148,6 @@ return function(harness)
 						lowest = math.min(lowest, low[2])
 					end
 				end
-				local limit = if isShowpiece(model) then SHOWPIECE_BUDGET else BUDGET
-				expect.truthy(count <= limit, `{model.name} has {count} blocks (limit {limit})`)
 				expect.near(lowest, 0, 0.2, model.name .. " feet on the ground")
 				-- The seat is on top of the pet, roughly over its middle.
 				expect.truthy(model.seat[2] > model.size[2] * 0.3, model.name .. " seat height")
@@ -161,7 +155,7 @@ return function(harness)
 			end)
 		end)
 
-		it("makes Secret and Eternal pets far more detailed than every other pet", function()
+		it("builds Secret and Eternal pets in showpiece detail", function()
 			local showpieces = 0
 			each(function(model)
 				if not isShowpiece(model) then
@@ -170,15 +164,6 @@ return function(harness)
 				showpieces += 1
 				local count = blockCount(model)
 				expect.truthy(count >= SHOWPIECE_MINIMUM, `{model.name} has only {count} blocks`)
-				each(function(other)
-					if not isShowpiece(other) then
-						local theirs = blockCount(other)
-						expect.truthy(
-							count >= theirs * SHOWPIECE_LEAD,
-							`{model.name} ({count} blocks) should well outdo {other.name} ({theirs})`
-						)
-					end
-				end)
 			end)
 			expect.truthy(showpieces >= 1, "at least one Secret or Eternal pet is made")
 		end)

@@ -5793,60 +5793,150 @@ Designs.Pteranodon = {
 	name = "Pteranodon",
 	skeleton = "Winged",
 	gait = "Walk",
-	scale = 0.5,
+	scale = 0.55 * 0.8,
 	draw = function(pet)
-		local TAN = rgb(204, 150, 104)
-		local DARK = rgb(150, 96, 70)
-		local CREAM = rgb(240, 222, 180)
+		-- Sculpted finer than it is drawn (blocks 0.8 of a unit across), with a beak, crest and wings of parts at
+		-- any angle, so it keeps its shape however big it is shown.
+		local U = 0.8
+		local function at(p: Vec): Vec
+			return { p[1] / U, p[2] / U, p[3] / U }
+		end
+		local function bladeAt(limb: Limb, a: Vec, b: Vec, w: number, t: number, f: Vec, c: Color, m: string?)
+			blade(limb, at(a), at(b), w / U, t / U, f, c, m)
+		end
+		local function taperAt(limb: Limb, a: Vec, b: Vec, w: number, t: number, f: Vec, c: Color, m: string?)
+			taper(limb, at(a), at(b), w / U, t / U, f, c, m)
+		end
+		local function triangleAt(limb: Limb, a: Vec, b: Vec, c: Vec, t: number, color: Color)
+			triangle(limb, at(a), at(b), at(c), t / U, color)
+		end
+		local function eggAt(limb: Limb, centre: Vec, size: Vec, color: Color)
+			egg(limb, at(centre), { size[1] / U, size[2] / U, size[3] / U }, nil, color)
+		end
+		local function look(r: number, g: number, b: number, material: string?): Look
+			return { color = rgb(r, g, b), material = material }
+		end
+		local FUR = look(204, 150, 104)
+		local FUR_LIGHT = look(222, 176, 128)
+		local DARK = look(150, 96, 70)
+		local CREAM = look(240, 222, 180)
+		local CAP = look(120, 72, 52)
+		local FOOT = look(196, 146, 78)
+		local CLAW = rgb(60, 40, 32)
 		local CREST = rgb(226, 78, 46)
+		local CREST_DARK = rgb(160, 44, 34)
 		local BEAK = rgb(240, 202, 120)
-		local BEAK_DARK = rgb(200, 150, 80)
-		local MEMBRANE = rgb(178, 96, 68)
+		local BEAK_DARK = rgb(196, 146, 78)
+		local MEMBRANE = rgb(186, 100, 70)
+		local MEMBRANE_DARK = rgb(146, 72, 54)
 		local VEIN = rgb(132, 66, 48)
 		local BONE = rgb(112, 70, 50)
+		local SIDE = { 1, 0, 0 }
+		local FLAT = { 0, 0, 1 }
 
-		-- An upright body with a cream chest.
-		local body = pet:limb("Body", { 0, 5, 0 })
-		body:box(-2, 3, -2, 1, 8, 2, TAN)
-		body:paint(-2, 3, 2, 1, 7, 2, CREAM)
-		body:paint(-2, 4, -2, 1, 8, -2, DARK)
+		local function speckle(p: Vec, chance: number): boolean
+			local n = math.sin(p[1] * 12.9898 + p[2] * 78.233 + p[3] * 37.719) * 43758.5453
+			return n - math.floor(n) < chance
+		end
+		-- Short fur: a cream chest and belly, a darker back, flecked lighter all over.
+		local function fur(p: Vec, open: (number, number, number) -> boolean): Look?
+			if open(0, 0, 1) and not open(0, 0, -1) and math.abs(p[1]) < 2.4 then
+				return CREAM
+			end
+			if open(0, 0, -1) then
+				return DARK
+			end
+			if speckle(p, 0.14) then
+				return FUR_LIGHT
+			end
+			return nil
+		end
 
-		-- A long pointed beak, and a tall crest sweeping back from its head.
-		local head = pet:limb("Head", { 0, 9, 0 })
-		head:box(-1, 9, -1, 0, 10, 1, TAN)
-		head:box(-2, 11, -1, 1, 13, 2, TAN)
-		head:box(-1, 11, 3, 0, 12, 6, BEAK)
-		head:box(-1, 11, 7, 0, 11, 9, BEAK)
-		head:paint(-1, 11, 3, 0, 11, 6, BEAK_DARK)
-		head:box(-1, 14, -2, 0, 14, 1, CREST)
-		head:box(-1, 15, -5, 0, 15, -1, CREST)
-		head:box(-1, 16, -7, 0, 16, -4, CREST)
-		head:paintPair(1, 12, 1, 1, 12, 1, EYE)
-		head:paint(-2, 13, -1, 1, 13, 2, DARK)
+		-- An upright, furry body, broad at the shoulders where the wings join.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 9.4, -0.4 }, { 4.2, 5.2, 3.9 }), FUR)
+		body:add(ellipsoid({ 0, 11.6, -0.2 }, { 4.8, 2.8, 3.3 }), FUR)
+		body:add(ellipsoid({ 0, 6, -0.8 }, { 3.2, 2.6, 3 }), FUR)
+		body:coat(fur)
 
-		-- Great leathery wings held out wide: a bony leading edge rising to the tip, veined membranes below.
-		pet:limbPair("LeftWing", "RightWing", { 2, 8, 0 }, function(wing)
-			wing:box(2, 8, 0, 7, 8, 0, BONE)
-			wing:box(7, 9, 0, 11, 9, 0, BONE)
-			wing:box(11, 10, 0, 15, 10, 0, BONE)
-			wing:box(2, 4, 0, 7, 7, 0, MEMBRANE)
-			wing:box(8, 5, 0, 11, 8, 0, MEMBRANE)
-			wing:box(12, 7, 0, 14, 9, 0, MEMBRANE)
-			wing:paint(4, 4, 0, 4, 7, 0, VEIN)
-			wing:paint(9, 5, 0, 9, 8, 0, VEIN)
-			wing:box(7, 10, 1, 7, 10, 1, BONE)
+		-- A slender neck and a long head: dark-capped, with a long pointed beak and a tall crest sweeping back.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 13, 0, 2.2 }, { 0, 15.2, 0.6, 1.8 }, { 0, 16.8, 0.8, 1.9 } }), FUR)
+		head:add(ellipsoid({ 0, 18, 0.7 }, { 2.4, 2.3, 3 }), FUR)
+		head:add(ellipsoid({ 0, 17.4, 2.5 }, { 1.6, 1.7, 1.8 }), FUR)
+		head:coat(function(p, open)
+			if p[2] > 19 then
+				return CAP
+			end
+			return fur(p, open)
 		end)
 
-		pet:limbPair("LeftLeg", "RightLeg", { 1.5, 3, 0 }, function(leg)
-			leg:box(1, 1, 0, 1, 2, 0, TAN)
-			leg:box(1, 0, -1, 1, 0, 2, BEAK_DARK)
+		-- Legs with gripping feet of three clawed toes.
+		local leg = newSculpt(U)
+		leg:add(rod({ { 1.7, 5.6, -0.6, 1.4 }, { 1.9, 3, -0.2, 0.85 }, { 1.9, 1, 0.3, 0.7 } }), FUR)
+		for _, dx in { -0.8, 0, 0.8 } do
+			leg:add(rod({ { 1.9 + dx * 0.4, 0.7, 0.6, 0.55 }, { 1.9 + dx, 0.5, 2.4, 0.45 } }), FOOT)
+		end
+		leg:coat(function(p)
+			return if p[2] < 1.6 then FOOT else nil
 		end)
 
-		local tail = pet:limb("Tail", { 0, 4, -2 })
-		tail:box(-1, 3, -4, 0, 4, -3, TAN)
-		tail:box(-1, 3, -6, 0, 3, -5, DARK)
+		local tail = newSculpt(U)
+		tail:add(rod({ { 0, 6, -2.6, 0.9 }, { 0, 5.4, -5.8, 0.35 } }), FUR)
+		tail:coat(function()
+			return DARK
+		end)
 
-		pet:seat(0, 9, -1)
+		local legMirror = leg:mirror()
+		body:draw(pet:limb("Body", at({ 0, 8, 0 })), { head, leg, legMirror, tail }, FUR)
+		local headLimb = pet:limb("Head", at({ 0, 13, 0 }))
+		head:draw(headLimb, { body }, FUR)
+		-- Round eyes on the surface of its head.
+		local cx, cy, cz = 0, math.floor(18.4 / U), math.floor(1.6 / U)
+		while head:has(cx + 1, cy, cz) do
+			cx += 1
+		end
+		local eyeX = (cx + 1) * U
+		for _, s in { 1, -1 } do
+			eggAt(headLimb, { (eyeX - 0.12) * s, 18.4, 1.6 }, { 0.55, 0.95, 0.95 }, EYE)
+			eggAt(headLimb, { (eyeX + 0.1) * s, 18.75, 1.85 }, { 0.22, 0.32, 0.32 }, SHINE)
+		end
+		bladeAt(headLimb, { 0, 17.9, 3 }, { 0, 17.6, 7 }, 1.7, 1.8, SIDE, BEAK)
+		taperAt(headLimb, { 0, 17.6, 7 }, { 0, 16.9, 12.5 }, 1.7, 1.5, SIDE, BEAK)
+		bladeAt(headLimb, { 0, 16.5, 3 }, { 0, 16.3, 6.4 }, 1, 1.6, SIDE, BEAK_DARK)
+		taperAt(headLimb, { 0, 16.3, 6.4 }, { 0, 16.1, 10.6 }, 1, 1.3, SIDE, BEAK_DARK)
+		triangleAt(headLimb, { 0, 19.8, 1.6 }, { 0, 25.5, -9.5 }, { 0, 17, -1.8 }, 0.7, CREST)
+		triangleAt(headLimb, { 0, 19.4, -0.8 }, { 0, 23.6, -8.2 }, { 0, 18.2, -2.2 }, 0.9, CREST_DARK)
+		pet:limbPair("LeftLeg", "RightLeg", at({ 1.7, 5.6, -0.6 }), function(limb)
+			leg:draw(limb, { body }, FUR)
+		end)
+		tail:draw(pet:limb("Tail", at({ 0, 6, -2.6 })), { body }, FUR)
+
+		-- Great leathery wings held out wide: a bony arm to the wrist, then one very long finger out to the tip,
+		-- the membrane two-toned and veined, and small clawed fingers at each wrist.
+		pet:limbPair("LeftWing", "RightWing", at({ 3, 11.4, 0 }), function(wing)
+			local shoulder, elbow, wrist = { 3, 11.4, 0 }, { 8, 13, -1 }, { 12.5, 14.5, -0.5 }
+			local knuckle, tip = { 19, 15.2, -2 }, { 26, 15, -4 }
+			local trail1, trail2, flank = { 19.5, 11, -3.5 }, { 13, 7.5, -3 }, { 3, 6.5, -1.4 }
+			triangleAt(wing, wrist, tip, trail1, 0.4, MEMBRANE)
+			triangleAt(wing, wrist, trail1, trail2, 0.4, MEMBRANE)
+			triangleAt(wing, elbow, wrist, trail2, 0.4, MEMBRANE)
+			triangleAt(wing, elbow, trail2, flank, 0.4, MEMBRANE_DARK)
+			triangleAt(wing, shoulder, elbow, flank, 0.4, MEMBRANE_DARK)
+			for _, vein in { { wrist, trail1 }, { wrist, trail2 }, { elbow, flank } } do
+				bladeAt(wing, vein[1], vlerp(vein[1], vein[2], 0.85), 0.28, 0.55, FLAT, VEIN)
+			end
+			bladeAt(wing, shoulder, elbow, 1.4, 1.1, FLAT, BONE)
+			bladeAt(wing, elbow, wrist, 1.2, 1, FLAT, BONE)
+			bladeAt(wing, wrist, knuckle, 1, 0.9, FLAT, BONE)
+			taperAt(wing, knuckle, tip, 0.9, 0.8, FLAT, BONE)
+			eggAt(wing, wrist, { 1.5, 1.5, 1.5 }, BONE)
+			for _, claw in { { 12.2, 15.6, 1.6 }, { 13.3, 15.4, 1.4 }, { 11.4, 15.2, 1.2 } } do
+				taperAt(wing, wrist, claw, 0.55, 0.45, { 0, 1, 0 }, CLAW)
+			end
+		end)
+
+		pet:seat(0, 13.5 / U, -1 / U)
 	end,
 }
 
@@ -5928,67 +6018,212 @@ Designs.Stegosaurus = {
 	name = "Stegosaurus",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.42 * 1.2,
 	draw = function(pet)
-		local HIDE = rgb(102, 128, 86)
-		local DARK = rgb(72, 96, 64)
-		local BELLY = rgb(216, 204, 148)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with plates and spikes of parts at
+		-- any angle, so it keeps its shape however big it is shown.
+		local U = 1.2
+		local function at(p: Vec): Vec
+			return { p[1] / U, p[2] / U, p[3] / U }
+		end
+		local function look(r: number, g: number, b: number, material: string?): Look
+			return { color = rgb(r, g, b), material = material }
+		end
+		local HIDE = look(104, 132, 88)
+		local DARK = look(76, 100, 66)
+		local DAPPLE = look(132, 158, 104)
+		local BELLY = look(220, 208, 152)
+		local BELLY_DARK = look(198, 182, 128)
+		local KNOB = look(88, 110, 74)
+		local NAIL = look(238, 228, 198)
+		local BEAK = look(70, 66, 58)
 		local PLATE = rgb(222, 92, 50)
-		local PLATE_DARK = rgb(186, 60, 40)
-		local TIP = rgb(255, 184, 60)
+		local PLATE_DARK = rgb(170, 56, 38)
+		local TIP = rgb(255, 186, 60)
 		local SPIKE = rgb(246, 236, 206)
 
-		-- A high-arched back carrying two staggered rows of plates, glowing at their tips.
-		local body = pet:limb("Body", { 0, 8, 0 })
-		body:box(-4, 6, -7, 3, 12, 4, HIDE)
-		body:box(-3, 13, -6, 2, 13, 3, HIDE)
-		body:paint(-4, 6, -7, 3, 6, 4, BELLY)
-		body:paintPair(3, 9, -5, 3, 10, -4, DARK)
-		body:paintPair(3, 8, -1, 3, 9, 0, DARK)
-		body:paintPair(3, 10, 2, 3, 11, 2, DARK)
-		-- Each plate a tall diamond: narrow at the root, widest in the middle, to a glowing point.
-		for _, plate in { { -1, 3, 5 }, { 0, 1, 7 }, { -1, -2, 9 }, { 0, -5, 8 } } do
-			local x, c, height = plate[1], plate[2], plate[3]
-			body:box(x, 14, c - 1, x, 15, c + 1, PLATE)
-			body:box(x, 16, c - 2, x, 11 + height, c + 1, PLATE)
-			body:box(x, 12 + height, c - 1, x, 12 + height, c, PLATE_DARK)
-			body:box(x, 13 + height, c - 1, x, 13 + height, c - 1, TIP, NEON)
+		local function speckle(p: Vec, chance: number): boolean
+			local n = math.sin(p[1] * 12.9898 + p[2] * 78.233 + p[3] * 37.719) * 43758.5453
+			return n - math.floor(n) < chance
+		end
+		local function top(s: Sculpt, z: number, x: number?): number
+			-- Down from high above, to the first cell of clay.
+			local cx, cz, y = math.floor((x or 0) / U), math.floor(z / U), math.floor(40 / U)
+			while y > 0 and not s:has(cx, y, cz) do
+				y -= 1
+			end
+			return (y + 1) * U
+		end
+		local function side(s: Sculpt, y: number, z: number): number
+			local cx, cy, cz = 0, math.floor(y / U), math.floor(z / U)
+			while s:has(cx + 1, cy, cz) do
+				cx += 1
+			end
+			return (cx + 1) * U
+		end
+		-- Hide: a pale belly in bands, dark stripes down the flanks, lighter dapples over the back.
+		local function hide(p: Vec, open: (number, number, number) -> boolean, belly: number): Look?
+			local y, z = p[2], p[3]
+			if open(0, -1, 0) and y < belly then
+				return if math.floor(z / 2.4) % 2 == 0 then BELLY else BELLY_DARK
+			end
+			if open(0, 1, 0) and speckle(p, 0.12) then
+				return DAPPLE
+			end
+			return nil
+		end
+		-- A plate standing up from the back: a triangle leaning a little back, its root sunk in, a darker band
+		-- at the root and, on the big ones, a glowing point.
+		local function plate(limb: Limb, s: Sculpt, z: number, x: number, tall: number, long: number, glow: boolean)
+			local base = top(s, z, x) - 0.6
+			local front, back = { x, base - 0.5, z + long / 2 }, { x, base - 0.5, z - long / 2 }
+			local tip = { x, base + tall, z - long * 0.2 }
+			triangle(limb, at(front), at(tip), at(back), 0.75 / U, PLATE)
+			triangle(
+				limb,
+				at(vadd(front, { 0, 0, 0.12 })),
+				at(vlerp(front, tip, 0.2)),
+				at(vadd(back, { 0, 0, -0.12 })),
+				0.95 / U,
+				PLATE_DARK
+			)
+			if glow then
+				local a, b = vlerp(front, tip, 0.6), vlerp(back, tip, 0.6)
+				triangle(
+					limb,
+					at(vadd(a, { 0, 0, 0.1 })),
+					at(vadd(tip, { 0, 0.12, 0 })),
+					at(vadd(b, { 0, 0, -0.1 })),
+					1.05 / U,
+					TIP,
+					NEON
+				)
+			end
 		end
 
-		-- A small head held low on a short neck, with a plate on its neck.
-		local head = pet:limb("Head", { 0, 8, 5 })
-		head:box(-2, 6, 5, 1, 10, 6, HIDE)
-		head:box(-2, 4, 7, 1, 7, 10, HIDE)
-		head:box(-1, 4, 11, 0, 6, 11, HIDE)
-		head:paintPair(1, 4, 8, 1, 4, 11, DARK)
-		head:paintPair(1, 6, 9, 1, 6, 9, EYE)
-		head:paint(-2, 6, 6, 1, 7, 6, BELLY)
-		head:box(0, 11, 5, 0, 11, 6, PLATE)
-		head:box(0, 12, 6, 0, 12, 6, TIP, NEON)
-
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 6, 2 }, function(leg)
-			leg:box(2, 0, 1, 3, 5, 2, HIDE)
-			leg:box(2, 0, 3, 3, 0, 3, SPIKE)
+		-- A big body arching highest over its hips, dark bands down its flanks, and a row of bony knobs low on
+		-- each side.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 16.5, -5 }, { 7, 8, 10.8 }), HIDE)
+		body:add(ellipsoid({ 0, 14, 5 }, { 6.4, 6.6, 8.4 }), HIDE)
+		body:add(ellipsoid({ 0, 12, -2 }, { 6.2, 4.6, 10 }), HIDE)
+		body:coat(function(p, open)
+			return hide(p, open, 11.5)
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 6, -5 }, function(leg)
-			leg:box(2, 0, -6, 4, 5, -4, HIDE)
-			leg:paint(4, 3, -6, 4, 4, -5, DARK)
-			leg:box(2, 0, -3, 2, 0, -3, SPIKE)
-			leg:box(4, 0, -3, 4, 0, -3, SPIKE)
+		for _, s in { 1, -1 } do
+			for _, band in { { 8, 6 }, { 3, 1.5 }, { -2, -3.5 }, { -7, -8.5 }, { -11.5, -12.5 } } do
+				body:trace({ { 0, 23, band[1] }, { 0, 18, band[2] }, { 0, 14, band[2] + 0.8 } }, { -s, 0, 0 }, DARK)
+			end
+		end
+		for _, z in { 8, 4.5, 1, -2.5, -6, -9.5 } do
+			for _, s in { 1, -1 } do
+				local x = side(body, 12.5, z) * s
+				body:add(rod({ { x - 0.5 * s, 12.5, z, 0.9 }, { x + 0.5 * s, 12.6, z, 0.55 } }), KNOB)
+			end
+		end
+
+		-- A small head held low on a thick neck, with a dark horny beak and little bony studs down its throat.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 14, 9, 4.2 }, { 0, 11.5, 14, 3 }, { 0, 10.4, 17, 2.6 } }), HIDE)
+		head:add(ellipsoid({ 0, 10.8, 18.8 }, { 2.6, 2.5, 3.7 }), HIDE)
+		head:add(ellipsoid({ 0, 11.6, 18.2 }, { 2.3, 1.6, 2.6 }), HIDE)
+		head:add(ellipsoid({ 0, 9.8, 22.3 }, { 1.75, 1.65, 2.1 }), HIDE)
+		head:coat(function(p, open)
+			if p[3] > 23.2 and p[2] < 11 then
+				return BEAK
+			end
+			if open(0, -1, 0) and p[2] < 10.2 then
+				return if p[3] < 15 and math.floor(p[3] / 1.4) % 2 == 0 then KNOB else BELLY
+			end
+			if open(0, 1, 0) and speckle(p, 0.12) then
+				return DAPPLE
+			end
+			return nil
 		end)
+		head:trace({ { 0, 9.4, 19.5 }, { 0, 9.5, 23.6 } }, { -1, 0, 0 }, BEAK)
+		head:trace({ { 0, 9.4, 19.5 }, { 0, 9.5, 23.6 } }, { 1, 0, 0 }, BEAK)
 
-		-- A long tail with small plates and four spikes at its end.
-		local tail = pet:limb("Tail", { 0, 10, -8 })
-		tail:box(-2, 8, -11, 1, 11, -8, HIDE)
-		tail:box(-1, 8, -15, 0, 10, -12, HIDE)
-		tail:box(-1, 9, -18, 0, 9, -16, HIDE)
-		tail:box(0, 12, -10, 0, 12, -9, PLATE)
-		tail:box(-1, 11, -14, -1, 11, -13, PLATE)
-		tail:boxPair(1, 9, -17, 3, 9, -17, SPIKE)
-		tail:boxPair(1, 10, -15, 2, 11, -15, SPIKE)
+		-- Sturdy legs, the back ones longer, on round feet with short toes and pale nails.
+		local function foot(s: Sculpt, x: number, z: number, toes: number)
+			s:add(ellipsoid({ x, 1.4, z }, { 2.8, 1.4, 2.8 }), HIDE)
+			for t = 1, toes do
+				local dx = (t - (toes + 1) / 2) * 1.5
+				s:add(ellipsoid({ x + dx, 1, z + 2.3 }, { 0.75, 0.9, 0.9 }), NAIL)
+			end
+		end
+		local front = newSculpt(U)
+		front:add(rod({ { 4.6, 12, 6, 3 }, { 5, 6, 7, 2.5 }, { 5, 2.6, 7.4, 2.4 } }), HIDE)
+		foot(front, 5, 7.8, 3)
+		front:add(ellipsoid({ 5.4, 7.6, 6.8 }, { 2.3, 1.8, 2.2 }), HIDE)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 5, 14.5, -6 }, { 3.4, 6.4, 5 }), HIDE)
+		back:add(rod({ { 5.4, 10, -7.5, 3.4 }, { 5.6, 4.5, -8.4, 2.8 }, { 5.6, 2.8, -8, 2.7 } }), HIDE)
+		foot(back, 5.6, -6.8, 3)
+		for _, leg in { front, back } do
+			leg:coat(function(p, open)
+				if open(0, 1, 0) and speckle(p, 0.12) then
+					return DAPPLE
+				end
+				return nil
+			end)
+		end
+		back:trace({ { 0, 19, -4.5 }, { 0, 14, -6 }, { 0, 10, -7 } }, { -1, 0, 0 }, DARK)
 
-		pet:light(TIP, 1.6, 14)
-		pet:seat(0, 14, -1)
+		-- A long tail with small plates, and four spikes at the end.
+		local tail = newSculpt(U)
+		tail:add(
+			rod({ { 0, 17.5, -13, 5 }, { 0, 15.5, -21, 3.5 }, { 0, 13.5, -29, 2.4 }, { 0, 12.5, -35, 1.3 } }),
+			HIDE
+		)
+		tail:coat(function(p, open)
+			return hide(p, open, 30)
+		end)
+		for _, s in { 1, -1 } do
+			for _, band in { { -16, -17.5 }, { -21, -22 }, { -25.5, -26.5 } } do
+				tail:trace({ { 0, 21, band[1] }, { 0, 14, band[2] } }, { -s, 0, 0 }, DARK)
+			end
+		end
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		local bodyLimb = pet:limb("Body", at({ 0, 14, -2 }))
+		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, HIDE)
+		local headLimb = pet:limb("Head", at({ 0, 13, 9 }))
+		head:draw(headLimb, { body }, HIDE)
+		for _, s in { 1, -1 } do
+			local x = side(head, 11.6, 20) * s
+			egg(headLimb, at({ x - 0.15 * s, 11.6, 20 }), { 0.7 / U, 1.15 / U, 1.15 / U }, nil, EYE)
+			egg(headLimb, at({ x + 0.12 * s, 12, 20.3 }), { 0.3 / U, 0.4 / U, 0.4 / U }, nil, SHINE)
+		end
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", at({ 4.6, 11, 6 }), function(limb)
+			front:draw(limb, { body }, HIDE)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", at({ 5, 12, -6 }), function(limb)
+			back:draw(limb, { body }, HIDE)
+		end)
+		local tailLimb = pet:limb("Tail", at({ 0, 16, -13 }))
+		tail:draw(tailLimb, { body }, HIDE)
+
+		-- Two staggered rows of plates from the neck to the tail, tallest over the hips.
+		plate(headLimb, head, 11.5, -0.7, 3.2, 3.4, false)
+		plate(headLimb, head, 14.2, 0.7, 2.4, 2.8, false)
+		for index, z in { 8.5, 5.2, 1.9, -1.4, -4.7, -8, -11.3 } do
+			local x = if index % 2 == 0 then 0.8 else -0.8
+			local tall = ({ 5.5, 7.5, 9.5, 11, 11, 9.5, 7.5 })[index]
+			plate(bodyLimb, body, z, x, tall, 5.4, index >= 2 and index <= 6)
+		end
+		for index, z in { -15.5, -19.5, -23.5, -27 } do
+			plate(tailLimb, tail, z, if index % 2 == 0 then 0.6 else -0.6, ({ 6, 4.6, 3.4, 2.4 })[index], 4.2, false)
+		end
+		for _, s in { 1, -1 } do
+			for _, spike in { { -30.5, 13.6, -33, 1.4 }, { -33.5, 13.2, -37.5, 1.2 } } do
+				local root = { 1 * s, spike[2], spike[1] }
+				local point = { 6 * s, spike[2] + 3.4, spike[3] }
+				taper(tailLimb, at(root), at(point), spike[4] / U, spike[4] / U, { 0, 1, 0 }, SPIKE)
+			end
+		end
+
+		pet:light(TIP, 1.8, 18)
+		pet:seat(0, 23 / U, -3 / U)
 	end,
 }
 

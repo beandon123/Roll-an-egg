@@ -98,8 +98,8 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
 
-The rarer the pet, the more detailed it is. Secret and Eternal pets are the showpieces: the tests require each to
-have at least 150 blocks and at least 30% more than any other pet in the game.
+The rarer the pet, the more detailed it is. There is no block budget: quality comes first. Secret and Eternal pets
+are the showpieces, built in the finest detail (the tests require at least 150 blocks each).
 
 Most blocks are placed by hand. Curved and rounded parts are drawn with helpers at the top of the designs file:
 `tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
@@ -167,8 +167,8 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures), and that every egg and pet model exists, is unique, has nothing floating loose, and
-  stays within its part budget. Pets are also checked for the limbs their skeleton needs, and for differently coloured
+  stamina, bounces, closures), and that every egg and pet model exists, is unique and has nothing floating loose,
+  and that every egg stays within its part budget. Pets have none. They are also checked for the limbs their skeleton needs, and for differently coloured
   blocks sharing a face (which flicker in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
