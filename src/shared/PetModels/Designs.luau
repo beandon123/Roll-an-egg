@@ -1206,6 +1206,169 @@ local function feather(
 	end
 end
 
+----------------------------------------------------------------------------------------------------------------
+-- Helpers for sculpted pets
+
+-- A look for sculpted clay: a colour and, optionally, a material.
+local function look(r: number, g: number, b: number, material: string?): Look
+	return { color = rgb(r, g, b), material = material }
+end
+
+-- A steady pseudo-random number from 0 to 1 for a point: the same every time, for speckles and dapples.
+local function noise(p: Vec): number
+	local n = math.sin(p[1] * 12.9898 + p[2] * 78.233 + p[3] * 37.719) * 43758.5453
+	return n - math.floor(n)
+end
+
+-- How far the clay reaches out to the pet's left at a height and depth (design units): where its surface is.
+local function sideOf(s: Sculpt, y: number, z: number): number
+	local u = s.unit
+	local cx, cy, cz = 0, math.floor(y / u), math.floor(z / u)
+	while s:has(cx + 1, cy, cz) do
+		cx += 1
+	end
+	return (cx + 1) * u
+end
+
+-- How far the clay reaches forward at a point across and a height (design units): where its front surface is.
+local function frontOf(s: Sculpt, x: number, y: number): number
+	local u = s.unit
+	local cx, cy, cz = math.floor(x / u), math.floor(y / u), 0
+	while s:has(cx, cy, cz + 1) do
+		cz += 1
+	end
+	return (cz + 1) * u
+end
+
+-- The underside of the clay under a point (design units): up from low down to the first cell.
+local function bottomOf(s: Sculpt, z: number, x: number?): number
+	local u = s.unit
+	local cx, cz, y = math.floor((x or 0) / u), math.floor(z / u), math.floor(-10 / u)
+	while y < 120 / u and not s:has(cx, y, cz) do
+		y += 1
+	end
+	return y * u
+end
+
+-- The top of the clay over a point (design units): down from high above to the first cell.
+local function topOf(s: Sculpt, z: number, x: number?): number
+	local u = s.unit
+	local cx, cz, y = math.floor((x or 0) / u), math.floor(z / u), math.floor(90 / u)
+	while y > -20 and not s:has(cx, y, cz) do
+		y -= 1
+	end
+	return (y + 1) * u
+end
+
+-- Round eyes set into both sides of a sculpted head at a height and depth (design units), `size` across, each
+-- with a glint of light. Ball parts, so they stay round however big the pet is shown.
+local function roundEyes(limb: Limb, s: Sculpt, y: number, z: number, size: number, color: Color?)
+	local u = s.unit
+	local x = sideOf(s, y, z)
+	for _, side in { 1, -1 } do
+		egg(
+			limb,
+			{ (x - size * 0.12) * side / u, y / u, z / u },
+			{ size * 0.55 / u, size / u, size / u },
+			nil,
+			color or EYE
+		)
+		egg(
+			limb,
+			{ (x + size * 0.12) * side / u, (y + size * 0.25) / u, (z + size * 0.2) / u },
+			{ size * 0.24 / u, size * 0.34 / u, size * 0.34 / u },
+			nil,
+			SHINE
+		)
+	end
+end
+
+-- Narrow eyes, pointed at both ends, flat on both sides of a sculpted head: from `front` to `back` ({ y, z } in
+-- design units), `width` across the middle, each in a dark rim.
+local function slitEyes(
+	limb: Limb,
+	s: Sculpt,
+	front: { number },
+	back: { number },
+	width: number,
+	color: Color,
+	material: string?,
+	rim: Color?
+)
+	local u = s.unit
+	local depth = sideOf(s, (front[1] + back[1]) / 2, (front[2] + back[2]) / 2) - 0.03
+	local function at(p: Vec): Vec
+		return { p[1] / u, p[2] / u, p[3] / u }
+	end
+	for _, side in { 1, -1 } do
+		local out = { side, 0, 0 }
+		local function almond(grow: number, shade: Color, glow: string?, thick: number)
+			local x = side * (depth + thick / 2)
+			local nose = { x, front[1] - grow * 0.2, front[2] + grow }
+			local tail = { x, back[1] + grow * 0.2, back[2] - grow }
+			local p1, p2 = vlerp(nose, tail, 0.3), vlerp(nose, tail, 0.7)
+			taper(limb, at(p1), at(nose), (width + grow) / u, thick / u, out, shade, glow)
+			blade(limb, at(p1), at(p2), (width + grow) / u, thick / u, out, shade, glow)
+			taper(limb, at(p2), at(tail), (width + grow) / u, thick / u, out, shade, glow)
+		end
+		almond(0.4, rim or EYE, nil, 0.16)
+		almond(0, color, material, 0.3)
+	end
+end
+
+-- Angled parts placed in a sculpted pet's own design units (`u` of them to a block), so a design can use one set of
+-- numbers for its clay and its parts.
+local function inUnits(u: number)
+	local t = {}
+	function t.at(p: Vec): Vec
+		return { p[1] / u, p[2] / u, p[3] / u }
+	end
+	function t.blade(
+		limb: Limb,
+		a: Vec,
+		b: Vec,
+		width: number,
+		thick: number,
+		facing: Vec,
+		color: Color,
+		material: string?
+	)
+		blade(limb, t.at(a), t.at(b), width / u, thick / u, facing, color, material)
+	end
+	function t.taper(
+		limb: Limb,
+		a: Vec,
+		b: Vec,
+		width: number,
+		thick: number,
+		facing: Vec,
+		color: Color,
+		material: string?
+	)
+		taper(limb, t.at(a), t.at(b), width / u, thick / u, facing, color, material)
+	end
+	function t.triangle(limb: Limb, a: Vec, b: Vec, c: Vec, thick: number, color: Color, material: string?)
+		triangle(limb, t.at(a), t.at(b), t.at(c), thick / u, color, material)
+	end
+	-- A ball (or egg shape, given three sizes) centred on a point.
+	function t.ball(limb: Limb, centre: Vec, size: number | Vec, color: Color, material: string?)
+		local s: Vec = if type(size) == "number" then { size, size, size } else size
+		egg(limb, t.at(centre), { s[1] / u, s[2] / u, s[3] / u }, nil, color, material)
+	end
+	-- A chain of blades through points, `width` across, narrowing to a point at the end: a branch, a horn, a vine.
+	function t.branch(limb: Limb, points: { Vec }, width: number, facing: Vec, color: Color, material: string?)
+		for index = 1, #points - 1 do
+			local w = width * (1 - 0.5 * (index - 1) / math.max(1, #points - 1))
+			if index == #points - 1 then
+				t.taper(limb, points[index], points[index + 1], w, w, facing, color, material)
+			else
+				t.blade(limb, points[index], points[index + 1], w, w, facing, color, material)
+			end
+		end
+	end
+	return t
+end
+
 local Designs: { [string]: Design } = {}
 
 ----------------------------------------------------------------------------------------------------------------
@@ -1414,76 +1577,154 @@ Designs.Owl = {
 	name = "Owl",
 	skeleton = "Winged",
 	gait = "Waddle",
-	scale = 0.5,
+	scale = 0.42 * 0.8,
 	-- Its wings hang folded at its sides: they turn out this far to fly.
 	wingSpread = 1.35,
 	draw = function(pet)
-		local BROWN = rgb(140, 98, 62)
-		local DARK = rgb(96, 64, 40)
-		local LIGHT = rgb(222, 196, 152)
+		-- Sculpted finer than it is drawn (blocks 0.8 of a unit across), with feathers, beak, brows and eyes of
+		-- parts at any angle, so it keeps its shape however big it is shown.
+		local U = 0.8
+		local T = inUnits(U)
+		local BROWN = look(140, 98, 62)
+		local DARK = look(96, 64, 40)
+		local LIGHT = look(222, 196, 152)
+		local FACE = look(238, 220, 184)
+		local RIM = look(104, 68, 42)
+		local TALON = look(242, 164, 44)
 		local BEAK = rgb(242, 164, 44)
 		local RING = rgb(255, 214, 70)
+		local CLAW = rgb(60, 44, 34)
 
-		-- A round, fluffy body: a soft chest with chevrons, speckles on its back.
-		local body = pet:limb("Body", { 0, 2, 0 })
-		body:box(-4, 2, -3, 3, 9, 3, BROWN)
-		body:box(-3, 3, 4, 2, 8, 4, LIGHT)
-		body:paintPair(1, 6, 4, 1, 6, 4, DARK)
-		body:paintPair(2, 4, 4, 2, 4, 4, DARK)
-		body:paint(-1, 4, 4, 0, 4, 4, DARK)
-		body:paint(-1, 7, 4, 0, 7, 4, DARK)
-		body:paint(-3, 8, -3, -3, 8, -3, LIGHT)
-		body:paint(2, 6, -3, 2, 6, -3, LIGHT)
-		body:paint(-1, 4, -3, 0, 4, -3, LIGHT)
-		body:paint(1, 8, -3, 1, 8, -3, LIGHT)
-		body:paint(-3, 3, -3, -3, 3, -3, LIGHT)
-		body:paint(-4, 2, -3, 3, 2, 3, LIGHT)
-
-		-- A big round head: pale face disc with a dark rim, frowning brows, huge eyes, a hooked beak, tall tufts.
-		local head = pet:limb("Head", { 0, 10, 0 })
-		head:box(-4, 10, -3, 3, 15, 3, BROWN)
-		head:box(-3, 16, -2, 2, 16, 2, BROWN)
-		head:paint(-4, 10, 3, 3, 14, 3, LIGHT)
-		head:paint(-4, 10, 3, -4, 14, 3, DARK)
-		head:paint(3, 10, 3, 3, 14, 3, DARK)
-		head:paintPair(1, 12, 3, 2, 13, 3, RING)
-		head:paintPair(1, 12, 3, 1, 13, 3, EYE)
-		head:paintPair(1, 13, 3, 1, 13, 3, SHINE)
-		head:boxPair(1, 14, 4, 2, 14, 4, DARK)
-		head:boxPair(3, 15, 4, 3, 15, 4, DARK)
-		head:box(-1, 11, 4, 0, 12, 4, BEAK)
-		head:box(-1, 10, 5, 0, 11, 5, BEAK)
-		head:boxPair(2, 16, -1, 3, 17, 0, BROWN)
-		head:boxPair(3, 18, -1, 4, 18, 0, DARK)
-		head:boxPair(4, 19, -1, 4, 19, 0, DARK)
-		head:paint(-2, 16, -2, -2, 16, -2, LIGHT)
-		head:paint(1, 16, 1, 1, 16, 1, LIGHT)
-		head:paint(-3, 14, -3, -3, 14, -3, LIGHT)
-		head:paint(2, 12, -3, 2, 12, -3, LIGHT)
-
-		-- Layered wings: soft coverts, barred flight feathers and dark tips.
-		pet:limbPair("LeftWing", "RightWing", { 4.5, 9, 0 }, function(wing)
-			wing:box(4, 6, -2, 5, 9, 2, BROWN)
-			wing:box(4, 2, -3, 4, 5, 1, DARK)
-			wing:box(4, 1, -4, 4, 2, -3, DARK)
-			wing:paint(4, 7, -2, 5, 7, 2, LIGHT)
-			wing:paint(4, 4, -3, 4, 4, 1, LIGHT)
-			wing:paint(4, 2, -3, 4, 2, 1, LIGHT)
-		end)
-		-- Fluffy legs and orange talons.
-		pet:limbPair("LeftLeg", "RightLeg", { 2, 2, 1 }, function(leg)
-			leg:box(1, 1, 0, 2, 1, 1, LIGHT)
-			leg:box(1, 0, 0, 2, 0, 2, BEAK)
-			leg:paint(1, 0, 2, 2, 0, 2, DARK)
+		-- A round, fluffy body: a pale chest barred with dark chevrons, speckles over its back.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 9.6, 0 }, { 6, 7.4, 5.6 }), BROWN)
+		body:add(ellipsoid({ 0, 7.4, 1 }, { 5.3, 5.4, 4.8 }), BROWN)
+		body:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if open(0, 0, 1) and z > 1.4 and math.abs(x) < 4.6 then
+				if y > 3 and y < 14.5 and (y + math.abs(x) * 0.7) % 2.6 < 0.7 then
+					return DARK
+				end
+				return LIGHT
+			end
+			if noise(p) < 0.12 then
+				return LIGHT
+			end
+			return nil
 		end)
 
-		-- A fan of tail feathers.
-		local tail = pet:limb("Tail", { 0, 3, -3 })
-		tail:box(-2, 2, -4, 1, 4, -4, DARK)
-		tail:box(-3, 1, -5, 2, 2, -5, DARK)
-		tail:paint(-3, 1, -5, 2, 1, -5, LIGHT)
+		-- A big round head: a pale facial disc in a dark rim, huge ringed eyes under frowning brows, a hooked
+		-- beak and tall ear tufts.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 20, 0.3 }, { 6.6, 5.7, 5.4 }), BROWN)
+		head:add(ellipsoid({ 0, 17.4, 0.4 }, { 5.2, 3, 4.6 }), BROWN)
+		head:coat(function(p, open)
+			local x, y = p[1], p[2]
+			if open(0, 0, 1) or p[3] > 3.2 then
+				local near = math.min((x - 2.3) ^ 2 + ((y - 20) * 1.1) ^ 2, (x + 2.3) ^ 2 + ((y - 20) * 1.1) ^ 2)
+				if near < 3.3 ^ 2 then
+					return FACE
+				elseif near < 4.2 ^ 2 then
+					return RIM
+				end
+			end
+			if open(0, 1, 0) and noise(p) < 0.18 then
+				return LIGHT
+			end
+			return nil
+		end)
 
-		pet:seat(0, 17, -1)
+		-- Fluffy legs and orange feet, each with three toes and dark talons.
+		local leg = newSculpt(U)
+		leg:add(ellipsoid({ 2.4, 3.2, 1.2 }, { 1.7, 2.1, 1.7 }), LIGHT)
+		leg:add(rod({ { 2.4, 1.7, 1.5, 0.9 }, { 2.4, 1, 2.2, 0.75 } }), TALON)
+		for _, dx in { -0.8, 0, 0.8 } do
+			leg:add(rod({ { 2.4 + dx * 0.4, 0.9, 2, 0.62 }, { 2.4 + dx * 1.5, 0.7, 3.8, 0.55 } }), TALON)
+		end
+
+		-- Folded wings at its sides: barred coverts over long barred flight feathers.
+		local covert = newSculpt(U)
+		covert:add(ellipsoid({ 5.9, 10.6, -0.6 }, { 1.3, 5.2, 4.2 }), BROWN)
+		covert:coat(function(p)
+			if p[2] < 12.5 and math.floor((p[2] + 30) / 2.2) % 2 == 0 then
+				return LIGHT
+			end
+			return nil
+		end)
+
+		local legMirror, covertMirror = leg:mirror(), covert:mirror()
+		body:draw(pet:limb("Body", T.at({ 0, 6, 0 })), { head, leg, legMirror, covert, covertMirror }, BROWN)
+		local headLimb = pet:limb("Head", T.at({ 0, 15.5, 0 }))
+		head:draw(headLimb, { body }, BROWN)
+		for _, s in { 1, -1 } do
+			local face = frontOf(head, 2.3 * s, 20.4)
+			T.ball(headLimb, { 2.3 * s, 20.4, face - 0.15 }, { 3, 3, 0.8 }, RING)
+			T.ball(headLimb, { 2.3 * s, 20.3, face + 0.1 }, { 2.1, 2.1, 0.7 }, EYE)
+			T.ball(headLimb, { 2.05 * s, 20.9, face + 0.42 }, { 0.6, 0.6, 0.3 }, SHINE)
+			T.blade(
+				headLimb,
+				{ 0.6 * s, 22.3, face + 0.1 },
+				{ 4 * s, 23.5, face - 0.8 },
+				0.8,
+				0.6,
+				{ 0, 0, 1 },
+				DARK.color
+			)
+			T.taper(headLimb, { 3.6 * s, 24, -0.4 }, { 5.8 * s, 28.8, -1.2 }, 1.5, 0.7, { 0, 0, 1 }, DARK.color)
+			T.taper(headLimb, { 3 * s, 24.2, -1.2 }, { 4.5 * s, 27.8, -2.3 }, 1.3, 0.6, { 0, 0, 1 }, BROWN.color)
+		end
+		local nose = frontOf(head, 0, 19.6)
+		T.blade(headLimb, { 0, 19.9, nose - 0.4 }, { 0, 18.6, nose + 0.8 }, 1.3, 1.2, { 1, 0, 0 }, BEAK)
+		T.taper(headLimb, { 0, 18.6, nose + 0.8 }, { 0, 16.9, nose + 0.9 }, 1.1, 1, { 1, 0, 0 }, BEAK)
+
+		pet:limbPair("LeftWing", "RightWing", T.at({ 5, 14.5, 0 }), function(wing)
+			covert:draw(wing, { body }, BROWN)
+			for index, z in { 2, 0.6, -0.8, -2.2, -3.6 } do
+				feather(
+					wing,
+					T.at({ 6.1, 8, z }),
+					{ 0.1, -1, -0.45 - index * 0.06 },
+					6.4 / U,
+					1.5 / U,
+					0.5 / U,
+					{ 1, 0, 0 },
+					{
+						{ color = DARK.color, to = 0.3 },
+						{ color = LIGHT.color, to = 0.42 },
+						{ color = DARK.color, to = 0.72 },
+						{ color = LIGHT.color, to = 0.82 },
+						{ color = DARK.color, to = 1 },
+					}
+				)
+			end
+		end)
+		pet:limbPair("LeftLeg", "RightLeg", T.at({ 2.4, 4, 1.2 }), function(limb)
+			leg:draw(limb, { body }, BROWN)
+			for _, dx in { -0.8, 0, 0.8 } do
+				T.taper(limb, { 2.4 + dx * 1.3, 0.8, 2.9 }, { 2.4 + dx * 1.6, 0.35, 4.7 }, 0.5, 0.45, { 0, 1, 0 }, CLAW)
+			end
+		end)
+
+		-- A fan of barred tail feathers.
+		local tail = pet:limb("Tail", T.at({ 0, 5, -4 }))
+		for _, dx in { -2, -1, 0, 1, 2 } do
+			feather(
+				tail,
+				T.at({ dx * 0.6, 5.2, -3.8 }),
+				{ dx * 0.35, -0.8, -1 },
+				4.6 / U,
+				1.5 / U,
+				0.5 / U,
+				{ 0, 1, -0.6 },
+				{
+					{ color = DARK.color, to = 0.45 },
+					{ color = LIGHT.color, to = 0.6 },
+					{ color = DARK.color, to = 1 },
+				}
+			)
+		end
+
+		pet:seat(0, 25.6 / U, -0.5 / U)
 	end,
 }
 
@@ -1491,139 +1732,296 @@ Designs.Bear = {
 	name = "Bear",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local BROWN = rgb(142, 94, 58)
-		local TAN = rgb(218, 174, 124)
-		local NOSE = rgb(44, 32, 28)
-		local HONEY = rgb(255, 188, 48)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with claws of parts at an angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local FUR = look(142, 94, 58)
+		local FUR_DARK = look(112, 72, 44)
+		local FUR_LIGHT = look(168, 118, 76)
+		local TAN = look(218, 174, 124)
+		local NOSE = look(44, 32, 28)
+		local HONEY = look(255, 188, 48)
+		local HONEY_DARK = look(232, 150, 30)
+		local PAD = look(70, 50, 40)
+		local CLAW = rgb(236, 226, 206)
 
-		local body = pet:limb("Body", { 0, 6, 0 })
-		body:box(-5, 3, -5, 4, 10, 4, BROWN)
-		body:paint(-3, 3, 4, 2, 8, 4, TAN)
+		local function fur(p: Vec): Look?
+			local n = noise(p)
+			if n < 0.1 then
+				return FUR_LIGHT
+			elseif n > 0.92 then
+				return FUR_DARK
+			end
+			return nil
+		end
 
-		local head = pet:limb("Head", { 0, 10, 4 })
-		head:box(-4, 9, 4, 3, 15, 10, BROWN)
-		head:box(-2, 9, 11, 1, 11, 12, TAN)
-		head:paint(-1, 11, 12, 0, 11, 12, NOSE)
-		head:paint(-1, 11, 11, 0, 11, 11, rgb(116, 76, 46))
-		eyes(head, 1, 12, 10, 1)
-		-- Round ears, light inside.
-		head:boxPair(2, 16, 6, 4, 17, 7, BROWN)
-		head:paintPair(3, 16, 7, 3, 16, 7, TAN)
-		-- Honey dripping down its head, like on its egg.
-		head:paint(-3, 15, 5, 1, 15, 9, HONEY)
-		head:paint(-1, 14, 10, -1, 15, 10, HONEY)
-
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 4, 2 }, function(leg)
-			leg:box(2, 0, 1, 4, 3, 3, BROWN)
-			leg:paint(2, 0, 3, 4, 0, 3, TAN)
-			leg:box(2, 0, 4, 4, 0, 4, NOSE)
+		-- A big, heavy body with a hump at the shoulders and a pale blaze on its chest.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 13, -1 }, { 7, 7, 11 }), FUR)
+		body:add(ellipsoid({ 0, 17, 4 }, { 5.6, 3.6, 5.4 }), FUR)
+		body:add(ellipsoid({ 0, 13.5, -8 }, { 6.4, 6.6, 5.6 }), FUR)
+		body:coat(function(p, open)
+			if open(0, 0, 1) and p[3] > 6 and p[2] < 15 and math.abs(p[1]) < 3.6 then
+				return TAN
+			end
+			return fur(p)
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 4, -4 }, function(leg)
-			leg:box(2, 0, -5, 4, 3, -3, BROWN)
+
+		-- A broad head with round ears, a pale muzzle and a shiny nose, honey dripping down from its crown.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 15, 7, 4.9 }, { 0, 16.6, 11, 4.5 } }), FUR)
+		head:add(ellipsoid({ 0, 18.2, 14 }, { 5.3, 4.9, 4.7 }), FUR)
+		head:add(ellipsoid({ 0, 16.4, 18.2 }, { 2.9, 2.4, 2.9 }), TAN)
+		head:add(ellipsoid({ 0, 17.6, 20.6 }, { 1.5, 1, 1 }), NOSE)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 3.9 * s, 22.6, 12.8 }, { 1.9, 1.9, 1.3 }), FUR)
+			head:paint(ellipsoid({ 3.9 * s, 22.6, 13.9 }, { 1.2, 1.2, 0.7 }), TAN, nil, true)
+		end
+		head:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			-- Honey pooled on its crown, running down in drips.
+			if open(0, 1, 0) and y > 21.6 and math.abs(x + 0.6) < 3.2 and z > 11 and z < 17 then
+				return HONEY
+			end
+			for _, drip in { { -2.4, 19.6 }, { -0.6, 18.8 }, { 1.4, 20 } } do
+				if math.abs(x - drip[1]) < 0.7 and y > drip[2] and y < 22.6 and z > 15 then
+					return if y < drip[2] + 0.9 then HONEY_DARK else HONEY
+				end
+			end
+
+			return fur(p)
 		end)
+		head:trace({ { 0, 15.6, 18.6 }, { 0, 15.4, 20.4 } }, { 0, 0, -1 }, NOSE)
 
-		local tail = pet:limb("Tail", { 0, 8, -5 })
-		tail:box(-1, 8, -6, 0, 9, -6, BROWN)
+		-- Thick legs on broad paws with pale claws.
+		local function paw(s: Sculpt, x: number, z: number)
+			s:add(ellipsoid({ x, 1.7, z }, { 3, 1.7, 3.3 }), FUR)
+		end
+		local front = newSculpt(U)
+		front:add(rod({ { 4.6, 13, 5, 3.3 }, { 4.9, 6, 6.2, 2.9 }, { 4.9, 2.6, 6.4, 2.8 } }), FUR)
+		paw(front, 4.9, 7.4)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 4.8, 12.5, -8 }, { 3.8, 5.6, 4.8 }), FUR)
+		back:add(rod({ { 5, 9, -9, 3.3 }, { 5, 2.6, -8.2, 2.9 } }), FUR)
+		paw(back, 5, -7.2)
+		for _, leg in { front, back } do
+			leg:coat(function(p, open)
+				if open(0, -1, 0) or p[2] < 0.8 then
+					return PAD
+				end
+				return fur(p)
+			end)
+		end
 
-		pet:seat(0, 11, -1)
+		local tail = newSculpt(U)
+		tail:add(ellipsoid({ 0, 16, -13.6 }, { 1.6, 1.6, 1.4 }), FUR)
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		body:draw(pet:limb("Body", T.at({ 0, 12, 0 })), { head, front, frontMirror, back, backMirror, tail }, FUR)
+		local headLimb = pet:limb("Head", T.at({ 0, 15, 8 }))
+		head:draw(headLimb, { body }, FUR)
+		roundEyes(headLimb, head, 19.6, 16.6, 1.55)
+		local function claws(limb: Limb, x: number, z: number)
+			for _, dx in { -1.3, -0.45, 0.45, 1.3 } do
+				T.taper(limb, { x + dx, 1.4, z - 1.2 }, { x + dx * 1.1, 0.3, z + 0.9 }, 0.55, 0.5, { 0, 1, 0 }, CLAW)
+			end
+		end
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 4.6, 12, 5 }), function(limb)
+			front:draw(limb, { body }, FUR)
+			claws(limb, 4.9, 10.6)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 4.8, 12, -8 }), function(limb)
+			back:draw(limb, { body }, FUR)
+			claws(limb, 5, -4)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 16, -12.5 })), { body }, FUR)
+
+		pet:seat(0, 21.4 / U, -2 / U)
 	end,
 }
 
 Designs.MossStag = {
 	name = "Moss Stag",
 	skeleton = "Quadruped",
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local DEER = rgb(152, 106, 68)
-		local DEER_DARK = rgb(116, 78, 48)
-		local LIGHT = rgb(232, 206, 162)
-		local MOSS = rgb(86, 146, 66)
-		local MOSS_LIGHT = rgb(140, 196, 96)
-		local VINE = rgb(70, 128, 58)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with antlers, ears, mushrooms and
+		-- blossoms of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local DEER = look(152, 106, 68)
+		local LIGHT = look(232, 206, 162)
+		local SPOT = look(250, 240, 226)
+		local MOSS = look(86, 146, 66)
+		local MOSS_LIGHT = look(140, 196, 96)
+		local MOSS_DARK = look(62, 112, 50)
+		local HOOF = look(64, 46, 34)
+		local NOSE = look(54, 40, 32)
 		local WOOD = rgb(168, 126, 82)
-		local HOOF = rgb(64, 46, 34)
+		local VINE = rgb(70, 128, 58)
 		local CAP = rgb(214, 54, 50)
-		local SPOT = rgb(250, 240, 226)
+		local CREAM = rgb(250, 240, 226)
 		local PINK = rgb(255, 150, 196)
 		local YELLOW = rgb(255, 220, 80)
 
-		-- A deer's body: deep chest, slimmer middle, rounded rump, pale belly and a few fawn spots.
-		local body = pet:limb("Body", { 0, 9, 0 })
-		body:box(-4, 7, 1, 3, 12, 5, DEER)
-		body:box(-3, 7, -5, 2, 11, 0, DEER)
-		body:box(-4, 7, -8, 3, 12, -6, DEER)
-		body:paint(-3, 7, -5, 2, 7, 0, LIGHT)
-		body:paint(-2, 8, 5, 1, 11, 5, LIGHT)
-		body:paintPair(3, 10, -8, 3, 10, -8, SPOT)
-		body:paintPair(3, 11, -7, 3, 11, -7, SPOT)
-		body:paintPair(2, 9, -3, 2, 9, -3, SPOT)
-		-- A blanket of moss over its back, hanging in uneven drips, with mushrooms, blossoms and a trailing vine.
-		body:box(-5, 12, -7, 4, 13, 4, MOSS)
-		body:boxPair(4, 10, -4, 4, 11, 3, MOSS)
-		body:boxPair(4, 9, -4, 4, 9, -3, MOSS)
-		body:boxPair(4, 8, 0, 4, 9, 0, MOSS)
-		body:boxPair(4, 9, 2, 4, 9, 2, MOSS)
-		body:boxPair(4, 6, -3, 4, 8, -3, VINE)
-		body:paint(-3, 13, -5, -1, 13, -3, MOSS_LIGHT)
-		body:paint(0, 13, 0, 2, 13, 3, MOSS_LIGHT)
-		body:paintPair(4, 11, -2, 4, 11, 0, MOSS_LIGHT)
-		body:box(2, 14, -5, 3, 14, -4, CAP)
-		body:paint(2, 14, -5, 2, 14, -5, SPOT)
-		body:box(-4, 14, 2, -4, 14, 2, CAP)
-		body:box(-2, 14, -1, -2, 14, -1, PINK, NEON)
-		body:box(1, 14, 2, 1, 14, 2, YELLOW, NEON)
-		body:box(-4, 14, -6, -4, 14, -6, PINK, NEON)
+		local function moss(p: Vec): Look
+			local n = noise(p)
+			return if n < 0.25 then MOSS_LIGHT elseif n > 0.85 then MOSS_DARK else MOSS
+		end
+		local function mossEdge(z: number): number
+			return 21.4 + 1.3 * math.sin(z * 1.1) + 0.8 * math.sin(z * 2.7 + 1)
+		end
 
-		-- A strong neck with a pale throat, a soft muzzle, and great branching antlers in bloom.
-		local head = pet:limb("Head", { 0, 12, 5 })
-		head:box(-2, 11, 5, 1, 15, 7, DEER)
-		head:paint(-1, 11, 7, 0, 14, 7, LIGHT)
-		head:box(-3, 15, 5, 2, 19, 10, DEER)
-		head:box(-2, 15, 11, 1, 17, 12, LIGHT)
-		head:box(-1, 16, 13, 0, 17, 13, HOOF)
-		head:paint(-2, 18, 10, 1, 19, 10, DEER_DARK)
-		eyes(head, 1, 17, 10, 1)
-		head:boxPair(3, 18, 7, 4, 19, 8, DEER)
-		head:paintPair(3, 18, 8, 4, 18, 8, LIGHT)
-		head:paint(-2, 19, 6, 1, 19, 9, MOSS)
-		head:boxPair(1, 20, 7, 1, 21, 7, WOOD)
-		head:boxPair(2, 22, 7, 3, 22, 7, WOOD)
-		head:boxPair(4, 23, 7, 4, 25, 7, WOOD)
-		head:boxPair(5, 26, 7, 5, 27, 7, WOOD)
-		head:boxPair(2, 23, 8, 2, 24, 9, WOOD)
-		head:boxPair(3, 24, 6, 3, 26, 6, WOOD)
-		head:boxPair(6, 25, 7, 7, 25, 7, WOOD)
-		head:paintPair(4, 23, 7, 4, 24, 7, MOSS_LIGHT)
-		head:paintPair(2, 22, 7, 2, 22, 7, MOSS)
-		head:boxPair(5, 28, 7, 5, 28, 7, PINK, NEON)
-		head:boxPair(3, 27, 6, 3, 27, 6, YELLOW, NEON)
-		head:boxPair(2, 25, 9, 2, 25, 9, PINK, NEON)
-		head:boxPair(8, 25, 7, 8, 25, 7, YELLOW, NEON)
-		head:boxPair(7, 22, 7, 7, 24, 7, VINE)
-
-		-- Long legs with knees, pale cuffs and dark hooves.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3, 8, 3.5 }, function(leg)
-			leg:box(2, 4, 3, 3, 7, 4, DEER)
-			leg:box(2, 0, 3, 3, 3, 4, DEER)
-			leg:paint(2, 4, 4, 3, 4, 4, DEER_DARK)
-			leg:paint(2, 1, 3, 3, 1, 4, LIGHT)
-			leg:paint(2, 0, 3, 3, 0, 4, HOOF)
+		-- A deer's body: a deep chest, a slim middle and a rounded rump, a pale belly and fawn spots, under a
+		-- ragged blanket of moss with mounds, mushrooms and blossoms growing in it and vines trailing down.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 20, 5 }, { 5, 5.6, 6.6 }), DEER)
+		body:add(ellipsoid({ 0, 19.6, -2 }, { 4.5, 4.8, 6.2 }), DEER)
+		body:add(ellipsoid({ 0, 20.2, -8.5 }, { 4.9, 5.2, 5.2 }), DEER)
+		body:coat(function(p, open)
+			local y, z = p[2], p[3]
+			if y > mossEdge(z) and z > -12.5 and z < 9 then
+				return moss(p)
+			end
+			if open(0, -1, 0) and y < 17 then
+				return LIGHT
+			end
+			if (open(1, 0, 0) or open(-1, 0, 0)) and z < -4 and noise(p) < 0.12 then
+				return SPOT
+			end
+			return nil
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3, 8, -6.5 }, function(leg)
-			leg:box(3, 6, -8, 4, 10, -5, DEER)
-			leg:box(2, 0, -7, 3, 5, -6, DEER)
-			leg:paint(2, 1, -7, 3, 1, -6, LIGHT)
-			leg:paint(2, 0, -7, 3, 0, -6, HOOF)
+		for _, mound in { { 1.6, 2.5 }, { -2, -1.5 }, { 0.8, -6.5 }, { -1.4, 5.5 }, { 2.4, -9.5 } } do
+			local x, z = mound[1], mound[2]
+			body:add(ellipsoid({ x, topOf(body, z, x) - 0.2, z }, { 1.8, 1, 1.8 }), MOSS_LIGHT)
+		end
+
+		-- A strong neck with a pale throat, a soft muzzle with a dark nose, moss on its crown.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 22, 8.5, 3.2 }, { 0, 26, 11, 2.5 }, { 0, 28, 12.4, 2.4 } }), DEER)
+		head:add(ellipsoid({ 0, 29.2, 13.4 }, { 2.7, 2.6, 3.2 }), DEER)
+		head:add(ellipsoid({ 0, 28, 16.6 }, { 1.75, 1.7, 2.3 }), DEER)
+		head:coat(function(p, open)
+			local y, z = p[2], p[3]
+			if z > 18.2 and y > 27.6 then
+				return NOSE
+			end
+			if z > 15.5 and y < 27.4 then
+				return LIGHT
+			end
+			if open(0, -1, 0) and z < 13 then
+				return LIGHT
+			end
+			if open(0, 1, 0) and y > 31.2 then
+				return moss(p)
+			end
+			return nil
 		end)
 
-		-- A white flag of a tail.
-		local tail = pet:limb("Tail", { 0, 11, -8 })
-		tail:box(-1, 10, -9, 0, 12, -9, LIGHT)
-		tail:paint(-1, 12, -9, 0, 12, -9, DEER)
+		-- Long legs with knobbly knees, pale cuffs and dark hooves.
+		local front = newSculpt(U)
+		front:add(rod({ { 3.4, 19, 6, 2.4 }, { 3.6, 10.5, 6.8, 1.35 }, { 3.6, 2.6, 6.4, 1.05 } }), DEER)
+		front:add(ellipsoid({ 3.6, 10.6, 6.8 }, { 1.5, 1.4, 1.5 }), DEER)
+		front:add(ellipsoid({ 3.6, 1.1, 6.6 }, { 1.3, 1.1, 1.5 }), HOOF)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 3.6, 18.8, -8.6 }, { 2.7, 4.8, 3.8 }), DEER)
+		back:add(rod({ { 3.8, 15, -10, 1.9 }, { 3.9, 9.5, -11.6, 1.3 }, { 3.9, 2.6, -10, 1.05 } }), DEER)
+		back:add(ellipsoid({ 3.9, 1.1, -9.8 }, { 1.3, 1.1, 1.5 }), HOOF)
+		for _, leg in { front, back } do
+			leg:coat(function(p)
+				if p[2] > 2.2 and p[2] < 3.4 then
+					return LIGHT
+				end
+				return nil
+			end)
+		end
 
-		pet:seat(0, 14, -1)
+		local tail = newSculpt(U)
+		tail:add(ellipsoid({ 0, 22.4, -13.4 }, { 1.1, 2, 1 }), LIGHT)
+		tail:coat(function(_, open)
+			return if open(0, 0, -1) then nil else DEER
+		end)
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 19, 0 }))
+		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, DEER)
+		local headLimb = pet:limb("Head", T.at({ 0, 22, 8.5 }))
+		head:draw(headLimb, { body }, DEER)
+		roundEyes(headLimb, head, 29.7, 15, 1.1)
+
+		-- Mushrooms, blossoms and trailing vines on its mossy back.
+		for _, mushroom in { { 2.6, -4.5, 1 }, { -2.8, 3.5, 0.8 }, { -1, -10, 0.7 } } do
+			local x, z, size = mushroom[1], mushroom[2], mushroom[3]
+			local y = topOf(body, z, x)
+			T.blade(bodyLimb, { x, y - 0.5, z }, { x, y + 1.2 * size, z }, 0.6 * size, 0.6 * size, { 0, 0, 1 }, CREAM)
+			T.ball(bodyLimb, { x, y + 1.4 * size, z }, { 2.4 * size, 1.2 * size, 2.4 * size }, CAP)
+			T.ball(bodyLimb, { x + 0.5 * size, y + 1.9 * size, z + 0.3 }, 0.45 * size, CREAM)
+			T.ball(bodyLimb, { x - 0.4 * size, y + 1.85 * size, z - 0.5 * size }, 0.4 * size, CREAM)
+		end
+		for index, flower in { { -1.4, 0 }, { 2, 6 }, { -2.6, -7 }, { 0.4, -3 }, { 1.2, -12 } } do
+			local x, z = flower[1], flower[2]
+			T.ball(bodyLimb, { x, topOf(body, z, x) + 0.1, z }, 1, if index % 2 == 0 then YELLOW else PINK, NEON)
+		end
+		for _, s in { 1, -1 } do
+			for _, z in { 3, -5.5 } do
+				local edge = mossEdge(z)
+				local x = sideOf(body, edge - 0.6, z) * s
+				T.branch(
+					bodyLimb,
+					{ { x, edge, z }, { x + 0.3 * s, edge - 3, z + 0.3 }, { x + 0.1 * s, edge - 5.4, z } },
+					0.5,
+					{ 1, 0, 0 },
+					VINE
+				)
+			end
+		end
+
+		-- Great branching antlers of wood, mossy and in bloom, with a vine hanging from one tine; ears like leaves.
+		for _, s in { 1, -1 } do
+			T.taper(headLimb, { 2.2 * s, 30.4, 12.4 }, { 5.4 * s, 31.6, 11.6 }, 1.7, 0.5, { 0, 0, 1 }, DEER.color)
+			T.taper(headLimb, { 2.4 * s, 30.5, 12.6 }, { 4.9 * s, 31.4, 11.9 }, 1, 0.55, { 0, 0, 1 }, LIGHT.color)
+			local base, p1, p2, p3 =
+				{ 1.5 * s, 31, 12.6 }, { 3.4 * s, 34.6, 11.4 }, { 5.4 * s, 38.4, 10.6 }, { 6.4 * s, 41.8, 9.6 }
+			local tip = { 6.6 * s, 45, 10.2 }
+			T.branch(headLimb, { base, p1, p2, p3, tip }, 1.2, { 0, 0, 1 }, WOOD)
+			local tines = {
+				{ p1, { 4.2 * s, 37.6, 14 } },
+				{ p2, { 8.8 * s, 40.8, 11.2 } },
+				{ p2, { 5.6 * s, 42.4, 7.2 } },
+				{ p3, { 9.6 * s, 44.6, 9.2 } },
+			}
+			for _, tine in tines do
+				T.taper(headLimb, tine[1], tine[2], 0.85, 0.85, { 0, 0, 1 }, WOOD)
+			end
+			T.ball(headLimb, vlerp(p1, p2, 0.5), { 1.5, 1.1, 1.5 }, MOSS.color)
+			T.ball(headLimb, vlerp(base, p1, 0.6), { 1.2, 0.9, 1.2 }, MOSS_LIGHT.color)
+			T.ball(headLimb, vlerp(p3, tip, 0.3), { 1.1, 0.9, 1.1 }, MOSS.color)
+			T.ball(headLimb, tines[4][2], 1, PINK, NEON)
+			T.ball(headLimb, tines[1][2], 0.9, YELLOW, NEON)
+			T.ball(headLimb, tip, 0.9, PINK, NEON)
+			T.ball(headLimb, tines[3][2], 0.8, YELLOW, NEON)
+			local hang = vlerp(p2, tines[2][2], 0.55)
+			T.branch(
+				headLimb,
+				{ hang, vadd(hang, { -0.4 * s, -3, 0.3 }), vadd(hang, { -0.2 * s, -5.4, 0 }) },
+				0.4,
+				{ 0, 0, 1 },
+				VINE
+			)
+		end
+
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.4, 18, 6 }), function(limb)
+			front:draw(limb, { body }, DEER)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.6, 18, -8.6 }), function(limb)
+			back:draw(limb, { body }, DEER)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 22, -12.5 })), { body }, DEER)
+
+		pet:light(rgb(140, 220, 110), 1.8, 16)
+		pet:seat(0, 25.5 / U, -2 / U)
 	end,
 }
 
@@ -1631,109 +2029,212 @@ Designs.Treant = {
 	name = "Treant",
 	skeleton = "Biped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local BARK = rgb(112, 78, 48)
-		local BARK_DARK = rgb(78, 52, 32)
-		local HOLLOW = rgb(36, 24, 16)
-		local LEAF = rgb(132, 202, 92)
-		local LEAF_DARK = rgb(74, 140, 60)
-		local MOSS = rgb(96, 156, 70)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with twigs, branches, eyes,
+		-- blossoms and fruit of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local BARK = look(112, 78, 48)
+		local BARK_DARK = look(78, 52, 32)
+		local BARK_LIGHT = look(138, 100, 64)
+		local HOLLOW = look(36, 24, 16)
+		local SAP = look(196, 255, 110, NEON)
+		local MOSS = look(96, 156, 70)
+		local LEAF = look(132, 202, 92)
+		local LEAF_DARK = look(74, 140, 60)
+		local LEAF_LIGHT = look(172, 226, 122)
 		local VINE = rgb(70, 128, 58)
-		local SAP = rgb(196, 255, 110)
 		local PINK = rgb(255, 150, 196)
 		local CAP = rgb(214, 54, 50)
 		local SPOT = rgb(250, 240, 226)
 
-		-- A hunched trunk: narrow at the hips, broad at the shoulders.
-		local body = pet:limb("Body", { 0, 6, 0 })
-		body:box(-4, 6, -3, 3, 11, 3, BARK)
-		body:box(-5, 12, -4, 4, 18, 3, BARK)
-		-- A heavy brow over glowing slit eyes, and a hollow mouth glowing deep inside.
-		body:box(-4, 16, 4, 3, 16, 4, BARK_DARK)
-		body:paintPair(1, 15, 3, 2, 15, 3, SAP, NEON)
-		body:paint(-2, 12, 3, 1, 13, 3, HOLLOW)
-		body:paint(-1, 12, 3, 0, 12, 3, SAP, NEON)
-		-- Glowing sap showing through jagged cracks in the bark.
-		body:paint(-3, 10, 3, -3, 11, 3, SAP, NEON)
-		body:paint(-2, 8, 3, -2, 9, 3, SAP, NEON)
-		body:paint(-3, 7, 3, -3, 7, 3, SAP, NEON)
-		body:paint(2, 9, 3, 2, 10, 3, SAP, NEON)
-		body:paint(1, 7, 3, 1, 8, 3, SAP, NEON)
-		body:paint(2, 6, 3, 2, 6, 3, SAP, NEON)
-		body:paint(4, 16, -2, 4, 17, -2, SAP, NEON)
-		body:paint(4, 14, -1, 4, 15, -1, SAP, NEON)
-		body:paint(4, 13, -2, 4, 13, -2, SAP, NEON)
-		body:paint(-1, 9, -3, -1, 11, -3, SAP, NEON)
-		body:paint(0, 12, -4, 0, 13, -4, SAP, NEON)
-		body:paint(-1, 14, -4, -1, 15, -4, SAP, NEON)
-		-- Bark grooves and moss on its shoulders.
-		body:paint(1, 6, -3, 1, 11, -3, BARK_DARK)
-		body:paint(2, 12, -4, 2, 18, -4, BARK_DARK)
-		body:paint(-5, 12, 0, -5, 18, 0, BARK_DARK)
-		body:paint(-5, 18, -4, -2, 18, -1, MOSS)
-		body:paint(2, 18, 0, 4, 18, 3, MOSS)
-		-- Red mushrooms growing out of one side, a snapped-off branch on the other.
-		body:box(-7, 13, -4, -6, 13, -2, CAP)
-		body:paint(-7, 13, -3, -7, 13, -3, SPOT)
-		body:box(-6, 9, 0, -5, 9, 1, CAP)
-		body:box(4, 8, -1, 5, 9, -1, BARK_DARK)
+		local function bark(p: Vec): Look?
+			local n = noise(p)
+			if n < 0.1 then
+				return BARK_LIGHT
+			elseif n > 0.9 then
+				return BARK_DARK
+			end
+			return nil
+		end
 
-		-- A big crown of leaves with branches poking through, blossoms, and glowing fruit hanging underneath.
-		local head = pet:limb("Head", { 0, 19, 0 })
-		head:box(-6, 19, -5, 5, 21, 4, LEAF)
-		head:box(-5, 22, -4, 4, 23, 3, LEAF)
-		head:box(-3, 24, -3, 2, 24, 2, LEAF)
-		head:box(-7, 20, -2, -7, 21, 1, LEAF)
-		head:box(6, 19, -3, 6, 20, 0, LEAF)
-		head:box(-2, 20, 5, 1, 22, 5, LEAF)
-		head:paint(-6, 19, -5, -3, 20, -3, LEAF_DARK)
-		head:paint(2, 21, 1, 5, 21, 4, LEAF_DARK)
-		head:paint(-5, 23, 0, -3, 23, 3, LEAF_DARK)
-		head:paint(1, 24, -3, 2, 24, -1, LEAF_DARK)
-		head:box(-4, 25, -1, -3, 26, 0, BARK)
-		head:box(-5, 27, -1, -5, 27, 0, BARK)
-		head:box(-7, 28, -2, -5, 29, 1, LEAF)
-		head:paint(-7, 28, -2, -6, 28, 1, LEAF_DARK)
-		head:box(2, 25, -3, 3, 26, -2, BARK)
-		head:box(4, 27, -3, 4, 27, -2, BARK)
-		head:box(4, 28, -4, 6, 29, -1, LEAF)
-		head:paint(5, 28, -4, 6, 28, -1, LEAF_DARK)
-		head:paint(5, 20, -2, 5, 20, -2, PINK)
-		head:paint(-4, 23, 3, -4, 23, 3, PINK)
-		head:paint(0, 24, 2, 0, 24, 2, PINK)
-		head:paint(-7, 21, 0, -7, 21, 0, PINK)
-		head:paint(1, 22, 5, 1, 22, 5, PINK)
-		head:box(-6, 18, 3, -6, 18, 3, SAP, NEON)
-		head:box(5, 17, 2, 5, 18, 2, SAP, NEON)
-		head:box(-2, 18, -5, -2, 18, -5, SAP, NEON)
-
-		-- Long branch arms reaching down, with twig claws, a tuft of leaves and a hanging vine.
-		pet:limbPair("LeftArm", "RightArm", { 5.5, 17, 0 }, function(arm)
-			arm:box(5, 15, -1, 6, 17, 1, BARK)
-			arm:box(6, 11, -1, 7, 15, 0, BARK)
-			arm:box(6, 8, 0, 7, 10, 1, BARK)
-			arm:box(6, 6, 2, 6, 7, 2, BARK_DARK)
-			arm:box(7, 6, 0, 7, 7, 0, BARK_DARK)
-			arm:box(5, 6, 1, 5, 7, 1, BARK_DARK)
-			arm:box(5, 18, -1, 7, 18, 1, LEAF)
-			arm:box(7, 12, 1, 7, 14, 1, VINE)
-			arm:paint(6, 13, -1, 7, 14, -1, MOSS)
+		-- A hunched trunk, narrow at the hips and broad at the shoulders, with a face: a heavy brow and a hollow
+		-- mouth glowing deep inside. Grooved bark, cracks of glowing sap, moss on its shoulders.
+		local body = newSculpt(U)
+		body:add(rod({ { 0, 12.5, 0, 5 }, { 0, 21, 0.2, 5.4 }, { 0, 28, -0.4, 6.6 } }), BARK)
+		body:add(ellipsoid({ 0, 29.5, -0.4 }, { 8.4, 4.2, 5.8 }), BARK)
+		body:add(rod({ { -4.8, 27.6, 4.8, 1.6 }, { 0, 26.4, 6.3, 1.7 }, { 4.8, 27.6, 4.8, 1.6 } }), BARK_DARK)
+		body:carve(ellipsoid({ 0, 20.4, 6.4 }, { 3.2, 2.2, 2.6 }))
+		body:paint(ellipsoid({ 0, 20.4, 6.4 }, { 3.8, 2.8, 3.2 }), HOLLOW, nil, true)
+		body:add(ellipsoid({ 0, 20.2, 3.6 }, { 1.6, 1.1, 0.9 }), SAP)
+		body:coat(function(p, open)
+			if open(0, 1, 0) and p[2] > 30.5 then
+				return if noise(p) < 0.3 then LEAF_DARK else MOSS
+			end
+			return bark(p)
 		end)
-		-- Thick legs on spreading roots.
-		pet:limbPair("LeftLeg", "RightLeg", { 2.5, 6, 0 }, function(leg)
-			leg:box(1, 2, -2, 3, 6, 1, BARK)
-			leg:box(0, 0, -3, 4, 1, 2, BARK_DARK)
-			leg:box(1, 0, 3, 1, 0, 4, BARK_DARK)
-			leg:box(3, 0, 3, 3, 0, 4, BARK_DARK)
-			leg:box(5, 0, -1, 5, 0, 0, BARK_DARK)
-			leg:box(1, 0, -4, 1, 0, -4, BARK_DARK)
-			leg:paint(0, 1, -3, 2, 1, -1, MOSS)
+		for _, groove in { { -2.8, 0 }, { 2.2, 0 } } do
+			body:trace(
+				{ { groove[1], 31, 0 }, { groove[1] + 0.5, 21, 0 }, { groove[1] - 0.2, 10, 0 } },
+				{ 0, 0, 1 },
+				BARK_DARK
+			)
+		end
+		for _, s in { 1, -1 } do
+			body:trace({ { 0, 31, 2 }, { 0, 20, 1.4 }, { 0, 10, 1.8 } }, { -s, 0, 0 }, BARK_DARK)
+			body:trace({ { 0, 30, -2.4 }, { 0, 19, -2 }, { 0, 10, -2.6 } }, { -s, 0, 0 }, BARK_DARK)
+		end
+		local cracks = {
+			{ { { -3.2, 16.4, 0 }, { -2.2, 14.4, 0 }, { -3.2, 12.6, 0 }, { -2.2, 10, 0 } }, { 0, 0, -1 } },
+			{ { { 2.6, 16.6, 0 }, { 1.6, 14.8, 0 }, { 2.8, 13, 0 }, { 2, 11, 0 } }, { 0, 0, -1 } },
+			{ { { -1, 25, 0 }, { 0.4, 21.5, 0 }, { -0.8, 17.4, 0 }, { 0.4, 14, 0 } }, { 0, 0, 1 } },
+			{ { { 0, 27, 2 }, { 0, 24, 0.4 }, { 0, 21.6, 1.6 }, { 0, 18.4, 0.2 } }, { -1, 0, 0 } },
+			{ { { 0, 25, -1.4 }, { 0, 22, 0.2 }, { 0, 19.4, -1 } }, { 1, 0, 0 } },
+		}
+		for _, crack in cracks do
+			body:trace(crack[1], crack[2], SAP)
+		end
+
+		-- A crown of leaves: billowing clumps, dark underneath, with branches poking through, blossoms, and glowing
+		-- fruit hanging below.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 36.5, -0.4 }, { 8.6, 4.8, 7.2 }), LEAF)
+		head:add(ellipsoid({ -5.2, 38.6, 1 }, { 5, 4, 5 }), LEAF)
+		head:add(ellipsoid({ 5, 38.2, -1.8 }, { 5.2, 4.2, 5 }), LEAF)
+		head:add(ellipsoid({ 0, 41.2, -1 }, { 6.2, 3.8, 5.6 }), LEAF)
+		head:add(ellipsoid({ -1.6, 44, 0.4 }, { 3.8, 2.6, 3.4 }), LEAF)
+		head:add(ellipsoid({ 2.6, 43.4, -2.4 }, { 3, 2.4, 3 }), LEAF)
+		head:add(ellipsoid({ 0, 33, -0.4 }, { 4.6, 2.4, 4 }), BARK)
+		head:coat(function(p, open)
+			if p[2] < 33.6 then
+				return nil
+			end
+			if open(0, -1, 0) then
+				return LEAF_DARK
+			end
+			local n = noise(p)
+			if n < 0.2 then
+				return LEAF_LIGHT
+			elseif n > 0.8 then
+				return LEAF_DARK
+			end
+			return nil
 		end)
 
-		pet:light(SAP, 2, 14)
-		pet:particles("Sparkles", SAP, 8)
-		pet:seat(0, 25, -1)
+		-- Long branch arms reaching down, a tuft of leaves at each shoulder, moss on the forearm, twig claws.
+		local arm = newSculpt(U)
+		arm:add(
+			rod({ { 6.8, 29.6, -0.4, 2.6 }, { 9.6, 23, 0.4, 1.9 }, { 10.2, 16, 1.4, 1.5 }, { 9.9, 12, 2.2, 1.2 } }),
+			BARK
+		)
+		arm:add(ellipsoid({ 8.2, 31.6, -0.4 }, { 2.8, 1.9, 2.8 }), LEAF)
+		arm:coat(function(p, open)
+			if p[2] > 30.5 then
+				return if noise(p) < 0.3 then LEAF_LIGHT else nil
+			end
+			if open(0, 1, 0) and p[2] < 24 and p[2] > 15 then
+				return MOSS
+			end
+			return bark(p)
+		end)
+
+		-- Thick legs spreading into roots over the ground, moss on the roots.
+		local leg = newSculpt(U)
+		leg:add(rod({ { 3.4, 13, 0, 3.4 }, { 3.8, 6, 0.3, 3.1 }, { 4, 3.6, 0.5, 3.4 } }), BARK)
+		for _, root in { { 8.8, 3.6 }, { 3.4, 6.8 }, { 8.2, -4.4 }, { 2, -5.6 } } do
+			local mid = { (4 + root[1]) / 2, 1.6, (0.5 + root[2]) / 2 }
+			leg:add(
+				rod({ { 4, 2.6, 0.5, 2.2 }, { mid[1], mid[2], mid[3], 1.3 }, { root[1], 0.7, root[2], 0.6 } }),
+				BARK_DARK
+			)
+		end
+		leg:coat(function(p, open)
+			if open(0, 1, 0) and p[2] < 3.4 and noise(p) < 0.45 then
+				return MOSS
+			end
+			return bark(p)
+		end)
+
+		local legMirror, armMirror = leg:mirror(), arm:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 14, 0 }))
+		body:draw(bodyLimb, { head, leg, legMirror, arm, armMirror }, BARK)
+		-- Glowing slit eyes under the brow, slanting down to the middle.
+		for _, s in { 1, -1 } do
+			local z = frontOf(body, 2.6 * s, 23.4) + 0.12
+			T.blade(bodyLimb, { 0.8 * s, 23.2, z }, { 2.8 * s, 23.8, z - 0.2 }, 1.9, 0.5, { 0, 0, 1 }, SAP.color, NEON)
+			T.taper(
+				bodyLimb,
+				{ 2.8 * s, 23.8, z - 0.2 },
+				{ 4.8 * s, 24.9, z - 1.1 },
+				1.9,
+				0.5,
+				{ 0, 0, 1 },
+				SAP.color,
+				NEON
+			)
+		end
+		-- Red mushrooms growing out of its side.
+		for _, mushroom in { { -1, 17, 1.2 }, { -1, 13.6, 0.9 }, { 1, 22.4, 0.8 } } do
+			local s, y, size = mushroom[1], mushroom[2], mushroom[3]
+			local x = sideOf(body, y, 0) * s
+			T.blade(
+				bodyLimb,
+				{ x - 0.4 * s, y, 0.4 },
+				{ x + 0.9 * s * size, y + 0.3, 0.4 },
+				0.6 * size,
+				0.6 * size,
+				{ 0, 1, 0 },
+				SPOT
+			)
+			T.ball(bodyLimb, { x + 1 * s * size, y + 0.5, 0.4 }, { 1.4 * size, 0.9 * size, 2.4 * size }, CAP)
+			T.ball(bodyLimb, { x + 1.3 * s * size, y + 0.85, 0.9 }, 0.4 * size, SPOT)
+		end
+
+		local headLimb = pet:limb("Head", T.at({ 0, 32, 0 }))
+		head:draw(headLimb, { body, arm, armMirror }, BARK)
+		for _, branch in
+			{
+				{ { -1, 35, 0 }, { -3.6, 43, 0.6 }, { -6.4, 47.6, 1.4 } },
+				{ { 1, 35, -1 }, { 4.4, 42.6, -2.8 }, { 7, 46.4, -3.6 } },
+				{ { 0, 35, -2 }, { 0.6, 42, -5.4 }, { 1.4, 44.4, -8.2 } },
+			}
+		do
+			T.branch(headLimb, branch, 1.3, { 0, 0, 1 }, BARK.color)
+			T.ball(headLimb, branch[3], { 3.2, 2, 3 }, LEAF.color)
+			T.ball(headLimb, vadd(branch[3], { 0.6, 0.8, 0.6 }), 0.9, PINK)
+		end
+		for _, flower in { { -4, 2 }, { 3, 2.6 }, { -6.6, -2 }, { 5.6, -4.4 }, { 0, 3.4 }, { -1.6, -5.2 }, { 2.4, -1 } } do
+			local x, z = flower[1], flower[2]
+			T.ball(headLimb, { x, topOf(head, z, x) - 0.1, z }, 1.1, PINK)
+		end
+		for _, fruit in { { -6.4, 2 }, { 6.6, -2.6 }, { -2.6, -6.4 }, { 3.6, 5 }, { -4.6, -4.2 } } do
+			local x, z = fruit[1], fruit[2]
+			local y = bottomOf(head, z, x)
+			T.blade(headLimb, { x, y + 0.6, z }, { x, y - 1.2, z }, 0.3, 0.3, { 0, 0, 1 }, VINE)
+			T.ball(headLimb, { x, y - 1.8, z }, 1.4, SAP.color, NEON)
+		end
+
+		pet:limbPair("LeftArm", "RightArm", T.at({ 7.6, 29, -0.4 }), function(limb)
+			arm:draw(limb, { body, head }, BARK)
+			for _, twig in
+				{
+					{ { 9.9, 12.6, 2.2 }, { 10.6, 9.4, 3.2 }, { 11.2, 7.8, 4.6 } },
+					{ { 9.6, 12.4, 2.6 }, { 9.2, 9, 4 }, { 8.8, 7.6, 5.4 } },
+					{ { 10.2, 12.4, 1.6 }, { 11.6, 9.6, 1.4 }, { 12.6, 8.2, 1.8 } },
+				}
+			do
+				T.branch(limb, twig, 0.8, { 1, 0, 0 }, BARK_DARK.color)
+			end
+			T.branch(limb, { { 10, 21, 1.4 }, { 10.7, 17.4, 2.4 }, { 10.4, 14.4, 2.2 } }, 0.4, { 0, 0, 1 }, VINE)
+		end)
+		pet:limbPair("LeftLeg", "RightLeg", T.at({ 3.6, 13, 0 }), function(limb)
+			leg:draw(limb, { body }, BARK)
+		end)
+
+		pet:light(SAP.color, 2.2, 18)
+		pet:particles("Sparkles", SAP.color, 10)
+		pet:seat(0, 46.6 / U, -0.5 / U)
 	end,
 }
 
@@ -4862,9 +5363,6 @@ Designs.Cerberus = {
 		local function at(p: { number }): { number }
 			return { p[1] / U, p[2] / U, p[3] / U }
 		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
-		end
 		local FUR = look(64, 48, 54)
 		local FUR_DARK = look(30, 22, 28)
 		local HORN = look(58, 46, 48)
@@ -5164,12 +5662,12 @@ Designs.EternalPhoenix = {
 		-- The eyes are painted flat on the face, narrow and pointed, slanting up and back under the brow. A crest of
 		-- five flame plumes sweeps back from the crown, burning at its tip.
 		local head = pet:limb("Head", { 0, 24, 2.5 })
-		local function look(color: Color, material: string?): Look
+		local function tone(color: Color, material: string?): Look
 			return { color = color, material = material }
 		end
-		local FACE, FACE_DEEP, NAPE = look(rgb(255, 206, 62)), look(rgb(240, 160, 34)), look(RED)
-		local BILL, HOOK, CERE = look(BEAK), look(BEAK_TIP), look(rgb(255, 228, 120))
-		local GAPE, LID = look(rgb(90, 30, 18)), look(rgb(70, 10, 12))
+		local FACE, FACE_DEEP, NAPE = tone(rgb(255, 206, 62)), tone(rgb(240, 160, 34)), tone(RED)
+		local BILL, HOOK, CERE = tone(BEAK), tone(BEAK_TIP), tone(rgb(255, 228, 120))
+		local GAPE, LID = tone(rgb(90, 30, 18)), tone(rgb(70, 10, 12))
 		-- Narrower from side to side than it is round: a raptor's beak.
 		local function narrow(s: Shape, squeeze: number): Shape
 			return shape(s.centre, s.radius, function(x, y, z)
@@ -5207,7 +5705,7 @@ Designs.EternalPhoenix = {
 		skull:carve(shape({ 0, 25.9, 8.6 }, 3, function(x, y, z)
 			return math.abs(y - 25.9) < 0.3 and z > 7.4 and z < 10 and math.abs(x) < 1.2
 		end))
-		skull:add(ellipsoid({ 0, 25.9, 7.4 }, { 0.9, 0.35, 0.6 }), look(ORANGE, NEON))
+		skull:add(ellipsoid({ 0, 25.9, 7.4 }, { 0.9, 0.35, 0.6 }), tone(ORANGE, NEON))
 		skull:coat(function(p, open)
 			local x, y, z = p[1], p[2], p[3]
 			local side = if x > 0 then 1 else -1
@@ -5233,12 +5731,12 @@ Designs.EternalPhoenix = {
 				local thick = 0.95 * math.max(0, math.sin(math.pi * math.clamp(t, 0, 1))) ^ 0.7
 				if t >= 0 and t <= 1 and y <= top and y >= top - thick then
 					if z > 4.7 and z < 5.1 then
-						return look(PUPIL)
+						return tone(PUPIL)
 					end
 					if z >= 5.1 and z < 5.5 and y > top - 0.45 then
-						return look(WHITE, NEON)
+						return tone(WHITE, NEON)
 					end
-					return look(EYE_RED, NEON)
+					return tone(EYE_RED, NEON)
 				end
 				if t >= -0.12 and t <= 1.12 and y <= top + 0.35 and y >= top - thick - 0.3 then
 					return LID
@@ -5438,9 +5936,6 @@ Designs.LavaDragon = {
 		local U = 1.2
 		local function at(p: Vec): Vec
 			return { p[1] / U, p[2] / U, p[3] / U }
-		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
 		end
 		local SCALE = look(38, 28, 32)
 		local HORN = look(78, 62, 60)
@@ -5813,9 +6308,6 @@ Designs.Pteranodon = {
 		local function eggAt(limb: Limb, centre: Vec, size: Vec, color: Color)
 			egg(limb, at(centre), { size[1] / U, size[2] / U, size[3] / U }, nil, color)
 		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
-		end
 		local FUR = look(204, 150, 104)
 		local FUR_LIGHT = look(222, 176, 128)
 		local DARK = look(150, 96, 70)
@@ -6025,9 +6517,6 @@ Designs.Stegosaurus = {
 		local U = 1.2
 		local function at(p: Vec): Vec
 			return { p[1] / U, p[2] / U, p[3] / U }
-		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
 		end
 		local HIDE = look(104, 132, 88)
 		local DARK = look(76, 100, 66)
@@ -6327,9 +6816,6 @@ Designs.TRex = {
 		local function at(p: Vec): Vec
 			return { p[1] / U, p[2] / U, p[3] / U }
 		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
-		end
 		local SCALE = look(84, 70, 56)
 		local DARK = look(44, 36, 30)
 		local STRIPE = look(156, 40, 30)
@@ -6567,9 +7053,6 @@ Designs.Mosasaurus = {
 		local function at(p: Vec): Vec
 			return { p[1] / U, p[2] / U, p[3] / U }
 		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
-		end
 		local BACK = look(28, 58, 90)
 		local SIDE = look(42, 90, 126)
 		local BELLY = look(206, 228, 228)
@@ -6740,9 +7223,6 @@ Designs.LunarDragon = {
 		local U = 1.2
 		local function at(p: Vec): Vec
 			return { p[1] / U, p[2] / U, p[3] / U }
-		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
 		end
 		local NIGHT = look(38, 42, 96)
 		local NIGHT_DARK = look(26, 28, 68)
@@ -6920,26 +7400,7 @@ Designs.LunarDragon = {
 		local headLimb = pet:limb("Head", at({ 0, 18, 7 }))
 		head:draw(headLimb, { body }, NIGHT)
 		-- Narrow glowing eyes, slanting up towards the back, in dark rims.
-		for _, s in { 1, -1 } do
-			local out = { s, 0, 0 }
-			local cy, cz = math.floor(31.9 / U), math.floor(18.6 / U)
-			local cx = 6
-			while not head:has(if s > 0 then cx else -1 - cx, cy, cz) and cx > 0 do
-				cx -= 1
-			end
-			local depth = (cx + 1) * U - 0.03
-			local function almond(grow: number, color: Color, material: string?, thick: number)
-				local nose = { s * (depth + thick / 2), 31.6 - grow * 0.2, 20.3 + grow }
-				local backPoint = { s * (depth + thick / 2), 32.5 + grow * 0.2, 17 - grow }
-				local p1, p2 = vlerp(nose, backPoint, 0.3), vlerp(nose, backPoint, 0.7)
-				local width = 0.95 + grow
-				taper(headLimb, at(p1), at(nose), width / U, thick / U, out, color, material)
-				blade(headLimb, at(p1), at(p2), width / U, thick / U, out, color, material)
-				taper(headLimb, at(p2), at(backPoint), width / U, thick / U, out, color, material)
-			end
-			almond(0.4, CLAW.color, nil, 0.16)
-			almond(0, MOON.color, NEON, 0.3)
-		end
+		slitEyes(headLimb, head, { 31.6, 20.3 }, { 32.5, 17 }, 0.95, MOON.color, NEON, CLAW.color)
 		for _, tip in hornTips do
 			headLimb:fire(at(tip), 2.5, MOONFIRE, MOONFIRE_CORE)
 		end
