@@ -8,7 +8,8 @@
 -- Every pet in the game has a design, zone by zone: Forest, Desert, Snow, Ocean and Volcano.
 -- Secret and Eternal pets are the showpieces, far more detailed than the rest (the tests check this).
 -- Curved parts use the helpers below: `tube` (tentacles, coils, horns), `curl` (a spiral to end a tube on), and
--- `blob` (rounded bodies, filled from a shape function).
+-- `blob` (rounded bodies, filled from a shape function). The finest pets are sculpted (`newSculpt`): modelled cell
+-- by cell from rounded shapes turned to any angle, then packed into blocks.
 
 type Color = { number }
 type Pet = any
@@ -526,6 +527,491 @@ local function blob(
 		draw(o)
 	end
 	return inside
+end
+
+----------------------------------------------------------------------------------------------------------------
+-- Sculpting, for the showpieces: a limb is modelled cell by cell out of rounded shapes, each of which can be turned
+-- to any angle, then packed into as few blocks as possible. Later shapes cover earlier ones, so details are just
+-- more shapes on top. Every cell belongs to one block, so no two blocks ever overlap (and so never flicker).
+
+export type Look = { color: Color, material: string?, transparency: number? }
+-- Where a shape sits and which way it faces: its own x, y and z are turned by `yaw` (round y, turning forward
+-- towards its left), then `pitch` (tipping forward up), then `roll` (round its forward axis), and moved to `origin`.
+export type Frame = { origin: { number }, yaw: number?, pitch: number?, roll: number? }
+export type Shape = {
+	-- Whether a point (not a cell: the middle of cell x is x + 0.5) is inside it, in its own frame.
+	inside: (x: number, y: number, z: number) -> boolean,
+	-- A ball round it, in its own frame, to know which cells to try.
+	centre: { number },
+	radius: number,
+}
+
+local function toWorld(frame: Frame, x: number, y: number, z: number): (number, number, number)
+	local c, s = math.cos(frame.roll or 0), math.sin(frame.roll or 0)
+	x, y = x * c - y * s, x * s + y * c
+	c, s = math.cos(frame.pitch or 0), math.sin(frame.pitch or 0)
+	y, z = y * c + z * s, -y * s + z * c
+	c, s = math.cos(frame.yaw or 0), math.sin(frame.yaw or 0)
+	x, z = x * c + z * s, -x * s + z * c
+	return x + frame.origin[1], y + frame.origin[2], z + frame.origin[3]
+end
+
+local function toLocal(frame: Frame, x: number, y: number, z: number): (number, number, number)
+	x, y, z = x - frame.origin[1], y - frame.origin[2], z - frame.origin[3]
+	local c, s = math.cos(-(frame.yaw or 0)), math.sin(-(frame.yaw or 0))
+	x, z = x * c + z * s, -x * s + z * c
+	c, s = math.cos(-(frame.pitch or 0)), math.sin(-(frame.pitch or 0))
+	y, z = y * c + z * s, -y * s + z * c
+	c, s = math.cos(-(frame.roll or 0)), math.sin(-(frame.roll or 0))
+	x, y = x * c - y * s, x * s + y * c
+	return x, y, z
+end
+
+-- An egg shape: a ball stretched to radii { rx, ry, rz }.
+local function ellipsoid(centre: { number }, radii: { number }): Shape
+	return {
+		centre = centre,
+		radius = math.max(radii[1], radii[2], radii[3]),
+		inside = function(x: number, y: number, z: number): boolean
+			local dx, dy, dz = (x - centre[1]) / radii[1], (y - centre[2]) / radii[2], (z - centre[3]) / radii[3]
+			return dx * dx + dy * dy + dz * dz <= 1
+		end,
+	}
+end
+
+-- A rounded rod through points { x, y, z, radius }, tapering from one to the next: legs, necks, horns, claws.
+local function rod(points: { { number } }): Shape
+	local low, high = { math.huge, math.huge, math.huge }, { -math.huge, -math.huge, -math.huge }
+	for _, p in points do
+		for k = 1, 3 do
+			low[k] = math.min(low[k], p[k] - p[4])
+			high[k] = math.max(high[k], p[k] + p[4])
+		end
+	end
+	local centre = { (low[1] + high[1]) / 2, (low[2] + high[2]) / 2, (low[3] + high[3]) / 2 }
+	return {
+		centre = centre,
+		radius = math.max(high[1] - low[1], high[2] - low[2], high[3] - low[3]) / 2 * 1.74,
+		inside = function(x: number, y: number, z: number): boolean
+			for index = 1, #points - 1 do
+				local a, b = points[index], points[index + 1]
+				local abx, aby, abz = b[1] - a[1], b[2] - a[2], b[3] - a[3]
+				local length = abx * abx + aby * aby + abz * abz
+				local t = 0
+				if length > 0 then
+					t = math.clamp(((x - a[1]) * abx + (y - a[2]) * aby + (z - a[3]) * abz) / length, 0, 1)
+				end
+				local dx, dy, dz = a[1] + abx * t - x, a[2] + aby * t - y, a[3] + abz * t - z
+				local r = a[4] + (b[4] - a[4]) * t
+				if dx * dx + dy * dy + dz * dz <= r * r then
+					return true
+				end
+			end
+			return false
+		end,
+	}
+end
+
+-- A shape squashed `factor` times thinner along z, round the plane z = z0: feathers, fins, blades.
+local function flatten(s: Shape, z0: number, factor: number): Shape
+	return {
+		centre = s.centre,
+		radius = s.radius,
+		inside = function(x: number, y: number, z: number): boolean
+			return s.inside(x, y, z0 + (z - z0) * factor)
+		end,
+	}
+end
+
+-- Any shape at all, from a test for points inside it and a ball round it.
+local function shape(centre: { number }, radius: number, inside: (number, number, number) -> boolean): Shape
+	return { centre = centre, radius = radius, inside = inside }
+end
+
+local Sculpt = {}
+Sculpt.__index = Sculpt
+export type Sculpt = typeof(setmetatable({} :: { cells: { [number]: Look }, unit: number }, Sculpt))
+
+local function cellKey(x: number, y: number, z: number): number
+	return ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512)
+end
+
+local function cellAt(key: number): (number, number, number)
+	local z = key % 1024
+	key = (key - z) // 1024
+	local y = key % 1024
+	return (key - y) // 1024 - 512, y - 512, z - 512
+end
+
+-- Clay modelled in units of the design's choosing, `unit` of them to a cell, so a design can be drawn once and
+-- built finer or coarser. Positions given to the limbs it is drawn on (pivots, the seat) are in cells: divide by
+-- `unit`.
+local function newSculpt(unit: number?): Sculpt
+	return setmetatable({ cells = {}, unit = unit or 1 }, Sculpt)
+end
+
+-- Calls `fn` with every cell whose middle is inside the shape. With `ensure`, a shape too small to hold the middle
+-- of any cell still gets the cell its own middle is in, so small details never vanish.
+function Sculpt.each(self: Sculpt, s: Shape, frame: Frame?, fn: (number, number, number) -> (), ensure: boolean?)
+	local unit = self.unit
+	local cx, cy, cz = s.centre[1], s.centre[2], s.centre[3]
+	if frame then
+		cx, cy, cz = toWorld(frame, cx, cy, cz)
+	end
+	local r = s.radius / unit + 1
+	cx, cy, cz = cx / unit, cy / unit, cz / unit
+	local found = false
+	for x = math.floor(cx - r), math.ceil(cx + r) do
+		for y = math.floor(cy - r), math.ceil(cy + r) do
+			for z = math.floor(cz - r), math.ceil(cz + r) do
+				local px, py, pz = (x + 0.5) * unit, (y + 0.5) * unit, (z + 0.5) * unit
+				if frame then
+					px, py, pz = toLocal(frame, px, py, pz)
+				end
+				if s.inside(px, py, pz) then
+					found = true
+					fn(x, y, z)
+				end
+			end
+		end
+	end
+	if ensure and not found then
+		fn(math.floor(cx), math.floor(cy), math.floor(cz))
+	end
+end
+
+-- Fills a shape with clay of a look, over anything already there.
+function Sculpt.add(self: Sculpt, s: Shape, look: Look, frame: Frame?)
+	self:each(s, frame, function(x, y, z)
+		self.cells[cellKey(x, y, z)] = look
+	end, true)
+end
+
+-- Cuts a shape away.
+function Sculpt.carve(self: Sculpt, s: Shape, frame: Frame?)
+	self:each(s, frame, function(x, y, z)
+		self.cells[cellKey(x, y, z)] = nil
+	end)
+end
+
+function Sculpt.has(self: Sculpt, x: number, y: number, z: number): boolean
+	return self.cells[cellKey(x, y, z)] ~= nil
+end
+
+-- Whether a cell is on the outside of the clay, with at least one side showing.
+function Sculpt.showing(self: Sculpt, x: number, y: number, z: number): boolean
+	return self:has(x, y, z)
+		and not (
+			self:has(x + 1, y, z)
+			and self:has(x - 1, y, z)
+			and self:has(x, y + 1, z)
+			and self:has(x, y - 1, z)
+			and self:has(x, y, z + 1)
+			and self:has(x, y, z - 1)
+		)
+end
+
+-- Recolours the clay already inside a shape: with `outside`, only the cells that show.
+function Sculpt.paint(self: Sculpt, s: Shape, look: Look, frame: Frame?, outside: boolean?)
+	self:each(s, frame, function(x, y, z)
+		if self:has(x, y, z) and (not outside or self:showing(x, y, z)) then
+			self.cells[cellKey(x, y, z)] = look
+		end
+	end)
+end
+
+-- Builds the clay on a limb as blocks. Cells that are hidden inside (in this clay or another limb's) take the main look (the most common one), so
+-- the bulk of the clay is one solid colour, then each look is covered with as few blocks as it can find. Blocks of
+-- the same look may overlap, which never shows; blocks of different looks never do.
+-- Draws a line over the outside of the clay: follows a path of points { x, y, z } (design units), and at each step
+-- colours the outermost cell seen looking along `direction` (such as { -1, 0, 0 }, looking from its left side).
+-- Only the path's other two coordinates matter.
+function Sculpt.trace(self: Sculpt, points: { { number } }, direction: { number }, look: Look)
+	local unit = self.unit
+	local axis = if direction[1] ~= 0 then 1 elseif direction[2] ~= 0 then 2 else 3
+	for index = 1, #points - 1 do
+		local a, b = points[index], points[index + 1]
+		local length = math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2 + (b[3] - a[3]) ^ 2)
+		local steps = math.max(1, math.ceil(length / (unit * 0.4)))
+		for step = 0, steps do
+			local t = step / steps
+			local cell = {}
+			for k = 1, 3 do
+				cell[k] = math.floor((a[k] + (b[k] - a[k]) * t) / unit)
+			end
+			cell[axis] = -direction[axis] * 60
+			for _ = 0, 120 do
+				local key = cellKey(cell[1], cell[2], cell[3])
+				if self.cells[key] then
+					self.cells[key] = look
+					break
+				end
+				cell[axis] += direction[axis]
+			end
+		end
+	end
+end
+
+-- A copy mirrored to the other side of the pet, for the clay of a limb drawn with limbPair.
+function Sculpt.mirror(self: Sculpt): Sculpt
+	local copy = newSculpt(self.unit)
+	for key, look in self.cells do
+		local x, y, z = cellAt(key)
+		copy.cells[cellKey(-1 - x, y, z)] = look
+	end
+	return copy
+end
+
+-- `others` are the sculpts of the limbs that overlap this one: where they fill a cell too, it is hidden inside.
+-- Hidden cells all take `inside` (by default the commonest look); limbs that overlap should share it.
+function Sculpt.draw(self: Sculpt, limb: Limb, others: { Sculpt }?, inside: Look?)
+	-- Thin tips can end in cells touching the rest only at a corner, which would float: keep only the cells
+	-- joined, face to face or edge to edge, to the biggest piece.
+	local neighbours = {}
+	for dx = -1, 1 do
+		for dy = -1, 1 do
+			for dz = -1, 1 do
+				local moved = math.abs(dx) + math.abs(dy) + math.abs(dz)
+				if moved == 1 or moved == 2 then
+					table.insert(neighbours, { dx, dy, dz })
+				end
+			end
+		end
+	end
+	local piece: { [number]: number } = {}
+	local sizes: { number } = {}
+	local starts = {}
+	for key in self.cells do
+		table.insert(starts, key)
+	end
+	table.sort(starts)
+	for _, start in starts do
+		if not piece[start] then
+			local id = #sizes + 1
+			sizes[id] = 0
+			piece[start] = id
+			local queue = { start }
+			local head = 1
+			while head <= #queue do
+				local x, y, z = cellAt(queue[head])
+				head += 1
+				sizes[id] += 1
+				for _, n in neighbours do
+					local k = cellKey(x + n[1], y + n[2], z + n[3])
+					if self.cells[k] and not piece[k] then
+						piece[k] = id
+						table.insert(queue, k)
+					end
+				end
+			end
+		end
+	end
+	local biggest = 1
+	for id, size in sizes do
+		if size > sizes[biggest] then
+			biggest = id
+		end
+	end
+	for key, id in piece do
+		if id ~= biggest then
+			self.cells[key] = nil
+		end
+	end
+
+	local names: { [number]: string } = {}
+	local looks: { [string]: Look } = {}
+	local counts: { [string]: number } = {}
+	for key, look in self.cells do
+		local name = `{look.color[1]},{look.color[2]},{look.color[3]},{look.material},{look.transparency}`
+		names[key] = name
+		looks[name] = look
+		counts[name] = (counts[name] or 0) + 1
+	end
+	local main, most = nil, -1
+	for name, count in counts do
+		if count > most or (count == most and name < (main :: string)) then
+			main, most = name, count
+		end
+	end
+	if inside then
+		main = `{inside.color[1]},{inside.color[2]},{inside.color[3]},{inside.material},{inside.transparency}`
+		looks[main :: string] = inside
+	end
+	local sets: { [string]: { [number]: boolean } } = {}
+	for key, name in names do
+		local x, y, z = cellAt(key)
+		local covered = false
+		for _, other in others or {} do
+			covered = covered or other.cells[key] ~= nil
+		end
+		local into = if self:showing(x, y, z) and not covered then name else main :: string
+		sets[into] = sets[into] or {}
+		sets[into][key] = true
+	end
+
+	-- As few blocks as it can find covering one set of cells exactly (blocks may overlap), as
+	-- { x0, y0, z0, x1, y1, z1 }. Candidates come from every row of cells in every slice, in all three
+	-- directions: each row is widened over the rows beside it that hold it, then thickened over the slices beside
+	-- it that hold it. Then the candidate covering the most cells not yet covered is taken, again and again, and
+	-- any taken block the others turn out to cover is dropped.
+	local function cover(set: { [number]: boolean }): { { number } }
+		local candidates: { { number } } = {}
+		local seen: { [string]: boolean } = {}
+		local function inSet(p: { number }): boolean
+			return set[cellKey(p[1], p[2], p[3])] == true
+		end
+		for axis = 1, 3 do
+			local u, v = axis % 3 + 1, (axis + 1) % 3 + 1
+			local rows: { [string]: { number } } = {}
+			for key in set do
+				local p = { cellAt(key) }
+				local name = `{p[axis]},{p[u]}`
+				rows[name] = rows[name] or { p[axis], p[u] }
+				table.insert(rows[name], p[v])
+			end
+			for _, row in rows do
+				local a0, ui = row[1], row[2]
+				local vs = table.move(row, 3, #row, 1, {})
+				table.sort(vs)
+				local index = 1
+				while index <= #vs do
+					local v0 = vs[index]
+					local v1 = v0
+					while index < #vs and vs[index + 1] == v1 + 1 do
+						index += 1
+						v1 = vs[index]
+					end
+					index += 1
+					local box = {}
+					box[axis], box[axis + 3] = a0, a0
+					box[u], box[u + 3] = ui, ui
+					box[v], box[v + 3] = v0, v1
+					-- Grow it one way, then another, while every cell it would take is in the set.
+					local function grow(k: number, step: number): boolean
+						local edge = if step > 0 then box[k + 3] + 1 else box[k] - 1
+						local p = {}
+						local ka, kb = k % 3 + 1, (k + 1) % 3 + 1
+						for i = box[ka], box[ka + 3] do
+							for j = box[kb], box[kb + 3] do
+								p[k], p[ka], p[kb] = edge, i, j
+								if not inSet(p) then
+									return false
+								end
+							end
+						end
+						if step > 0 then
+							box[k + 3] = edge
+						else
+							box[k] = edge
+						end
+						return true
+					end
+					for _, k in { u, axis } do
+						for _, step in { -1, 1 } do
+							local more = true
+							while more do
+								more = grow(k, step)
+							end
+						end
+					end
+					local name = table.concat(box, ",")
+					if not seen[name] then
+						seen[name] = true
+						table.insert(candidates, box)
+					end
+				end
+			end
+		end
+		table.sort(candidates, function(a, b)
+			return table.concat(a, ",") < table.concat(b, ",")
+		end)
+
+		-- The cells each candidate covers.
+		local cellsOf: { { number } } = {}
+		for index, box in candidates do
+			local list = {}
+			for x = box[1], box[4] do
+				for y = box[2], box[5] do
+					for z = box[3], box[6] do
+						table.insert(list, cellKey(x, y, z))
+					end
+				end
+			end
+			cellsOf[index] = list
+		end
+		local covered: { [number]: number } = {}
+		local left = 0
+		for _ in set do
+			left += 1
+		end
+		local gain = {}
+		for index, list in cellsOf do
+			gain[index] = #list
+		end
+		local taken = {}
+		while left > 0 do
+			local best, bestGain = nil, 0
+			for index, g in gain do
+				if g > bestGain then
+					-- Stored gains only ever shrink, so check this one is still right before trusting it.
+					local fresh = 0
+					for _, key in cellsOf[index] do
+						if not covered[key] then
+							fresh += 1
+						end
+					end
+					gain[index] = fresh
+					if fresh > bestGain then
+						best, bestGain = index, fresh
+					end
+				end
+			end
+			if best == nil then
+				break
+			end
+			gain[best] = 0
+			table.insert(taken, best)
+			for _, key in cellsOf[best] do
+				if not covered[key] then
+					left -= 1
+				end
+				covered[key] = (covered[key] or 0) + 1
+			end
+		end
+		local blocks = {}
+		for i = #taken, 1, -1 do
+			local list = cellsOf[taken[i]]
+			local needed = false
+			for _, key in list do
+				if covered[key] == 1 then
+					needed = true
+					break
+				end
+			end
+			if needed then
+				table.insert(blocks, 1, candidates[taken[i]])
+			else
+				for _, key in list do
+					covered[key] -= 1
+				end
+			end
+		end
+		return blocks
+	end
+
+	local names2 = {}
+	for name in sets do
+		table.insert(names2, name)
+	end
+	table.sort(names2, function(a, b)
+		return (a == main) and b ~= main or ((b == main) == (a == main) and a < b)
+	end)
+	for _, name in names2 do
+		local look = looks[name]
+		for _, b in cover(sets[name]) do
+			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], look.color, look.material, look.transparency)
+		end
+	end
 end
 
 local Designs: { [string]: Design } = {}
@@ -2513,7 +2999,7 @@ Designs.GreatShark = {
 		local SCAR = rgb(176, 186, 198)
 
 		-- A torpedo: deepest just behind the head, tapering to a pointed snout and a narrow tail.
-		local function shape(z: number): (number, number, number)
+		local function girth(z: number): (number, number, number)
 			local rx, ry
 			if z >= 2 then
 				local t = math.min(1, (z - 2) / 14.5)
@@ -2525,12 +3011,12 @@ Designs.GreatShark = {
 			return rx, ry, 5 + 0.08 * z
 		end
 		local function inBody(x: number, y: number, z: number): boolean
-			local rx, ry, yc = shape(z + 0.5)
+			local rx, ry, yc = girth(z + 0.5)
 			return ((x + 0.5) / rx) ^ 2 + ((y + 0.5 - yc) / ry) ^ 2 <= 1
 		end
 		-- Grey above, white below, along a jagged line.
 		local function white(y: number, z: number): boolean
-			local _, ry, yc = shape(z + 0.5)
+			local _, ry, yc = girth(z + 0.5)
 			return y + 0.5 < yc - ry * 0.2 + (if z % 3 == 0 then 0.8 else 0)
 		end
 		-- The open mouth: a wedge cut under the snout, widening towards the front.
@@ -2538,7 +3024,7 @@ Designs.GreatShark = {
 			if z < 9 or z > 15 then
 				return false
 			end
-			local _, ry, yc = shape(z + 0.5)
+			local _, ry, yc = girth(z + 0.5)
 			local low = yc - ry * 0.6
 			return y + 0.5 > low and y + 0.5 < low + 1.2 + (z - 9) * 0.45
 		end
@@ -4173,211 +4659,224 @@ Designs.Cerberus = {
 	name = "Cerberus",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.45,
+	scale = 0.42 * 1.4,
 	draw = function(pet)
-		local COAL = rgb(50, 44, 50)
-		local COAL_DARK = rgb(30, 26, 32)
-		local EMBER = rgb(255, 84, 28)
-		local FLAME = rgb(255, 146, 30)
-		local FLAME_HOT = rgb(255, 222, 80)
-		local COLLAR = rgb(186, 32, 42)
-		local STEEL = rgb(206, 206, 216)
-		local IRON = rgb(96, 96, 108)
-		local CLAW = rgb(232, 224, 208)
-		local MOUTH = rgb(92, 16, 26)
-		local TONGUE = rgb(208, 54, 74)
-		local FANG = rgb(250, 248, 236)
+		-- Modelled in finer units than it is built in: 1.4 of them to a block.
+		local U = 1.4
+		local function at(p: { number }): { number }
+			return { p[1] / U, p[2] / U, p[3] / U }
+		end
+		local function look(r: number, g: number, b: number, material: string?): Look
+			return { color = rgb(r, g, b), material = material }
+		end
+		local FUR = look(64, 48, 54)
+		local FUR_DARK = look(30, 22, 28)
+		local HORN = look(58, 46, 48)
+		local CLAW = look(226, 216, 196)
+		local FANG = look(246, 240, 224)
+		local GUM = look(112, 18, 28)
+		local EMBER = look(255, 76, 24, NEON)
+		local FLAME = look(255, 146, 30, NEON)
+		local HOT = look(255, 226, 90, NEON)
+		local STEEL = look(196, 198, 210)
+		local IRON = look(84, 84, 96)
 
-		-- A huge black hound: deep in the chest, narrow at the waist, heavy in the haunches.
-		local profile = {
-			{ 6.5, 2.6, 3.2, 15.6 },
-			{ 4, 6, 6.6, 15.2 },
-			{ 0, 5.8, 6.2, 15 },
-			{ -5, 4.4, 4.9, 14.6 },
-			{ -9, 5.2, 5.6, 14.2 },
-			{ -12.5, 4.8, 5.1, 14.2 },
-			{ -15, 2.2, 2.6, 14.6 },
-		}
-		local function shape(z: number): (number, number, number)
-			if z >= profile[1][1] or z <= profile[#profile][1] then
-				return 0, 0, 0
+		-- A hunched, heavy-shouldered hellhound, fire showing through cracks between its ribs, a row of bone
+		-- spikes and tongues of fire down its spine.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 20, 4 }, { 7.5, 8, 9 }), FUR)
+		body:add(ellipsoid({ 0, 25.5, 2.5 }, { 7, 5, 8 }), FUR)
+		body:add(ellipsoid({ 0, 20.5, -7 }, { 5.6, 6.5, 8 }), FUR)
+		body:add(ellipsoid({ 0, 20, -15 }, { 6.5, 7, 7 }), FUR)
+		-- Molten veins tracing the muscles of its shoulders, ribs and haunches, as if fire ran under its hide.
+		for _, side in { 1, -1 } do
+			for _, vein in
+				{
+					{ { 0, 26, 6.5 }, { 0, 21, 10 }, { 0, 17, 11.5 } },
+					{ { 0, 21, 10 }, { 0, 16, 7.5 }, { 0, 13.5, 6 } },
+					{ { 0, 24, 1.5 }, { 0, 20, 0 }, { 0, 16.5, -1.5 } },
+					{ { 0, 24.5, -3.5 }, { 0, 20, -5 }, { 0, 16, -7 } },
+					{ { 0, 25.5, -11 }, { 0, 21, -14 }, { 0, 18.5, -18.5 } },
+					{ { 0, 21, -14 }, { 0, 16, -13 }, { 0, 14, -16 } },
+				}
+			do
+				body:trace(vein, { -side, 0, 0 }, EMBER)
 			end
-			for index = 1, #profile - 1 do
-				local a, b = profile[index], profile[index + 1]
-				if z <= a[1] and z >= b[1] then
-					local t = (a[1] - z) / (a[1] - b[1])
-					return a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t
-				end
-			end
-			return 0, 0, 0
 		end
-		local function inBody(x: number, y: number, z: number): boolean
-			local rx, ry, yc = shape(z + 0.5)
-			return rx > 0 and ((x + 0.5) / rx) ^ 2 + ((y + 0.5 - yc) / ry) ^ 2 <= 1
-		end
-		-- The outermost cell of its body on one side (or on top) at a height and a point along it.
-		local function side(y: number, z: number, direction: number): number
-			local x = if direction > 0 then 0 else -1
-			while inBody(x + direction, y, z) do
-				x += direction
-			end
-			return x
-		end
+		-- The height of the top of its back at a point along it.
 		local function top(z: number): number
-			local y = 14
-			while inBody(0, y + 1, z) do
+			local cz, y = math.floor(z / U), math.floor(20 / U)
+			while body:has(0, y + 1, cz) do
 				y += 1
 			end
-			return y
+			return (y + 1) * U
+		end
+		-- Bone spikes jutting from its shoulders, and a mane of fire streaming back along its spine.
+		for _, spike in { { 4, 6.5, 6 }, { -4, 6.5, 6 } } do
+			local y = top(spike[2]) - 1
+			body:add(rod({ { spike[1], y, spike[2], 1.4 }, { spike[1] * 1.5, y + spike[3], spike[2] - 3, 0.3 } }), HORN)
+		end
+		for index, z in { 4, 0, -4, -8, -12.5, -17 } do
+			local y = top(z) - 1.5
+			local tall = if index % 2 == 0 then 1 else 1.35
+			body:add(rod({ { 0, y, z, 2 }, { 0, y + 3.5 * tall, z - 2.5, 1.3 } }), EMBER)
+			body:add(rod({ { 0, y + 3.5 * tall, z - 2.5, 1.3 }, { 0, y + 6.5 * tall, z - 5, 0.6 } }), FLAME)
+			body:add(rod({ { 0, y + 6.5 * tall, z - 5, 0.65 }, { 0, y + 8.5 * tall, z - 6.5, 0.25 } }), HOT)
 		end
 
-		local body = pet:limb("Body", { 0, 14, -4 })
-		blob(body, { -7, 7, -16, 6, 23, 7 }, inBody, COAL)
-		-- Glowing cracks down its flanks, as if it were full of fire.
-		for _, crack in { { 12, 14, -1 }, { 14, 16, -3 }, { 11, 12, -7 }, { 13, 15, -8 }, { 15, 16, -2 } } do
-			for y = crack[1], crack[2] do
-				local x = side(y, crack[3], 1)
-				body:paintPair(x, y, crack[3], x, y, crack[3], if y == crack[2] then FLAME else EMBER, NEON)
+		-- Three heads on thick necks, each turned its own way: the middle one snarling straight ahead, one reared
+		-- up roaring, one low and stalking. Each has eyes burning deep under a heavy brow, curved horns, a crest
+		-- of fire, lips curled back from rows of fangs, fire in its throat and dripping from its jaws, and a
+		-- studded collar.
+		local heads = newSculpt(U)
+		local function hound(frame: Frame, k: number)
+			local function E(c: { number }, r: { number }): Shape
+				return ellipsoid({ c[1] * k, c[2] * k, c[3] * k }, { r[1] * k, r[2] * k, r[3] * k })
 			end
-		end
-		-- A mane of fire licking up its spine and streaming back.
-		for _, z in { 3, 0, -9, -12 } do
-			local y = top(z)
-			body:box(-1, y + 1, z - 1, 0, y + 2, z, EMBER, NEON)
-			body:box(-1, y + 3, z - 2, 0, y + 4, z - 2, FLAME, NEON)
-			body:box(-1, y + 5, z - 3, -1, y + 6, z - 3, FLAME_HOT, NEON)
-			body:boxPair(1, y + 1, z - 2, 1, y + 2, z - 2, FLAME, NEON)
-			body:boxPair(1, y + 3, z - 3, 1, y + 3, z - 3, FLAME_HOT, NEON)
-		end
-
-		-- Three heads on three thick necks, each in a studded red collar: the middle one biggest and highest. Each
-		-- snarls with its jaws open on a glowing throat, fangs bared, eyes burning under a heavy brow, ears up.
-		local head = pet:limb("Head", { 0, 18, 4 })
-		local function hound(limb, ox: number, oy: number, oz: number, w: number)
-			local function box(x0, y0, z0, x1, y1, z1, ...)
-				limb:box(x0 + ox, y0 + oy, z0 + oz, x1 + ox, y1 + oy, z1 + oz, ...)
-			end
-			local function paint(x0, y0, z0, x1, y1, z1, ...)
-				limb:paint(x0 + ox, y0 + oy, z0 + oz, x1 + ox, y1 + oy, z1 + oz, ...)
-			end
-			local function both(fn, x0, y0, z0, x1, y1, z1, ...)
-				fn(x0, y0, z0, x1, y1, z1, ...)
-				fn(-1 - x0, y0, z0, -1 - x1, y1, z1, ...)
-			end
-			local front = 9 + w - 3
-			box(-w, 3, 0, w - 1, 8, 5, COAL)
-			box(-w + 1, 9, 0, w - 2, 9, 4, COAL)
-			box(-w, 0, 2, w - 1, 2, 4, COAL)
-			box(-w + 1, 4, 6, w - 2, 6, front, COAL)
-			box(-1, 5, front + 1, 0, 6, front + 1, COAL_DARK)
-			box(-w + 1, 0, 5, w - 2, 1, front - 1, COAL)
-			both(box, w, 4, 2, w, 5, 3, COAL)
-			-- Inside the mouth: a glowing throat, fangs top and bottom, and a tongue lolling out over the jaw.
-			paint(-w + 2, 4, 6, w - 3, 4, front, MOUTH)
-			paint(-w + 2, 1, 5, w - 3, 1, front - 1, MOUTH)
-			paint(-w + 1, 2, 4, w - 2, 2, 4, EMBER, NEON)
-			paint(-w + 1, 3, 5, w - 2, 3, 5, MOUTH)
-			box(-1, 2, 5, 0, 2, front - 1, TONGUE)
-			box(-1, 0, front, 0, 1, front, TONGUE)
-			both(box, w - 2, 3, front, w - 2, 3, front, FANG)
-			both(box, w - 2, 3, front - 2, w - 2, 3, front - 2, FANG)
-			both(box, w - 2, 2, front - 1, w - 2, 2, front - 1, FANG)
-			both(box, w - 2, 2, front - 3, w - 2, 2, front - 3, FANG)
-			-- Burning eyes under a scowling brow, and snarl lines on the muzzle.
-			paint(-w + 2, 6, 7, w - 3, 6, 7, COAL_DARK)
-			both(paint, 1, 7, 5, w - 1, 7, 5, EMBER, NEON)
-			both(paint, w - 1, 7, 4, w - 1, 7, 4, EMBER, NEON)
-			both(paint, 2, 7, 5, 2, 7, 5, FLAME_HOT, NEON)
-			both(box, 1, 8, 6, 2, 8, 6, COAL_DARK)
-			both(box, w - 1, 9, 5, w - 1, 9, 6, COAL_DARK)
-			-- Tall pointed ears, glowing inside, and a crest of fire between them.
-			both(box, w - 2, 10, 0, w - 1, 11, 1, COAL)
-			both(box, w - 1, 12, 0, w - 1, 12, 0, COAL)
-			both(paint, w - 2, 10, 1, w - 2, 11, 1, EMBER, NEON)
-			box(-1, 10, 0, 0, 11, 1, EMBER, NEON)
-			box(-1, 12, -1, 0, 13, -1, FLAME, NEON)
-			box(-1, 14, -2, -1, 14, -2, FLAME_HOT, NEON)
-		end
-		hound(head, 0, 21, 8, 4)
-		hound(head, 8, 18, 5, 3)
-		hound(mirrored(head), 8, 18, 5, 3)
-		local necks = {
-			tube(head, { { 0, 16, 2, 2.6 }, { 0, 19.5, 5.5, 2.6 }, { 0, 22, 8.5, 2.5 } }, COAL, { even = true }),
-			tube(head, { { 3, 15.5, 2, 2.2 }, { 6, 17.5, 4.5, 2.1 }, { 8, 19.5, 6.5, 2 } }, COAL),
-			tube(head, { { -3, 15.5, 2, 2.2 }, { -6, 17.5, 4.5, 2.1 }, { -8, 19.5, 6.5, 2 } }, COAL),
-		}
-		for _, neck in necks do
-			local band = neck.cubes[math.max(1, #neck.cubes - 3)]
-			head:paint(band[1], band[2], band[3], band[4], band[5], band[6], COLLAR)
-			for _, direction in { { 0, 1, 0 }, { 1, 0, 0 }, { -1, 0, 0 } } do
-				local s = surfaceCell(neck, band, direction)
-				if s then
-					local spike = { s[1] + direction[1], s[2] + direction[2], s[3] + direction[3] }
-					head:box(spike[1], spike[2], spike[3], spike[1], spike[2], spike[3], STEEL)
+			local function R(points: { { number } }): Shape
+				local scaled = {}
+				for _, p in points do
+					table.insert(scaled, { p[1] * k, p[2] * k, p[3] * k, p[4] * k })
 				end
+				return rod(scaled)
 			end
+			local function add(s: Shape, l: Look)
+				heads:add(s, l, frame)
+			end
+			add(E({ 0, 0, 1.5 }, { 4, 3.4, 4.2 }), FUR)
+			add(E({ 0, -2.6, 2.8 }, { 3.6, 2.2, 2.6 }), FUR)
+			add(E({ 0, -0.8, 8 }, { 2.5, 1.9, 5.2 }), FUR)
+			add(E({ 0, -5.3, 7 }, { 2.2, 1, 4.6 }), FUR)
+			heads:carve(E({ 0, -3.3, 8.3 }, { 1.9, 1.45, 4.8 }), frame)
+			heads:paint(E({ 0, -3.3, 8.3 }, { 2.6, 2.1, 5.4 }), GUM, frame, true)
+			add(E({ 0, -3.1, 3.6 }, { 1.8, 1.1, 1 }), EMBER)
+			add(E({ 0, 1.9, 4.3 }, { 4.1, 1.15, 1.5 }), FUR_DARK)
+			add(E({ 0, 0.1, 13 }, { 1.3, 0.9, 0.8 }), FUR_DARK)
+			for _, s in { 1, -1 } do
+				add(R({ { 1.2 * s, 0.2, 5.9, 0.7 }, { 3.1 * s, 1, 4.6, 0.7 } }), HOT)
+				add(R({ { 1.5 * s, -2, 11.2, 0.6 }, { 1.4 * s, -4.6, 11.5, 0.4 } }), FANG)
+				add(R({ { 1.2 * s, -4.6, 10.4, 0.55 }, { 1.15 * s, -2.8, 10.6, 0.35 } }), FANG)
+				for _, z in { 5.6, 7.3, 9 } do
+					add(E({ 1.7 * s, -2.7, z }, { 0.5, 0.65, 0.5 }), FANG)
+				end
+				for _, z in { 6.4, 8.1 } do
+					add(E({ 1.5 * s, -4.1, z }, { 0.5, 0.65, 0.5 }), FANG)
+				end
+				add(
+					R({
+						{ 2.3 * s, 2.2, 1.8, 1.15 },
+						{ 3.7 * s, 4.2, -0.4, 0.95 },
+						{ 4.7 * s, 6.2, -0.2, 0.7 },
+						{ 5.1 * s, 7.8, 1.9, 0.4 },
+					}),
+					HORN
+				)
+				add(R({ { 4.95 * s, 7.3, 1.2, 0.5 }, { 5.1 * s, 7.9, 2.1, 0.35 } }), EMBER)
+				add(R({ { 3 * s, 2, -0.4, 0.95 }, { 3.9 * s, 3, -3.6, 0.3 } }), FUR)
+				add(R({ { 2 * s, -3.8, 9, 0.6 }, { 2.3 * s, -7.2, 9.6, 0.3 } }), FLAME)
+			end
+			add(R({ { 0, 2.9, -0.4, 1.1 }, { 0, 4.6, -2.4, 0.6 } }), EMBER)
+			add(R({ { 0, 4.6, -2.4, 0.6 }, { 0, 6, -4, 0.25 } }), FLAME)
+			add(R({ { 0, -3.4, 12.4, 0.8 }, { 0, -2.4, 15, 0.3 } }), FLAME)
+			for _, a in { 90, 30, 150 } do
+				local c, s = math.cos(math.rad(a)), math.sin(math.rad(a))
+				add(R({ { c * 3.2, -0.6 + s * 3.2, -2.6, 0.9 }, { c * 5.8, -0.6 + s * 5.8, -2.6, 0.25 } }), STEEL)
+			end
+		end
+		heads:add(rod({ { 0, 23, 7, 4.6 }, { 0, 25, 12, 4.2 }, { 0, 26, 16, 3.9 } }), FUR)
+		heads:add(rod({ { 4.5, 22, 7, 4.1 }, { 9, 24.5, 11, 3.6 }, { 12, 26, 13.5, 3.3 } }), FUR)
+		heads:add(rod({ { -4.5, 22, 7, 4.1 }, { -9, 22.5, 11.5, 3.6 }, { -12, 22, 14.5, 3.3 } }), FUR)
+		hound({ origin = { 0, 26.5, 17 }, pitch = -0.2 }, 1.35)
+		hound({ origin = { 12.4, 26.5, 14 }, yaw = 0.6, pitch = 0.35 }, 1.2)
+		hound({ origin = { -12.4, 22, 15 }, yaw = -0.5, pitch = -0.3 }, 1.2)
+
+		-- Massive legs with clawed paws wreathed in fire, iron shackles on the forelegs with their chains snapped.
+		local function paw(s: Sculpt, x: number, y: number, z: number)
+			s:add(ellipsoid({ x, y, z }, { 3.4, 2, 3.8 }), FUR)
+			for i = 0, 3 do
+				local tx = x - 1.7 + 1.13 * i
+				s:add(ellipsoid({ tx, y - 0.5, z + 2.8 }, { 0.75, 1, 1.2 }), FUR)
+				s:add(rod({ { tx, y - 0.4, z + 3.4, 0.5 }, { tx, y - 1.3, z + 4.8, 0.3 } }), CLAW)
+			end
+		end
+		local front = newSculpt(U)
+		do
+			local s = front
+			s:add(rod({ { 6.5, 20, 5.5, 4.3 }, { 8, 11, 7, 3.4 } }), FUR)
+			s:add(rod({ { 8, 11, 7, 3.2 }, { 8.4, 3.5, 8.6, 2.6 } }), FUR)
+			s:trace({ { 0, 18, 8 }, { 0, 12, 8.5 }, { 0, 6, 9.5 } }, { -1, 0, 0 }, EMBER)
+			paw(s, 8.4, 2, 10.4)
+			s:add(
+				shape({ 7.6, 6, 7.9 }, 4, function(x, y, z)
+					local r = math.sqrt((x - 7.6) ^ 2 + (z - 7.9) ^ 2)
+					return r >= 2 and r <= 3.1 and math.abs(y - 6) <= 0.9
+				end),
+				IRON
+			)
+			s:add(
+				rod({
+					{ 10.4, 5.6, 8.5, 0.55 },
+					{ 11.4, 3.6, 9.4, 0.5 },
+					{ 12, 1.6, 8.6, 0.5 },
+					{ 13.4, 0.5, 10.4, 0.5 },
+				}),
+				IRON
+			)
+			s:add(rod({ { 5.2, 2.6, 8.4, 0.9 }, { 4.6, 6, 7.4, 0.25 } }), FLAME)
+			s:add(rod({ { 10, 2.6, 8.8, 0.9 }, { 10.6, 5.6, 7.8, 0.25 } }), EMBER)
+			s:add(rod({ { 7.6, 3, 11.6, 0.8 }, { 7.6, 5.4, 12.2, 0.25 } }), FLAME)
+		end
+		local back = newSculpt(U)
+		do
+			local s = back
+			s:add(ellipsoid({ 6.8, 16.5, -15 }, { 4, 6.8, 6.2 }), FUR)
+			s:add(rod({ { 7.2, 12, -18.5, 3 }, { 7.8, 5, -20.5, 2.3 } }), FUR)
+			s:add(rod({ { 7.8, 5, -20.5, 2.3 }, { 7.8, 2.5, -17.4, 2.2 } }), FUR)
+			s:trace({ { 0, 21, -12 }, { 0, 16, -15 }, { 0, 11, -18.5 } }, { -1, 0, 0 }, EMBER)
+			paw(s, 7.8, 1.8, -15.2)
+			s:add(rod({ { 9.4, 5, -20, 0.8 }, { 10.2, 8.5, -21, 0.25 } }), FLAME)
+			s:add(rod({ { 5.8, 5, -20.5, 0.8 }, { 5.2, 8.2, -21.4, 0.25 } }), EMBER)
 		end
 
-		-- Massive legs on clawed paws, flames licking up from the paws. A shackle still hangs from one foreleg,
-		-- its chain snapped.
-		local function paw(leg, x0: number, z0: number)
-			leg:box(x0, 0, z0, x0 + 4, 1, z0 + 4, COAL)
-			for _, toe in { 0, 2, 4 } do
-				leg:box(x0 + toe, 0, z0 + 5, x0 + toe, 1, z0 + 5, COAL)
-				leg:box(x0 + toe, 0, z0 + 6, x0 + toe, 0, z0 + 6, CLAW)
-			end
+		-- A long whip of a tail, spiked along its back, ending in a burst of fire.
+		local tail = newSculpt(U)
+		tail:add(
+			rod({
+				{ 0, 22, -20, 3.4 },
+				{ 0, 25, -25, 2.7 },
+				{ 0, 30, -28.5, 2 },
+				{ 0, 35, -28.5, 1.5 },
+				{ 0, 38, -25.5, 1.1 },
+			}),
+			FUR
+		)
+		for _, spike in { { 26.5, -26.5, 1 }, { 31, -30.5, 0 }, { 35.5, -30.3, -0.5 } } do
+			tail:add(
+				rod({ { 0, spike[1], spike[2], 0.8 }, { 0, spike[1] + 1 + spike[3], spike[2] - 2.6, 0.25 } }),
+				HORN
+			)
 		end
-		local function flames(leg, x: number, y0: number, z0: number)
-			leg:paint(x, y0, z0, x, y0 + 2, z0, EMBER, NEON)
-			leg:paint(x, y0, z0 + 1, x, y0 + 3, z0 + 1, FLAME, NEON)
-			leg:paint(x, y0, z0 + 2, x, y0 + 1, z0 + 2, EMBER, NEON)
-			leg:paint(x, y0 + 4, z0 + 1, x, y0 + 4, z0 + 1, FLAME_HOT, NEON)
-		end
-		local function foreleg(leg)
-			leg:box(3, 6, 0, 6, 11, 4, COAL)
-			leg:box(3, 2, 1, 5, 5, 3, COAL)
-			paw(leg, 2, 0)
-			flames(leg, 5, 2, 1)
-		end
-		local frontLeft = pet:limb("FrontLeftLeg", { 4.5, 11, 2 })
-		foreleg(frontLeft)
-		frontLeft:box(2, 3, 0, 6, 3, 4, IRON)
-		frontLeft:box(7, 2, 1, 7, 3, 2, IRON)
-		frontLeft:box(8, 1, 2, 8, 1, 3, IRON)
-		frontLeft:box(8, 0, 4, 9, 0, 4, IRON)
-		foreleg(mirrored(pet:limb("FrontRightLeg", { -4.5, 11, 2 })))
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 4.5, 13, -10 }, function(leg)
-			leg:box(3, 8, -13, 7, 14, -8, COAL)
-			leg:box(4, 4, -13, 6, 7, -11, COAL)
-			leg:box(4, 2, -12, 5, 3, -11, COAL)
-			paw(leg, 3, -12)
-			flames(leg, 6, 3, -13)
+		tail:add(rod({ { 0, 35, -28.5, 1.35 }, { 0, 38, -25.5, 1 } }), EMBER)
+		tail:add(rod({ { 0, 38, -25.5, 1.2 }, { 0, 40.5, -22.5, 0.4 } }), FLAME)
+		tail:add(rod({ { 0, 39, -24.5, 0.8 }, { 0, 42.5, -23.5, 0.2 } }), HOT)
+		tail:add(rod({ { 0, 37.5, -27, 0.9 }, { 0, 40.5, -30, 0.2 } }), FLAME)
+		tail:add(rod({ { 1, 38.5, -25, 0.8 }, { 2.6, 41, -24, 0.2 } }), FLAME)
+		tail:add(rod({ { -1, 38.5, -25, 0.8 }, { -2.6, 41, -24, 0.2 } }), FLAME)
+		-- Each limb is built knowing which others overlap it.
+		local frontRight, backRight = front:mirror(), back:mirror()
+		body:draw(pet:limb("Body", at({ 0, 20, -4 })), { heads, front, frontRight, back, backRight, tail })
+		heads:draw(pet:limb("Head", at({ 0, 24, 9 })), { body })
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", at({ 6.5, 19, 6 }), function(limb)
+			front:draw(limb, { body })
 		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", at({ 6.5, 18, -15 }), function(limb)
+			back:draw(limb, { body })
+		end)
+		tail:draw(pet:limb("Tail", at({ 0, 22, -21 })), { body })
 
-		-- A thick tail that turns to fire towards its tip.
-		local tail = pet:limb("Tail", { 0, 17, -14 })
-		local t = tube(tail, {
-			{ 0, 16.5, -14, 1.5 },
-			{ 0, 18.5, -17, 1.3 },
-			{ 0, 21.5, -19, 1.1 },
-			{ 0, 25, -19.5, 0.9 },
-			{ 0, 27.5, -18.5, 0.7 },
-		}, COAL)
-		local count = #t.cubes
-		for index, cube in t.cubes do
-			local f = index / count
-			local color = if f > 0.9 then FLAME_HOT elseif f > 0.75 then FLAME elseif f > 0.55 then EMBER else nil
-			if color then
-				tail:paint(cube[1], cube[2], cube[3], cube[4], cube[5], cube[6], color, NEON)
-			end
-		end
-		local tip = t.cubes[count]
-		tail:box(tip[1], tip[5] + 1, tip[3], tip[4], tip[5] + 2, tip[6], FLAME_HOT, NEON)
-		tail:box(tip[1], tip[5] + 3, tip[3] - 1, tip[1], tip[5] + 3, tip[3] - 1, FLAME_HOT, NEON)
-
-		pet:light(FLAME, 3, 22)
-		pet:particles("Embers", FLAME_HOT, 16)
-		pet:seat(0, 21, -3)
+		pet:light(rgb(255, 96, 30), 3.2, 26)
+		pet:particles("Embers", rgb(255, 196, 60), 18)
+		pet:seat(0, 27 / U, -6 / U)
 	end,
 }
 
@@ -4386,161 +4885,296 @@ Designs.EternalPhoenix = {
 	skeleton = "Winged",
 	gait = "Walk",
 	hover = 2,
-	scale = 0.45,
+	scale = 0.45 * 1.4,
 	draw = function(pet)
-		local CRIMSON = rgb(198, 30, 34)
-		local CRIMSON_DARK = rgb(140, 18, 28)
-		local FLAME = rgb(242, 82, 28)
-		local ORANGE = rgb(255, 142, 32)
-		local GOLD = rgb(255, 202, 52)
-		local PALE_GOLD = rgb(255, 236, 140)
-		local ETERNAL = rgb(150, 255, 245)
-		local ETERNAL_DEEP = rgb(70, 210, 236)
-		local BEAK = rgb(255, 214, 90)
-		local TALON = rgb(70, 40, 40)
+		-- Modelled in finer units than it is built in: 1.4 of them to a block.
+		local U = 1.4
+		local function at(p: { number }): { number }
+			return { p[1] / U, p[2] / U, p[3] / U }
+		end
+		local function look(r: number, g: number, b: number, material: string?): Look
+			return { color = rgb(r, g, b), material = material }
+		end
+		local CRIMSON = look(186, 24, 32)
+		local CRIMSON_DARK = look(112, 12, 22)
+		local BREAST = look(255, 168, 52)
+		local BREAST_DARK = look(214, 104, 30)
+		local GILT = look(255, 200, 70)
+		local GILT_DARK = look(196, 132, 30)
+		local TALON = look(48, 26, 28)
+		local EMBER = look(255, 66, 22, NEON)
+		local FLAME = look(255, 132, 30, NEON)
+		local GOLD = look(255, 206, 60, NEON)
+		local ETERNAL = look(150, 255, 245, NEON)
+		local ETERNAL_DEEP = look(60, 200, 236, NEON)
+		local HOT = look(255, 236, 140, NEON)
 
-		-- An upright body of crimson feathers over a golden breast.
-		local function inBody(x: number, y: number, z: number): boolean
-			return ((x + 0.5) / 4.6) ^ 2 + ((y + 0.5 - 12) / 6.5) ^ 2 + ((z + 0.5 - 0.6 * (y + 0.5 - 12) / 6.5) / 4.4) ^ 2
-				<= 1
-		end
-		local function breast(y: number, z: number): boolean
-			return z >= 2 and y >= 7 and y <= 15
-		end
-		local body = pet:limb("Body", { 0, 12, 0 })
-		blob(body, { -5, 5, -6, 4, 19, 6 }, function(x, y, z)
-			return inBody(x, y, z) and not breast(y, z)
-		end, CRIMSON)
-		blob(body, { -5, 5, -6, 4, 19, 6 }, function(x, y, z)
-			return inBody(x, y, z) and breast(y, z)
-		end, GOLD)
-		-- Rows of feathers down the breast, and flame-tipped feathers over the back.
-		for y = 8, 14, 2 do
-			local z = 2
-			while inBody(-1, y, z + 1) do
-				z += 1
+		-- A plume of fire along a path: each stretch of it in a colour, from the root out (each band ends at a
+		-- fraction of the way along).
+		local function plume(s: Sculpt, points: { { number } }, bands: { { any } }, frame: Frame?, flat: number?)
+			local lengths, total = { 0 }, 0
+			for index = 2, #points do
+				local a, b = points[index - 1], points[index]
+				total += math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2 + (b[3] - a[3]) ^ 2)
+				lengths[index] = total
 			end
-			body:paint(-1, y, z, 0, y, z, PALE_GOLD)
-		end
-		for _, spot in { { 16, -3 }, { 14, -4 }, { 12, -4 }, { 10, -4 } } do
-			local z = 0
-			while inBody(1, spot[1], z - 1) do
-				z -= 1
-			end
-			body:paintPair(1, spot[1], z, 2, spot[1], z, if spot[1] % 4 == 0 then ORANGE else FLAME)
-		end
-
-		-- A fierce head with a hooked golden beak, eyes burning eternal blue, flame plumes sweeping back from
-		-- its cheeks, and a great crest fanning up behind, each plume tipped with eternal fire.
-		local head = pet:limb("Head", { 0, 18, 1 })
-		head:box(-3, 18, -2, 2, 22, 3, CRIMSON)
-		head:box(-2, 23, -1, 1, 23, 2, CRIMSON)
-		head:box(-2, 17, -1, 1, 17, 2, CRIMSON)
-		head:box(-1, 19, 4, 0, 21, 5, BEAK)
-		head:box(-1, 18, 6, 0, 20, 6, BEAK)
-		head:box(-1, 17, 6, 0, 17, 6, ORANGE)
-		head:paint(-1, 21, 4, 0, 21, 5, PALE_GOLD)
-		head:paintPair(2, 20, 2, 2, 20, 3, ETERNAL, NEON)
-		head:paintPair(2, 20, 3, 2, 20, 3, SHINE)
-		head:boxPair(2, 21, 2, 3, 21, 4, CRIMSON_DARK)
-		head:paintPair(2, 19, 0, 2, 19, 1, GOLD)
-		for _, plume in { { 3, 20, 0, 5, 21, -2 }, { 3, 19, 1, 5, 19, 0 } } do
-			local feather = line({ plume[1], plume[2], plume[3] }, { plume[4], plume[5], plume[6] })
-			cells(head, feather, ORANGE, false, NEON)
-			cells(mirrored(head), feather, ORANGE, false, NEON)
-		end
-		for _, feather in { { -3, 3, 0.5 }, { -1, 5, 0.5 }, { 1, 5.5, 0 }, { 3, 5, 0.5 }, { 5, 3, 0.5 } } do
-			local x = feather[1] / 1.6
-			local quill = tube(head, {
-				{ 0, 24.5, 0.5, 0.5 },
-				{ x * 0.6, 26, -0.5 + feather[3], 0.5 },
-				{ x, 27 + feather[2] * 0.5, -2.5 + feather[3], 0.5 },
-				{ x * 1.15, 28 + feather[2] * 0.6, -4, 0.5 },
-			}, FLAME, { material = NEON })
-			local tip = quill.cubes[#quill.cubes]
-			head:box(tip[1], tip[2] + 1, tip[3], tip[1], tip[2] + 2, tip[3], GOLD, NEON)
-			head:box(tip[1], tip[2] + 3, tip[3], tip[1], tip[2] + 3, tip[3], ETERNAL, NEON)
-		end
-
-		-- Great wings raised and spread, layered like flames: crimson at the root, then flame, gold, and tips
-		-- burning eternal blue. Each feather hangs from the wing's leading edge, longest at the tip.
-		pet:limbPair("LeftWing", "RightWing", { 4, 16, -1 }, function(wing)
-			tube(
-				wing,
-				{ { 3.5, 16, -1.5, 1.4 }, { 12, 25.5, -2, 1.2 }, { 17, 27, -2.5, 1 }, { 22, 28, -3, 0.7 } },
-				CRIMSON
-			)
-			local bands = { { CRIMSON, 0.3 }, { FLAME, 0.22 }, { ORANGE, 0.2 }, { GOLD, 0.18 }, { ETERNAL, 0.1 } }
-			for x = 5, 21, 2 do
-				-- Short feathers near the body, long ones at the tip, every other one longer and set further back.
-				local topY = if x <= 12 then math.floor(16 + (x - 4) * 1.1) else math.floor(25 + (x - 12) * 0.3)
-				local f = (x - 5) / 16
-				local stagger = (x // 2) % 2
-				local length = math.floor(6 + 9 * f * f) + 2 * stagger
-				local z = -3 + stagger
-				local y = topY
-				for index, band in bands do
-					local size = if index == #bands
-						then math.max(1, y - (topY - length))
-						else math.max(1, math.round(length * band[2]))
-					wing:box(x, y - size + 1, z - 1, x + 1, y, z, band[1], if band[1] == CRIMSON then nil else NEON)
-					y -= size
-					if y <= topY - length then
-						break
+			local function pointAt(f: number): { number }
+				local d = f * total
+				for index = 2, #points do
+					if d <= lengths[index] or index == #points then
+						local a, b = points[index - 1], points[index]
+						local span = lengths[index] - lengths[index - 1]
+						local t = if span > 0 then math.clamp((d - lengths[index - 1]) / span, 0, 1) else 0
+						return {
+							a[1] + (b[1] - a[1]) * t,
+							a[2] + (b[2] - a[2]) * t,
+							a[3] + (b[3] - a[3]) * t,
+							a[4] + (b[4] - a[4]) * t,
+						}
 					end
 				end
+				return points[#points]
 			end
-		end)
-
-		-- Golden legs with dark talons.
-		pet:limbPair("LeftLeg", "RightLeg", { 2, 6, 1 }, function(leg)
-			leg:box(1, 5, 0, 3, 7, 2, CRIMSON_DARK)
-			leg:box(2, 2, 1, 2, 4, 1, GOLD)
-			leg:box(1, 0, 0, 3, 1, 2, GOLD)
-			leg:box(1, 0, 3, 1, 0, 3, TALON)
-			leg:box(3, 0, 3, 3, 0, 3, TALON)
-			leg:box(2, 0, -1, 2, 0, -1, TALON)
-		end)
-
-		-- A long train of tail plumes sweeping back and curling up at their ends, crimson to gold, each ending in
-		-- an eye of eternal fire.
-		local tail = pet:limb("Tail", { 0, 8, -4 })
-		for _, plume in { { 0, 1.2 }, { 2.5, 0.9 }, { -2.5, 0.9 }, { 5, 0.6 }, { -5, 0.6 } } do
-			local x, reach = plume[1], plume[2]
-			local points = andThen(
-				{
-					{ x * 0.2, 8, -4, 1 },
-					{ x * 0.5, 6, -9, 0.9 },
-					{ x * 0.8, 3.5, -14 - 2 * reach, 0.75 },
-					{ x, 2, -18 - 3 * reach, 0.6 },
-				},
-				curl({
-					centre = { x, 4.5, -18 - 3 * reach },
-					plane = { 3, 2 },
-					from = -math.pi / 2,
-					turns = -0.75,
-					radius = { 2.5, 1.2 },
-					width = { 0.6, 0.5 },
-				})
-			)
-			-- Crimson near the body, then flame, then gold, all the plumes changing colour at the same distance back.
-			tube(tail, points, CRIMSON, {
-				shade = function(cube, index, count)
-					if index >= count - 1 then
-						return (if index == count then ETERNAL else ETERNAL_DEEP), NEON
-					elseif cube[3] > -9 then
-						return CRIMSON, nil
-					elseif cube[3] > -15 then
-						return FLAME, NEON
+			local from = 0
+			for _, band in bands do
+				local to = band[2]
+				local part = { pointAt(from) }
+				for index = 2, #points - 1 do
+					local f = lengths[index] / total
+					if f > from and f < to then
+						table.insert(part, points[index])
 					end
-					return GOLD, NEON
-				end,
-			})
+				end
+				table.insert(part, pointAt(to))
+				s:add(if flat then flatten(rod(part), points[1][3], flat) else rod(part), band[1], frame)
+				from = to
+			end
+		end
+		local BURN = { { CRIMSON, 0.25 }, { EMBER, 0.45 }, { FLAME, 0.65 }, { GOLD, 0.86 }, { ETERNAL, 1 } }
+		local LICK = { { EMBER, 0.4 }, { FLAME, 0.75 }, { HOT, 1 } }
+
+		-- A body leaning forward to strike, crimson over a golden breast, with a heart of eternal fire burning in
+		-- its chest, and behind it a halo of eternal fire ringed with flames.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 0, 0 }, { 5.2, 7.2, 5.6 }), CRIMSON, { origin = { 0, 17, -1 }, pitch = -0.35 })
+		body:paint(ellipsoid({ 0, 15, 3.5 }, { 4.8, 6.2, 3.4 }), BREAST, nil, true)
+		for _, y in { 11.5, 14.5, 17.5 } do
+			body:paint(
+				rod({ { -4.5, y + 1, 1.5, 0.6 }, { 0, y, 5.5, 0.6 }, { 4.5, y + 1, 1.5, 0.6 } }),
+				BREAST_DARK,
+				nil,
+				true
+			)
+		end
+		body:add(ellipsoid({ 0, 17, 4.4 }, { 1.6, 1.9, 1.1 }), ETERNAL)
+		body:paint(ellipsoid({ 0, 17, 4.2 }, { 2.6, 2.9, 1.2 }), GILT, nil, true)
+		body:add(ellipsoid({ 0, 17, 4.6 }, { 1.4, 1.7, 1 }), ETERNAL)
+		local halo = { 0, 26, -8.5 }
+		body:add(
+			shape(halo, 14, function(x, y, z)
+				local r = math.sqrt(x * x + (y - halo[2]) ^ 2)
+				return math.abs(r - 12.5) <= 1.4 and math.abs(z - halo[3]) <= 0.8
+			end),
+			ETERNAL_DEEP
+		)
+		body:paint(
+			shape(halo, 14, function(x, y, z)
+				local r = math.sqrt(x * x + (y - halo[2]) ^ 2)
+				return math.abs(r - 12.5) <= 0.6 and z >= halo[3]
+			end),
+			ETERNAL
+		)
+		for a = 0, 330, 30 do
+			if a < 230 or a > 310 then
+				local c, s = math.cos(math.rad(a)), math.sin(math.rad(a))
+				local long = if a % 60 == 0 then 5 else 3
+				plume(body, {
+					{ c * 13.5, halo[2] + s * 13.5, halo[3], 1.1 },
+					{ c * (13.8 + long), halo[2] + s * (13.8 + long), halo[3], 0.3 },
+				}, if a % 60 == 0 then { { ETERNAL, 0.45 }, { GOLD, 1 } } else { { GOLD, 1 } }, nil, 1.6)
+			end
+		end
+		-- The halo is held to its back by a stream of fire.
+		plume(body, { { 0, 13.5, -5.5, 1.4 }, { 0, 13.2, -8.5, 1.1 } }, { { FLAME, 1 } })
+
+		-- A long neck ruffed with flame feathers, and a raptor's head thrust forward: horned brows, slanted eyes
+		-- burning eternal blue, a hooked golden beak open on a throat of fire, and a blazing crown of plumes.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 23, 2, 3.3 }, { 0, 26.5, 5.5, 2.7 }, { 0, 29, 8.5, 2.3 } }), CRIMSON)
+		for _, s in { 1, -1 } do
+			plume(head, { { 2 * s, 25, 3.5, 1.1 }, { 4.6 * s, 26.5, -1, 0.7 }, { 5.6 * s, 28, -4, 0.3 } }, LICK)
+			plume(head, { { 1.6 * s, 22.5, 1.5, 1 }, { 4.2 * s, 23, -2.5, 0.6 }, { 5 * s, 24, -5, 0.3 } }, LICK)
+		end
+		local face = { origin = { 0, 29.5, 10.5 }, pitch = -0.2 }
+		-- The head is drawn at 1.3 times the size of the numbers below.
+		local H = 1.3
+		local function E(c: { number }, r: { number }): Shape
+			return ellipsoid({ c[1] * H, c[2] * H, c[3] * H }, { r[1] * H, r[2] * H, r[3] * H })
+		end
+		local function scaled(points: { { number } }): { { number } }
+			local out = {}
+			for _, p in points do
+				table.insert(out, { p[1] * H, p[2] * H, p[3] * H, p[4] * H })
+			end
+			return out
+		end
+		local function R(points: { { number } }): Shape
+			return rod(scaled(points))
+		end
+		head:add(E({ 0, 0, 0 }, { 3, 2.8, 3.6 }), CRIMSON, face)
+		head:add(E({ 0, 1.4, 1.8 }, { 3.1, 0.9, 1.6 }), CRIMSON_DARK, face)
+		head:add(
+			R({ { 0, 0, 2.4, 1.6 }, { 0, -0.4, 5.5, 1.2 }, { 0, -1.4, 7.2, 0.8 }, { 0, -2.8, 7.6, 0.45 } }),
+			GILT,
+			face
+		)
+		head:add(R({ { 0, -1.4, 7.2, 0.7 }, { 0, -2.8, 7.6, 0.45 } }), GILT_DARK, face)
+		head:add(R({ { 0, -1.8, 2.5, 1.2 }, { 0, -3, 5.2, 0.7 } }), GILT, face)
+		head:carve(E({ 0, -1.6, 4.6 }, { 1, 0.65, 2.3 }), face)
+		head:add(E({ 0, -1.6, 3 }, { 0.9, 0.6, 0.8 }), FLAME, face)
+		for _, s in { 1, -1 } do
+			head:add(R({ { 1.2 * s, 0.45, 3.3, 0.7 }, { 2.7 * s, 1.05, 2.4, 0.7 } }), ETERNAL, face)
+			head:add(
+				R({ { 1.8 * s, 1.6, 2.2, 0.8 }, { 3 * s, 3.4, -1.5, 0.5 }, { 3.4 * s, 4.6, -3.5, 0.25 } }),
+				CRIMSON_DARK,
+				face
+			)
+			plume(
+				head,
+				scaled({ { 2.4 * s, -0.6, 0, 0.9 }, { 3.8 * s, 0.4, -4, 0.6 }, { 4.4 * s, 1.4, -6.5, 0.3 } }),
+				LICK,
+				face
+			)
+		end
+		for _, crest in { { 0, 9 }, { 1.7, 8 }, { -1.7, 8 }, { 3, 6.5 }, { -3, 6.5 } } do
+			local x, tall = crest[1], crest[2]
+			plume(
+				head,
+				scaled({
+					{ x * 0.6, 2, 0.2, 0.75 },
+					{ x * 1.1, 2 + tall * 0.5, -2.8, 0.55 },
+					{ x * 1.6, 2 + tall * 0.85, -6.8, 0.25 },
+				}),
+				BURN,
+				face
+			)
 		end
 
-		pet:light(ETERNAL, 3, 24)
-		pet:particles("Embers", GOLD, 16)
-		pet:seat(0, 17, -4)
+		-- Wings raised and burning: flames lick up from their leading edges, and every feather burns from
+		-- crimson at the root through flame and gold to a tip of eternal blue, the longest at the wingtips.
+		local wing = newSculpt(U)
+		local arm = { { 4.5, 22, -1, 2.4 }, { 11, 28.5, -2, 1.9 }, { 17.5, 33.5, -3, 1.4 }, { 25, 37, -4.2, 0.8 } }
+		local function armAt(x: number): (number, number)
+			for index = 2, #arm do
+				local a, b = arm[index - 1], arm[index]
+				if x <= b[1] or index == #arm then
+					local t = math.clamp((x - a[1]) / (b[1] - a[1]), 0, 1)
+					return a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t
+				end
+			end
+			return arm[#arm][2], arm[#arm][3]
+		end
+		-- Broad flame-shaped feathers, each overlapping the next: four along the arm, four longer ones fanning out
+		-- from the tip.
+		for index, feather in
+			{
+				{ 6.5, 10 },
+				{ 9.5, 11 },
+				{ 12.5, 12 },
+				{ 15, 13 },
+				{ 17, 14.5 },
+				{ 19.5, 16 },
+				{ 22, 17 },
+				{ 24.2, 15.5 },
+			}
+		do
+			local x, length = feather[1], feather[2]
+			local y, z = armAt(x)
+			local spread = if index > 4 then (index - 4) * 1.3 else 0
+			local back = if index % 2 == 0 then -0.9 else 0
+			plume(wing, {
+				{ x, y - 0.5, z + back, 1.4 },
+				{ x + spread * 0.4, y - length * 0.45, z - 0.8 + back, 2 },
+				{ x + spread * 0.75, y - length * 0.8, z - 1.3 + back, 1.1 },
+				{ x + spread, y - length, z - 1.6 + back, 0.35 },
+			}, BURN, nil, 2.2)
+		end
+		for _, c in { { 9, 24.8, -2, 3.4, 2.4 }, { 15, 29.8, -2.8, 3.4, 2.4 }, { 20, 33.2, -3.5, 3, 2 } } do
+			wing:add(ellipsoid({ c[1], c[2], c[3] }, { c[4], c[5], 1.4 }), CRIMSON)
+		end
+		wing:add(rod(arm), CRIMSON_DARK)
+		for _, x in { 8, 12.5, 17, 21, 24.5 } do
+			local y, z = armAt(x)
+			local tall = if x == 12.5 or x == 21 then 7 else 5
+			plume(
+				wing,
+				{ { x, y + 0.5, z, 1.4 }, { x - 0.6, y + tall * 0.55, z - 1, 0.9 }, { x - 1.4, y + tall, z - 2, 0.25 } },
+				LICK,
+				nil,
+				1.6
+			)
+		end
+
+		-- Golden legs with great dark talons, reaching forward to strike.
+		local leg = newSculpt(U)
+		leg:add(ellipsoid({ 2.8, 9.5, 1 }, { 2.6, 4, 3 }), CRIMSON)
+		plume(
+			leg,
+			{ { 2.8, 7, 2.5, 1.6 }, { 3, 5, 3.5, 1.2 }, { 3.1, 4, 4.2, 0.5 } },
+			{ { CRIMSON, 0.4 }, { EMBER, 0.7 }, { FLAME, 1 } }
+		)
+		leg:add(rod({ { 3, 5.5, 2.5, 1.1 }, { 3.1, 2.4, 3.5, 0.95 } }), GILT)
+		for _, toe in { -1.5, 0, 1.5 } do
+			leg:add(rod({ { 3.1, 2, 3.6, 0.8 }, { 3.1 + toe, 1.1, 6, 0.75 } }), GILT)
+			leg:add(
+				rod({
+					{ 3.1 + toe, 1.2, 6.2, 0.7 },
+					{ 3.1 + toe * 1.15, 0.9, 7.6, 0.5 },
+					{ 3.1 + toe * 1.2, 0.2, 8.2, 0.35 },
+				}),
+				TALON
+			)
+		end
+		leg:add(rod({ { 3.1, 2, 3, 0.75 }, { 3.1, 1.1, 0.8, 0.65 } }), GILT)
+		leg:add(rod({ { 3.1, 1.1, 0.6, 0.6 }, { 3.1, 0.3, -0.8, 0.4 } }), TALON)
+
+		-- A long train of fire streamers, curling up at their ends.
+		local tail = newSculpt(U)
+		for _, x in { 0, 2.6, -2.6, 5, -5 } do
+			local reach = 1 - math.abs(x) / 10
+			local points = andThen(
+				{
+					{ x * 0.2, 12.5, -5, 1.6 },
+					{ x * 0.5, 10, -10, 1.3 },
+					{ x * 0.8, 7, -16 - 2 * reach, 1 },
+					{ x, 5, -21 - 3 * reach, 0.8 },
+				},
+				curl({
+					centre = { x, 7.6, -21 - 3 * reach },
+					plane = { 3, 2 },
+					from = -math.pi / 2,
+					turns = -0.7,
+					radius = { 2.6, 1.2 },
+					width = { 0.8, 0.45 },
+				})
+			)
+			plume(tail, points, { { CRIMSON, 0.2 }, { EMBER, 0.4 }, { FLAME, 0.6 }, { GOLD, 0.82 }, { ETERNAL, 1 } })
+		end
+
+		local mirroredWing, mirroredLeg = wing:mirror(), leg:mirror()
+		body:draw(pet:limb("Body", at({ 0, 17, -1 })), { head, wing, mirroredWing, leg, mirroredLeg, tail }, CRIMSON)
+		head:draw(pet:limb("Head", at({ 0, 27, 6 })), { body, wing, mirroredWing }, CRIMSON)
+		pet:limbPair("LeftWing", "RightWing", at({ 4.5, 22, -1 }), function(limb)
+			wing:draw(limb, { body, head }, CRIMSON)
+		end)
+		pet:limbPair("LeftLeg", "RightLeg", at({ 2.6, 11, 0.5 }), function(limb)
+			leg:draw(limb, { body }, CRIMSON)
+		end)
+		tail:draw(pet:limb("Tail", at({ 0, 12.5, -5 })), { body }, CRIMSON)
+
+		pet:light(rgb(150, 255, 245), 3.4, 28)
+		pet:particles("Embers", rgb(255, 206, 60), 18)
+		pet:seat(0, 26 / U, -4 / U)
 	end,
 }
 

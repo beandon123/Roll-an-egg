@@ -32,7 +32,7 @@ return function(harness)
 	local BUDGET = 120
 	-- Secret and Eternal pets are the showpieces: far more detailed than the rest, so they get a bigger budget,
 	-- and must have at least this many blocks and this much more than any other pet in the game.
-	local SHOWPIECE_BUDGET = 500
+	local SHOWPIECE_BUDGET = 700
 	local SHOWPIECE_MINIMUM = 150
 	local SHOWPIECE_LEAD = 1.3
 
