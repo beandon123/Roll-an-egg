@@ -35,7 +35,7 @@ return function(harness)
 	describe("Zones", function()
 		it("has one zone per runway segment, in order", function()
 			expect.equal(#Zones.List, Runway.ZONE_COUNT)
-			local names = { "Forest", "Desert", "Snow", "Ocean", "Volcano" }
+			local names = { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" }
 			for index, zone in Zones.List do
 				expect.equal(zone.id, index)
 				expect.equal(zone.name, names[index])
@@ -49,6 +49,7 @@ return function(harness)
 				{ Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2, Secret = 1 },
 				{ Rare = 2, Epic = 2, Legendary = 1, Mythic = 1, Secret = 2 },
 				{ Rare = 1, Epic = 1, Legendary = 2, Mythic = 2, Secret = 1, Eternal = 1 },
+				{ Epic = 2, Legendary = 2, Mythic = 1, Secret = 1, Eternal = 2 },
 			}
 			for index, zone in Zones.List do
 				expect.equal(#zone.eggs, 8, zone.name .. " eggs")
@@ -159,6 +160,8 @@ return function(harness)
 			expect.equal(EggSpec.rollRarity(1, 0.99999), "Mythic")
 			expect.equal(EggSpec.rollRarity(4, 0), "Rare")
 			expect.equal(EggSpec.rollRarity(5, 0.99999), "Eternal")
+			expect.equal(EggSpec.rollRarity(6, 0), "Epic")
+			expect.equal(EggSpec.rollRarity(6, 0.99999), "Eternal")
 		end)
 
 		it("picks evenly between a zone's eggs of the same rarity", function()
@@ -169,6 +172,8 @@ return function(harness)
 			expect.equal(EggSpec.pickEgg(1, "Common", 0.9999), "Cottontail")
 			expect.equal(EggSpec.pickEgg(4, "Secret", 0.7), "Abyss")
 			expect.equal(EggSpec.pickEgg(1, "Epic", 0.9), "Bear")
+			expect.equal(EggSpec.pickEgg(6, "Eternal", 0.2), "Mosasaurus")
+			expect.equal(EggSpec.pickEgg(6, "Eternal", 0.8), "LunarDragon")
 			expect.falsy(EggSpec.pickEgg(3, "Common", 0))
 			local zone, rarity = EggSpec.placeOf("Yeti")
 			expect.equal(zone, 3)

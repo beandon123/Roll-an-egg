@@ -7,7 +7,7 @@ Items marked (decided) were confirmed by the game's owner; items marked (propose
 Genre: Skill-based obstacle runner + collect-and-hatch plot tycoon, with light PvP.
 
 Core loop:
-1. One long straight runway passes through five zones in order: Forest, Desert, Snow, Ocean, Volcano.
+1. One long straight runway passes through six zones in order: Forest, Desert, Snow, Ocean, Volcano, Prehistoric.
    Anyone can go anywhere; deeper zones drop rarer, bigger eggs that need more stamina to hold on to.
 2. The runway runs in 3-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
    rider disappears, every nest hatches 30x faster, and a fresh lineup of eggs starts.
@@ -27,7 +27,7 @@ Session length: 15-30 min target. First claimed egg in under 60 s, first hatch i
 What makes it unique: a "rodeo on a rolling egg." Every ride is a race between your claim meter and your stamina while
 dodging obstacles, and every time you leave an egg it cracks a little more. The runway is shared and live, so any
 unlocked egg can be stolen mid-ride in a rhythm duel. The world changes as you roll deeper, and so does the prize:
-Forest and Desert up to Mythic, Snow and Ocean up to Secret, Volcano up to Eternal.
+Forest and Desert up to Mythic, Snow and Ocean up to Secret, Volcano and Prehistoric up to Eternal.
 Original theme, art, and creatures.
 
 ## Target Audience
@@ -38,13 +38,15 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight runway (~3,000 studs) holding five zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
-      5 Volcano; ends at a cliff after the Volcano; more zones added later (decided)
+- [ ] One straight runway (~3,600 studs) holding six zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
+      5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); ends at a cliff after the Prehistoric
+      zone; more zones added later (decided)
     - [ ] Anyone can walk or ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with coins (decided)
-    - [ ] Bought in order (Desert, then Snow, then Ocean, then Volcano); prices rise steeply so they track progress
+    - [ ] Bought in order (Desert, then Snow, then Ocean, then Volcano, then Prehistoric); prices rise steeply so
+          they track progress
           (decided; exact prices set during economy tuning)
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
@@ -54,6 +56,7 @@ Original theme, art, and creatures.
     - [ ] Snow: 2 Uncommon, Rare, Epic, Legendary, 2 Mythic, Secret (no Commons)
     - [ ] Ocean: 2 Rare, 2 Epic, Legendary, Mythic, 2 Secret
     - [ ] Volcano: Rare, Epic, 2 Legendary, 2 Mythic, Secret, Eternal
+    - [ ] Prehistoric: 2 Epic, 2 Legendary, Mythic, Secret, 2 Eternal (decided: one Mythic, one Secret, two Eternals)
     - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
 - [ ] Eggs: lineup rolled per zone at the start of each cycle; down-runway movement fixed by spawn time (decided);
       ~8 active eggs per zone (12 during Egg Avalanche)
@@ -88,6 +91,7 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
     3 Snow      -       2,500     3,200   4,000   5,000      6,200    7,500    -
     4 Ocean     -       -         12,500  16,000  20,000     25,000   30,000   -
     5 Volcano   -       -         55,000  70,000  85,000     100,000  125,000  150,000
+    6 Prehist.  -       -         -       200,000 250,000    320,000  400,000  500,000
 
     Riding drains 80% of the egg's requirement over its claim time; bumps cost extra.
     Meeting the requirement leaves a 20% buffer for mistakes; below it, you fall off before the claim finishes.
@@ -111,7 +115,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
     - [ ] Zone-themed obstacles (proposed): Forest: rolling logs, swinging vines; Desert: tumbleweeds, sand geysers;
           Snow: giant snowballs, ice patches (slide sideways); Ocean: crashing waves, snapping clams;
-          Volcano: lava bursts (lethal), falling rocks; every obstacle is telegraphed before it arrives
+          Volcano: lava bursts (lethal), falling rocks; Prehistoric: stampeding dino herds, tar pits (proposed);
+          every obstacle is telegraphed before it arrives
 - [ ] Leaving an egg (decided)
     - [ ] Whenever an egg is left with no rider (jumped off, knocked off, out of stamina, rider died), it bounces once
           in the air and loses a bounce; at 0 bounces it cracks and splats
@@ -172,6 +177,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
                 Secret: Kraken, Leviathan
     5 Volcano:  Rare: Obsidian Goat | Epic: Cinder Boar | Legendary: Volcano Tortoise, Fire Salamander
                 Mythic: Chimera, Lava Golem | Secret: Cerberus | Eternal: Lava Dragon
+    6 Prehistoric: Epic: Velociraptor, Pteranodon | Legendary: Triceratops, Stegosaurus
+                Mythic: Brachiosaurus (decided) | Secret: T-Rex (decided) | Eternal: Mosasaurus, Lunar Dragon (decided)
 
     Shelved for now (designed, out of the game): Frost Dragon and Magma Dragon (decided), plus the Hermit Crab,
     Fire Salamander (old Common egg), and Magma Toad eggs, whose rarities those zones no longer drop, and the
@@ -254,20 +261,20 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
           zone, plus 5 shelved): Commons plain, Uncommon/Rare a zone pattern hinting at the pet inside, Epic and up
           looking like the pet that hatches; Legendary+ glow, Mythic+ give off particles. Still to do: 5
           zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon yolk splat (no gore)
-    - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
+    - [ ] Pets: 48 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
         - [ ] Pets are built in the same blocky style as the eggs, from parts in code (decided), rigged with a
-              Motor6D per limb; all 40 zone pets done (Forest, Desert, Snow, Ocean, Volcano)
+              Motor6D per limb; all 48 zone pets done (Forest, Desert, Snow, Ocean, Volcano, Prehistoric)
         - [ ] Secret and Eternal pets are exceptionally detailed, well beyond every other pet (decided)
         - [ ] Where blocks on the grid are not enough, showpieces may use parts at any angle, wedges, egg shapes
               (sphere meshes) and Roblox Fire, so they hold their detail at every pet size (decided; the Lava
-              Dragon's wings and fire do, and the shelved Eternal Phoenix is built wholly from them)
-        - [ ] Flying animations for winged pets and dragons: Fly and a hovering idle (done for the owls and
-              the Lava Dragon)
+              and Lunar Dragons' wings and fire do, and the shelved Eternal Phoenix is built wholly from them)
+        - [ ] Flying animations for winged pets and dragons: Fly and a hovering idle (done for the owls, the
+              Pteranodon and the Lava and Lunar Dragons)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
-      -> Ocean (a causeway over a shallow reef) -> Volcano -> end cliff; each zone has its own palette, props, lighting,
+      -> Ocean (a causeway over a shallow reef) -> Volcano -> Prehistoric (ferns, tar pits, giant bones) -> end cliff; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, nests glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = coins, stamina, inventory, shop, index, mount, Reset shortcut,

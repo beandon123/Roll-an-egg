@@ -360,7 +360,7 @@ return function(harness)
 			local sim = newSim()
 			sim:setPhase("Closed") -- stops other eggs dropping; the phase does not affect fading
 			sim.phase = "Open"
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
 			local egg = sim:spawnEgg(1, 0, "Common")
 			sim:takeEvents()
 			sim:step(59)
@@ -371,7 +371,7 @@ return function(harness)
 
 		it("does not fade an egg that has been ridden", function()
 			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
 			sim:addRider(ALICE, 500, 14, 0)
 			local egg = sim:spawnEgg(1, 0, "Rare")
 			sim:requestMount(ALICE, egg.id, 1, true)
@@ -382,10 +382,10 @@ return function(harness)
 
 		it("ends the ride and removes the egg when it rolls off the end of the runway", function()
 			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			-- Plenty of stamina, but Alice gets on a Volcano egg far too late to finish the claim.
+			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			-- Plenty of stamina, but Alice gets on a Prehistoric egg far too late to finish the claim.
 			sim:addRider(ALICE, 1e9, 14, 0)
-			local egg = sim:spawnEgg(5, 0, "Eternal") -- 21 studs/s, 26 s to claim, 588 studs to the end
+			local egg = sim:spawnEgg(6, 0, "Eternal") -- 21 studs/s, 26 s to claim, 588 studs to the end
 			sim:requestMount(ALICE, egg.id, 10, true)
 			sim:takeEvents()
 

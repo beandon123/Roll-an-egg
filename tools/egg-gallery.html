@@ -749,7 +749,7 @@
 
   const MOVES = {
     Quadruped: "Four legs", LowSlung: "Four short legs", Winged: "Wings", Biped: "Two legs", ManyLegged: "Six legs",
-    Swimmer: "Fins", Tentacled: "Eight tentacles", Serpent: "Coils", Dragon: "Four legs and wings",
+    Swimmer: "Fins", Tentacled: "Eight tentacles", Serpent: "Coils", Dragon: "Four legs and wings", Theropod: "Two legs and a tail",
   };
   const GAITS = { Walk: "walks", Hop: "hops", Waddle: "waddles", Stomp: "stomps", Swim: "swims", Crawl: "crawls" };
 
@@ -953,7 +953,7 @@
       for (let k = list.length; k < 8; k++) petTable.append(document.createElement("div"));
     }
     const waiting = DATA.zones.filter((z) => !pets.some((p) => p.zone === z.id)).map((z) => z.name);
-    document.getElementById("pets-title").textContent = "Pets: " + pets.length + " of 40";
+    document.getElementById("pets-title").textContent = "Pets: " + pets.length + " of " + DATA.zones.length * 8;
     if (waiting.length) {
       document.getElementById("pets-note").textContent +=
         " " + waiting.join(", ").replace(/, ([^,]*)$/, " and $1") + " pets come next.";

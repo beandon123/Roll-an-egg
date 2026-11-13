@@ -149,6 +149,37 @@ local list: { ZoneInfo } = {
 			Eternal = 0.02,
 		},
 	},
+	{
+		id = 6,
+		key = "Prehistoric",
+		name = "Prehistoric",
+		ground = { 128, 138, 72 },
+		accent = { 232, 148, 40 },
+		eggs = {
+			{ egg = "Raptor", rarity = "Epic", pet = "Velociraptor" },
+			{ egg = "Pteranodon", rarity = "Epic", pet = "Pteranodon" },
+			{ egg = "Triceratops", rarity = "Legendary", pet = "Triceratops" },
+			{ egg = "Stegosaurus", rarity = "Legendary", pet = "Stegosaurus" },
+			{ egg = "Brachiosaurus", rarity = "Mythic", pet = "Brachiosaurus" },
+			{ egg = "TRex", rarity = "Secret", pet = "TRex" },
+			{ egg = "Mosasaurus", rarity = "Eternal", pet = "Mosasaurus" },
+			{ egg = "LunarDragon", rarity = "Eternal", pet = "LunarDragon" },
+		},
+		stamina = {
+			Epic = 200000,
+			Legendary = 250000,
+			Mythic = 320000,
+			Secret = 400000,
+			Eternal = 500000,
+		},
+		weights = {
+			Epic = 14,
+			Legendary = 6.5,
+			Mythic = 1.2,
+			Secret = 0.08,
+			Eternal = 0.03,
+		},
+	},
 }
 
 Zones.List = list

@@ -426,6 +426,55 @@ local VOLCANO = {
 	salamander = rgb(34, 28, 32),
 }
 
+local PREHISTORIC = {
+	fern = rgb(96, 168, 72),
+	raptor = rgb(124, 146, 66),
+	raptorDark = rgb(70, 84, 42),
+	cream = rgb(232, 218, 166),
+	claw = rgb(240, 232, 212),
+	amber = rgb(255, 172, 36),
+	amberDark = rgb(214, 112, 24),
+	black = rgb(30, 28, 30),
+	ptero = rgb(204, 150, 104),
+	pteroDark = rgb(150, 96, 70),
+	pteroCrest = rgb(226, 78, 46),
+	beak = rgb(240, 202, 120),
+	membrane = rgb(178, 96, 68),
+	wingBone = rgb(112, 70, 50),
+	trike = rgb(118, 138, 98),
+	trikeLight = rgb(166, 178, 124),
+	frill = rgb(234, 120, 50),
+	frillSpot = rgb(56, 96, 90),
+	frillRim = rgb(250, 214, 120),
+	horn = rgb(246, 236, 206),
+	trikeBeak = rgb(74, 68, 60),
+	stego = rgb(102, 128, 86),
+	stegoDark = rgb(72, 96, 64),
+	stegoBelly = rgb(216, 204, 148),
+	plate = rgb(222, 92, 50),
+	plateTip = rgb(255, 184, 60),
+	brachio = rgb(110, 150, 170),
+	brachioSpot = rgb(76, 108, 132),
+	brachioBelly = rgb(222, 224, 196),
+	rex = rgb(68, 58, 48),
+	rexStripe = rgb(154, 38, 30),
+	rexBelly = rgb(184, 150, 104),
+	tooth = rgb(248, 242, 224),
+	mouth = rgb(96, 20, 26),
+	mosa = rgb(38, 80, 112),
+	mosaDark = rgb(22, 48, 76),
+	mosaBelly = rgb(200, 228, 230),
+	glow = rgb(90, 240, 255),
+	lunar = rgb(34, 38, 86),
+	lunarScale = rgb(56, 62, 124),
+	lunarWing = rgb(76, 62, 156),
+	silver = rgb(214, 222, 240),
+	moon = rgb(234, 240, 255),
+	moonGlow = rgb(170, 200, 255),
+	star = rgb(255, 244, 196),
+	eternal = rgb(150, 255, 245),
+}
+
 ----------------------------------------------------------------------------------------------------------------
 -- Designs
 
@@ -1843,6 +1892,414 @@ Designs.LavaGolem = {
 		egg:fill(-1, 17, -1, 0, 17, 0, VOLCANO.lavaHot, NEON)
 		egg:light(VOLCANO.lava, 2, 14)
 		egg:particles("Embers", VOLCANO.lava, 8)
+	end,
+}
+
+Designs.Raptor = {
+	name = "Raptor Egg",
+	hatches = "Velociraptor",
+	seed = 62,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(PREHISTORIC.raptor)
+		-- A cream belly, and dark chevrons down its back.
+		egg:paint(function(cell)
+			if cell.facing ~= "side" then
+				return nil
+			end
+			if cell.angle > 50 and cell.angle < 130 and cell.y <= 9 then
+				return PREHISTORIC.cream
+			end
+			local fromBack = math.abs(cell.angle - 270)
+			if fromBack < 80 and (cell.y + math.floor(fromBack / 22)) % 4 == 0 then
+				return PREHISTORIC.raptorDark
+			end
+			return nil
+		end)
+		-- Narrow amber eyes under a dark brow.
+		egg:paint(function(cell)
+			local front = math.abs(cell.angle - 90)
+			if cell.facing == "side" and front > 22 and front < 46 then
+				if cell.y == 12 then
+					return PREHISTORIC.amber, NEON
+				elseif cell.y == 13 then
+					return PREHISTORIC.raptorDark
+				end
+			end
+			return nil
+		end)
+		-- A crest of quills over the top of its head.
+		local Q = { PREHISTORIC.raptorDark }
+		local A = { PREHISTORIC.amber }
+		spriteZ(egg, {
+			"A...",
+			"QA..",
+			".QQ.",
+		}, -3, 19, { -1, 0 }, { Q = Q, A = A })
+		for layer = 9, 15 do
+			local x, z = egg:outward(layer, 270, 0)
+			egg:set(x, layer, z, if layer % 2 == 0 then PREHISTORIC.raptorDark else PREHISTORIC.amberDark)
+		end
+		-- The sickle claw on each foot.
+		pairCells(egg, { { 2, 3, 4 }, { 2, 3, 5 }, { 2, 2, 5 } }, PREHISTORIC.claw)
+	end,
+}
+
+Designs.Pteranodon = {
+	name = "Pteranodon Egg",
+	hatches = "Pteranodon",
+	seed = 63,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(PREHISTORIC.ptero)
+		egg:paint(function(cell)
+			if cell.facing == "side" and math.abs(cell.angle - 270) < 70 then
+				return PREHISTORIC.pteroDark
+			end
+			return nil
+		end)
+		-- Its long beak, pointing forward from the top, and the crest sweeping back from its head.
+		egg:fill(-1, 15, 2, 0, 15, 7, PREHISTORIC.beak)
+		egg:fill(-1, 14, 3, 0, 14, 6, PREHISTORIC.beak)
+		local C = { PREHISTORIC.pteroCrest }
+		spriteZ(egg, {
+			"CC.....",
+			".CCC...",
+			"...CCC.",
+			".....CC",
+		}, -7, 20, { -1, 0 }, { C = C })
+		pairCells(egg, { { 2, 14, 1 } }, PREHISTORIC.black)
+		-- Leathery wings folded at its sides.
+		local B = { PREHISTORIC.wingBone }
+		local M = { PREHISTORIC.membrane }
+		local wing = {
+			"BB........",
+			"BMBB......",
+			"BMMMBB....",
+			"BMMMMMBB..",
+			"BMMMMMMMB.",
+			".BBBBBBBBB",
+		}
+		spriteZ(egg, wing, -5, 10, { 6 }, { B = B, M = M })
+		spriteZ(egg, wing, -5, 10, { -7 }, { B = B, M = M })
+	end,
+}
+
+Designs.Triceratops = {
+	name = "Triceratops Egg",
+	hatches = "Triceratops",
+	seed = 64,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(PREHISTORIC.trike)
+		blotches(egg, PREHISTORIC.trikeLight, 0.18, 7, 1, 9)
+		-- A great frill fanning out behind its head, spotted and rimmed.
+		local F = { PREHISTORIC.frill }
+		local S = { PREHISTORIC.frillSpot }
+		local R = { PREHISTORIC.frillRim }
+		sprite(egg, {
+			"....RRRRRRRR....",
+			"..RRFFFFFFFFRR..",
+			".RFFSFFFFFFSFFR.",
+			"RFFFFFFSSFFFFFFR",
+			"RFFSFFFFFFFFSFFR",
+			"RFFFFFFFFFFFFFFR",
+			".RFFFFFFFFFFFFR.",
+			"..RFFFFFFFFFFR..",
+			"...RFFFFFFFFR...",
+		}, -8, 21, { -3 }, { F = F, S = S, R = R })
+		-- A beak, a horn on its nose, and two long horns over its eyes.
+		egg:fill(-1, 6, 6, 0, 7, 6, PREHISTORIC.trikeBeak)
+		cells(egg, { { -1, 6, 7 }, { 0, 6, 7 } }, PREHISTORIC.trikeBeak)
+		cells(
+			egg,
+			{ { -1, 8, 6 }, { 0, 8, 6 }, { -1, 9, 6 }, { 0, 9, 6 }, { -1, 9, 7 }, { 0, 9, 7 } },
+			PREHISTORIC.horn
+		)
+		pairCells(egg, {
+			{ 1, 11, 5 },
+			{ 1, 12, 5 },
+			{ 1, 12, 6 },
+			{ 1, 13, 6 },
+			{ 1, 13, 7 },
+			{ 1, 14, 7 },
+			{ 1, 14, 8 },
+		}, PREHISTORIC.horn)
+		pairCells(egg, { { 2, 10, 5 } }, PREHISTORIC.black)
+		egg:light(PREHISTORIC.frill, 2, 14)
+		egg:particles("Leaves", PREHISTORIC.fern, 5)
+	end,
+}
+
+Designs.Stegosaurus = {
+	name = "Stegosaurus Egg",
+	hatches = "Stegosaurus",
+	seed = 65,
+	draw = function(egg)
+		egg:base(PREHISTORIC.stego)
+		egg:paint(function(cell)
+			if cell.facing ~= "side" then
+				return nil
+			end
+			if cell.angle > 45 and cell.angle < 135 and cell.y <= 8 then
+				return PREHISTORIC.stegoBelly
+			end
+			if math.abs(cell.angle - 270) < 70 and cell.y % 3 == 0 then
+				return PREHISTORIC.stegoDark
+			end
+			return nil
+		end)
+		-- Two staggered rows of plates up its back and over the top, red with glowing tips.
+		local plates = {
+			{ 3.5, -6.5, 0, -1, 2.2, 0 },
+			{ 6.5, -7, 0, -1, 2.8, -1 },
+			{ 9.5, -6.5, 0.2, -1, 3, 0 },
+			{ 12.5, -5, 0.5, -1, 3, -1 },
+			{ 15, -3.5, 0.8, -0.7, 2.8, 0 },
+			{ 16.8, -1.5, 1, -0.3, 2.6, -1 },
+		}
+		for _, plate in plates do
+			local by, bz, dy, dz, size, x = plate[1], plate[2], plate[3], plate[4], plate[5], plate[6]
+			local length = math.sqrt(dy * dy + dz * dz)
+			dy, dz = dy / length, dz / length
+			for y = 1, 22 do
+				for z = -11, 4 do
+					local vy, vz = y - 0.5 - by, z + 0.5 - bz
+					local along = vy * dy + vz * dz
+					local across = math.abs(vy * dz - vz * dy)
+					if along >= -0.5 and along <= size and across <= 1.3 * (1 - along / (size + 0.6)) + 0.35 then
+						local tip = along > size - 1
+						egg:set(
+							x,
+							y,
+							z,
+							if tip then PREHISTORIC.plateTip else PREHISTORIC.plate,
+							if tip then NEON else nil
+						)
+					end
+				end
+			end
+		end
+		-- The spiked tail, and a small head at the front.
+		pairCells(egg, { { 1, 2, -5 }, { 1, 2, -6 }, { 3, 4, -6 }, { 3, 4, -7 } }, PREHISTORIC.horn)
+		egg:fill(-2, 4, 6, 1, 5, 7, PREHISTORIC.stego)
+		pairCells(egg, { { 1, 5, 7 } }, PREHISTORIC.black)
+		egg:light(PREHISTORIC.plateTip, 2, 14)
+		egg:particles("Leaves", PREHISTORIC.fern, 5)
+	end,
+}
+
+Designs.Brachiosaurus = {
+	name = "Brachiosaurus Egg",
+	hatches = "Brachiosaurus",
+	seed = 66,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(PREHISTORIC.brachio)
+		egg:paint(function(cell)
+			if cell.facing == "side" and cell.angle > 45 and cell.angle < 135 and cell.y <= 7 then
+				return PREHISTORIC.brachioBelly
+			end
+			return nil
+		end)
+		blotches(egg, PREHISTORIC.brachioSpot, 0.16, 9, 6, 16)
+		-- Its long neck rising from the top, and its small head with a domed crest.
+		local N = { PREHISTORIC.brachio }
+		local D = { PREHISTORIC.brachioSpot }
+		local E = { PREHISTORIC.black }
+		local B = { PREHISTORIC.brachioBelly }
+		spriteZ(egg, {
+			"..DD...",
+			".NNNNN.",
+			".NNENNN",
+			".NBBBB.",
+			"NNB....",
+			"NB.....",
+			"DB.....",
+			"NB.....",
+			"NN.....",
+		}, -1, 25, { -1, 0 }, { N = N, D = D, E = E, B = B })
+		-- Four sturdy legs.
+		for _, angle in { 40, 140, 220, 320 } do
+			local x, z = egg:outward(3, angle, 0)
+			egg:set(x, 3, z, PREHISTORIC.brachio)
+			egg:set(x, 2, z, PREHISTORIC.brachioBelly)
+		end
+		egg:light(PREHISTORIC.fern, 2, 16)
+		egg:particles("Leaves", PREHISTORIC.fern, 9)
+	end,
+}
+
+Designs.TRex = {
+	name = "T-Rex Egg",
+	hatches = "T-Rex",
+	seed = 67,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(PREHISTORIC.rex)
+		stripes(egg, 14, 9, PREHISTORIC.rexStripe, 3, 15, 4)
+		egg:paint(function(cell)
+			local front = math.abs(cell.angle - 90)
+			if cell.facing == "bottom" or (cell.facing == "side" and front < 50 and cell.y <= 4) then
+				return PREHISTORIC.rexBelly
+			end
+			-- The inside of its open mouth.
+			if cell.facing == "side" and front < 40 and cell.y >= 7 and cell.y <= 9 then
+				return PREHISTORIC.mouth
+			end
+			return nil
+		end)
+		-- Huge jaws: a lower jaw, and a snout jutting out over the mouth, lined with teeth.
+		egg:fill(-3, 5, 6, 2, 6, 7, PREHISTORIC.rex)
+		egg:fill(-3, 10, 6, 2, 11, 8, PREHISTORIC.rex)
+		egg:fill(-2, 12, 6, 1, 12, 6, PREHISTORIC.rex)
+		cells(egg, { { -2, 11, 8 }, { 1, 11, 8 } }, PREHISTORIC.black)
+		cells(egg, {
+			{ -3, 9, 7 },
+			{ -1, 9, 8 },
+			{ 0, 9, 8 },
+			{ 2, 9, 7 },
+			{ -2, 7, 7 },
+			{ 1, 7, 7 },
+			{ -3, 7, 6 },
+			{ 2, 7, 6 },
+		}, PREHISTORIC.tooth)
+		-- Glowing eyes under heavy brows.
+		pairCells(egg, { { 3, 12, 3 } }, PREHISTORIC.amber, NEON)
+		pairCells(egg, { { 3, 13, 4 }, { 3, 14, 3 } }, PREHISTORIC.rex)
+		-- Tiny clawed arms.
+		pairCells(egg, { { 3, 4, 5 } }, PREHISTORIC.rex)
+		pairCells(egg, { { 3, 3, 5 } }, PREHISTORIC.claw)
+		egg:light(PREHISTORIC.amber, 2.5, 16)
+		egg:particles("Embers", PREHISTORIC.amber, 10)
+	end,
+}
+
+Designs.Mosasaurus = {
+	name = "Mosasaurus Egg",
+	hatches = "Mosasaurus",
+	seed = 68,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(PREHISTORIC.mosa)
+		egg:paint(function(cell)
+			local front = math.abs(cell.angle - 90)
+			if cell.facing == "side" and front < 50 and cell.y >= 2 and cell.y <= 9 then
+				return PREHISTORIC.mosaBelly
+			end
+			if math.abs(cell.angle - 270) < 60 or cell.facing == "top" then
+				return PREHISTORIC.mosaDark
+			end
+			-- Two rows of glowing spots down each side.
+			local side = math.min(math.abs(cell.angle - 0), math.abs(cell.angle - 360), math.abs(cell.angle - 180))
+			if cell.facing == "side" and cell.y % 2 == 1 and cell.y >= 3 and cell.y <= 13 then
+				if math.abs(side - 22) < 6 or math.abs(side - 42) < 6 then
+					return PREHISTORIC.glow, NEON
+				end
+			end
+			return nil
+		end)
+		-- Long jaws full of teeth.
+		egg:fill(-2, 11, 5, 1, 12, 8, PREHISTORIC.mosa)
+		cells(egg, { { -1, 11, 9 }, { 0, 11, 9 } }, PREHISTORIC.mosa)
+		egg:fill(-2, 8, 5, 1, 8, 8, PREHISTORIC.mosaBelly)
+		egg:paint(function(cell)
+			if cell.facing == "side" and math.abs(cell.angle - 90) < 35 and cell.y >= 9 and cell.y <= 10 then
+				return PREHISTORIC.mouth
+			end
+			return nil
+		end)
+		cells(egg, {
+			{ -2, 10, 6 },
+			{ 1, 10, 6 },
+			{ -2, 10, 8 },
+			{ 1, 10, 8 },
+			{ -2, 9, 7 },
+			{ 1, 9, 7 },
+			{ -1, 10, 9 },
+			{ 0, 10, 9 },
+		}, PREHISTORIC.tooth)
+		pairCells(egg, { { 2, 13, 2 } }, PREHISTORIC.glow, NEON)
+		-- Flippers at its sides, and a crescent tail fluke at the back.
+		local F = { PREHISTORIC.mosaDark }
+		sprite(egg, { "FF..", ".FFF", "..FF" }, 6, 7, { 1, 2 }, { F = F }, true)
+		sprite(egg, { "FF.", ".FF" }, 5, 4, { -2 }, { F = F }, true)
+		spriteZ(egg, {
+			"TT....",
+			".TT...",
+			"..TT..",
+			"..TTT.",
+			".TT...",
+			"TT....",
+		}, -9, 6, { -1, 0 }, { T = { PREHISTORIC.mosaDark } })
+		for layer = 8, 12 do
+			local x, z = egg:outward(layer, 270, 0)
+			egg:set(x, layer, z, PREHISTORIC.mosaDark)
+		end
+		egg:band(16, 16, PREHISTORIC.eternal, NEON)
+		egg:light(PREHISTORIC.glow, 3, 18)
+		egg:particles("Bubbles", PREHISTORIC.glow, 14)
+	end,
+}
+
+Designs.LunarDragon = {
+	name = "Lunar Dragon Egg",
+	hatches = "Lunar Dragon",
+	seed = 69,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(PREHISTORIC.lunar)
+		egg:paint(function(cell)
+			if cell.facing == "side" and (cell.y + math.floor(cell.angle / 18)) % 3 == 0 then
+				return PREHISTORIC.lunarScale
+			end
+			return nil
+		end)
+		speckle(egg, PREHISTORIC.star, 0.05, 11, 1, 15)
+		-- A glowing crescent moon on its front.
+		egg:paint(function(cell)
+			if cell.facing ~= "side" or math.abs(cell.angle - 90) > 50 then
+				return nil
+			end
+			local u, v = cell.x + 0.5, cell.y - 7.5
+			local inOuter = u * u + v * v <= 3.6 * 3.6
+			local du, dv = u - 1.6, v + 0.9
+			local inInner = du * du + dv * dv <= 2.9 * 2.9
+			if inOuter and not inInner then
+				return PREHISTORIC.moon, NEON
+			end
+			return nil
+		end)
+		-- Silver horns curving up like crescent moons, tipped with starlight.
+		local S = { PREHISTORIC.silver }
+		local T = { PREHISTORIC.star, NEON }
+		sprite(egg, {
+			".T..",
+			".SS.",
+			"..SS",
+			"...S",
+			"..SS",
+			".SS.",
+			"SS..",
+		}, 2, 21, { -1, 0 }, { S = S, T = T }, true)
+		-- Starry wings folded at its sides.
+		local B = { PREHISTORIC.silver }
+		local M = { PREHISTORIC.lunarWing }
+		local W = { PREHISTORIC.star, NEON }
+		local wing = {
+			"BB.......",
+			"BMB......",
+			"BMWBB....",
+			"BMMMWBB..",
+			"BWMMMMMB.",
+			".BBBBBBBB",
+		}
+		spriteZ(egg, wing, -5, 10, { 6 }, { B = B, M = M, W = W })
+		spriteZ(egg, wing, -5, 10, { -7 }, { B = B, M = M, W = W })
+		pairCells(egg, { { 2, 12, 2 } }, PREHISTORIC.moonGlow, NEON)
+		egg:band(15, 16, PREHISTORIC.moon, NEON)
+		egg:light(PREHISTORIC.moonGlow, 3, 18)
+		egg:particles("Sparkles", PREHISTORIC.moon, 16)
 	end,
 }
 

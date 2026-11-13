@@ -225,6 +225,49 @@ PetAnimations.MOVES = {
 			wave("Head", "ry", 0.12, 1.3),
 		},
 	},
+	-- Two strong legs, small arms and a long tail held out behind for balance (raptors, tyrannosaurs): the body
+	-- tips side to side over the stepping leg, the tail swings the other way, and the head bobs with each step.
+	Theropod = {
+		Idle = joined(idle(), {
+			wave("LeftArm", "rx", 0.08, 1.6),
+			wave("RightArm", "rx", 0.08, 1.6, { shift = 0.4 }),
+			wave("Tail", "rx", 0.05, 1.6, { shift = 1 }),
+		}),
+		Walk = {
+			wave("LeftLeg", "rx", 0.5, 7),
+			wave("RightLeg", "rx", -0.5, 7),
+			wave("Body", "rz", 0.06, 7),
+			wave("Body", "py", 0.3, 7, { shift = QUARTER, shape = "bounce" }),
+			wave("Tail", "ry", 0.18, 7, { shift = math.pi }),
+			wave("Tail", "rx", 0.05, 14),
+			wave("Head", "rx", 0.06, 14, { shift = QUARTER }),
+			wave("LeftArm", "rx", 0.15, 7),
+			wave("RightArm", "rx", -0.15, 7),
+		},
+		Stomp = {
+			wave("LeftLeg", "rx", 0.38, 4),
+			wave("RightLeg", "rx", -0.38, 4),
+			wave("Body", "rz", 0.08, 4),
+			wave("Body", "ry", 0.05, 4),
+			wave("Body", "py", 0.45, 4, { shift = QUARTER, shape = "bounce" }),
+			wave("Tail", "ry", 0.25, 4, { shift = math.pi }),
+			wave("Tail", "rx", 0.06, 8),
+			wave("Head", "ry", 0.12, 4, { shift = math.pi }),
+			wave("Head", "rx", 0.06, 8, { shift = QUARTER }),
+			wave("LeftArm", "rx", 0.12, 4),
+			wave("RightArm", "rx", -0.12, 4),
+		},
+		-- Rearing back with its head thrown up and shaking, arms spread, tail lashing.
+		Roar = {
+			wave("Body", "rx", 0.04, 9, { base = -0.18 }),
+			wave("Head", "rx", 0.05, 18, { base = -0.4 }),
+			wave("Head", "ry", 0.1, 7),
+			wave("LeftArm", "rz", 0.06, 9, { base = 0.25 }),
+			wave("RightArm", "rz", -0.06, 9, { base = -0.25 }),
+			wave("Tail", "ry", 0.25, 3.5),
+			wave("Tail", "rx", 0.06, 9, { base = 0.1 }),
+		},
+	},
 	-- Floats and swims: a gentle bob, the body rocking, fins sweeping, the tail beating up and down.
 	Swimmer = {
 		Idle = {

@@ -96,6 +96,8 @@ PetModels.SKELETONS = {
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
 	Biped = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg" },
+	-- Two legs, small arms and a long tail (raptors, tyrannosaurs).
+	Theropod = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Tail" },
 	-- Floats and swims: fins (or wings, or forelegs) and a tail.
 	Swimmer = { "Body", "Head", "LeftFin", "RightFin", "Tail" },
 	-- Eight tentacles round a body, with the head (mantle) on top.

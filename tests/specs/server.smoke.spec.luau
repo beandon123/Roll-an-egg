@@ -79,7 +79,7 @@ return function(harness)
 			expect.truthy(map.Hub:IsA("Part"))
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
-			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano" } do
+			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
 				expect.truthy(zone.Ground:IsA("Part"))
@@ -301,7 +301,7 @@ return function(harness)
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
-			local egg = dropEgg(session, 5, "Eternal")
+			local egg = dropEgg(session, 6, "Eternal")
 
 			-- Wait until the egg is too close to the end to be claimed, then get on.
 			session:heartbeat(0.5, 20)
@@ -464,6 +464,68 @@ return function(harness)
 			expect.equal(
 				table.concat(kinds, ","),
 				"Obsidian,CinderBoar,VolcanoTortoise,Salamander,Chimera,LavaGolem,Cerberus,LavaDragon"
+			)
+		end)
+
+		it("show the Prehistoric pets, the Lunar Dragon with starry wings and moonfire", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			root.Position = roblox.Vector3.new(0, 0, 3300) -- Prehistoric
+			session:heartbeat(1 / 60)
+			session:fromClient("DevCommand", player, "ShowPets")
+			local folder = session:service("Workspace"):FindFirstChild("StudioPets")
+			local names = {}
+			for _, pet in folder:GetChildren() do
+				table.insert(names, pet.Name)
+			end
+			table.sort(names)
+			expect.equal(
+				table.concat(names, ","),
+				"Brachiosaurus,LunarDragon,Mosasaurus,Pteranodon,Stegosaurus,TRex,Triceratops,Velociraptor"
+			)
+			local wedges, stars, fires = 0, 0, 0
+			for _, part in folder.LunarDragon:GetDescendants() do
+				if part:IsA("WedgePart") then
+					wedges += 1
+				elseif part:IsA("SpecialMesh") and part.MeshType == roblox.Enum.MeshType.Sphere then
+					stars += 1
+				elseif part:IsA("Fire") then
+					fires += 1
+				end
+			end
+			expect.truthy(wedges > 20, "wedges in its wings: " .. wedges)
+			expect.truthy(stars >= 20, "stars on its wings: " .. stars)
+			expect.equal(fires, 3, "moonfire on its horns and tail")
+			-- The T-Rex and the Mosasaurus have animated limbs too.
+			for _, name in { "TRex", "Mosasaurus" } do
+				local joints = 0
+				for _, joint in folder[name]:GetDescendants() do
+					if joint:IsA("Motor6D") then
+						joints += 1
+					end
+				end
+				expect.truthy(joints >= 4, name .. " joints: " .. joints)
+			end
+		end)
+
+		it("drop each of the Prehistoric eggs in turn", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			root.Position = roblox.Vector3.new(0, 0, 3300) -- Prehistoric
+			session:heartbeat(1 / 60)
+			session:clearSent()
+			session:fromClient("DevCommand", player, "DropEachEgg")
+			task.wait(6)
+			session:heartbeat(1 / 60)
+			local kinds = {}
+			for _, entry in session:sent("EggSpawned", "all") do
+				if entry.args[1].zone == 6 then
+					table.insert(kinds, entry.args[1].kind)
+				end
+			end
+			expect.equal(
+				table.concat(kinds, ","),
+				"Raptor,Pteranodon,Triceratops,Stegosaurus,Brachiosaurus,TRex,Mosasaurus,LunarDragon"
 			)
 		end)
 

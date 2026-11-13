@@ -8,7 +8,7 @@
 
 local Runway = {}
 
-Runway.ZONE_COUNT = 5
+Runway.ZONE_COUNT = 6
 Runway.ZONE_LENGTH = 600
 Runway.LENGTH = Runway.ZONE_COUNT * Runway.ZONE_LENGTH
 Runway.WIDTH = 64

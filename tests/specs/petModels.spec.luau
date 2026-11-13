@@ -28,6 +28,16 @@ return function(harness)
 			"Cerberus",
 			"LavaDragon",
 		},
+		{
+			"Velociraptor",
+			"Pteranodon",
+			"Triceratops",
+			"Stegosaurus",
+			"Brachiosaurus",
+			"TRex",
+			"Mosasaurus",
+			"LunarDragon",
+		},
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
 	local SHAPES = { Block = true, Wedge = true, Ball = true }
@@ -76,7 +86,7 @@ return function(harness)
 			for _, zone in Zones.List do
 				for _, entry in zone.eggs do
 					local hatches = EggModels.describe(entry.egg).hatches
-					expect.equal(entry.pet, (string.gsub(hatches, " ", "")), entry.egg .. " pet")
+					expect.equal(entry.pet, (string.gsub(hatches, "[^%w]", "")), entry.egg .. " pet")
 					local model = PetModels.get(entry.pet)
 					expect.truthy(model, entry.pet .. " has a model")
 					if model then

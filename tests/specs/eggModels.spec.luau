@@ -15,7 +15,7 @@ return function(harness)
 	local COMMON_BUDGET = 70
 	local BUDGET = 230
 
-	-- Every egg with a design: the 40 in the zones' lineups, then the shelved ones.
+	-- Every egg with a design: the 48 in the zones' lineups, then the shelved ones.
 	local function each(body)
 		for _, entry in EggModels.lineup() do
 			body(EggModels.get(entry.kind), entry.rarity)
@@ -45,7 +45,7 @@ return function(harness)
 	describe("EggModels", function()
 		it("has a model for every egg in every zone, 8 per zone", function()
 			local lineup = EggModels.lineup()
-			expect.equal(#lineup, 40)
+			expect.equal(#lineup, 48)
 			local perZone = {}
 			for _, entry in lineup do
 				local model = EggModels.get(entry.kind)

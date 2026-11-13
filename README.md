@@ -7,10 +7,10 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway and riding**.
 
-- A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
+- A placeholder map: the hub, six zone slabs (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) and their signs.
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for all 40 zone pets, rigged with joints so they can be animated
+- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated
   (see below). Pets do not hatch or roam yet.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
@@ -96,6 +96,7 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
+- Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
 
 The rarer the pet, the more detailed it is. Secret and Eternal pets are the showpieces: the tests require each to
 have at least 150 blocks and at least 30% more than any other pet in the game.
@@ -103,22 +104,24 @@ have at least 150 blocks and at least 30% more than any other pet in the game.
 Most blocks are placed by hand. Curved and rounded parts are drawn with helpers at the top of the designs file:
 `tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
 the end of one, and `blob` fills a rounded shape such as the Kraken's mantle or the Great Shark's body.
-Cerberus is sculpted: `newSculpt` models a whole limb cell by cell out of rounded shapes that can be turned to any
+Cerberus, the T-Rex and the Mosasaurus are sculpted: `newSculpt` models a whole limb cell by cell out of rounded shapes that can be turned to any
 angle, then packs it into as few blocks as it can. Some parts leave the grid altogether and are built from parts
 at any angle (`blade`, `taper` for wedge points, `egg` for egg shapes, `triangle` for a flat three-cornered sheet,
 and `feather` for a banded feather of them) plus Roblox `Fire`, so they keep their detail however big a pet is
-shown. The Lava Dragon is both: a sculpted body, head, legs and tail laced with glowing veins, and wings of angled
-membranes on angled bones, with fire at its jaw, tail and wing tips. (The Eternal Phoenix, built wholly from angled
+shown. The Lava Dragon and the Lunar Dragon are both: sculpted bodies, heads, legs and tails, and wings of angled
+membranes on angled bones (the Lava Dragon's veined with lava and burning at the tips, the Lunar Dragon's scattered
+with stars and edged with moonlight), with fire: orange on the Lava Dragon, blue moonfire on the Lunar Dragon. (The Eternal Phoenix, built wholly from angled
 parts, is shelved for now, its design kept.) `PetRig` builds those as turned parts,
 `WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
-four-legged, winged, dragon (four legs and wings), two legs, six legs, swimmer (fins and a tail; these float),
-eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a
+four-legged, winged, dragon (four legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor
+and the T-Rex), six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a
 `Motor6D` at its joint, so pets that share a skeleton can share their animations.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
-Crawl, Swim), each a set of waves that turn or shift its limbs. Winged pets (the owls) and dragons (the Lava Dragon) also
+Crawl, Swim, and Roar for theropods), each a set of waves that turn or shift its limbs. Winged pets (the owls and the
+Pteranodon) and dragons (the Lava and Lunar Dragons) also
 **Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
 on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
 (`wingSpread`), so owls that fold their wings at their sides open them to fly. The same moves drive the gallery
