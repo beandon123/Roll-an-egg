@@ -8,6 +8,8 @@ return function(harness)
 	local Zones = harness.load("src/shared/Config/Zones")
 	local Runway = harness.load("src/shared/Runway")
 	local EggSpec = harness.load("src/shared/EggSpec")
+	local Settings = harness.load("src/shared/Config/Settings")
+	local Shop = harness.load("src/shared/Config/Shop")
 
 	describe("Rarities", function()
 		it("has info for every rarity, in order", function()
@@ -137,6 +139,116 @@ return function(harness)
 					expect.truthy(rideDistance < room * 0.95, zone.name .. " " .. rarity)
 				end
 			end
+		end)
+	end)
+
+	describe("Shop", function()
+		it("lists every product once, in a known section, with a price and a reward", function()
+			local seen = {}
+			local sections = {}
+			for _, name in Shop.Sections do
+				sections[name] = true
+			end
+			local kinds = { Coins = true, MaxStamina = true, Luck = true }
+			for _, product in Shop.Products do
+				expect.falsy(seen[product.id], "duplicate id " .. product.id)
+				seen[product.id] = true
+				expect.truthy(sections[product.section], product.id .. " section")
+				expect.truthy(product.robux > 0, product.id .. " price")
+				expect.equal(product.productId, math.floor(product.productId), product.id .. " product ID")
+				expect.truthy(kinds[product.grant.kind], product.id .. " grant")
+				expect.truthy(Shop.ProductsById[product.id] == product, product.id .. " lookup")
+			end
+			for _, pass in Shop.Passes do
+				expect.falsy(seen[pass.id], "duplicate id " .. pass.id)
+				seen[pass.id] = true
+				expect.truthy(pass.robux > 0, pass.id .. " price")
+			end
+			expect.falsy(seen[Shop.PEN_UPGRADE_ID], "the pen upgrade id is not used by anything else")
+		end)
+
+		it("lists each section's products in order, bigger packs costing more", function()
+			for _, section in { "Luck", "Stamina", "Coins" } do
+				local products = Shop.productsIn(section)
+				expect.truthy(#products >= 2, section)
+				for index = 2, #products do
+					expect.truthy(products[index].order > products[index - 1].order, section .. " order")
+					expect.truthy(products[index].robux > products[index - 1].robux, section .. " price")
+				end
+			end
+		end)
+
+		it("sells pen levels 2 to 9, holding 10 pets at level 1 and 18 at the top (REQUEST)", function()
+			expect.equal(Shop.penCapacity(1), 10)
+			expect.equal(Shop.penCapacity(Shop.MAX_PEN_LEVEL), 18)
+			expect.equal(Shop.PenLevels[1], nil)
+			for level = 2, Shop.MAX_PEN_LEVEL do
+				local penLevel = Shop.PenLevels[level]
+				expect.truthy(penLevel, "level " .. level)
+				expect.equal(penLevel.level, level)
+				if level > 2 then
+					expect.truthy(penLevel.coins > Shop.PenLevels[level - 1].coins, "coins rise")
+					expect.truthy(penLevel.robux > Shop.PenLevels[level - 1].robux, "Robux rise")
+				end
+			end
+			expect.equal(Shop.PenLevels[Shop.MAX_PEN_LEVEL + 1], nil)
+		end)
+
+		it("never matches the unset product ID 0", function()
+			local product, penLevel = Shop.findByProductId(0)
+			expect.equal(product, nil)
+			expect.equal(penLevel, nil)
+		end)
+
+		it("works out Max Stamina from the base, the bonus bought, and the pass", function()
+			expect.equal(Shop.maxStamina(100, 0, false), 100)
+			expect.equal(Shop.maxStamina(100, 500, false), 600)
+			expect.equal(Shop.maxStamina(100, 500, true), 1200)
+		end)
+	end)
+
+	describe("Settings", function()
+		it("lists every setting once, under a known section, with a default of the right type", function()
+			local seen = {}
+			local sections = {}
+			for _, name in Settings.Sections do
+				sections[name] = 0
+			end
+			for _, setting in Settings.List do
+				expect.falsy(seen[setting.key], "duplicate " .. setting.key)
+				seen[setting.key] = true
+				expect.truthy(sections[setting.section], setting.key .. " section")
+				sections[setting.section] += 1
+				if setting.kind == "Slider" then
+					expect.equal(type(setting.default), "number", setting.key)
+					expect.truthy(setting.default >= 0 and setting.default <= 1, setting.key .. " range")
+				else
+					expect.equal(type(setting.default), "boolean", setting.key)
+				end
+			end
+			for name, count in sections do
+				expect.truthy(count > 0, name .. " has settings")
+			end
+		end)
+
+		it("only lets valid values be saved", function()
+			expect.equal(Settings.sanitize("MusicVolume", 0.456), 0.46)
+			expect.equal(Settings.sanitize("MusicVolume", 7), 1)
+			expect.equal(Settings.sanitize("MusicVolume", -2), 0)
+			expect.equal(Settings.sanitize("MusicVolume", 0 / 0), nil)
+			expect.equal(Settings.sanitize("MusicVolume", true), nil)
+			expect.equal(Settings.sanitize("ShowMyPets", false), false)
+			expect.equal(Settings.sanitize("ShowMyPets", 1), nil)
+			expect.equal(Settings.sanitize("NotASetting", 1), nil)
+			expect.equal(Settings.sanitize(5, 1), nil)
+		end)
+
+		it("fills in defaults around valid saved values", function()
+			local values = Settings.withDefaults({ MusicVolume = 0.3, ShowMyPets = "no", Junk = 1 })
+			expect.equal(values.MusicVolume, 0.3)
+			expect.equal(values.ShowMyPets, true)
+			expect.equal(values.Junk, nil)
+			expect.equal(Settings.withDefaults(nil).Vibration, true)
 		end)
 	end)
 end

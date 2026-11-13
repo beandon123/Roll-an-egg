@@ -1,6 +1,8 @@
 -- The on-screen HUD, built with Fusion. It only reads UiState; controllers change UiState and the HUD follows.
 --
--- Placeholder look: clear and readable, sized for phones first. Final UI art comes later.
+-- Layout (phones first): runway timer and zone top centre; luck boost top left; Shop and Settings tabs on the
+-- left edge with the wallet under them; stamina and claim meters bottom centre. The Shop and Settings panels open
+-- in the middle over a dimmed backdrop.
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -9,7 +11,11 @@ local Load = require(script.Parent.Parent.Load)
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
 
+local SettingsPanel = require(script.Parent.SettingsPanel)
+local ShopPanel = require(script.Parent.ShopPanel)
+local Theme = require(script.Parent.Theme)
 local UiState = require(script.Parent.UiState)
+local Widgets = require(script.Parent.Widgets)
 
 local Fusion = UiState.Fusion
 local Children = Fusion.Children
@@ -90,6 +96,105 @@ local function bar(scope, props)
 				TextSize = 16,
 				TextStrokeTransparency = 0.4,
 			}),
+		},
+	})
+end
+
+-- A big tab on the left edge of the screen. Its left end hides off-screen, so it looks like it slides out.
+local function tab(scope, props)
+	return Widgets.button(scope, {
+		Name = props.Name,
+		LayoutOrder = props.LayoutOrder,
+		Size = UDim2.fromOffset(186, 64),
+		Color = props.Light,
+		Deep = props.Deep,
+		Radius = UDim.new(0, 22),
+		OnActivated = function()
+			UiState.togglePanel(props.Name)
+		end,
+		Content = {
+			Widgets.speckles(scope, { { 0.55, 0.25, 10 }, { 0.68, 0.72, 7 }, { 0.9, 0.35, 12 } }),
+			scope:New("Frame")({
+				Name = "Bubble",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.new(0, 56, 0.5, 0),
+				Size = UDim2.fromOffset(46, 46),
+				BackgroundColor3 = Theme.WHITE,
+				[Children] = {
+					Widgets.round(scope),
+					Widgets.stroke(scope, 3),
+					Widgets.text(scope, { Name = "Icon", Text = props.Icon, TextSize = 26 }),
+				},
+			}),
+			Widgets.text(scope, {
+				Name = "Label",
+				Position = UDim2.fromOffset(86, 0),
+				Size = UDim2.new(1, -92, 1, 0),
+				Text = props.Text,
+				TextColor3 = Theme.WHITE,
+				TextScaled = true,
+				MaxTextSize = 28,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Stroke = 3,
+			}),
+		},
+	})
+end
+
+-- One line of the wallet: an icon, a number, and (optionally) a "+" that opens the shop at `ShopSection`.
+local function walletRow(scope, props)
+	return scope:New("Frame")({
+		Name = props.Name,
+		LayoutOrder = props.LayoutOrder,
+		Size = UDim2.fromOffset(200, 46),
+		BackgroundColor3 = Theme.CREAM,
+		[Children] = {
+			Widgets.round(scope),
+			Widgets.stroke(scope, 3),
+			props.Icon,
+			Widgets.text(scope, {
+				Name = "Value",
+				Position = UDim2.fromOffset(48, 0),
+				Size = UDim2.new(1, -96, 1, 0),
+				Text = props.Value,
+				TextScaled = true,
+				MaxTextSize = 26,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			if props.ShopSection
+				then Widgets.button(scope, {
+					Name = "Add",
+					AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, 8, 0.5, 0),
+					Size = UDim2.fromOffset(44, 44),
+					Color = Theme.GREEN,
+					Deep = Theme.GREEN_DEEP,
+					Radius = UDim.new(0.5, 0),
+					Text = "+",
+					TextColor3 = Theme.WHITE,
+					TextSize = 32,
+					Stroke = 2.5,
+					OnActivated = function()
+						UiState.openShop(props.ShopSection)
+					end,
+				})
+				else nil,
+		},
+	})
+end
+
+-- An emoji in a white circle, for the left end of a wallet row.
+local function emojiIcon(scope, emoji: string)
+	return scope:New("Frame")({
+		Name = "Icon",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, -6, 0.5, 0),
+		Size = UDim2.fromOffset(46, 46),
+		BackgroundColor3 = Theme.WHITE,
+		[Children] = {
+			Widgets.round(scope),
+			Widgets.stroke(scope, 3),
+			Widgets.text(scope, { Text = emoji, TextSize = 26 }),
 		},
 	})
 end
@@ -246,34 +351,99 @@ function Hud.mount(playerGui: Instance)
 						TextStrokeTransparency = 0.3,
 					}),
 
-					-- Top left: coins and eggs held.
+					-- Top left: the server luck boost, while one is running.
 					scope:New("Frame")({
-						Name = "Wallet",
-						Position = UDim2.fromOffset(10, 8),
-						Size = UDim2.fromOffset(150, 80),
+						Name = "Luck",
+						Position = UDim2.fromOffset(12, 10),
+						Size = UDim2.fromOffset(236, 42),
+						Visible = scope:Computed(function(use)
+							return use(UiState.luck) > 1 and use(UiState.luckSeconds) > 0
+						end),
+						BackgroundColor3 = Theme.WHITE,
+						[Children] = {
+							Widgets.round(scope),
+							Widgets.gradient(scope, Theme.Sections.Luck.light, Theme.Sections.Luck.deep),
+							Widgets.stroke(scope, 3),
+							Widgets.text(scope, {
+								Name = "Label",
+								Text = scope:Computed(function(use)
+									local clock = NumberFormat.clock(use(UiState.luckSeconds))
+									return `🍀 x{use(UiState.luck)} LUCK  {clock}`
+								end),
+								TextColor3 = Theme.WHITE,
+								TextSize = 22,
+								Stroke = 2.5,
+							}),
+						},
+					}),
+
+					-- Left edge: the tabs that open the panels.
+					scope:New("Frame")({
+						Name = "Tabs",
+						AnchorPoint = Vector2.new(0, 0.5),
+						-- Pushed off the left edge so each tab's rounded end is hidden.
+						Position = UDim2.new(0, -26, 0.4, 0),
+						Size = UDim2.fromOffset(186, 140),
 						BackgroundTransparency = 1,
 						[Children] = {
-							scope:New("UIListLayout")({
-								Padding = UDim.new(0, 6),
-								SortOrder = Enum.SortOrder.LayoutOrder,
-							}),
-							pill(scope, {
-								Name = "Coins",
+							Widgets.list(scope, { Padding = 10 }),
+							tab(scope, {
+								Name = "Shop",
 								LayoutOrder = 1,
-								Size = UDim2.new(1, 0, 0, 34),
-								Text = scope:Computed(function(use)
-									return `Coins  {NumberFormat.abbreviate(use(UiState.coins))}`
-								end),
-								TextSize = 16,
+								Text = "Shop",
+								Icon = "🛒",
+								Light = Theme.Sections.Featured.light,
+								Deep = Theme.Sections.Featured.deep,
 							}),
-							pill(scope, {
-								Name = "Eggs",
+							tab(scope, {
+								Name = "Settings",
 								LayoutOrder = 2,
-								Size = UDim2.new(1, 0, 0, 34),
-								Text = scope:Computed(function(use)
-									return `Eggs  {use(UiState.eggCount)}`
+								Text = "Settings",
+								Icon = "⚙️",
+								Light = Theme.SKY,
+								Deep = Theme.SKY_DEEP,
+							}),
+						},
+					}),
+
+					-- Under the tabs: Max Stamina, coins, and eggs held. "+" opens the shop at that section.
+					scope:New("Frame")({
+						Name = "Wallet",
+						Position = UDim2.new(0, 18, 0.4, 92),
+						Size = UDim2.fromOffset(200, 160),
+						BackgroundTransparency = 1,
+						[Children] = {
+							Widgets.list(scope, { Padding = 9 }),
+							walletRow(scope, {
+								Name = "Stamina",
+								LayoutOrder = 1,
+								Icon = emojiIcon(scope, "⚡"),
+								Value = scope:Computed(function(use)
+									return NumberFormat.abbreviate(use(UiState.maxStamina))
 								end),
-								TextSize = 16,
+								ShopSection = "Stamina",
+							}),
+							walletRow(scope, {
+								Name = "Coins",
+								LayoutOrder = 2,
+								Icon = Widgets.coin(scope, {
+									Name = "Icon",
+									AnchorPoint = Vector2.new(0, 0.5),
+									Position = UDim2.new(0, -6, 0.5, 0),
+									Size = 46,
+								}),
+								Value = scope:Computed(function(use)
+									return NumberFormat.abbreviate(use(UiState.coins))
+								end),
+								ShopSection = "Coins",
+							}),
+							walletRow(scope, {
+								Name = "Eggs",
+								LayoutOrder = 3,
+								Icon = emojiIcon(scope, "🥚"),
+								Value = scope:Computed(function(use)
+									return tostring(use(UiState.eggCount))
+								end),
 							}),
 						},
 					}),
@@ -291,6 +461,8 @@ function Hud.mount(playerGui: Instance)
 						TextSize = 32,
 						TextStrokeTransparency = 0,
 						Visible = UiState.toastVisible,
+						-- Above the panels, so purchase messages show while the shop is open.
+						ZIndex = 30,
 					}),
 
 					-- Bottom centre: claim meter (while riding) above the stamina bar.
@@ -339,6 +511,25 @@ function Hud.mount(playerGui: Instance)
 					}),
 
 					if RunService:IsStudio() then devPanel(scope) else nil,
+
+					-- Panels, over a backdrop that closes them when tapped.
+					scope:New("TextButton")({
+						Name = "Backdrop",
+						Size = UDim2.fromScale(1, 1),
+						ZIndex = 15,
+						AutoButtonColor = false,
+						Text = "",
+						BackgroundColor3 = Theme.BACKDROP,
+						BackgroundTransparency = 0.45,
+						Visible = scope:Computed(function(use)
+							return use(UiState.openPanel) ~= nil
+						end),
+						[OnEvent("Activated")] = function()
+							UiState.openPanel:set(nil)
+						end,
+					}),
+					ShopPanel.build(scope),
+					SettingsPanel.build(scope),
 				},
 			}),
 		},

@@ -8,7 +8,6 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Net = require(Shared.Net)
-local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
 local RunwayService = require(script.Parent.RunwayService)
@@ -23,8 +22,9 @@ local commands: { [string]: (Player) -> () } = {
 		local current = RunwayService.GetMaxStamina(player)
 		RunwayService.SetMaxStamina(player, math.min(MAX_TEST_STAMINA, current * 5))
 	end,
+	-- Back to what the player really has (the base plus anything bought in the shop).
 	StaminaReset = function(player)
-		RunwayService.SetMaxStamina(player, Tuning.BASE_MAX_STAMINA)
+		RunwayService.RefreshMaxStamina(player)
 	end,
 	-- Drops the rarest egg of the zone the player is standing in.
 	DropBestEgg = function(player)

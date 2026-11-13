@@ -11,7 +11,8 @@ local Runway = {}
 Runway.ZONE_COUNT = 5
 Runway.ZONE_LENGTH = 600
 Runway.LENGTH = Runway.ZONE_COUNT * Runway.ZONE_LENGTH
-Runway.WIDTH = 64
+-- Wide enough for a whole server to chase eggs side by side; walls run down both sides.
+Runway.WIDTH = 120
 
 -- Height of the walking surface at the hub and the start of the runway.
 Runway.BASE_Y = 10

@@ -41,6 +41,8 @@ Original theme, art, and creatures.
 - [ ] One straight runway (~3,000 studs) holding five zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano; ends at a cliff after the Volcano; more zones added later (decided)
     - [ ] Anyone can walk or ride into any zone (decided); the scenery, music, and obstacles change zone by zone
+    - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
+          (proposed, from the owner's reference screenshots)
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with coins (decided)
@@ -117,7 +119,7 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
     - [ ] Bounces by rarity (decided for now): Common/Uncommon 1, Rare/Epic 2, Legendary/Mythic/Secret 3, Eternal 4
     - [ ] An egg with bounces left keeps rolling, and anyone can jump on (claim progress starts from 0)
 - [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost
-- [ ] Death (lethal obstacle, falling off the runway's side edge, riding over the end cliff, resetting): cartoon splat,
+- [ ] Death (lethal obstacle, riding over the end cliff, resetting; the side walls stop falls off the edge): cartoon splat,
       respawn at your plot; current ride lost; no coins or items lost
 - [ ] Egg-to-egg hopping: progress resets on the new egg; landing within 1 s of leaving the last one refunds 10% stamina
       and builds a hop-combo counter (the egg you left still loses a bounce)
@@ -211,6 +213,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - [ ] Daily quests (e.g., claim 5 eggs, win 2 duels, claim a Desert egg, hatch 2 Rares, get 3 Perfects in one duel)
 - [ ] Offline earnings (capped) + "Welcome back" summary
 - [ ] Global leaderboards: eggs claimed, eggs stolen, total coins, rarest hatch
+    - [ ] Shown on boards beside the start zone (proposed); "Top Egg Claimers" is the first
 - [ ] Community-join reward; opt-in Roblox experience notifications ("Your Mythic egg hatched!")
 
 ### Server Events (decided: Titan Egg + Egg Avalanche; Shiny Hour on hold)
@@ -237,6 +240,14 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
       chance on hatches)
 - [ ] Developer products: Next Pen Level (decided), Instant Hatch, Server Luck boost (helps everyone), Call the Titan
       (an extra Titan Egg for the server, limited frequency), coin packs
+    - [ ] Server Luck: x2 and x4 for 15 minutes; every rarity above Common becomes that many times as likely; boosts
+          stack by adding time, and the strongest running one applies (proposed)
+    - [ ] Max Stamina packs (+500 / +5K / +25K, permanent) and an x2 Max Stamina game pass (proposed, asked for by
+          the owner; amounts and prices set during economy tuning)
+- [ ] Shop UI ("Coop Shop"): sections Featured (next pen level, Robux or coins), Luck, Stamina, Coins, Passes;
+      original look (eggshell cream, yolk-yellow buttons, speckled cards)
+- [ ] Settings: Music / Effects / Nature volume, show others' pets, show your pets, reduce camera shake, vibration;
+      saved to the account
 - [ ] Premium player perk + Premium payouts
 - [ ] Nothing sold affects duels; they're decided by timing alone
 
