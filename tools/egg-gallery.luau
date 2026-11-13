@@ -48,7 +48,14 @@ local function exportBoxes(list)
 			hex(box.color),
 			box.material,
 			box.transparency,
+			box.shape or "Block",
+			if box.rotation then table.create(9, 0) else false,
 		})
+		if box.rotation then
+			for index, value in box.rotation do
+				boxes[#boxes][11][index] = round(value)
+			end
+		end
 	end
 	return boxes
 end
@@ -97,6 +104,19 @@ for _, kind in PetModels.all() do
 		size = model.size,
 		center = model.center,
 		limbs = limbs,
+		fires = (function()
+			local list = {}
+			for _, fire in model.fires do
+				table.insert(list, {
+					limb = fire.limb,
+					position = fire.position,
+					size = fire.size,
+					color = hex(fire.color),
+					secondary = hex(fire.secondary),
+				})
+			end
+			return list
+		end)(),
 		light = model.light and { color = hex(model.light.color), brightness = model.light.brightness },
 		particles = model.particles and { color = hex(model.particles.color), style = model.particles.style },
 	})

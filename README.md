@@ -103,8 +103,11 @@ have at least 150 blocks and at least 30% more than any other pet in the game.
 Most blocks are placed by hand. Curved and rounded parts are drawn with helpers at the top of the designs file:
 `tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
 the end of one, and `blob` fills a rounded shape such as the Kraken's mantle or the Great Shark's body.
-For the most detailed pets (Cerberus and the Eternal Phoenix), `newSculpt` models a whole limb cell by cell out of
-rounded shapes that can be turned to any angle, then packs it into as few blocks as it can.
+Cerberus is sculpted: `newSculpt` models a whole limb cell by cell out of rounded shapes that can be turned to any
+angle, then packs it into as few blocks as it can. The Eternal Phoenix leaves the grid altogether: it is built from
+parts at any angle (`blade`, `taper` for wedge points, `egg` for egg shapes, and `feather` for a banded feather of
+them) plus Roblox `Fire`, so it keeps its detail however big a pet is shown. `PetRig` builds those as turned parts,
+`WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, winged, two legs, six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a

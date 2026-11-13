@@ -402,6 +402,50 @@ return function(harness)
 			expect.equal(folders, 1)
 		end)
 
+		it("show the Volcano pets, the Eternal Phoenix with wedges, egg shapes and fire", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			root.Position = roblox.Vector3.new(0, 0, 2500) -- Volcano
+			session:heartbeat(1 / 60)
+			session:fromClient("DevCommand", player, "ShowPets")
+			local folder = session:service("Workspace"):FindFirstChild("StudioPets")
+			local names = {}
+			for _, pet in folder:GetChildren() do
+				table.insert(names, pet.Name)
+			end
+			table.sort(names)
+			expect.equal(
+				table.concat(names, ","),
+				"Cerberus,Chimera,CinderBoar,EternalPhoenix,FireSalamander,LavaGolem,ObsidianGoat,VolcanoTortoise"
+			)
+			local phoenix = folder.EternalPhoenix
+			local wedges, eggs, fires, turned = 0, 0, 0, 0
+			for _, part in phoenix:GetDescendants() do
+				if part:IsA("WedgePart") then
+					wedges += 1
+				elseif part:IsA("SpecialMesh") and part.MeshType == roblox.Enum.MeshType.Sphere then
+					eggs += 1
+				elseif part:IsA("Fire") then
+					fires += 1
+				end
+				if part:IsA("BasePart") and part.CFrame.UpVector.Y < 0.999 then
+					turned += 1
+				end
+			end
+			expect.truthy(wedges > 50, "wedge feather tips: " .. wedges)
+			expect.truthy(eggs > 10, "egg shapes: " .. eggs)
+			expect.truthy(turned > 100, "parts at an angle: " .. turned)
+			expect.truthy(fires >= 5, "flames: " .. fires)
+			for _, fire in phoenix:GetDescendants() do
+				if fire:IsA("Fire") then
+					expect.truthy(
+						fire.Parent:FindFirstChildOfClass("WeldConstraint"),
+						"each flame is welded to its limb"
+					)
+				end
+			end
+		end)
+
 		it("drop each of the zone's eggs in turn", function()
 			local session = startServer()
 			local player, _, root = session:addPlayer(1, "Tester")

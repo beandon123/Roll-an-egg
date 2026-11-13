@@ -27,7 +27,16 @@ export type Box = {
 	color: Color,
 	material: string,
 	transparency: number,
+	-- "Block" (the default), "Wedge" (a Roblox wedge: full height at its back, +z, sloping down to an edge at its
+	-- front, -z, along its bottom) or "Ball" (an egg shape filling the box).
+	shape: string?,
+	-- For a part turned at an angle: the directions of its own x, y and z axes, as the columns of a 3x3 matrix
+	-- written row by row. Nil for a block lined up with the grid.
+	rotation: { number }?,
 }
+
+-- A flame burning at a point on a limb (a Roblox Fire), in voxels.
+export type Fire = { limb: string, position: { number }, size: number, color: Color, secondary: Color }
 
 export type Limb = {
 	name: string,
@@ -63,6 +72,7 @@ export type Model = {
 	center: { number },
 	light: Light?,
 	particles: Particles?,
+	fires: { Fire },
 	-- Blocks not joined to the rest of the pet, which would float in the air. Should always be 0.
 	loose: number,
 	-- Pairs of differently coloured blocks with faces in the same place, which flicker in Roblox. Should be 0.
@@ -132,9 +142,11 @@ type LimbBuild = {
 	parent: string?,
 	pivot: { number },
 	boxes: { Box },
+	-- The cells each box covers (for a part at an angle, the cells round it).
 	ranges: { Range },
 	-- Each paint so far and how many steps out it sits.
 	paints: { { range: Range, layer: number } },
+	fires: { Fire },
 }
 
 ----------------------------------------------------------------------------------------------------------------
@@ -274,6 +286,73 @@ function LimbBuilder.paintPair(
 	self:paint(-1 - x0, y0, z0, -1 - x1, y1, z1, color, material)
 end
 
+-- The box round a part at an angle: from its centre, how far it reaches along each axis.
+local function reach(size: { number }, rotation: { number }, round: boolean): { number }
+	local out = {}
+	for i = 0, 2 do
+		local total = 0
+		for j = 0, 2 do
+			local r = rotation[i * 3 + j + 1] * size[j + 1] / 2
+			total += if round then r * r else math.abs(r)
+		end
+		out[i + 1] = if round then math.sqrt(total) else total
+	end
+	return out
+end
+
+local function addPart(build: LimbBuild, box: Box)
+	table.insert(build.boxes, box)
+	local around = reach({ box.sx, box.sy, box.sz }, box.rotation or { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, box.shape == "Ball")
+	local centre = { box.x, box.y, box.z }
+	local range = {}
+	for axis = 1, 3 do
+		range[axis] = centre[axis] - around[axis]
+		range[axis + 3] = centre[axis] + around[axis] - 1
+	end
+	table.insert(build.ranges, range)
+end
+
+-- A part of any shape, turned to any angle: `axes` are the directions its own x, y and z point in (at right angles
+-- to each other, each of length 1), `size` its size along them, all in voxels. See Box for the shapes.
+function LimbBuilder.part(
+	self: LimbBuilder,
+	center: { number },
+	size: { number },
+	axes: { { number } },
+	color: Color,
+	material: string?,
+	transparency: number?,
+	shape: string?
+)
+	local rotation = {}
+	for i = 1, 3 do
+		for j = 1, 3 do
+			rotation[(i - 1) * 3 + j] = axes[j][i]
+		end
+	end
+	addPart(self.build, {
+		x = center[1],
+		y = center[2],
+		z = center[3],
+		sx = size[1],
+		sy = size[2],
+		sz = size[3],
+		color = color,
+		material = material or DEFAULT_MATERIAL,
+		transparency = transparency or 0,
+		shape = shape or "Block",
+		rotation = rotation,
+	})
+end
+
+-- A flame burning at a point on the limb, in voxels, `size` voxels tall, shading from `color` to `secondary`.
+function LimbBuilder.fire(self: LimbBuilder, position: { number }, size: number, color: Color, secondary: Color)
+	table.insert(
+		self.build.fires,
+		{ limb = self.build.name, position = position, size = size, color = color, secondary = secondary }
+	)
+end
+
 local PetBuilder = {}
 PetBuilder.__index = PetBuilder
 
@@ -302,6 +381,7 @@ function PetBuilder.limb(self: PetBuilder, name: string, pivot: { number }, pare
 		boxes = {},
 		ranges = {},
 		paints = {},
+		fires = {},
 	}
 	table.insert(self.limbs, build)
 	self.byName[name] = build
@@ -320,9 +400,18 @@ function PetBuilder.limbPair(
 	local left = self:limb(leftName, pivot, parent)
 	draw(left)
 	local right = self:limb(rightName, { -pivot[1], pivot[2], pivot[3] }, parent)
-	-- Replay the left limb's blocks mirrored, keeping paint on top of blocks.
+	-- Replay the left limb's blocks mirrored, keeping paint on top of blocks. A part at an angle is mirrored by
+	-- turning it the mirror-image way round; every shape is symmetrical across its own x, so it looks the same.
 	for index, range in left.build.ranges do
 		local box = left.build.boxes[index]
+		if box.rotation then
+			local r = box.rotation
+			local copy = table.clone(box)
+			copy.x = -box.x
+			copy.rotation = { r[1], -r[2], -r[3], -r[4], r[5], r[6], -r[7], r[8], r[9] }
+			addPart(right.build, copy)
+			continue
+		end
 		local pad = (box.sx - (range[4] - range[1] + 1)) / 2
 		addBox(
 			right.build,
@@ -344,6 +433,16 @@ function PetBuilder.limbPair(
 			right.build.paints,
 			{ range = { -1 - r[4], r[2], r[3], -1 - r[1], r[5], r[6] }, layer = paint.layer }
 		)
+	end
+	for _, fire in left.build.fires do
+		local p = fire.position
+		table.insert(right.build.fires, {
+			limb = rightName,
+			position = { -p[1], p[2], p[3] },
+			size = fire.size,
+			color = fire.color,
+			secondary = fire.secondary,
+		})
 	end
 end
 
@@ -385,7 +484,8 @@ local function countFlicker(pet: PetBuilder): (number, { string })
 	for _, limb in pet.limbs do
 		for index, range in limb.ranges do
 			local box = limb.boxes[index]
-			if box.sx == range[4] - range[1] + 1 then
+			-- Parts at an angle are left to the design to keep apart.
+			if box.rotation == nil and box.sx == range[4] - range[1] + 1 then
 				local look = `{box.color[1]},{box.color[2]},{box.color[3]},{box.material},{box.transparency}`
 				table.insert(solids, { range = range, look = look, limb = limb.name })
 			end
@@ -507,7 +607,11 @@ function PetModels.get(kind: string): Model?
 	local low = { math.huge, math.huge, math.huge }
 	local high = { -math.huge, -math.huge, -math.huge }
 	local limbs: { Limb } = {}
+	local fires: { Fire } = {}
 	for _, build in pet.limbs do
+		for _, fire in build.fires do
+			table.insert(fires, fire)
+		end
 		for _, range in build.ranges do
 			for axis = 1, 3 do
 				low[axis] = math.min(low[axis], range[axis])
@@ -532,6 +636,7 @@ function PetModels.get(kind: string): Model?
 		center = { (high[1] + low[1]) / 2, (high[2] + low[2]) / 2, (high[3] + low[3]) / 2 },
 		light = pet.lightInfo,
 		particles = pet.particleInfo,
+		fires = fires,
 		loose = countLoose(pet),
 		flicker = 0,
 		flickerAt = {},
@@ -539,6 +644,20 @@ function PetModels.get(kind: string): Model?
 	model.flicker, model.flickerAt = countFlicker(pet)
 	cache[kind] = model
 	return model
+end
+
+-- The lowest and highest point a box reaches along each axis, in voxels, allowing for its angle and shape.
+function PetModels.extent(box: Box): ({ number }, { number })
+	local around = if box.rotation
+		then reach({ box.sx, box.sy, box.sz }, box.rotation, box.shape == "Ball")
+		else { box.sx / 2, box.sy / 2, box.sz / 2 }
+	local centre = { box.x, box.y, box.z }
+	local low, high = {}, {}
+	for axis = 1, 3 do
+		low[axis] = centre[axis] - around[axis]
+		high[axis] = centre[axis] + around[axis]
+	end
+	return low, high
 end
 
 -- Every pet that has a model, in the order their eggs appear in the zones.

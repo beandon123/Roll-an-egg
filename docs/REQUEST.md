@@ -259,6 +259,9 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
         - [ ] Pets are built in the same blocky style as the eggs, from parts in code (decided), rigged with a
               Motor6D per limb; all 40 zone pets done (Forest, Desert, Snow, Ocean, Volcano)
         - [ ] Secret and Eternal pets are exceptionally detailed, well beyond every other pet (decided)
+        - [ ] Where blocks on the grid are not enough, showpieces may use parts at any angle, wedges, egg shapes
+              (sphere meshes) and Roblox Fire, so they hold their detail at every pet size (decided; the Eternal
+              Phoenix does)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow

@@ -9,7 +9,8 @@
 -- Secret and Eternal pets are the showpieces, far more detailed than the rest (the tests check this).
 -- Curved parts use the helpers below: `tube` (tentacles, coils, horns), `curl` (a spiral to end a tube on), and
 -- `blob` (rounded bodies, filled from a shape function). The finest pets are sculpted (`newSculpt`): modelled cell
--- by cell from rounded shapes turned to any angle, then packed into blocks.
+-- by cell from rounded shapes turned to any angle, then packed into blocks; or built from parts at any angle
+-- (`blade`, `taper`, `egg`, `feather`), with flames (limb:fire).
 
 type Color = { number }
 type Pet = any
@@ -612,17 +613,6 @@ local function rod(points: { { number } }): Shape
 	}
 end
 
--- A shape squashed `factor` times thinner along z, round the plane z = z0: feathers, fins, blades.
-local function flatten(s: Shape, z0: number, factor: number): Shape
-	return {
-		centre = s.centre,
-		radius = s.radius,
-		inside = function(x: number, y: number, z: number): boolean
-			return s.inside(x, y, z0 + (z - z0) * factor)
-		end,
-	}
-end
-
 -- Any shape at all, from a test for points inside it and a ball round it.
 local function shape(centre: { number }, radius: number, inside: (number, number, number) -> boolean): Shape
 	return { centre = centre, radius = radius, inside = inside }
@@ -1011,6 +1001,144 @@ function Sculpt.draw(self: Sculpt, limb: Limb, others: { Sculpt }?, inside: Look
 		for _, b in cover(sets[name]) do
 			limb:box(b[1], b[2], b[3], b[4], b[5], b[6], look.color, look.material, look.transparency)
 		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------------------
+-- Parts at an angle, for the most detailed pets: blades, wedge points and egg shapes pointed any way, in voxels.
+
+type Vec = { number }
+
+local function vadd(a: Vec, b: Vec): Vec
+	return { a[1] + b[1], a[2] + b[2], a[3] + b[3] }
+end
+
+local function vsub(a: Vec, b: Vec): Vec
+	return { a[1] - b[1], a[2] - b[2], a[3] - b[3] }
+end
+
+local function vscale(a: Vec, s: number): Vec
+	return { a[1] * s, a[2] * s, a[3] * s }
+end
+
+local function vlerp(a: Vec, b: Vec, t: number): Vec
+	return { a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t }
+end
+
+local function vdot(a: Vec, b: Vec): number
+	return a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
+end
+
+local function vcross(a: Vec, b: Vec): Vec
+	return { a[2] * b[3] - a[3] * b[2], a[3] * b[1] - a[1] * b[3], a[1] * b[2] - a[2] * b[1] }
+end
+
+local function vlength(a: Vec): number
+	return math.sqrt(vdot(a, a))
+end
+
+local function vnorm(a: Vec): Vec
+	local length = vlength(a)
+	return if length > 1e-9 then vscale(a, 1 / length) else { 0, 1, 0 }
+end
+
+-- Some direction square to `a`, for when the one wanted lines up with it.
+local function squareTo(a: Vec): Vec
+	local x = vcross(a, { 1, 0, 0 })
+	if vdot(x, x) < 1e-6 then
+		x = vcross(a, { 0, 0, 1 })
+	end
+	return vnorm(x)
+end
+
+-- Axes for a part whose own y runs along `along`, with its own z turned as near to `facing` as it can be.
+local function axesAlong(along: Vec, facing: Vec): { Vec }
+	local y = vnorm(along)
+	local x = vcross(y, facing)
+	x = if vdot(x, x) < 1e-6 then squareTo(y) else vnorm(x)
+	return { x, y, vcross(x, y) }
+end
+
+-- Axes for a part whose own z points along `facing`, with its own y as near to `up` (default straight up) as it can
+-- be.
+local function axesFacing(facing: Vec, up: Vec?): { Vec }
+	local z = vnorm(facing)
+	local x = vcross(up or { 0, 1, 0 }, z)
+	x = if vdot(x, x) < 1e-6 then squareTo(z) else vnorm(x)
+	return { x, vcross(z, x), z }
+end
+
+-- A flat blade (a block) from `a` to `b`, `width` across and `thickness` through, its broad face towards `facing`.
+local function blade(
+	limb: Limb,
+	a: Vec,
+	b: Vec,
+	width: number,
+	thickness: number,
+	facing: Vec,
+	color: Color,
+	material: string?
+)
+	limb:part(
+		vlerp(a, b, 0.5),
+		{ width, vlength(vsub(b, a)), thickness },
+		axesAlong(vsub(b, a), facing),
+		color,
+		material
+	)
+end
+
+-- A wedge from its broad end at `a` to an edge at `b`: a feather's tip, a claw, the hook of a beak. Its broad face
+-- (`width` across) is towards `facing`, `thickness` through it. One side runs straight on from the part before it,
+-- the other slants in to the point.
+local function taper(
+	limb: Limb,
+	a: Vec,
+	b: Vec,
+	width: number,
+	thickness: number,
+	facing: Vec,
+	color: Color,
+	material: string?
+)
+	-- A Roblox wedge narrows towards its own -z, along its bottom: point that at `b`, its own x through it.
+	local z = vnorm(vsub(a, b))
+	local x = vsub(facing, vscale(z, vdot(facing, z)))
+	x = if vdot(x, x) < 1e-6 then squareTo(z) else vnorm(x)
+	local y = vcross(z, x)
+	limb:part(vlerp(a, b, 0.5), { thickness, width, vlength(vsub(b, a)) }, { x, y, z }, color, material, nil, "Wedge")
+end
+
+-- An egg shape at `center`, `size` along its axes (default lined up with the pet).
+local function egg(limb: Limb, center: Vec, size: Vec, axes: { Vec }?, color: Color, material: string?)
+	limb:part(center, size, axes or { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, color, material, nil, "Ball")
+end
+
+export type Band = { color: Color, material: string?, to: number }
+
+-- A feather from `root`, `length` long along `direction`, in bands of colour from the root out (each ending
+-- `to` of the way along), narrowing a little band by band and ending in a point.
+local function feather(
+	limb: Limb,
+	root: Vec,
+	direction: Vec,
+	length: number,
+	width: number,
+	thickness: number,
+	facing: Vec,
+	bands: { Band }
+)
+	local d = vnorm(direction)
+	local from = 0
+	for index, band in bands do
+		local a, b = vadd(root, vscale(d, from * length)), vadd(root, vscale(d, band.to * length))
+		local w = width * (1 - 0.08 * (index - 1))
+		if index == #bands then
+			taper(limb, a, b, w, thickness, facing, band.color, band.material)
+		else
+			blade(limb, a, b, w, thickness, facing, band.color, band.material)
+		end
+		from = band.to
 	end
 end
 
@@ -4884,297 +5012,313 @@ Designs.EternalPhoenix = {
 	name = "Eternal Phoenix",
 	skeleton = "Winged",
 	gait = "Walk",
-	hover = 2,
-	scale = 0.45 * 1.4,
+	scale = 0.42,
 	draw = function(pet)
-		-- Modelled in finer units than it is built in: 1.4 of them to a block.
-		local U = 1.4
-		local function at(p: { number }): { number }
-			return { p[1] / U, p[2] / U, p[3] / U }
-		end
-		local function look(r: number, g: number, b: number, material: string?): Look
-			return { color = rgb(r, g, b), material = material }
-		end
-		local CRIMSON = look(186, 24, 32)
-		local CRIMSON_DARK = look(112, 12, 22)
-		local BREAST = look(255, 168, 52)
-		local BREAST_DARK = look(214, 104, 30)
-		local GILT = look(255, 200, 70)
-		local GILT_DARK = look(196, 132, 30)
-		local TALON = look(48, 26, 28)
-		local EMBER = look(255, 66, 22, NEON)
-		local FLAME = look(255, 132, 30, NEON)
-		local GOLD = look(255, 206, 60, NEON)
-		local ETERNAL = look(150, 255, 245, NEON)
-		local ETERNAL_DEEP = look(60, 200, 236, NEON)
-		local HOT = look(255, 236, 140, NEON)
+		local RED = rgb(214, 30, 24)
+		local RED_DARK = rgb(146, 14, 18)
+		local ORANGE = rgb(255, 118, 22)
+		local AMBER = rgb(255, 166, 30)
+		local YELLOW = rgb(255, 218, 60)
+		local GOLD = rgb(255, 190, 40)
+		local GOLD_DEEP = rgb(226, 140, 22)
+		local BEAK = rgb(255, 208, 80)
+		local BEAK_TIP = rgb(206, 112, 20)
+		local EYE_RED = rgb(255, 36, 20)
+		local PUPIL = rgb(36, 8, 8)
+		local WHITE = rgb(255, 255, 255)
+		local TALON = rgb(64, 30, 22)
+		local ETERNAL = rgb(150, 255, 245)
+		local UP, FRONT = { 0, 1, 0 }, { 0, 0, 1 }
 
-		-- A plume of fire along a path: each stretch of it in a colour, from the root out (each band ends at a
-		-- fraction of the way along).
-		local function plume(s: Sculpt, points: { { number } }, bands: { { any } }, frame: Frame?, flat: number?)
-			local lengths, total = { 0 }, 0
-			for index = 2, #points do
-				local a, b = points[index - 1], points[index]
-				total += math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2 + (b[3] - a[3]) ^ 2)
-				lengths[index] = total
-			end
-			local function pointAt(f: number): { number }
-				local d = f * total
-				for index = 2, #points do
-					if d <= lengths[index] or index == #points then
-						local a, b = points[index - 1], points[index]
-						local span = lengths[index] - lengths[index - 1]
-						local t = if span > 0 then math.clamp((d - lengths[index - 1]) / span, 0, 1) else 0
-						return {
-							a[1] + (b[1] - a[1]) * t,
-							a[2] + (b[2] - a[2]) * t,
-							a[3] + (b[3] - a[3]) * t,
-							a[4] + (b[4] - a[4]) * t,
-						}
-					end
+		local function band(color: Color, to: number, material: string?): Band
+			return { color = color, to = to, material = material }
+		end
+		-- The burning feathers: deep red at the root, through orange to a glowing yellow tip.
+		local FLIGHT = { band(RED, 0.38), band(ORANGE, 0.66), band(AMBER, 0.86, NEON), band(YELLOW, 1, NEON) }
+		local COVERT = { band(RED, 0.68), band(ORANGE, 1) }
+		local PLUME = { band(RED, 0.4), band(ORANGE, 0.7), band(YELLOW, 0.9, NEON), band(ETERNAL, 1, NEON) }
+
+		-- Its body: an upright red torso leaning forward, a golden breast covered in overlapping feathers of red,
+		-- orange and gold, and a ruff of red feathers round its neck.
+		local body = pet:limb("Body", { 0, 16, 0 })
+		local lean = { { 1, 0, 0 }, { 0, 0.978, 0.208 }, { 0, -0.208, 0.978 } }
+		egg(body, { 0, 16, 0 }, { 10, 15, 9.5 }, lean, RED)
+		egg(body, { 0, 15, 2.4 }, { 8.4, 12.5, 6 }, lean, GOLD)
+		egg(body, { 0, 22.5, 1.6 }, { 6.4, 8, 6.4 }, nil, RED)
+		egg(body, { 0, 22, 3.4 }, { 4.6, 7, 3.6 }, nil, GOLD)
+		-- Overlapping scale feathers over the breast, each pointing down, in a mottle of red, orange and gold.
+		local tones = { RED, ORANGE, GOLD_DEEP, AMBER, RED, YELLOW, ORANGE }
+		for row = 0, 7 do
+			local y = 20.2 - row * 1.45
+			for column = -3, 3 do
+				local x = column * 1.35 + (if row % 2 == 1 then 0.68 else 0)
+				local inside = 1 - (x / 4.2) ^ 2 - ((y - 15) / 6.25) ^ 2
+				if inside > 0.15 and math.abs(x) < 3.9 then
+					local z = 2.4 + 3 * math.sqrt(inside) + 0.2 * (y - 15) / 6.25 + 0.15
+					local normal = vnorm({ x / 4.2 ^ 2, (y - 15) / 6.25 ^ 2 * 0.6, (z - 2.4) / 9 })
+					local down = vnorm(vsub({ 0, -1, 0.15 }, vscale(normal, vdot({ 0, -1, 0.15 }, normal))))
+					local tone = tones[(row * 3 + column + 9) % #tones + 1]
+					local top = vadd({ x, y + 0.7, z }, vscale(normal, 0.05 * (row % 2)))
+					taper(body, top, vadd(top, vscale(down, 2)), 1.6, 0.45, normal, tone)
 				end
-				return points[#points]
-			end
-			local from = 0
-			for _, band in bands do
-				local to = band[2]
-				local part = { pointAt(from) }
-				for index = 2, #points - 1 do
-					local f = lengths[index] / total
-					if f > from and f < to then
-						table.insert(part, points[index])
-					end
-				end
-				table.insert(part, pointAt(to))
-				s:add(if flat then flatten(rod(part), points[1][3], flat) else rod(part), band[1], frame)
-				from = to
 			end
 		end
-		local BURN = { { CRIMSON, 0.25 }, { EMBER, 0.45 }, { FLAME, 0.65 }, { GOLD, 0.86 }, { ETERNAL, 1 } }
-		local LICK = { { EMBER, 0.4 }, { FLAME, 0.75 }, { HOT, 1 } }
+		-- Rows of feathers down its back, between the wings.
+		for row = 0, 2 do
+			for column = -1, 1 do
+				local x = column * 2.2 + (if row % 2 == 1 then 1.1 else 0)
+				local root = { x, 21 - row * 3, -3.6 + row * 0.3 }
+				feather(body, root, { x * 0.08, -1, -0.45 }, 4.2, 2.2, 0.5, vnorm({ x * 0.1, 0.3, -1 }), COVERT)
+			end
+		end
+		for layer = 0, 1 do
+			for index = 0, 8 do
+				local a = math.rad(-160 + index * 40 + layer * 20)
+				local radius = 3 + layer * 0.35
+				local root = { math.sin(a) * radius, 21.5 - layer * 1.6, 1.4 + math.cos(a) * radius }
+				local out = { math.sin(a) * 0.8, -1.5, math.cos(a) * 0.7 - 0.35 }
+				local length = 4.5 + layer * 1.5
+				feather(
+					body,
+					root,
+					out,
+					length,
+					1.9,
+					0.5,
+					{ math.sin(a), 0.35, math.cos(a) },
+					if layer == 0 then COVERT else FLIGHT
+				)
+			end
+		end
 
-		-- A body leaning forward to strike, crimson over a golden breast, with a heart of eternal fire burning in
-		-- its chest, and behind it a halo of eternal fire ringed with flames.
-		local body = newSculpt(U)
-		body:add(ellipsoid({ 0, 0, 0 }, { 5.2, 7.2, 5.6 }), CRIMSON, { origin = { 0, 17, -1 }, pitch = -0.35 })
-		body:paint(ellipsoid({ 0, 15, 3.5 }, { 4.8, 6.2, 3.4 }), BREAST, nil, true)
-		for _, y in { 11.5, 14.5, 17.5 } do
-			body:paint(
-				rod({ { -4.5, y + 1, 1.5, 0.6 }, { 0, y, 5.5, 0.6 }, { 4.5, y + 1, 1.5, 0.6 } }),
-				BREAST_DARK,
-				nil,
-				true
-			)
-		end
-		body:add(ellipsoid({ 0, 17, 4.4 }, { 1.6, 1.9, 1.1 }), ETERNAL)
-		body:paint(ellipsoid({ 0, 17, 4.2 }, { 2.6, 2.9, 1.2 }), GILT, nil, true)
-		body:add(ellipsoid({ 0, 17, 4.6 }, { 1.4, 1.7, 1 }), ETERNAL)
-		local halo = { 0, 26, -8.5 }
-		body:add(
-			shape(halo, 14, function(x, y, z)
-				local r = math.sqrt(x * x + (y - halo[2]) ^ 2)
-				return math.abs(r - 12.5) <= 1.4 and math.abs(z - halo[3]) <= 0.8
-			end),
-			ETERNAL_DEEP
-		)
-		body:paint(
-			shape(halo, 14, function(x, y, z)
-				local r = math.sqrt(x * x + (y - halo[2]) ^ 2)
-				return math.abs(r - 12.5) <= 0.6 and z >= halo[3]
-			end),
-			ETERNAL
-		)
-		for a = 0, 330, 30 do
-			if a < 230 or a > 310 then
-				local c, s = math.cos(math.rad(a)), math.sin(math.rad(a))
-				local long = if a % 60 == 0 then 5 else 3
-				plume(body, {
-					{ c * 13.5, halo[2] + s * 13.5, halo[3], 1.1 },
-					{ c * (13.8 + long), halo[2] + s * (13.8 + long), halo[3], 0.3 },
-				}, if a % 60 == 0 then { { ETERNAL, 0.45 }, { GOLD, 1 } } else { { GOLD, 1 } }, nil, 1.6)
-			end
-		end
-		-- The halo is held to its back by a stream of fire.
-		plume(body, { { 0, 13.5, -5.5, 1.4 }, { 0, 13.2, -8.5, 1.1 } }, { { FLAME, 1 } })
-
-		-- A long neck ruffed with flame feathers, and a raptor's head thrust forward: horned brows, slanted eyes
-		-- burning eternal blue, a hooked golden beak open on a throat of fire, and a blazing crown of plumes.
-		local head = newSculpt(U)
-		head:add(rod({ { 0, 23, 2, 3.3 }, { 0, 26.5, 5.5, 2.7 }, { 0, 29, 8.5, 2.3 } }), CRIMSON)
+		-- A fierce golden head: a red crown, hooded brows over glowing red eyes, a hooked beak open on a throat of
+		-- fire, and a great crest of flame feathers sweeping up and back, burning at its tip.
+		local head = pet:limb("Head", { 0, 24, 2.5 })
+		egg(head, { 0, 27.5, 3.6 }, { 6.6, 6.2, 7.4 }, nil, GOLD)
+		egg(head, { 0, 28.9, 2.6 }, { 6, 4.2, 6.6 }, nil, RED)
 		for _, s in { 1, -1 } do
-			plume(head, { { 2 * s, 25, 3.5, 1.1 }, { 4.6 * s, 26.5, -1, 0.7 }, { 5.6 * s, 28, -4, 0.3 } }, LICK)
-			plume(head, { { 1.6 * s, 22.5, 1.5, 1 }, { 4.2 * s, 23, -2.5, 0.6 }, { 5 * s, 24, -5, 0.3 } }, LICK)
-		end
-		local face = { origin = { 0, 29.5, 10.5 }, pitch = -0.2 }
-		-- The head is drawn at 1.3 times the size of the numbers below.
-		local H = 1.3
-		local function E(c: { number }, r: { number }): Shape
-			return ellipsoid({ c[1] * H, c[2] * H, c[3] * H }, { r[1] * H, r[2] * H, r[3] * H })
-		end
-		local function scaled(points: { { number } }): { { number } }
-			local out = {}
-			for _, p in points do
-				table.insert(out, { p[1] * H, p[2] * H, p[3] * H, p[4] * H })
+			egg(head, { 2.1 * s, 26.6, 4.6 }, { 3, 3.4, 3.6 }, nil, GOLD)
+			-- The eye: a dark rim, a glowing red eye, a slit pupil and a white glint.
+			local normal = vnorm({ 0.8 * s, 0.12, 0.6 })
+			local at = { 2.75 * s, 27.9, 5.4 }
+			local axes = axesFacing(normal)
+			egg(head, at, { 3, 2.7, 0.9 }, axes, RED_DARK)
+			egg(head, vadd(at, vscale(normal, 0.25)), { 2.4, 2.2, 0.8 }, axes, EYE_RED, NEON)
+			egg(head, vadd(at, vscale(normal, 0.5)), { 0.85, 1.7, 0.5 }, axes, PUPIL)
+			local glint = vadd(vadd(at, vscale(normal, 0.6)), vadd(vscale(axes[2], 0.45), vscale(axes[1], 0.4 * s)))
+			egg(head, glint, { 0.55, 0.55, 0.3 }, axes, WHITE, NEON)
+			-- A heavy brow slanting down to the beak.
+			blade(head, { 1.2 * s, 29.1, 6.5 }, { 3.5 * s, 29.8, 4.2 }, 1.2, 1, UP, RED_DARK)
+			-- A red streak swept back from the eye, and small feathers over the brow.
+			egg(head, { 3.25 * s, 26.6, 3.4 }, { 0.7, 1, 3.4 }, axesFacing({ s, 0, 0.25 }), RED)
+			for index, x in { 0.9, 2.1 } do
+				local top = { x * s, 30.3 - index * 0.2, 5.6 - index * 0.5 }
+				taper(
+					head,
+					top,
+					vadd(top, { 0.2 * s, -0.3, 1.7 }),
+					1.2,
+					0.4,
+					{ 0.3 * s, 1, 0.3 },
+					if index == 1 then ORANGE else RED
+				)
 			end
-			return out
+			-- Cheek feathers sweeping back.
+			feather(head, { 2.6 * s, 26.2, 2.5 }, { 0.5 * s, 0.25, -1 }, 4.5, 1.6, 0.5, { s, 0.2, 0 }, COVERT)
 		end
-		local function R(points: { { number } }): Shape
-			return rod(scaled(points))
-		end
-		head:add(E({ 0, 0, 0 }, { 3, 2.8, 3.6 }), CRIMSON, face)
-		head:add(E({ 0, 1.4, 1.8 }, { 3.1, 0.9, 1.6 }), CRIMSON_DARK, face)
-		head:add(
-			R({ { 0, 0, 2.4, 1.6 }, { 0, -0.4, 5.5, 1.2 }, { 0, -1.4, 7.2, 0.8 }, { 0, -2.8, 7.6, 0.45 } }),
-			GILT,
-			face
-		)
-		head:add(R({ { 0, -1.4, 7.2, 0.7 }, { 0, -2.8, 7.6, 0.45 } }), GILT_DARK, face)
-		head:add(R({ { 0, -1.8, 2.5, 1.2 }, { 0, -3, 5.2, 0.7 } }), GILT, face)
-		head:carve(E({ 0, -1.6, 4.6 }, { 1, 0.65, 2.3 }), face)
-		head:add(E({ 0, -1.6, 3 }, { 0.9, 0.6, 0.8 }), FLAME, face)
+		-- A long hooked beak, its jaws parted on the fire inside.
+		egg(head, { 0, 27, 7.3 }, { 3.2, 2.8, 3.2 }, nil, BEAK)
+		blade(head, { 0, 27.5, 7.6 }, { 0, 26.7, 10.9 }, 2.1, 1.7, UP, BEAK)
+		taper(head, { 0, 26.7, 10.7 }, { 0, 24.2, 11.8 }, 1.6, 1.3, FRONT, BEAK_TIP)
+		blade(head, { 0, 25.5, 7.6 }, { 0, 24.9, 9.9 }, 1.5, 0.9, UP, BEAK)
+		taper(head, { 0, 24.9, 9.7 }, { 0, 24.6, 10.7 }, 1.2, 0.7, UP, BEAK_TIP)
+		egg(head, { 0, 26, 8.6 }, { 1.4, 0.75, 2.6 }, nil, ORANGE, NEON)
 		for _, s in { 1, -1 } do
-			head:add(R({ { 1.2 * s, 0.45, 3.3, 0.7 }, { 2.7 * s, 1.05, 2.4, 0.7 } }), ETERNAL, face)
-			head:add(
-				R({ { 1.8 * s, 1.6, 2.2, 0.8 }, { 3 * s, 3.4, -1.5, 0.5 }, { 3.4 * s, 4.6, -3.5, 0.25 } }),
-				CRIMSON_DARK,
-				face
-			)
-			plume(
-				head,
-				scaled({ { 2.4 * s, -0.6, 0, 0.9 }, { 3.8 * s, 0.4, -4, 0.6 }, { 4.4 * s, 1.4, -6.5, 0.3 } }),
-				LICK,
-				face
-			)
+			egg(head, { 0.6 * s, 28.25, 9 }, { 0.45, 0.35, 0.8 }, nil, BEAK_TIP)
 		end
-		for _, crest in { { 0, 9 }, { 1.7, 8 }, { -1.7, 8 }, { 3, 6.5 }, { -3, 6.5 } } do
-			local x, tall = crest[1], crest[2]
-			plume(
-				head,
-				scaled({
-					{ x * 0.6, 2, 0.2, 0.75 },
-					{ x * 1.1, 2 + tall * 0.5, -2.8, 0.55 },
-					{ x * 1.6, 2 + tall * 0.85, -6.8, 0.25 },
-				}),
-				BURN,
-				face
-			)
+		for k = -3, 3 do
+			local a = math.abs(k)
+			local root = { k * 0.6, 30.2, 3.4 - a * 0.3 }
+			local mid = { k * 1.3, 35 + (3 - a) * 1.2, 0.2 - a * 0.4 }
+			local tip = { k * 2, 39 + (3 - a) * 2.2, -4.5 - a * 0.5 }
+			local facing = vnorm({ k * 0.15, 0.2, 1 })
+			blade(head, root, mid, 1.9 - a * 0.1, 0.6, facing, RED)
+			local three = vlerp(mid, tip, 0.45)
+			blade(head, mid, three, 1.6 - a * 0.1, 0.55, facing, ORANGE)
+			taper(head, three, tip, 1.4 - a * 0.1, 0.5, facing, if k == 0 then ETERNAL else YELLOW, NEON)
 		end
+		for k = -2, 2 do
+			local a = math.abs(k)
+			local root = { k * 0.9, 29.8, 4.4 }
+			local mid = { k * 1.5, 33 + (2 - a) * 0.8, 2.6 }
+			local tip = { k * 2.3, 35.5 + (2 - a) * 1.4, -0.6 }
+			local facing = vnorm({ k * 0.2, 0.35, 1 })
+			blade(head, root, mid, 1.5, 0.5, facing, ORANGE)
+			taper(head, mid, tip, 1.3, 0.45, facing, YELLOW, NEON)
+		end
+		head:fire({ 0, 46, -4.5 }, 10, ORANGE, YELLOW)
+		head:fire({ 4, 41.5, -5.5 }, 5, ORANGE, YELLOW)
+		head:fire({ -4, 41.5, -5.5 }, 5, ORANGE, YELLOW)
 
-		-- Wings raised and burning: flames lick up from their leading edges, and every feather burns from
-		-- crimson at the root through flame and gold to a tip of eternal blue, the longest at the wingtips.
-		local wing = newSculpt(U)
-		local arm = { { 4.5, 22, -1, 2.4 }, { 11, 28.5, -2, 1.9 }, { 17.5, 33.5, -3, 1.4 }, { 25, 37, -4.2, 0.8 } }
-		local function armAt(x: number): (number, number)
-			for index = 2, #arm do
-				local a, b = arm[index - 1], arm[index]
-				if x <= b[1] or index == #arm then
-					local t = math.clamp((x - a[1]) / (b[1] - a[1]), 0, 1)
-					return a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t
-				end
+		-- Great wings spread wide, layer over layer: short red coverts along the arm, then long secondaries, then
+		-- the longest flight feathers fanning out at the tip, each burning from red to a glowing yellow tip.
+		pet:limbPair("LeftWing", "RightWing", { 4.2, 21, -1 }, function(wing)
+			local arm = { { 4.2, 21, -1 }, { 11, 23.5, -2.4 }, { 18, 23.2, -3.6 }, { 25, 21.5, -4.6 } }
+			local function along(t: number): Vec
+				local f = t * (#arm - 1)
+				local index = math.min(#arm - 1, math.floor(f) + 1)
+				return vlerp(arm[index], arm[index + 1], f - (index - 1))
 			end
-			return arm[#arm][2], arm[#arm][3]
-		end
-		-- Broad flame-shaped feathers, each overlapping the next: four along the arm, four longer ones fanning out
-		-- from the tip.
-		for index, feather in
-			{
-				{ 6.5, 10 },
-				{ 9.5, 11 },
-				{ 12.5, 12 },
-				{ 15, 13 },
-				{ 17, 14.5 },
-				{ 19.5, 16 },
-				{ 22, 17 },
-				{ 24.2, 15.5 },
-			}
-		do
-			local x, length = feather[1], feather[2]
-			local y, z = armAt(x)
-			local spread = if index > 4 then (index - 4) * 1.3 else 0
-			local back = if index % 2 == 0 then -0.9 else 0
-			plume(wing, {
-				{ x, y - 0.5, z + back, 1.4 },
-				{ x + spread * 0.4, y - length * 0.45, z - 0.8 + back, 2 },
-				{ x + spread * 0.75, y - length * 0.8, z - 1.3 + back, 1.1 },
-				{ x + spread, y - length, z - 1.6 + back, 0.35 },
-			}, BURN, nil, 2.2)
-		end
-		for _, c in { { 9, 24.8, -2, 3.4, 2.4 }, { 15, 29.8, -2.8, 3.4, 2.4 }, { 20, 33.2, -3.5, 3, 2 } } do
-			wing:add(ellipsoid({ c[1], c[2], c[3] }, { c[4], c[5], 1.4 }), CRIMSON)
-		end
-		wing:add(rod(arm), CRIMSON_DARK)
-		for _, x in { 8, 12.5, 17, 21, 24.5 } do
-			local y, z = armAt(x)
-			local tall = if x == 12.5 or x == 21 then 7 else 5
-			plume(
-				wing,
-				{ { x, y + 0.5, z, 1.4 }, { x - 0.6, y + tall * 0.55, z - 1, 0.9 }, { x - 1.4, y + tall, z - 2, 0.25 } },
-				LICK,
-				nil,
-				1.6
-			)
-		end
+			local surface = vnorm({ 0, 0.15, 1 })
+			for index = 1, #arm - 1 do
+				blade(wing, arm[index], arm[index + 1], 2.8 - index * 0.5, 1.6, surface, RED_DARK)
+			end
+			egg(wing, arm[2], { 2.8, 2.8, 2 }, nil, RED)
+			egg(wing, arm[3], { 2.3, 2.3, 1.8 }, nil, RED)
+			for index = 0, 11 do
+				local t = 0.04 + index * 0.08
+				local root = vadd(along(t), { 0, -0.6, 0.55 + (index % 2) * 0.14 })
+				local tilt = vnorm({ 0.15 + t * 0.6, -1, -0.1 })
+				feather(
+					wing,
+					root,
+					tilt,
+					4.8 - t * 1.4,
+					2.3,
+					0.5,
+					vnorm({ 0.03 * (index % 2 * 2 - 1), 0.15, 1 }),
+					COVERT
+				)
+			end
+			for index = 0, 5 do
+				local t = 0.05 + index * 0.1
+				local root = vadd(along(t), { 0, -2.2, 0.1 + (index % 2) * 0.14 })
+				local tilt = vnorm({ 0.2 + t * 0.7, -1, -0.15 })
+				feather(
+					wing,
+					root,
+					tilt,
+					9.5 + index * 0.4,
+					2.5,
+					0.5,
+					vnorm({ 0.03 * (index % 2 * 2 - 1), 0.12, 1 }),
+					FLIGHT
+				)
+			end
+			for index = 0, 6 do
+				local t = 0.58 + index * 0.07
+				local root = vadd(along(t), { 0, -1.2, -0.35 + (index % 2) * 0.14 })
+				local fan = index / 6
+				local tilt = vnorm({ 0.5 + fan * 0.95, -1 + fan * 0.4, -0.15 })
+				feather(
+					wing,
+					root,
+					tilt,
+					11.5 + index * 0.45,
+					2.3,
+					0.5,
+					vnorm({ 0.03 * (index % 2 * 2 - 1), 0.12, 1 }),
+					FLIGHT
+				)
+			end
+			-- Small feathers over the top of the arm, overlapping back from its leading edge.
+			for index = 0, 9 do
+				local t = 0.05 + index * 0.1
+				local root = vadd(along(t), { 0, 1, 0.9 })
+				feather(
+					wing,
+					root,
+					{ 0.25, -0.35, -1 },
+					2.6,
+					2,
+					0.45,
+					vnorm({ 0, 1, 0.25 }),
+					{ band(RED, 0.6), band(ORANGE, 1) }
+				)
+			end
+			wing:fire(vadd(along(1), { 7.5, -5, -0.5 }), 4, ORANGE, YELLOW)
+		end)
 
-		-- Golden legs with great dark talons, reaching forward to strike.
-		local leg = newSculpt(U)
-		leg:add(ellipsoid({ 2.8, 9.5, 1 }, { 2.6, 4, 3 }), CRIMSON)
-		plume(
-			leg,
-			{ { 2.8, 7, 2.5, 1.6 }, { 3, 5, 3.5, 1.2 }, { 3.1, 4, 4.2, 0.5 } },
-			{ { CRIMSON, 0.4 }, { EMBER, 0.7 }, { FLAME, 1 } }
-		)
-		leg:add(rod({ { 3, 5.5, 2.5, 1.1 }, { 3.1, 2.4, 3.5, 0.95 } }), GILT)
-		for _, toe in { -1.5, 0, 1.5 } do
-			leg:add(rod({ { 3.1, 2, 3.6, 0.8 }, { 3.1 + toe, 1.1, 6, 0.75 } }), GILT)
-			leg:add(
-				rod({
-					{ 3.1 + toe, 1.2, 6.2, 0.7 },
-					{ 3.1 + toe * 1.15, 0.9, 7.6, 0.5 },
-					{ 3.1 + toe * 1.2, 0.2, 8.2, 0.35 },
-				}),
-				TALON
-			)
-		end
-		leg:add(rod({ { 3.1, 2, 3, 0.75 }, { 3.1, 1.1, 0.8, 0.65 } }), GILT)
-		leg:add(rod({ { 3.1, 1.1, 0.6, 0.6 }, { 3.1, 0.3, -0.8, 0.4 } }), TALON)
-
-		-- A long train of fire streamers, curling up at their ends.
-		local tail = newSculpt(U)
-		for _, x in { 0, 2.6, -2.6, 5, -5 } do
-			local reach = 1 - math.abs(x) / 10
-			local points = andThen(
+		-- Strong red thighs over golden legs, gripping talons, and fire burning round its feet.
+		pet:limbPair("LeftLeg", "RightLeg", { 2.6, 9, 0.5 }, function(leg)
+			egg(leg, { 2.7, 8.8, 0.6 }, { 4.2, 6, 4.6 }, nil, RED)
+			for _, flake in
 				{
-					{ x * 0.2, 12.5, -5, 1.6 },
-					{ x * 0.5, 10, -10, 1.3 },
-					{ x * 0.8, 7, -16 - 2 * reach, 1 },
-					{ x, 5, -21 - 3 * reach, 0.8 },
-				},
-				curl({
-					centre = { x, 7.6, -21 - 3 * reach },
-					plane = { 3, 2 },
-					from = -math.pi / 2,
-					turns = -0.7,
-					radius = { 2.6, 1.2 },
-					width = { 0.8, 0.45 },
-				})
+					{ 2.4, 10.4, 2.7, ORANGE },
+					{ 3.6, 10, 2.4, RED },
+					{ 2.6, 8.6, 2.8, AMBER },
+					{ 3.9, 8.2, 2.2, ORANGE },
+					{ 3.1, 6.9, 2.4, GOLD_DEEP },
+					{ 4.6, 9, 0.9, AMBER },
+					{ 4.7, 7.4, 0.6, ORANGE },
+				}
+			do
+				local normal = vnorm({ flake[1] - 2.7, 0.2, flake[3] - 0.6 })
+				local top = { flake[1], flake[2] + 0.8, flake[3] }
+				taper(leg, top, vadd(top, { 0, -2, 0.2 }), 1.7, 0.45, normal, flake[4])
+			end
+			blade(leg, { 2.9, 6.2, 1.2 }, { 3.1, 2, 1.8 }, 1.4, 1.4, FRONT, GOLD)
+			egg(leg, { 3.1, 1.9, 1.9 }, { 1.8, 1.6, 1.8 }, nil, GOLD)
+			for _, dx in { -1.3, 0, 1.3 } do
+				blade(leg, { 3.1, 1.4, 2.2 }, { 3.1 + dx, 0.7, 4.8 }, 0.9, 0.9, UP, GOLD)
+				taper(leg, { 3.1 + dx, 0.75, 4.7 }, { 3.1 + dx * 1.1, 0.4, 5.7 }, 0.8, 0.7, { 1, 0, 0 }, TALON)
+			end
+			blade(leg, { 3.1, 1.4, 1.6 }, { 3.1, 0.6, -0.4 }, 0.9, 0.9, UP, GOLD)
+			taper(leg, { 3.1, 0.65, -0.3 }, { 3.1, 0.4, -1.2 }, 0.8, 0.7, { 1, 0, 0 }, TALON)
+			leg:fire({ 3, 0.8, 2.6 }, 8, rgb(255, 80, 20), YELLOW)
+		end)
+
+		-- A long tail of fanned flame feathers, the middle ones longest and tipped with eternal blue.
+		local tail = pet:limb("Tail", { 0, 10, -3.5 })
+		for k = -3, 3 do
+			local a = math.abs(k)
+			local facing = vnorm({ 0, 1, -0.3 })
+			local root = vadd({ k * 0.5, 10, -4 }, vscale(facing, (a % 2) * 0.16))
+			feather(
+				tail,
+				root,
+				{ k * 0.28, -0.36, -1 },
+				15 + (3 - a) * 2.5,
+				2.4,
+				0.5,
+				facing,
+				if a == 0 then PLUME else FLIGHT
 			)
-			plume(tail, points, { { CRIMSON, 0.2 }, { EMBER, 0.4 }, { FLAME, 0.6 }, { GOLD, 0.82 }, { ETERNAL, 1 } })
 		end
+		for k = -2, 2 do
+			local facing = vnorm({ 0, 1, -0.2 })
+			local root = vadd({ k * 0.7, 11, -4.2 }, vscale(facing, 0.6 + (math.abs(k) % 2) * 0.15))
+			feather(tail, root, { k * 0.3, -0.3, -1 }, 8, 2.3, 0.5, facing, COVERT)
+		end
+		-- Two long streamers trailing far behind, tipped with eternal blue.
+		for _, s in { 1, -1 } do
+			local points = {
+				{ 0.8 * s, 9.5, -4.5 },
+				{ 2.5 * s, 7, -12 },
+				{ 4.5 * s, 5.5, -20 },
+				{ 6 * s, 6, -27 },
+				{ 6.5 * s, 8.5, -32 },
+			}
+			local colors = { RED, ORANGE, AMBER, YELLOW }
+			for index = 1, #points - 2 do
+				blade(
+					tail,
+					points[index],
+					points[index + 1],
+					1.5 - index * 0.15,
+					0.4,
+					UP,
+					colors[index],
+					if index >= 3 then NEON else nil
+				)
+			end
+			taper(tail, points[#points - 1], points[#points], 1.1, 0.4, UP, ETERNAL, NEON)
+		end
+		tail:fire({ 0, 3, -25 }, 6, ORANGE, YELLOW)
 
-		local mirroredWing, mirroredLeg = wing:mirror(), leg:mirror()
-		body:draw(pet:limb("Body", at({ 0, 17, -1 })), { head, wing, mirroredWing, leg, mirroredLeg, tail }, CRIMSON)
-		head:draw(pet:limb("Head", at({ 0, 27, 6 })), { body, wing, mirroredWing }, CRIMSON)
-		pet:limbPair("LeftWing", "RightWing", at({ 4.5, 22, -1 }), function(limb)
-			wing:draw(limb, { body, head }, CRIMSON)
-		end)
-		pet:limbPair("LeftLeg", "RightLeg", at({ 2.6, 11, 0.5 }), function(limb)
-			leg:draw(limb, { body }, CRIMSON)
-		end)
-		tail:draw(pet:limb("Tail", at({ 0, 12.5, -5 })), { body }, CRIMSON)
-
-		pet:light(rgb(150, 255, 245), 3.4, 28)
-		pet:particles("Embers", rgb(255, 206, 60), 18)
-		pet:seat(0, 26 / U, -4 / U)
+		pet:light(rgb(255, 140, 40), 3.4, 26)
+		pet:particles("Embers", rgb(255, 200, 70), 20)
+		pet:seat(0, 23.5, -3)
 	end,
 }
 

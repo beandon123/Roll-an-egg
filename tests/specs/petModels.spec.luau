@@ -29,6 +29,7 @@ return function(harness)
 		},
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
+	local SHAPES = { Block = true, Wedge = true, Ball = true }
 	local BUDGET = 120
 	-- Secret and Eternal pets are the showpieces: far more detailed than the rest, so they get a bigger budget,
 	-- and must have at least this many blocks and this much more than any other pet in the game.
@@ -135,7 +136,9 @@ return function(harness)
 					count += #limb.boxes
 					for _, box in limb.boxes do
 						expect.truthy(MATERIALS[box.material], model.name .. " material " .. box.material)
-						lowest = math.min(lowest, box.y - box.sy / 2)
+						expect.truthy(SHAPES[box.shape or "Block"], model.name .. " shape " .. tostring(box.shape))
+						local low = PetModels.extent(box)
+						lowest = math.min(lowest, low[2])
 					end
 				end
 				local limit = if isShowpiece(model) then SHOWPIECE_BUDGET else BUDGET
