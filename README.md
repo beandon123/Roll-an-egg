@@ -101,17 +101,16 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 The rarer the pet, the more detailed it is. There is no block budget: quality comes first. Secret and Eternal pets
 are the showpieces, built in the finest detail (the tests require at least 150 blocks each).
 
-Most blocks are placed by hand. Curved and rounded parts are drawn with helpers at the top of the designs file:
-`tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
-the end of one, and `blob` fills a rounded shape such as the Kraken's mantle or the Great Shark's body.
-Cerberus, the T-Rex and the Mosasaurus are sculpted: `newSculpt` models a whole limb cell by cell out of rounded shapes that can be turned to any
-angle, then packs it into as few blocks as it can. Some parts leave the grid altogether and are built from parts
-at any angle (`blade`, `taper` for wedge points, `egg` for egg shapes, `triangle` for a flat three-cornered sheet,
-and `feather` for a banded feather of them) plus Roblox `Fire`, so they keep their detail however big a pet is
-shown. The Lava Dragon and the Lunar Dragon are both: sculpted bodies, heads, legs and tails, and wings of angled
-membranes on angled bones (the Lava Dragon's veined with lava and burning at the tips, the Lunar Dragon's scattered
-with stars and edged with moonlight), with fire: orange on the Lava Dragon, blue moonfire on the Lunar Dragon. (The Eternal Phoenix, built wholly from angled
-parts, is shelved for now, its design kept.) `PetRig` builds those as turned parts,
+The more common pets are built from blocks placed by hand. The rarer four of each zone (and a few more) are
+sculpted: `newSculpt` models each limb cell by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes
+such as necks, tails and tentacles, with `curl` for a spiral at the end), colours it by rules (`coat` for patterns
+like stripes, dapples, belly plates and lava seams, `trace` for lines), and packs it into as few blocks as it can.
+Thin details leave the grid altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for
+balls and eyes, `triangle` for a flat sheet such as a wing membrane or fin, and `feather` for a banded feather),
+placed in the design's own units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big
+a pet is shown. Some carry Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the
+Chimera's breath, the Volcano Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly
+from angled parts, is shelved for now, its design kept.) `PetRig` builds the angled parts as turned parts,
 `WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
