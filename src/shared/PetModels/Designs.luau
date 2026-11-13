@@ -2529,7 +2529,7 @@ Designs.GiantScorpion = {
 
 		-- A segmented tail curling up over its back, dark at every joint, to a glowing venom bulb and stinger.
 		local tail = newSculpt(U)
-		local curl = {
+		local segments = {
 			{ 0, 4.8, -11.6, 1.75 },
 			{ 0, 6.8, -14.1, 1.6 },
 			{ 0, 9.8, -15.4, 1.5 },
@@ -2537,11 +2537,11 @@ Designs.GiantScorpion = {
 			{ 0, 15.1, -12.3, 1.3 },
 			{ 0, 15.9, -9.6, 1.25 },
 		}
-		for index = 1, #curl - 1 do
-			local a, b = curl[index], curl[index + 1]
+		for index = 1, #segments - 1 do
+			local a, b = segments[index], segments[index + 1]
 			tail:add(rod({ { a[1], a[2], a[3], a[4] * 0.7 }, { b[1], b[2], b[3], b[4] * 0.7 } }), DARK)
 		end
-		for _, c in curl do
+		for _, c in segments do
 			tail:add(ellipsoid({ c[1], c[2], c[3] }, { c[4], c[4], c[4] }), AMBER)
 		end
 		tail:add(ellipsoid({ 0, 15.3, -7.3 }, { 1.5, 1.7, 2 }), VENOM)
@@ -2781,7 +2781,7 @@ Designs.Sphinx = {
 			head:add(ellipsoid({ 3.1 * s, 21.6, 11 }, { 0.85, 3.6, 1.15 }), GOLD)
 		end
 		head:add(rod({ { 0, 22, 12.4, 0.95 }, { 0, 19, 13, 0.8 } }), GOLD)
-		head:coat(function(p, open)
+		head:coat(function(p)
 			local x, y, z = p[1], p[2], p[3]
 			if math.abs(x) < 1.1 and y < 22.2 and z > 11.6 then
 				return stripes(y, 0.6)
@@ -3307,77 +3307,184 @@ Designs.SabertoothCat = {
 	name = "Sabertooth Cat",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.6,
+	scale = 0.46 * 1.2,
 	draw = function(pet)
-		local FUR = rgb(236, 230, 218)
-		local SHADE = rgb(206, 198, 184)
-		local STRIPE = rgb(74, 84, 104)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with fangs, ears, claws and ice
+		-- crystals of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local FUR = look(236, 230, 218)
+		local SHADE = look(206, 198, 184)
+		local STRIPE = look(74, 84, 104)
+		local NOSE = look(120, 86, 86)
+		local MOUTH = look(60, 50, 56)
+		local ICE = look(150, 206, 244)
 		local IVORY = rgb(250, 240, 214)
-		local NOSE = rgb(120, 86, 86)
-		local MOUTH = rgb(60, 50, 56)
-		local ICE = rgb(150, 206, 244)
 		local CRYSTAL = rgb(196, 240, 255)
+		local GLOW = rgb(150, 230, 255)
 
-		-- A powerful pale cat: high shoulders, slim waist, heavy hips, slate stripes and an ice-blue collar.
-		local body = pet:limb("Body", { 0, 8, 0 })
-		body:box(-5, 7, 0, 4, 13, 5, FUR)
-		body:box(-4, 7, -5, 3, 11, -1, FUR)
-		body:box(-4, 7, -9, 3, 12, -6, FUR)
-		body:paint(-4, 7, -5, 3, 7, -1, SHADE)
-		body:paint(-5, 13, 2, 4, 13, 2, STRIPE)
-		body:paintPair(4, 10, 2, 4, 13, 2, STRIPE)
-		for _, z in { -4, -2 } do
-			body:paint(-4, 11, z, 3, 11, z, STRIPE)
-			body:paintPair(3, 9, z, 3, 11, z, STRIPE)
+		local function fur(p: Vec): Look?
+			return if noise(p) < 0.1 then SHADE else nil
 		end
-		body:paint(-4, 12, -8, 3, 12, -8, STRIPE)
-		body:paintPair(3, 9, -8, 3, 12, -8, STRIPE)
-		body:box(-6, 11, 4, 5, 12, 6, ICE)
-		body:boxPair(6, 11, 5, 6, 12, 5, CRYSTAL, GLASS, 0.15)
-		body:box(-1, 11, 7, 0, 12, 7, CRYSTAL, GLASS, 0.15)
+		local function stripes(s: Sculpt, list: { { Vec } })
+			for _, side in { 1, -1 } do
+				for _, stripe in list do
+					s:trace(stripe, { -side, 0, 0 }, STRIPE)
+				end
+			end
+		end
 
-		-- A broad head with a heavy brow, glowing ice eyes, cheek ruffs, tufted ears and huge sabre fangs.
-		local head = pet:limb("Head", { 0, 12, 6 })
-		head:box(-4, 12, 6, 3, 17, 10, FUR)
-		head:box(-3, 16, 11, 2, 16, 11, SHADE)
-		head:box(-2, 12, 11, 1, 14, 12, FUR)
-		head:box(-1, 14, 13, 0, 14, 13, NOSE)
-		head:paint(-2, 12, 12, 1, 12, 12, MOUTH)
-		head:paintPair(1, 13, 12, 1, 13, 12, STRIPE)
-		head:boxPair(1, 10, 13, 1, 12, 13, IVORY)
-		head:boxPair(1, 8, 12, 1, 9, 12, IVORY)
-		head:paintPair(1, 15, 10, 2, 15, 10, ICE, NEON)
-		head:paint(-1, 17, 6, 0, 17, 10, STRIPE)
-		head:paintPair(2, 17, 7, 2, 17, 8, STRIPE)
-		head:boxPair(4, 12, 7, 4, 15, 9, FUR)
-		head:paintPair(4, 13, 7, 4, 13, 9, STRIPE)
-		head:boxPair(2, 18, 7, 3, 19, 8, FUR)
-		head:boxPair(3, 20, 7, 3, 20, 7, STRIPE)
-		head:paintPair(2, 18, 8, 2, 18, 8, SHADE)
-
-		-- Thick striped legs with big paws and ivory claws.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 3.5, 8, 3 }, function(leg)
-			leg:box(2, 3, 2, 4, 7, 4, FUR)
-			leg:box(2, 0, 2, 4, 2, 5, FUR)
-			leg:box(2, 0, 6, 4, 0, 6, IVORY)
-			leg:paint(3, 0, 5, 3, 1, 5, SHADE)
-			leg:paint(2, 5, 2, 4, 5, 4, STRIPE)
+		-- A powerful pale cat: high shoulders, a slim waist and heavy hips, slate stripes, a pale belly.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 17, 4 }, { 5.4, 5.8, 6 }), FUR)
+		body:add(ellipsoid({ 0, 20.4, 3 }, { 4.2, 2.6, 4 }), FUR)
+		body:add(ellipsoid({ 0, 16, -3 }, { 4.4, 4.6, 5.4 }), FUR)
+		body:add(ellipsoid({ 0, 16.8, -9 }, { 5, 5.2, 4.6 }), FUR)
+		body:coat(function(p, open)
+			if open(0, -1, 0) and p[2] < 14 then
+				return SHADE
+			end
+			return fur(p)
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 3.5, 8, -7.5 }, function(leg)
-			leg:box(3, 4, -9, 5, 10, -6, FUR)
-			leg:box(2, 0, -8, 4, 3, -7, FUR)
-			leg:box(2, 0, -6, 4, 0, -6, FUR)
-			leg:paint(5, 6, -8, 5, 9, -8, STRIPE)
-			leg:paint(2, 2, -8, 4, 2, -7, STRIPE)
+		stripes(body, {
+			{ { 0, 23, 4.5 }, { 0, 19, 5.6 }, { 0, 16, 5 } },
+			{ { 0, 22.6, 1 }, { 0, 18.6, 1.8 }, { 0, 15, 1.2 } },
+			{ { 0, 20.6, -2.6 }, { 0, 17, -2 }, { 0, 13.6, -2.6 } },
+			{ { 0, 21.4, -6 }, { 0, 17.4, -5.4 }, { 0, 14, -6 } },
+			{ { 0, 22, -9.6 }, { 0, 18, -9 }, { 0, 14.6, -9.6 } },
+		})
+		body:trace({ { 0, 24, 6 }, { 0, 21.6, -12 } }, { 0, -1, 0 }, STRIPE)
+
+		-- A broad head: a heavy brow, cheek ruffs, a pale muzzle, glowing ice eyes, and an ice-blue collar.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 18.6, 8, 4.2 }, { 0, 20, 10.4, 3.8 } }), FUR)
+		head:add(ellipsoid({ 0, 21.4, 12 }, { 4.3, 3.9, 4 }), FUR)
+		head:add(ellipsoid({ 0, 19.6, 15.4 }, { 2.5, 2.1, 2.3 }), FUR)
+		head:add(ellipsoid({ 0, 20.5, 17.4 }, { 0.75, 0.5, 0.45 }), NOSE)
+		head:add(rod({ { -2.8, 23.2, 14.2, 1.15 }, { 0, 23.6, 14.8, 1.25 }, { 2.8, 23.2, 14.2, 1.15 } }), FUR)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 3.9 * s, 19.8, 11.8 }, { 1.7, 2.3, 2.1 }), SHADE)
+		end
+		head:add(rod({ { -5, 18.4, 8.4, 1.3 }, { 0, 17.4, 10.6, 1.4 }, { 5, 18.4, 8.4, 1.3 } }), ICE)
+		head:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if z > 15.4 and y > 17.7 and y < 18.5 and (open(0, 0, 1) or open(1, 0, 0) or open(-1, 0, 0)) then
+				return MOUTH
+			end
+			if z > 13.6 and y < 20.6 then
+				return SHADE
+			end
+			if open(0, 1, 0) and math.abs(x) < 0.9 and z < 13.6 then
+				return STRIPE
+			end
+			return fur(p)
+		end)
+		stripes(head, { { { 0, 24.2, 11.6 }, { 0, 21.6, 10.4 } }, { { 0, 23.6, 9.4 }, { 0, 20.6, 8.6 } } })
+
+		-- Thick striped legs on big paws with ivory claws.
+		local front = newSculpt(U)
+		front:add(rod({ { 3.8, 16, 5, 2.9 }, { 4, 8, 6, 2.3 }, { 4, 3, 6.2, 2.1 } }), FUR)
+		front:add(ellipsoid({ 4, 1.6, 7.2 }, { 2.5, 1.6, 2.9 }), FUR)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 4, 16, -9 }, { 3.2, 5.2, 4 }), FUR)
+		back:add(rod({ { 4.2, 11, -10.6, 2.3 }, { 4.3, 6, -11.6, 1.8 }, { 4.3, 2.8, -10.2, 1.9 } }), FUR)
+		back:add(ellipsoid({ 4.3, 1.6, -9.2 }, { 2.4, 1.6, 2.8 }), FUR)
+		for _, leg in { front, back } do
+			leg:coat(function(p)
+				if p[2] > 6 and p[2] < 12 and math.floor(p[2] / 1.8) % 2 == 0 then
+					return STRIPE
+				end
+				return fur(p)
+			end)
+		end
+
+		local tail = newSculpt(U)
+		tail:add(ellipsoid({ 0, 19.2, -13.4 }, { 1.4, 1.8, 1.8 }), FUR)
+		tail:coat(function(p)
+			return if p[3] < -14.2 then STRIPE else nil
 		end)
 
-		-- A short bobtail.
-		local tail = pet:limb("Tail", { 0, 11, -9 })
-		tail:box(-1, 10, -11, 0, 12, -10, FUR)
-		tail:paint(-1, 12, -11, 0, 12, -11, STRIPE)
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 16, 0 }))
+		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, FUR)
+		local headLimb = pet:limb("Head", T.at({ 0, 18.6, 8 }))
+		head:draw(headLimb, { body }, FUR)
+		-- A hunter's eyes, facing forward: glowing ice in dark rims.
+		for _, s in { 1, -1 } do
+			local z = frontOf(head, 1.9 * s, 21.9)
+			T.blade(
+				headLimb,
+				{ 0.9 * s, 21.7, z - 0.2 },
+				{ 2.4 * s, 22.1, z - 0.6 },
+				1.25,
+				0.4,
+				{ 0, 0, 1 },
+				STRIPE.color
+			)
+			T.taper(
+				headLimb,
+				{ 2.4 * s, 22.1, z - 0.6 },
+				{ 3.4 * s, 22.6, z - 1.3 },
+				1.25,
+				0.4,
+				{ 0, 0, 1 },
+				STRIPE.color
+			)
+			T.blade(
+				headLimb,
+				{ 1.1 * s, 21.75, z - 0.05 },
+				{ 2.4 * s, 22.05, z - 0.45 },
+				0.8,
+				0.4,
+				{ 0, 0, 1 },
+				GLOW,
+				NEON
+			)
+			T.taper(
+				headLimb,
+				{ 2.4 * s, 22.05, z - 0.45 },
+				{ 3.1 * s, 22.45, z - 1 },
+				0.8,
+				0.4,
+				{ 0, 0, 1 },
+				GLOW,
+				NEON
+			)
+		end
+		for _, s in { 1, -1 } do
+			T.taper(headLimb, { 1.25 * s, 18.4, 16.2 }, { 1.45 * s, 12.8, 17.2 }, 1, 0.8, { 1, 0, 0 }, IVORY)
+			T.triangle(
+				headLimb,
+				{ 1.6 * s, 24.6, 12.6 },
+				{ 3.6 * s, 27.8, 11.2 },
+				{ 3.8 * s, 24, 10.4 },
+				0.7,
+				FUR.color
+			)
+			T.taper(headLimb, { 3.6 * s, 27.4, 11.2 }, { 3.8 * s, 29.4, 11 }, 0.5, 0.5, { 0, 0, 1 }, STRIPE.color)
+			for _, angle in { 0.5, 1.1, 1.8 } do
+				local base = { 4.4 * s * math.cos(angle * 0.5), 17.6, 9.6 + math.sin(angle) * 0.8 }
+				T.taper(headLimb, base, vadd(base, { 1.2 * s, 1.8, 0.8 }), 0.9, 0.9, { 0, 0, 1 }, CRYSTAL, GLASS)
+			end
+		end
+		T.taper(headLimb, { 0, 17, 11.6 }, { 0, 15.8, 13 }, 1, 1, { 1, 0, 0 }, CRYSTAL, GLASS)
+		local function claws(limb: Limb, x: number, z: number)
+			for _, dx in { -1.2, -0.4, 0.4, 1.2 } do
+				T.taper(limb, { x + dx, 1.4, z - 1.2 }, { x + dx * 1.1, 0.3, z + 0.8 }, 0.5, 0.45, { 0, 1, 0 }, IVORY)
+			end
+		end
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.8, 16, 5 }), function(limb)
+			front:draw(limb, { body }, FUR)
+			claws(limb, 4, 10)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 4, 16, -9 }), function(limb)
+			back:draw(limb, { body }, FUR)
+			claws(limb, 4.3, -6.4)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 19, -12.5 })), { body }, FUR)
 
-		pet:light(ICE, 1.6, 12)
-		pet:seat(0, 14, -2)
+		pet:light(ICE.color, 1.8, 14)
+		pet:seat(0, 22.5 / U, -2 / U)
 	end,
 }
 
@@ -3385,87 +3492,184 @@ Designs.AuroraOwl = {
 	name = "Aurora Owl",
 	skeleton = "Winged",
 	gait = "Waddle",
-	scale = 0.55,
+	scale = 0.5 * 0.8,
 	-- Its wings hang folded at its sides: they turn out this far to fly.
 	wingSpread = 1.35,
 	draw = function(pet)
-		local NIGHT = rgb(30, 40, 92)
-		local NIGHT_LIGHT = rgb(52, 66, 132)
-		local FEATHER = rgb(86, 116, 196)
-		local CHEST = rgb(226, 234, 252)
-		local MARK = rgb(160, 182, 228)
+		-- Sculpted finer than it is drawn (blocks 0.8 of a unit across), with feathers, beak, brows and eyes of
+		-- parts at any angle.
+		local U = 0.8
+		local T = inUnits(U)
+		local NIGHT = look(30, 40, 92)
+		local NIGHT_LIGHT = look(52, 66, 132)
+		local FEATHER = look(86, 116, 196)
+		local CHEST = look(226, 234, 252)
+		local MARK = look(160, 182, 228)
+		local STAR = look(255, 255, 255, NEON)
+		local FACE = look(214, 226, 250)
+		local RIM = look(86, 116, 196)
+		local TALON = look(240, 200, 120)
 		local GREEN = rgb(90, 255, 170)
 		local TEAL = rgb(80, 220, 255)
 		local VIOLET = rgb(182, 124, 255)
-		local STAR = rgb(255, 255, 255)
 		local BEAK = rgb(240, 200, 120)
-		local TALON = rgb(60, 60, 80)
+		local CLAW = rgb(60, 60, 80)
+		local AURORA = {
+			{ color = NIGHT_LIGHT.color, to = 0.35 },
+			{ color = GREEN, material = NEON, to = 0.55 },
+			{ color = TEAL, material = NEON, to = 0.78 },
+			{ color = VIOLET, material = NEON, to = 1 },
+		}
 
-		-- A night-blue owl whose back is speckled with stars.
-		local body = pet:limb("Body", { 0, 2, 0 })
-		body:box(-4, 2, -3, 3, 10, 3, NIGHT)
-		body:box(-3, 3, 4, 2, 9, 4, CHEST)
-		body:paintPair(1, 8, 4, 2, 8, 4, MARK)
-		body:paintPair(2, 6, 4, 2, 6, 4, MARK)
-		body:paint(-1, 7, 4, 0, 7, 4, MARK)
-		body:paint(-1, 5, 4, 0, 5, 4, MARK)
-		body:paintPair(1, 4, 4, 1, 4, 4, MARK)
-		body:paint(-3, 9, -3, -3, 9, -3, STAR, NEON)
-		body:paint(2, 7, -3, 2, 7, -3, STAR, NEON)
-		body:paint(-1, 5, -3, -1, 5, -3, STAR, NEON)
-		body:paint(1, 3, -3, 1, 3, -3, STAR, NEON)
-		body:paint(-3, 4, -3, -3, 4, -3, STAR, NEON)
-		body:paint(0, 9, -3, 0, 9, -3, STAR, NEON)
-
-		-- A pale face disc, glowing eyes under aurora brows, a hooked beak and tufts tipped with light.
-		local head = pet:limb("Head", { 0, 11, 0 })
-		head:box(-4, 11, -3, 3, 16, 3, NIGHT)
-		head:box(-3, 17, -2, 2, 17, 2, NIGHT)
-		head:paint(-4, 11, 3, 3, 15, 3, CHEST)
-		head:paint(-4, 11, 3, -4, 15, 3, FEATHER)
-		head:paint(3, 11, 3, 3, 15, 3, FEATHER)
-		head:paintPair(1, 12, 3, 2, 13, 3, TEAL, NEON)
-		head:paintPair(1, 12, 3, 1, 13, 3, NIGHT)
-		head:paintPair(1, 13, 3, 1, 13, 3, STAR)
-		head:boxPair(1, 15, 4, 3, 15, 4, VIOLET, NEON)
-		head:box(-1, 11, 4, 0, 12, 4, BEAK)
-		head:box(-1, 10, 5, 0, 11, 5, BEAK)
-		head:boxPair(2, 18, -1, 3, 18, 0, NIGHT)
-		head:boxPair(3, 19, -1, 4, 19, 0, FEATHER)
-		head:boxPair(4, 20, -1, 5, 20, 0, TEAL, NEON)
-		head:boxPair(5, 21, -1, 5, 21, 0, GREEN, NEON)
-		head:paint(-2, 16, -3, -2, 16, -3, STAR, NEON)
-		head:paint(1, 14, -3, 1, 14, -3, STAR, NEON)
-		head:paint(-1, 17, 1, -1, 17, 1, STAR, NEON)
-
-		-- Half-open wings banded with the northern lights.
-		pet:limbPair("LeftWing", "RightWing", { 4.5, 10, 0 }, function(wing)
-			wing:box(4, 6, -2, 5, 10, 2, NIGHT_LIGHT)
-			wing:box(4, 3, -3, 5, 5, 1, FEATHER)
-			wing:box(4, 1, -6, 4, 4, -4, FEATHER)
-			wing:paint(5, 8, -2, 5, 8, 2, GREEN, NEON)
-			wing:paint(5, 6, -2, 5, 6, 2, TEAL, NEON)
-			wing:paint(5, 4, -3, 5, 4, 1, VIOLET, NEON)
-			wing:paint(4, 2, -6, 4, 2, -4, TEAL, NEON)
-		end)
-		pet:limbPair("LeftLeg", "RightLeg", { 2, 2, 1 }, function(leg)
-			leg:box(1, 1, 0, 2, 1, 1, CHEST)
-			leg:box(1, 0, 0, 2, 0, 2, BEAK)
-			leg:paint(1, 0, 2, 2, 0, 2, TALON)
+		-- A night-blue owl with a pale chest marked in chevrons, and a back speckled with stars.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 9.6, 0 }, { 6, 7.4, 5.6 }), NIGHT)
+		body:add(ellipsoid({ 0, 7.4, 1 }, { 5.3, 5.4, 4.8 }), NIGHT)
+		body:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if open(0, 0, 1) and z > 1.4 and math.abs(x) < 4.6 then
+				if y > 3 and y < 14.5 and (y + math.abs(x) * 0.7) % 2.6 < 0.6 then
+					return MARK
+				end
+				return CHEST
+			end
+			if noise(p) < 0.06 then
+				return STAR
+			end
+			return nil
 		end)
 
-		-- Long trailing tail feathers with glowing tips.
-		local tail = pet:limb("Tail", { 0, 4, -3 })
-		tail:box(-2, 3, -5, 1, 5, -4, NIGHT)
-		tail:box(-1, 2, -11, 0, 3, -6, FEATHER)
-		tail:box(-1, 2, -12, 0, 2, -12, TEAL, NEON)
-		tail:boxPair(1, 3, -9, 2, 3, -6, FEATHER)
-		tail:boxPair(1, 3, -10, 2, 3, -10, VIOLET, NEON)
-		tail:paint(-1, 3, -9, 0, 3, -9, GREEN, NEON)
+		-- A big round head: a pale face disc, glowing teal eyes under brows of violet light, a hooked beak and
+		-- tall tufts tipped with the aurora.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 20, 0.3 }, { 6.6, 5.7, 5.4 }), NIGHT)
+		head:add(ellipsoid({ 0, 17.4, 0.4 }, { 5.2, 3, 4.6 }), NIGHT)
+		head:coat(function(p, open)
+			local x, y = p[1], p[2]
+			if open(0, 0, 1) or p[3] > 3.2 then
+				local near = math.min((x - 2.3) ^ 2 + ((y - 20) * 1.1) ^ 2, (x + 2.3) ^ 2 + ((y - 20) * 1.1) ^ 2)
+				if near < 3.3 ^ 2 then
+					return FACE
+				elseif near < 4.2 ^ 2 then
+					return RIM
+				end
+			end
+			if noise(p) < 0.06 then
+				return STAR
+			end
+			return nil
+		end)
 
-		pet:light(TEAL, 1.8, 13)
-		pet:particles("Sparkles", GREEN, 8)
-		pet:seat(0, 18, -1)
+		local leg = newSculpt(U)
+		leg:add(ellipsoid({ 2.4, 3.2, 1.2 }, { 1.7, 2.1, 1.7 }), CHEST)
+		leg:add(rod({ { 2.4, 1.7, 1.5, 0.9 }, { 2.4, 1, 2.2, 0.75 } }), TALON)
+		for _, dx in { -0.8, 0, 0.8 } do
+			leg:add(rod({ { 2.4 + dx * 0.4, 0.9, 2, 0.62 }, { 2.4 + dx * 1.5, 0.7, 3.8, 0.55 } }), TALON)
+		end
+
+		local covert = newSculpt(U)
+		covert:add(ellipsoid({ 5.9, 10.6, -0.6 }, { 1.3, 5.2, 4.2 }), FEATHER)
+		covert:coat(function(p)
+			local k = math.floor((p[2] + 30) / 1.6) % 3
+			if p[2] < 13 then
+				return if k == 0 then look(90, 255, 170, NEON) elseif k == 1 then NIGHT_LIGHT else nil
+			end
+			return nil
+		end)
+
+		local legMirror, covertMirror = leg:mirror(), covert:mirror()
+		body:draw(pet:limb("Body", T.at({ 0, 6, 0 })), { head, leg, legMirror, covert, covertMirror }, NIGHT)
+		local headLimb = pet:limb("Head", T.at({ 0, 15.5, 0 }))
+		head:draw(headLimb, { body }, NIGHT)
+		for _, s in { 1, -1 } do
+			local face = frontOf(head, 2.3 * s, 20.4)
+			T.ball(headLimb, { 2.3 * s, 20.4, face - 0.15 }, { 3, 3, 0.8 }, TEAL, NEON)
+			T.ball(headLimb, { 2.3 * s, 20.3, face + 0.1 }, { 2, 2, 0.7 }, NIGHT.color)
+			T.ball(headLimb, { 2.05 * s, 20.9, face + 0.42 }, { 0.6, 0.6, 0.3 }, SHINE)
+			T.blade(
+				headLimb,
+				{ 0.6 * s, 22.3, face + 0.1 },
+				{ 4 * s, 23.5, face - 0.8 },
+				0.8,
+				0.6,
+				{ 0, 0, 1 },
+				VIOLET,
+				NEON
+			)
+			feather(
+				headLimb,
+				T.at({ 3.6 * s, 24, -0.4 }),
+				{ 0.45 * s, 1, -0.2 },
+				6 / U,
+				1.5 / U,
+				0.7 / U,
+				{ 0, 0, 1 },
+				{
+					{ color = NIGHT.color, to = 0.5 },
+					{ color = TEAL, material = NEON, to = 0.75 },
+					{ color = GREEN, material = NEON, to = 1 },
+				}
+			)
+			feather(
+				headLimb,
+				T.at({ 3 * s, 24.2, -1.2 }),
+				{ 0.35 * s, 1, -0.3 },
+				4.6 / U,
+				1.3 / U,
+				0.6 / U,
+				{ 0, 0, 1 },
+				{
+					{ color = FEATHER.color, to = 0.6 },
+					{ color = VIOLET, material = NEON, to = 1 },
+				}
+			)
+		end
+		local nose = frontOf(head, 0, 19.6)
+		T.blade(headLimb, { 0, 19.9, nose - 0.4 }, { 0, 18.6, nose + 0.8 }, 1.3, 1.2, { 1, 0, 0 }, BEAK)
+		T.taper(headLimb, { 0, 18.6, nose + 0.8 }, { 0, 16.9, nose + 0.9 }, 1.1, 1, { 1, 0, 0 }, BEAK)
+
+		-- Folded wings banded with the northern lights.
+		pet:limbPair("LeftWing", "RightWing", T.at({ 5, 14.5, 0 }), function(wing)
+			covert:draw(wing, { body }, NIGHT)
+			for index, z in { 2, 0.6, -0.8, -2.2, -3.6 } do
+				feather(
+					wing,
+					T.at({ 6.1, 8, z }),
+					{ 0.1, -1, -0.45 - index * 0.06 },
+					6.6 / U,
+					1.5 / U,
+					0.5 / U,
+					{ 1, 0, 0 },
+					AURORA
+				)
+			end
+		end)
+		pet:limbPair("LeftLeg", "RightLeg", T.at({ 2.4, 4, 1.2 }), function(limb)
+			leg:draw(limb, { body }, NIGHT)
+			for _, dx in { -0.8, 0, 0.8 } do
+				T.taper(limb, { 2.4 + dx * 1.3, 0.8, 2.9 }, { 2.4 + dx * 1.6, 0.35, 4.7 }, 0.5, 0.45, { 0, 1, 0 }, CLAW)
+			end
+		end)
+
+		-- Long trailing tail feathers, glowing at the tips.
+		local tail = pet:limb("Tail", T.at({ 0, 5, -4 }))
+		for _, dx in { -2, -1, 0, 1, 2 } do
+			local length = 8.5 - math.abs(dx) * 1.2
+			feather(
+				tail,
+				T.at({ dx * 0.6, 5.2, -3.8 }),
+				{ dx * 0.3, -0.45, -1 },
+				length / U,
+				1.5 / U,
+				0.5 / U,
+				{ 0, 1, -0.4 },
+				AURORA
+			)
+		end
+
+		pet:light(TEAL, 2, 15)
+		pet:particles("Sparkles", GREEN, 10)
+		pet:seat(0, 25.6 / U, -0.5 / U)
 	end,
 }
 
@@ -3473,86 +3677,172 @@ Designs.WoollyMammoth = {
 	name = "Woolly Mammoth",
 	skeleton = "Quadruped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.48 * 1.2,
 	draw = function(pet)
-		local WOOL = rgb(120, 78, 48)
-		local WOOL_DARK = rgb(88, 56, 34)
-		local WOOL_LIGHT = rgb(150, 104, 66)
-		local SNOW = rgb(246, 250, 255)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with tusks, icicles and frost
+		-- crystals of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local WOOL = look(120, 78, 48)
+		local WOOL_DARK = look(88, 56, 34)
+		local WOOL_LIGHT = look(150, 104, 66)
+		local SNOW = look(246, 250, 255)
+		local SKIN = look(70, 52, 44)
 		local IVORY = rgb(250, 240, 214)
-		local IVORY_DARK = rgb(222, 206, 168)
 		local ICE = rgb(196, 240, 255)
 
-		-- A huge shaggy body with a shoulder hump, a curtain of long fur with icicles, snow on its back and
-		-- frost crystals growing out of the snow.
-		local body = pet:limb("Body", { 0, 10, 0 })
-		body:box(-6, 7, -7, 5, 15, 5, WOOL)
-		body:box(-4, 16, -1, 3, 17, 4, WOOL)
-		body:box(-5, 8, -8, 4, 14, -8, WOOL)
-		body:boxPair(6, 6, -6, 6, 13, 4, WOOL_DARK)
-		body:boxPair(6, 5, -5, 6, 5, -4, WOOL_DARK)
-		body:boxPair(6, 4, -1, 6, 5, -1, WOOL_DARK)
-		body:boxPair(6, 5, 2, 6, 5, 3, WOOL_DARK)
-		body:box(-5, 6, -3, 4, 6, 0, WOOL_DARK)
-		body:box(-3, 5, -3, -2, 5, -2, WOOL_DARK)
-		body:box(1, 5, -1, 2, 5, -1, WOOL_DARK)
-		body:paint(-4, 15, -5, -3, 15, -2, WOOL_LIGHT)
-		body:paint(1, 15, -6, 2, 15, -3, WOOL_LIGHT)
-		body:paintPair(6, 10, -3, 6, 12, -2, WOOL)
-		body:box(-3, 16, -6, 2, 16, -2, SNOW)
-		body:paint(-3, 17, 0, 2, 17, 3, SNOW)
-		body:box(-1, 17, -5, 0, 19, -5, ICE, GLASS, 0.15)
-		body:boxPair(2, 17, -4, 2, 18, -4, ICE, GLASS, 0.15)
-		body:box(-2, 17, -3, -2, 17, -3, ICE, GLASS, 0.15)
-		body:boxPair(6, 3, -4, 6, 4, -4, ICE, GLASS, 0.15)
-		body:boxPair(6, 2, -1, 6, 3, -1, ICE, GLASS, 0.15)
+		-- Long hair falls in strands: each column of cells has its own shade, the same all the way down.
+		local function wool(p: Vec): Look?
+			local n = noise({ math.floor(p[1] / 1.2), 0, math.floor(p[3] / 1.2) })
+			if n < 0.22 then
+				return WOOL_DARK
+			elseif n > 0.82 then
+				return WOOL_LIGHT
+			end
+			return nil
+		end
 
-		-- A high domed head capped with snow, shaggy bangs, a curling trunk and great frost-tipped tusks.
-		local head = pet:limb("Head", { 0, 13, 6 })
-		head:box(-4, 10, 6, 3, 17, 11, WOOL)
-		head:box(-3, 18, 7, 2, 19, 10, WOOL)
-		head:paint(-3, 19, 7, 2, 19, 10, SNOW)
-		head:paint(-3, 18, 10, -3, 18, 10, SNOW)
-		head:paint(2, 18, 7, 2, 18, 8, SNOW)
-		eyes(head, 2, 14, 11, 1)
-		head:box(-3, 16, 12, 2, 17, 12, WOOL_DARK)
-		head:boxPair(4, 13, 8, 4, 15, 9, WOOL_DARK)
-		head:box(-1, 9, 12, 0, 14, 13, WOOL)
-		head:box(-1, 6, 12, 0, 8, 13, WOOL)
-		head:box(-1, 5, 14, 0, 6, 14, WOOL)
-		head:box(-1, 6, 15, 0, 7, 15, WOOL_LIGHT)
-		head:paint(-1, 8, 13, 0, 8, 13, WOOL_DARK)
-		head:paint(-1, 11, 13, 0, 11, 13, WOOL_DARK)
-		head:boxPair(2, 10, 12, 2, 11, 13, IVORY)
-		head:boxPair(3, 8, 13, 3, 10, 14, IVORY)
-		head:boxPair(4, 7, 15, 4, 8, 16, IVORY)
-		head:boxPair(4, 9, 17, 4, 11, 17, IVORY)
-		head:boxPair(3, 12, 17, 3, 12, 17, ICE, GLASS, 0.15)
-		head:paintPair(3, 9, 13, 3, 9, 14, IVORY_DARK)
+		-- A huge shaggy body with a shoulder hump, a curtain of long hair down its sides, snow on its back.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 17, -1 }, { 7.4, 7.6, 11 }), WOOL)
+		body:add(ellipsoid({ 0, 22.6, 4 }, { 5.6, 3.4, 5 }), WOOL)
+		body:add(ellipsoid({ 0, 17.2, -8.4 }, { 6.6, 6.6, 5.4 }), WOOL)
+		for _, s in { 1, -1 } do
+			for z = -9, 7, 2.2 do
+				local x = 6.6 * s
+				body:add(rod({ { x, 14.4, z, 1.3 }, { x + 0.3 * s, 9.4 + (z % 3) * 0.4, z + 0.4, 0.8 } }), WOOL_DARK)
+			end
+		end
+		body:coat(function(p, open)
+			if open(0, 1, 0) and p[2] > 22 then
+				return SNOW
+			end
+			return wool(p)
+		end)
+
+		-- A high domed head capped with snow, shaggy bangs, small ears and a long curling trunk.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 20, 7, 5 }, { 0, 21, 10, 4.6 } }), WOOL)
+		head:add(ellipsoid({ 0, 22, 12.4 }, { 4.6, 5, 4.4 }), WOOL)
+		head:add(ellipsoid({ 0, 26.4, 11.6 }, { 3.4, 2.6, 3.2 }), WOOL)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 4.4 * s, 21.6, 10.6 }, { 0.9, 1.8, 1.5 }), WOOL_DARK)
+		end
+		for _, x in { -2.4, -0.8, 0.8, 2.4 } do
+			head:add(rod({ { x, 26, 14.6, 1 }, { x * 1.1, 23.4, 16, 0.7 } }), WOOL_DARK)
+		end
+		head:add(
+			rod({
+				{ 0, 20, 16, 2.3 },
+				{ 0, 15.5, 18, 1.85 },
+				{ 0, 10.5, 18.4, 1.45 },
+				{ 0, 7, 17.4, 1.15 },
+				{ 0, 5.6, 19, 0.95 },
+				{ 0, 6.8, 20.4, 0.85 },
+			}),
+			WOOL
+		)
+		head:coat(function(p, open)
+			local y, z = p[2], p[3]
+			if open(0, 1, 0) and y > 27 then
+				return SNOW
+			end
+			if z > 16.5 and y < 19 then
+				return if math.floor(y / 1.4) % 2 == 0 then WOOL_DARK else SKIN
+			end
+			return wool(p)
+		end)
 
 		-- Pillar legs with shaggy cuffs and ivory toenails.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", { 4, 9, 3 }, function(leg)
-			leg:box(2, 1, 1, 5, 8, 4, WOOL)
-			leg:box(2, 0, 1, 5, 0, 4, WOOL_DARK)
-			leg:paint(2, 2, 1, 5, 3, 4, WOOL_DARK)
-			leg:box(2, 0, 5, 2, 0, 5, IVORY)
-			leg:box(4, 0, 5, 4, 0, 5, IVORY)
-		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", { 4, 9, -5 }, function(leg)
-			leg:box(2, 1, -7, 5, 8, -4, WOOL)
-			leg:box(2, 0, -7, 5, 0, -4, WOOL_DARK)
-			leg:paint(2, 2, -7, 5, 3, -4, WOOL_DARK)
-			leg:box(2, 0, -3, 2, 0, -3, IVORY)
-			leg:box(4, 0, -3, 4, 0, -3, IVORY)
-		end)
+		local function pillar(s: Sculpt, x: number, z: number, top: number)
+			s:add(rod({ { x, top, z, 3.4 }, { x, 8, z + 0.4, 3 }, { x, 2.4, z + 0.4, 3 } }), WOOL)
+			s:add(ellipsoid({ x, 1.4, z + 0.6 }, { 3.2, 1.4, 3.2 }), SKIN)
+			s:add(ellipsoid({ x, 4.6, z + 0.4 }, { 3.5, 1.4, 3.5 }), WOOL_DARK)
+		end
+		local front = newSculpt(U)
+		pillar(front, 4.8, 4.6, 16)
+		local back = newSculpt(U)
+		pillar(back, 4.8, -8, 16)
+		for _, leg in { front, back } do
+			leg:coat(function(p)
+				return if p[2] > 5.6 then wool(p) else nil
+			end)
+		end
 
-		local tail = pet:limb("Tail", { 0, 13, -8 })
-		tail:box(-1, 10, -9, 0, 13, -9, WOOL)
-		tail:box(-1, 8, -9, 0, 9, -9, WOOL_DARK)
+		local tail = newSculpt(U)
+		tail:add(rod({ { 0, 21, -13.6, 0.9 }, { 0, 17, -14.6, 0.65 } }), WOOL)
+		tail:add(ellipsoid({ 0, 16, -14.7 }, { 0.9, 1.6, 0.9 }), WOOL_DARK)
 
-		pet:light(ICE, 1.6, 14)
-		pet:particles("Snow", SNOW, 8)
-		pet:seat(0, 18, -2)
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 16, 0 }))
+		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, WOOL)
+		-- Frost crystals growing out of the snow on its back, and icicles hanging from its long hair.
+		for _, crystal in { { 0, -4.6, 0, 2.6 }, { 2.4, -2.4, 0.4, 1.8 }, { -2.2, 0.6, -0.3, 2 }, { 1, 3.6, 0.2, 1.6 } } do
+			local x, z = crystal[1], crystal[2]
+			local y = topOf(body, z, x)
+			T.taper(
+				bodyLimb,
+				{ x, y - 0.6, z },
+				{ x + crystal[3], y + crystal[4] * 1.6, z },
+				crystal[4] * 0.6,
+				crystal[4] * 0.6,
+				{ 0, 0, 1 },
+				ICE,
+				GLASS
+			)
+		end
+		for _, s in { 1, -1 } do
+			for _, z in { -6.8, -0.2, 4.2 } do
+				local top = { 6.9 * s, 10.2, z + 0.4 }
+				T.taper(bodyLimb, top, vadd(top, { 0, -2.4, 0 }), 0.6, 0.6, { 1, 0, 0 }, ICE, GLASS)
+			end
+		end
+		local headLimb = pet:limb("Head", T.at({ 0, 20, 7 }))
+		head:draw(headLimb, { body }, WOOL)
+		roundEyes(headLimb, head, 22.4, 15.4, 1.05)
+		-- Great curving tusks of ivory, frosted at the tips.
+		for _, s in { 1, -1 } do
+			local points = {
+				{ 2.4 * s, 18.4, 15.8 },
+				{ 4 * s, 14.4, 19.4 },
+				{ 5.4 * s, 12.6, 23.4 },
+				{ 5.4 * s, 14.4, 27 },
+				{ 4.4 * s, 17.4, 28.6 },
+			}
+			for index = 1, #points - 2 do
+				T.blade(
+					headLimb,
+					points[index],
+					points[index + 1],
+					1.7 - index * 0.2,
+					1.7 - index * 0.2,
+					{ 1, 0, 0 },
+					IVORY
+				)
+			end
+			T.taper(headLimb, points[#points - 1], points[#points], 1.1, 1.1, { 1, 0, 0 }, ICE, GLASS)
+			for index = 2, #points - 1 do
+				T.ball(headLimb, points[index], 1.75 - index * 0.2, IVORY)
+			end
+		end
+		local function nails(limb: Limb, x: number, z: number)
+			for _, dx in { -1.6, 0, 1.6 } do
+				T.ball(limb, { x + dx, 0.8, z + 3.2 }, { 1.2, 1, 0.9 }, IVORY)
+			end
+		end
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 4.8, 16, 4.6 }), function(limb)
+			front:draw(limb, { body }, WOOL)
+			nails(limb, 4.8, 5)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 4.8, 16, -8 }), function(limb)
+			back:draw(limb, { body }, WOOL)
+			nails(limb, 4.8, -7.6)
+		end)
+		tail:draw(pet:limb("Tail", T.at({ 0, 21, -13 })), { body }, WOOL)
+
+		pet:light(ICE, 1.8, 16)
+		pet:particles("Snow", SNOW.color, 10)
+		pet:seat(0, 26.6 / U, -2 / U)
 	end,
 }
 
@@ -3560,146 +3850,227 @@ Designs.Yeti = {
 	name = "Yeti",
 	skeleton = "Biped",
 	gait = "Stomp",
-	scale = 0.55,
+	scale = 0.5 * 1.2,
 	draw = function(pet)
-		local FUR = rgb(240, 245, 250)
-		local SHADE = rgb(204, 218, 236)
-		local DEEP = rgb(170, 190, 220)
-		local SKIN = rgb(146, 182, 224)
-		local SKIN_DARK = rgb(92, 124, 172)
-		local MOUTH = rgb(30, 36, 56)
+		-- Sculpted in finer units than it is built in (1.2 of them to a block), with horns, tusks, claws, ice
+		-- shards and its crystal club of parts at any angle.
+		local U = 1.2
+		local T = inUnits(U)
+		local FUR = look(240, 245, 250)
+		local SHADE = look(204, 218, 236)
+		local DEEP = look(170, 190, 220)
+		local SKIN = look(104, 146, 208)
+		local SKIN_DARK = look(62, 92, 150)
+		local MOUTH = look(30, 36, 56)
+		local GLOW = look(130, 236, 255, NEON)
+		local ICE_LOOK = look(196, 240, 255, GLASS)
 		local CLAW = rgb(220, 236, 250)
 		local ICE = rgb(196, 240, 255)
 		local ICE_DEEP = rgb(120, 190, 240)
-		local GLOW = rgb(130, 236, 255)
 		local GLOW_WHITE = rgb(230, 250, 255)
 
-		-- A towering, hunched body of shaggy white fur, hanging in layered fringes.
-		local body = pet:limb("Body", { 0, 9, 0 })
-		body:box(-5, 9, -4, 4, 14, 3, FUR)
-		body:box(-7, 15, -5, 6, 21, 4, FUR)
-		body:box(-5, 22, -5, 4, 22, 1, FUR)
-		body:boxPair(5, 12, -4, 6, 14, -3, FUR)
-		body:boxPair(5, 13, -1, 6, 14, 0, FUR)
-		body:boxPair(5, 11, 2, 6, 14, 3, FUR)
-		body:paintPair(5, 12, -4, 6, 12, -3, DEEP)
-		body:paintPair(5, 11, 2, 6, 11, 3, DEEP)
-		body:paintPair(5, 13, -1, 6, 13, 0, DEEP)
-		body:box(-1, 8, -3, 0, 8, 2, SHADE)
-		body:box(-1, 7, -2, 0, 7, 1, SHADE)
-		body:paint(-5, 9, -4, 4, 9, 3, DEEP)
-		body:paint(-5, 11, 3, 4, 11, 3, SHADE)
-		body:paint(-5, 13, 3, 4, 13, 3, SHADE)
-		body:paint(-7, 15, -5, 6, 15, 4, DEEP)
-		body:paintPair(6, 18, -3, 6, 18, 3, SHADE)
-		body:paintPair(6, 15, -5, 6, 21, -5, SHADE)
-		body:paintPair(4, 17, -5, 4, 21, -5, SHADE)
-		body:paint(-1, 15, -5, 0, 20, -5, SHADE)
-		body:paintPair(6, 17, 0, 6, 20, 0, SHADE)
-		-- A bare blue chest with a glowing frost rune, and a necklace of ice fangs.
-		body:paint(-3, 15, 4, 2, 20, 4, SKIN)
-		body:paint(-1, 15, 4, 0, 17, 4, GLOW, NEON)
-		body:paintPair(1, 16, 4, 2, 16, 4, GLOW, NEON)
-		body:paintPair(1, 15, 4, 1, 15, 4, GLOW, NEON)
-		body:paintPair(1, 17, 4, 1, 17, 4, GLOW, NEON)
-		body:paint(-1, 18, 4, 0, 18, 4, SKIN_DARK)
-		body:box(-4, 21, 5, 3, 21, 5, SKIN_DARK)
-		body:boxPair(0, 19, 5, 0, 20, 5, ICE, GLASS, 0.1)
-		body:boxPair(2, 20, 5, 2, 20, 5, ICE, GLASS, 0.1)
-		body:boxPair(3, 20, 5, 3, 20, 5, CLAW)
-		-- Ice shards growing out of its back and shoulders, glowing from inside.
-		body:box(-3, 19, -7, -2, 23, -6, ICE_DEEP, GLASS, 0.1)
-		body:paint(-3, 21, -7, -3, 22, -7, GLOW, NEON)
-		body:box(1, 18, -7, 2, 21, -6, ICE, GLASS, 0.15)
-		body:box(-1, 20, -6, 0, 25, -6, ICE, GLASS, 0.15)
-		body:paint(-1, 22, -6, 0, 23, -6, GLOW, NEON)
-		body:box(3, 16, -6, 3, 18, -6, ICE_DEEP, GLASS, 0.1)
-		body:boxPair(5, 22, -2, 6, 24, -1, ICE, GLASS, 0.15)
-		body:boxPair(6, 25, -2, 6, 26, -2, ICE, GLASS, 0.15)
-		body:paintPair(5, 23, -1, 5, 23, -1, GLOW, NEON)
-
-		-- A blue face under a heavy fur brow: glowing eyes, a flat nose, tusks, cheek tufts, and great
-		-- curling horns of ice with a crown of shards between them.
-		local head = pet:limb("Head", { 0, 22, 1 })
-		head:box(-4, 23, -1, 3, 29, 5, FUR)
-		head:paint(-3, 23, 5, 2, 27, 5, SKIN)
-		head:box(-4, 28, 6, 3, 28, 6, FUR)
-		head:paint(-4, 28, 6, 3, 28, 6, SHADE)
-		head:paintPair(1, 26, 5, 2, 27, 5, GLOW, NEON)
-		head:paintPair(1, 27, 5, 1, 27, 5, SKIN_DARK)
-		head:box(-1, 24, 6, 0, 25, 6, SKIN_DARK)
-		head:paint(-1, 24, 6, 0, 24, 6, MOUTH)
-		head:paint(-2, 23, 5, 1, 23, 5, MOUTH)
-		head:boxPair(2, 23, 6, 2, 24, 6, CLAW)
-		head:boxPair(4, 23, 2, 4, 27, 4, FUR)
-		head:paintPair(4, 23, 2, 4, 23, 4, SHADE)
-		head:paintPair(4, 25, 2, 4, 25, 4, SHADE)
-		head:box(-3, 30, 0, 2, 30, 4, FUR)
-		head:box(-2, 31, 1, 1, 31, 3, FUR)
-		head:paintPair(3, 24, -1, 3, 28, 0, SHADE)
-		head:paint(-3, 24, -1, 2, 26, -1, SHADE)
-		head:paint(-3, 30, 0, 2, 30, 0, SHADE)
-		head:boxPair(4, 28, 1, 5, 29, 3, ICE_DEEP, GLASS)
-		head:boxPair(6, 29, 0, 7, 30, 2, ICE_DEEP, GLASS)
-		head:boxPair(8, 27, -1, 9, 29, 1, ICE_DEEP, GLASS)
-		head:boxPair(8, 24, 0, 9, 26, 2, ICE_DEEP, GLASS)
-		head:boxPair(7, 23, 2, 7, 24, 3, ICE_DEEP, GLASS)
-		head:boxPair(6, 23, 4, 6, 23, 4, GLOW_WHITE, NEON)
-		head:paintPair(4, 28, 3, 5, 28, 3, GLOW, NEON)
-		head:paintPair(6, 30, 2, 7, 30, 2, GLOW, NEON)
-		head:paintPair(8, 28, 1, 9, 28, 1, GLOW, NEON)
-		head:paintPair(8, 25, 2, 9, 25, 2, GLOW, NEON)
-		head:box(-1, 32, 2, 0, 33, 2, ICE, GLASS, 0.15)
-		head:paint(-1, 33, 2, 0, 33, 2, GLOW_WHITE, NEON)
-		head:boxPair(1, 32, 1, 1, 32, 1, ICE, GLASS, 0.15)
-		head:boxPair(2, 31, 3, 2, 31, 3, ICE, GLASS, 0.15)
-
-		-- Long arms to the ground: fur shoulders, ice bracers with glowing runes, blue fists and ice claws.
-		local function arm(limb: Limb)
-			limb:box(7, 17, -2, 9, 21, 2, FUR)
-			limb:paint(7, 21, -2, 9, 21, 2, SHADE)
-			limb:box(8, 12, -2, 10, 16, 1, FUR)
-			limb:box(10, 11, -3, 10, 14, -3, DEEP)
-			limb:box(8, 7, -2, 10, 11, 1, FUR)
-			limb:box(7, 8, -3, 11, 10, 2, ICE, GLASS, 0.15)
-			limb:paint(11, 9, -1, 11, 9, 0, GLOW, NEON)
-			limb:paint(9, 9, 2, 9, 9, 2, GLOW, NEON)
-			limb:box(8, 3, -2, 10, 6, 2, SKIN)
-			limb:paint(8, 6, -2, 10, 6, 2, FUR)
-			limb:box(8, 2, 3, 8, 3, 3, ICE, GLASS, 0.15)
-			limb:box(10, 2, 3, 10, 3, 3, ICE, GLASS, 0.15)
-			limb:box(9, 1, 3, 9, 2, 3, ICE, GLASS, 0.15)
+		-- Shaggy white fur in long locks, deeper blue-white where it hangs.
+		local function fur(p: Vec): Look?
+			local n = noise({ math.floor(p[1] / 1.2), math.floor(p[2] / 3.6), math.floor(p[3] / 1.2) })
+			if n < 0.2 then
+				return SHADE
+			elseif n > 0.88 then
+				return DEEP
+			end
+			return nil
 		end
-		arm(pet:limb("LeftArm", { 8.5, 20, 0 }))
-		local right = mirrored(pet:limb("RightArm", { -8.5, 20, 0 }))
-		arm(right)
-		-- In its right hand, a club of frost crystal.
-		right:box(9, 4, 3, 9, 5, 6, ICE_DEEP, GLASS, 0.1)
-		right:box(8, 3, 7, 10, 7, 10, ICE, GLASS, 0.15)
-		right:box(9, 8, 8, 9, 9, 9, ICE, GLASS, 0.15)
-		right:box(11, 5, 8, 11, 6, 9, ICE, GLASS, 0.15)
-		right:box(9, 4, 11, 9, 5, 11, ICE, GLASS, 0.15)
-		right:paint(9, 4, 10, 9, 6, 10, GLOW, NEON)
-		right:paint(10, 5, 8, 10, 6, 9, GLOW, NEON)
 
-		-- Thick legs with a fringe at the knee, icicles, and wide blue feet with claws.
-		pet:limbPair("LeftLeg", "RightLeg", { 3, 9, 0 }, function(leg)
-			leg:box(1, 5, -3, 5, 9, 2, FUR)
-			leg:box(1, 4, -3, 5, 4, 3, DEEP)
-			leg:box(2, 1, -2, 4, 3, 2, FUR)
-			leg:box(1, 0, -3, 5, 0, 4, SKIN)
-			leg:paint(1, 0, -3, 5, 0, -3, SKIN_DARK)
-			leg:box(1, 0, 5, 1, 0, 5, CLAW)
-			leg:box(3, 0, 5, 3, 0, 5, CLAW)
-			leg:box(5, 0, 5, 5, 0, 5, CLAW)
-			leg:box(5, 2, 0, 5, 3, 0, ICE, GLASS, 0.15)
-			leg:box(1, 2, 3, 1, 3, 3, ICE, GLASS, 0.15)
-			leg:paint(1, 7, 2, 5, 7, 2, SHADE)
+		-- A towering, hunched body of shaggy fur, a bare blue chest with a glowing frost rune.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 16, -0.5 }, { 6, 5.2, 4.6 }), FUR)
+		body:add(ellipsoid({ 0, 24, -0.5 }, { 8.6, 7, 5.6 }), FUR)
+		body:add(ellipsoid({ 0, 28.6, -1 }, { 9.6, 3.6, 5.2 }), FUR)
+		body:add(ellipsoid({ 0, 28, -3.6 }, { 6, 4.6, 3.8 }), FUR)
+		for _, s in { 1, -1 } do
+			for _, z in { -3, -0.5, 2 } do
+				body:add(rod({ { 7.6 * s, 20, z, 1.4 }, { 8 * s, 15.6, z + 0.2, 0.8 } }), DEEP)
+			end
+		end
+		body:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if z > 2 and open(0, 0, 1) and (x / 4.4) ^ 2 + ((y - 24) / 4.6) ^ 2 < 1 then
+				return SKIN
+			end
+			if open(0, -1, 0) then
+				return DEEP
+			end
+			return fur(p)
+		end)
+		-- A blue face under a heavy fur brow: a flat nose, a wide mouth with tusks, cheek tufts.
+		local head = newSculpt(U)
+		head:add(ellipsoid({ 0, 34.4, 2 }, { 4.4, 4.4, 4.1 }), FUR)
+		head:add(rod({ { -3.6, 36.4, 4.6, 1.5 }, { 0, 36.8, 5.6, 1.6 }, { 3.6, 36.4, 4.6, 1.5 } }), FUR)
+		for _, s in { 1, -1 } do
+			head:add(ellipsoid({ 4 * s, 32.6, 2.8 }, { 1.6, 2.4, 2 }), FUR)
+		end
+		head:add(ellipsoid({ 0, 33.6, 6 }, { 1.3, 1, 0.9 }), SKIN_DARK)
+		head:carve(ellipsoid({ 0, 31.4, 6.2 }, { 2.4, 0.9, 1.6 }))
+		head:paint(ellipsoid({ 0, 31.4, 6.2 }, { 2.9, 1.4, 2.1 }), MOUTH, nil, true)
+		head:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if z > 3.6 and y < 36 and math.abs(x) < 3.2 and open(0, 0, 1) then
+				return SKIN
+			end
+			return fur(p)
 		end)
 
-		pet:light(GLOW, 2.6, 18)
+		-- Long arms to the ground: fur shoulders, ice bracers glowing with runes, blue fists and ice claws.
+		local arm = newSculpt(U)
+		arm:add(rod({ { 8.4, 29, -0.6, 3.6 }, { 10.4, 22, -0.4, 2.9 }, { 11, 14, 0, 2.7 }, { 11, 8, 0.4, 2.6 } }), FUR)
+		arm:add(ellipsoid({ 11, 12.4, 0.2 }, { 3.3, 1.8, 3.3 }), ICE_LOOK)
+		arm:add(ellipsoid({ 11, 4.8, 0.8 }, { 2.9, 2.9, 2.9 }), SKIN)
+		arm:coat(function(p, open)
+			local y = p[2]
+			if
+				y > 11
+				and y < 14
+				and (open(1, 0, 0) or open(-1, 0, 0) or open(0, 0, 1))
+				and math.floor(p[3] / 1.2) % 2 == 0
+			then
+				return GLOW
+			end
+			if y > 14.4 and y < 17 then
+				return DEEP
+			end
+			if y < 7.6 then
+				return nil
+			end
+			return fur(p)
+		end)
+
+		-- Thick legs with a fringe at the knee, and wide blue feet.
+		local leg = newSculpt(U)
+		leg:add(rod({ { 3.6, 16, -0.5, 3.6 }, { 4, 9, 0, 3.3 }, { 4.2, 4, 0.4, 3 } }), FUR)
+		leg:add(ellipsoid({ 4.2, 1.4, 1.6 }, { 3.3, 1.4, 4.2 }), SKIN)
+		for _, z in { -1.6, 0.6, 2.6 } do
+			leg:add(rod({ { 6.6, 10, z, 1 }, { 7, 6.4, z + 0.3, 0.6 } }), DEEP)
+		end
+		leg:coat(function(p)
+			return if p[2] > 2.8 then fur(p) else nil
+		end)
+
+		local legMirror, armMirror = leg:mirror(), arm:mirror()
+		local bodyLimb = pet:limb("Body", T.at({ 0, 16, 0 }))
+		body:draw(bodyLimb, { head, leg, legMirror, arm, armMirror }, FUR)
+		-- A necklace of ice fangs, and ice shards growing out of its back and shoulders, glowing at their roots.
+		for _, x in { -2.8, -1.4, 0, 1.4, 2.8 } do
+			local y = 28.6 - math.abs(x) * 0.3
+			local z = frontOf(body, x, y)
+			T.taper(bodyLimb, { x, y, z - 0.3 }, { x * 1.05, y - 2, z + 0.3 }, 0.8, 0.6, { 0, 0, 1 }, ICE, GLASS)
+		end
+		for _, shard in
+			{
+				{ { -2.6, 27, -7 }, { -3.6, 33.4, -9.6 }, 1.8 },
+				{ { 1.4, 26, -7.2 }, { 2.2, 31, -9.8 }, 1.4 },
+				{ { -0.4, 29, -6.4 }, { -0.6, 36.6, -8.4 }, 1.9 },
+				{ { 6.4, 30.4, -2.4 }, { 8.4, 35.6, -3.4 }, 1.4 },
+				{ { -6.4, 30.4, -2.4 }, { -8.4, 35.6, -3.4 }, 1.4 },
+				{ { 3.6, 23.4, -6.4 }, { 5, 26.4, -8.6 }, 1.1 },
+			}
+		do
+			T.taper(
+				bodyLimb,
+				shard[1],
+				shard[2],
+				shard[3],
+				shard[3],
+				{ 0, 0, 1 },
+				if shard[3] > 1.5 then ICE_DEEP else ICE,
+				GLASS
+			)
+			T.ball(bodyLimb, vlerp(shard[1], shard[2], 0.12), shard[3] * 0.8, GLOW_WHITE, NEON)
+		end
+
+		-- A glowing frost rune on its chest: a six-pointed snowflake.
+		local heart = { 0, 24, frontOf(body, 0, 24) + 0.1 }
+		for spoke = 0, 2 do
+			local angle = math.pi / 2 + spoke * math.pi / 3
+			local out = { math.cos(angle) * 3, math.sin(angle) * 3, 0 }
+			T.blade(bodyLimb, vsub(heart, out), vadd(heart, out), 0.45, 0.3, { 0, 0, 1 }, GLOW.color, NEON)
+			for _, tip in { vadd(heart, vscale(out, 0.7)), vsub(heart, vscale(out, 0.7)) } do
+				T.ball(bodyLimb, tip, 0.9, GLOW_WHITE, NEON)
+			end
+		end
+		T.ball(bodyLimb, heart, 1.4, GLOW_WHITE, NEON)
+		local headLimb = pet:limb("Head", T.at({ 0, 30, 1 }))
+		head:draw(headLimb, { body }, FUR)
+		for _, s in { 1, -1 } do
+			local z = frontOf(head, 1.8 * s, 34) + 0.08
+			T.blade(headLimb, { 0.7 * s, 33.8, z }, { 2.4 * s, 34.2, z - 0.4 }, 1.4, 0.4, { 0, 0, 1 }, GLOW.color, NEON)
+			T.taper(
+				headLimb,
+				{ 2.4 * s, 34.2, z - 0.4 },
+				{ 3.4 * s, 34.8, z - 1.1 },
+				1.4,
+				0.4,
+				{ 0, 0, 1 },
+				GLOW.color,
+				NEON
+			)
+			T.taper(headLimb, { 1.8 * s, 30.8, 5.6 }, { 2.3 * s, 33.4, 6.6 }, 0.8, 0.7, { 0, 0, 1 }, CLAW)
+			-- Curling horns of ice, ringed with glowing bands.
+			local horn = {
+				{ 3.2 * s, 37, 1.4 },
+				{ 6 * s, 38.8, 0.4 },
+				{ 8.4 * s, 37.4, -0.6 },
+				{ 9.4 * s, 34.2, 0.4 },
+				{ 8.4 * s, 31.6, 2 },
+			}
+			T.branch(headLimb, horn, 2, { 0, 0, 1 }, ICE_DEEP, GLASS)
+			for index = 2, 4 do
+				T.ball(headLimb, horn[index], 2.1 - index * 0.25, GLOW_WHITE, NEON)
+			end
+		end
+		for _, crown in { { 0, 0.4, 3 }, { 1.4, -0.4, 2.2 }, { -1.4, -0.4, 2.2 } } do
+			local x, z = crown[1], crown[2]
+			local y = topOf(head, z, x)
+			T.taper(headLimb, { x, y - 0.6, z }, { x * 1.3, y + crown[3], z - 0.6 }, 1.1, 1.1, { 0, 0, 1 }, ICE, GLASS)
+		end
+
+		local function claws(limb: Limb, x: number)
+			for _, dz in { -1.2, 0, 1.2 } do
+				T.taper(
+					limb,
+					{ x, 3.8, 3 + dz * 0.5 },
+					{ x + 0.2 * math.sign(x), 1.2, 4.4 + dz * 0.6 },
+					0.8,
+					0.7,
+					{ 1, 0, 0 },
+					ICE,
+					GLASS
+				)
+			end
+		end
+		local left = pet:limb("LeftArm", T.at({ 8.5, 29, 0 }))
+		arm:draw(left, { body }, FUR)
+		claws(left, 11)
+		local right = pet:limb("RightArm", T.at({ -8.5, 29, 0 }))
+		armMirror:draw(right, { body }, FUR)
+		claws(right, -11)
+		-- In its right fist, a club of frost crystal glowing at its heart.
+		T.blade(right, { -11, 5.2, 2.6 }, { -11, 6.4, 9.6 }, 1.2, 1.2, { 1, 0, 0 }, ICE_DEEP, GLASS)
+		T.ball(right, { -11, 6.6, 10 }, 2.6, GLOW_WHITE, NEON)
+		for _, spike in
+			{ { 0, 3, 1 }, { 2.4, 1.4, 1.6 }, { -2.4, 1.6, 1.4 }, { 0.6, -2, 2 }, { -1.2, 0, 3.2 }, { 1.6, 1, 3 } }
+		do
+			local root = { -11, 6.6, 10 }
+			T.taper(right, root, vadd(root, spike), 2, 2, { 0, 0, 1 }, ICE, GLASS)
+		end
+		pet:limbPair("LeftLeg", "RightLeg", T.at({ 3.6, 16, -0.5 }), function(limb)
+			leg:draw(limb, { body }, FUR)
+			for _, dx in { -1.6, 0, 1.6 } do
+				T.taper(limb, { 4.2 + dx, 1.4, 4.4 }, { 4.2 + dx * 1.1, 0.4, 6.4 }, 0.8, 0.7, { 0, 1, 0 }, CLAW)
+			end
+		end)
+
+		pet:light(GLOW.color, 2.8, 22)
 		pet:particles("Snow", GLOW_WHITE, 14)
-		pet:seat(0, 23, -4)
+		pet:seat(0, 39 / U, -1 / U)
 	end,
 }
 
