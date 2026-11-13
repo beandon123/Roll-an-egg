@@ -114,6 +114,18 @@ PetModels.SKELETONS = {
 	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
 	-- a ripple can run down it.
 	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
+	-- Four legs and a pair of wings (dragons).
+	Dragon = {
+		"Body",
+		"Head",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"LeftWing",
+		"RightWing",
+		"Tail",
+	},
 	-- Six legs (scorpions, beetles, crabs). Claws are part of the Head.
 	ManyLegged = {
 		"Body",

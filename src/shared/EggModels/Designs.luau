@@ -1621,6 +1621,7 @@ Designs.EternalPhoenix = {
 	name = "Eternal Phoenix Egg",
 	hatches = "Eternal Phoenix",
 	seed = 58,
+	shelved = "Eternal",
 	draw = function(egg)
 		-- Flame colours rising from deep red to gold, tipped with eternal blue.
 		egg:base(VOLCANO.crimson)
@@ -1660,6 +1661,71 @@ Designs.EternalPhoenix = {
 		spriteZ(egg, wing, -5, 9, { -7 }, { W = W, F = F, R = R, E = E })
 		egg:light(VOLCANO.eternal, 3, 18)
 		egg:particles("Embers", VOLCANO.gold, 14)
+	end,
+}
+
+Designs.LavaDragon = {
+	name = "Lava Dragon Egg",
+	hatches = "Lava Dragon",
+	seed = 59,
+	draw = function(egg)
+		-- A shell of cooled black lava, molten from the bottom up: white-hot at the base, then glowing orange under a
+		-- ragged red edge, crusted black above with darker scales, and split all over by glowing cracks.
+		egg:base(VOLCANO.charcoal)
+		egg:paint(function(cell)
+			local edge = 5 + math.round(wave(cell.angle, 7) * 2)
+			if cell.y <= 2 then
+				return VOLCANO.lavaHot, NEON
+			elseif cell.y < edge then
+				return VOLCANO.lava, NEON
+			elseif cell.y == edge then
+				return VOLCANO.crimson
+			elseif cell.facing == "side" and (cell.y + math.floor(cell.angle / 20)) % 3 == 0 then
+				return VOLCANO.dragonScale
+			end
+			return nil
+		end)
+		crack(egg, { { 5, 25 }, { 8, 45 }, { 11, 30 }, { 14, 55 }, { 15, 75 } }, VOLCANO.lava, NEON)
+		crack(egg, { { 5, 115 }, { 9, 100 }, { 12, 125 }, { 14, 110 } }, VOLCANO.lavaHot, NEON)
+		crack(egg, { { 9, 100 }, { 11, 80 } }, VOLCANO.lava, NEON)
+		crack(egg, { { 5, 205 }, { 8, 230 }, { 11, 215 }, { 14, 240 } }, VOLCANO.lava, NEON)
+		crack(egg, { { 5, 300 }, { 9, 320 }, { 12, 295 }, { 15, 315 } }, VOLCANO.lavaHot, NEON)
+		-- An eternal-blue gleam where the cracks meet at the crown.
+		egg:band(16, 16, VOLCANO.eternal, NEON)
+		zigzag(egg, 15, 1, 5, 1, VOLCANO.eternal, NEON)
+		-- Spines down its back, tipped with fire.
+		for _, layer in { 4, 6, 8, 10, 12 } do
+			local x, z = egg:outward(layer, 270, 0)
+			egg:set(x, layer, z, VOLCANO.dragonHorn)
+			egg:set(x, layer + 1, z, VOLCANO.lavaHot, NEON)
+		end
+		-- Bat wings folded at its sides: dark bones, red membranes veined with lava.
+		local B = { VOLCANO.dragonHorn }
+		local M = { VOLCANO.crimson }
+		local L = { VOLCANO.lava, NEON }
+		local wing = {
+			"BB......",
+			"BMB.....",
+			"BMMBB...",
+			"BMLMMBB.",
+			"BMMLMMMB",
+			".BBBBBBB",
+		}
+		spriteZ(egg, wing, -5, 10, { 6 }, { B = B, M = M, L = L })
+		spriteZ(egg, wing, -5, 10, { -7 }, { B = B, M = M, L = L })
+		-- Horns curving up and forward, their tips glowing eternal blue.
+		local H = { VOLCANO.dragonHorn }
+		local E = { VOLCANO.eternal, NEON }
+		sprite(egg, {
+			".E....",
+			"E.....",
+			"H.....",
+			"H.....",
+			".H....",
+			"..HH..",
+		}, -6, 22, { -1, 0 }, { H = H, E = E }, true)
+		egg:light(VOLCANO.lava, 3, 18)
+		egg:particles("Embers", VOLCANO.lavaHot, 14)
 	end,
 }
 

@@ -65,13 +65,17 @@ return function(harness)
 
 		it("keeps shelved eggs out of the zones, ready to come back", function()
 			local shelved = EggModels.shelved()
-			expect.equal(table.concat(shelved, ","), "Ash,Seafoam,MagmaToad,KingCrab,FrostDragon,MagmaDragon")
+			expect.equal(
+				table.concat(shelved, ","),
+				"Ash,Seafoam,MagmaToad,KingCrab,FrostDragon,MagmaDragon,EternalPhoenix"
+			)
 			for _, kind in shelved do
 				local model = EggModels.get(kind)
 				expect.truthy(model.shelved, kind)
 				expect.equal(model.zone, 0, kind .. " zone")
 			end
 			expect.equal(EggModels.get("MagmaDragon").rarity, "Secret")
+			expect.equal(EggModels.get("EternalPhoenix").rarity, "Eternal")
 		end)
 
 		it("gives every egg its own name and its own look", function()

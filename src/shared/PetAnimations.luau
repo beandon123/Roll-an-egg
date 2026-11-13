@@ -170,6 +170,40 @@ PetAnimations.MOVES = {
 			wave("Head", "ry", 0.15, 0.8),
 		}, beating(6.5, 0.55, 0.15, 0.12, true)),
 	},
+	-- Four legs and a pair of wings: a heavy tread on the ground, and in the air the same wingbeats as birds.
+	Dragon = {
+		Idle = joined(idle(), {
+			wave("LeftWing", "rz", 0.04, 1.6),
+			wave("RightWing", "rz", -0.04, 1.6),
+			wave("Tail", "rx", 0.04, 1.2, { shift = 1 }),
+		}),
+		Walk = joined(fourLegs(0.4, 5, 0.25), beating(5, 0.06, 0, 0, false)),
+		Stomp = joined(fourLegs(0.32, 4, 0.35, true), beating(4, 0.06, 0, 0, false)),
+		Fly = joined({
+			wave("Body", "py", 0.4, 4.5, { base = 6, tall = true }),
+			wave("Body", "rx", 0.04, 4.5, { base = 0.15 }),
+			wave("Body", "rz", 0.06, 1),
+			wave("FrontLeftLeg", "rx", 0.05, 4.5, { base = 0.9 }),
+			wave("FrontRightLeg", "rx", 0.05, 4.5, { base = 0.9 }),
+			wave("BackLeftLeg", "rx", 0.05, 4.5, { base = 1.1 }),
+			wave("BackRightLeg", "rx", 0.05, 4.5, { base = 1.1 }),
+			wave("Tail", "rx", 0.08, 4.5, { base = -0.1, shift = 1.5 }),
+			wave("Tail", "ry", 0.15, 2),
+			wave("Head", "rx", 0.04, 4.5, { base = -0.15, shift = math.pi }),
+		}, beating(4.5, 0.6, 0.1, 0.15, true)),
+		Hover = joined({
+			wave("Body", "py", 0.5, 5.5, { base = 5, shift = math.pi, tall = true }),
+			wave("Body", "rx", 0.04, 5.5, { base = -0.05 }),
+			wave("FrontLeftLeg", "rx", 0.06, 2.75, { base = 0.3 }),
+			wave("FrontRightLeg", "rx", 0.06, 2.75, { base = 0.3 }),
+			wave("BackLeftLeg", "rx", 0.06, 2.75, { base = 0.45 }),
+			wave("BackRightLeg", "rx", 0.06, 2.75, { base = 0.45 }),
+			wave("Tail", "ry", 0.2, 1.5),
+			wave("Tail", "rx", 0.06, 5.5, { shift = 1 }),
+			wave("Head", "ry", 0.15, 0.7),
+			wave("Head", "rx", 0.04, 5.5),
+		}, beating(5.5, 0.5, 0.15, 0.1, true)),
+	},
 	Biped = {
 		Idle = joined(idle(false), { wave("LeftArm", "rz", 0.04, 1.6), wave("RightArm", "rz", -0.04, 1.6) }),
 		Walk = {

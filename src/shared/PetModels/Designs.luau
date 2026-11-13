@@ -1137,6 +1137,42 @@ local function taper(
 	limb:part(vlerp(a, b, 0.5), { thickness, width, vlength(vsub(b, a)) }, { x, y, z }, color, material, nil, "Wedge")
 end
 
+-- A flat triangle between three points, `thickness` thick (for wing membranes): two wedges, split along the line
+-- from the corner opposite its longest side, square to that side.
+local function triangle(limb: Limb, a: Vec, b: Vec, c: Vec, thickness: number, color: Color, material: string?)
+	local ab, ac, bc = vsub(b, a), vsub(c, a), vsub(c, b)
+	local abd, acd, bcd = vdot(ab, ab), vdot(ac, ac), vdot(bc, bc)
+	if abd > acd and abd > bcd then
+		c, a = a, c
+	elseif acd > bcd and acd > abd then
+		a, b = b, a
+	end
+	ab, ac, bc = vsub(b, a), vsub(c, a), vsub(c, b)
+	local right = vnorm(vcross(ac, ab))
+	local up = vnorm(vcross(bc, right))
+	local back = vnorm(bc)
+	local height = math.abs(vdot(ab, up))
+	local wedge = "Wedge"
+	limb:part(
+		vlerp(a, b, 0.5),
+		{ thickness, height, math.abs(vdot(ab, back)) },
+		{ right, up, back },
+		color,
+		material,
+		nil,
+		wedge
+	)
+	limb:part(
+		vlerp(a, c, 0.5),
+		{ thickness, height, math.abs(vdot(ac, back)) },
+		{ vscale(right, -1), up, vscale(back, -1) },
+		color,
+		material,
+		nil,
+		wedge
+	)
+end
+
 -- An egg shape at `center`, `size` along its axes (default lined up with the pet).
 local function egg(limb: Limb, center: Vec, size: Vec, axes: { Vec }?, color: Color, material: string?)
 	limb:part(center, size, axes or { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }, color, material, nil, "Ball")
@@ -5389,6 +5425,297 @@ Designs.EternalPhoenix = {
 		pet:light(rgb(255, 140, 40), 3.4, 26)
 		pet:particles("Embers", rgb(255, 200, 70), 20)
 		pet:seat(0, 23.5, -3)
+	end,
+}
+
+Designs.LavaDragon = {
+	name = "Lava Dragon",
+	skeleton = "Dragon",
+	gait = "Stomp",
+	scale = 0.42 * 1.2,
+	draw = function(pet)
+		-- Modelled in finer units than it is built in: 1.2 of them to a block.
+		local U = 1.2
+		local function at(p: Vec): Vec
+			return { p[1] / U, p[2] / U, p[3] / U }
+		end
+		local function look(r: number, g: number, b: number, material: string?): Look
+			return { color = rgb(r, g, b), material = material }
+		end
+		local SCALE = look(38, 28, 32)
+		local HORN = look(78, 62, 60)
+		local CLAW = look(26, 20, 22)
+		local FANG = look(244, 236, 216)
+		local GUM = look(120, 22, 20)
+		local LAVA = look(255, 104, 20, NEON)
+		local HOT = look(255, 198, 46, NEON)
+		local MAGMA = look(200, 44, 16, NEON)
+		local PUPIL = look(30, 6, 6)
+
+		-- Glowing plates where its underside shows, molten and darker by turns.
+		local function plates(p: Vec, along: number): Look
+			return if math.floor(p[along] / 1.6) % 2 == 0 then LAVA else MAGMA
+		end
+
+		-- A heavy body of black obsidian scales, a molten belly in glowing plates, cracks of lava down its flanks, and
+		-- a row of horn spikes down its spine, glowing at their tips.
+		local body = newSculpt(U)
+		body:add(ellipsoid({ 0, 15, 4 }, { 6, 6.5, 7 }), SCALE)
+		body:add(ellipsoid({ 0, 18.5, 3 }, { 5.6, 3.6, 6 }), SCALE)
+		body:add(ellipsoid({ 0, 14, -4 }, { 5.2, 5.8, 7 }), SCALE)
+		body:add(ellipsoid({ 0, 14.5, -11 }, { 5.6, 6, 5.5 }), SCALE)
+		body:coat(function(p, open)
+			if open(0, -1, 0) and p[2] < 14 then
+				return plates(p, 3)
+			end
+			return nil
+		end)
+		-- Molten veins tracing its shoulders, ribs and haunches, branching as they run down.
+		for _, side in { 1, -1 } do
+			for _, vein in
+				{
+					{ { 0, 19.5, 7 }, { 0, 16, 9.5 }, { 0, 12.5, 8.5 } },
+					{ { 0, 16, 9.5 }, { 0, 17.5, 4.5 } },
+					{ { 0, 19.5, 3 }, { 0, 15.5, 1 }, { 0, 11.5, 2 } },
+					{ { 0, 19, -2 }, { 0, 15, -4 }, { 0, 11, -3 } },
+					{ { 0, 15, -4 }, { 0, 16.5, -8 } },
+					{ { 0, 18.5, -7.5 }, { 0, 14.5, -9.5 }, { 0, 11, -8.5 } },
+					{ { 0, 19.5, -11 }, { 0, 15.5, -13.5 }, { 0, 12, -12.5 } },
+				}
+			do
+				body:trace(vein, { -side, 0, 0 }, LAVA)
+			end
+		end
+		local function top(z: number): number
+			local cz, y = math.floor(z / U), math.floor(15 / U)
+			while body:has(0, y + 1, cz) do
+				y += 1
+			end
+			return (y + 1) * U
+		end
+		for index, z in { 9.5, 6, -8, -11.5, -15 } do
+			local y = top(z) - 0.6
+			local tall = if index % 2 == 1 then 4 else 3
+			body:add(rod({ { 0, y, z, 1.3 }, { 0, y + tall, z - 2.2, 0.35 } }), HORN)
+			body:add(rod({ { 0, y + tall - 0.8, z - 1.7, 0.5 }, { 0, y + tall + 0.3, z - 2.5, 0.3 } }), HOT)
+		end
+
+		-- A long neck, molten plates down its throat, and a horned head with jaws open on a throat of fire: heavy
+		-- brows over narrow glowing eyes, back-swept horns tipped with flame, fangs, glowing nostrils.
+		local head = newSculpt(U)
+		head:add(rod({ { 0, 18, 7, 3.8 }, { 0, 22.5, 11.5, 3.2 }, { 0, 26.5, 14, 2.7 } }), SCALE)
+		-- The head is drawn 1.22 times the size of the numbers below, about a point at the top of the neck.
+		local H, centre = 1.22, { 0, 26.5, 15 }
+		local function hp(p: Vec): Vec
+			return {
+				centre[1] + (p[1] - centre[1]) * H,
+				centre[2] + (p[2] - centre[2]) * H,
+				centre[3] + (p[3] - centre[3]) * H,
+			}
+		end
+		local function E(c: Vec, r: Vec): Shape
+			return ellipsoid(hp(c), { r[1] * H, r[2] * H, r[3] * H })
+		end
+		local function R(points: { { number } }): Shape
+			local out = {}
+			for _, p in points do
+				local q = hp(p)
+				table.insert(out, { q[1], q[2], q[3], p[4] * H })
+			end
+			return rod(out)
+		end
+		head:add(E({ 0, 28.5, 16.5 }, { 3.2, 2.8, 4 }), SCALE)
+		head:add(E({ 0, 29.6, 18.5 }, { 3.3, 1.2, 1.8 }), SCALE)
+		head:add(E({ 0, 27.8, 21.5 }, { 2.4, 1.9, 4.4 }), SCALE)
+		head:add(E({ 0, 26.4, 17 }, { 2.8, 1.8, 2.4 }), SCALE)
+		head:add(E({ 0, 25.2, 20.2 }, { 2.1, 1, 4 }), SCALE)
+		head:carve(E({ 0, 26.4, 21 }, { 1.7, 0.75, 3.8 }))
+		head:paint(E({ 0, 26.4, 21 }, { 2.2, 1.2, 4.3 }), GUM, nil, true)
+		head:add(E({ 0, 26.4, 17.8 }, { 1.4, 0.7, 0.8 }), HOT)
+		for _, s in { 1, -1 } do
+			for _, z in { 19, 20.5, 22, 23.4 } do
+				head:add(R({ { 1.6 * s, 26, z, 0.4 }, { 1.6 * s, 25.3, z + 0.2, 0.25 } }), FANG)
+			end
+			for _, z in { 19.8, 21.3, 22.8 } do
+				head:add(R({ { 1.4 * s, 25.6, z, 0.4 }, { 1.4 * s, 26.3, z + 0.2, 0.25 } }), FANG)
+			end
+			head:add(R({ { 1.2 * s, 26.6, 24.4, 0.5 }, { 1.1 * s, 24.9, 24.8, 0.3 } }), FANG)
+			head:add(
+				R({
+					{ 1.8 * s, 30.3, 14.6, 1.4 },
+					{ 2.9 * s, 32.2, 11.8, 1.1 },
+					{ 3.4 * s, 33.1, 8.8, 0.75 },
+					{ 3.2 * s, 32.6, 6.4, 0.35 },
+				}),
+				HORN
+			)
+			head:add(R({ { 3.35 * s, 32.95, 7.6, 0.45 }, { 3.2 * s, 32.6, 6.4, 0.3 } }), HOT)
+			head:add(R({ { 2.8 * s, 27.4, 15.4, 0.7 }, { 4.1 * s, 27.8, 12.8, 0.25 } }), HORN)
+			head:add(R({ { 2.4 * s, 30.2, 18, 0.6 }, { 3.2 * s, 31.3, 16.6, 0.25 } }), HORN)
+			head:add(R({ { 2.5 * s, 25, 16.5, 0.6 }, { 3.6 * s, 24.4, 14.6, 0.25 } }), HORN)
+		end
+		head:coat(function(real, open)
+			local p = {
+				centre[1] + (real[1] - centre[1]) / H,
+				centre[2] + (real[2] - centre[2]) / H,
+				centre[3] + (real[3] - centre[3]) / H,
+			}
+			local x, y, z = p[1], p[2], p[3]
+			-- Glowing nostrils.
+			if z > 24.6 and y > 28.3 and math.abs(x) > 0.4 and math.abs(x) < 1.4 then
+				return LAVA
+			end
+			-- Molten plates down the throat.
+			if real[3] < 15.5 and (open(0, -1, 0) or open(0, 0, 1)) and real[2] < 25.5 then
+				return plates(real, 2)
+			end
+			return nil
+		end)
+		-- Veins of lava up the sides of its neck to its horns.
+		for _, side in { 1, -1 } do
+			head:trace({ { 0, 19.5, 9 }, { 0, 23, 12 }, { 0, 26.5, 14 }, { 0, 29, 14.5 } }, { -side, 0, 0 }, LAVA)
+		end
+
+		-- Thick, clawed legs, cracked with lava, with spikes at the elbows and knees.
+		local function foot(s: Sculpt, x: number, y: number, z: number)
+			s:add(ellipsoid({ x, y, z }, { 2.3, 1.5, 2.9 }), SCALE)
+			for _, dx in { -1.3, 0, 1.3 } do
+				s:add(rod({ { x + dx, y - 0.1, z + 1.3, 0.9 }, { x + dx * 1.3, y - 0.5, z + 3, 0.7 } }), SCALE)
+				s:add(rod({ { x + dx * 1.3, y - 0.4, z + 3, 0.55 }, { x + dx * 1.4, y - 1.3, z + 4.2, 0.25 } }), CLAW)
+			end
+		end
+		local function veins(s: Sculpt, points: { Vec })
+			s:trace(points, { -1, 0, 0 }, LAVA)
+			s:trace(points, { 0, 0, -1 }, MAGMA)
+		end
+		local front = newSculpt(U)
+		front:add(rod({ { 5.2, 16, 5, 3 }, { 6.2, 9, 7, 2.3 } }), SCALE)
+		front:add(rod({ { 6.2, 9, 7, 2.1 }, { 6.4, 3, 6.6, 1.8 } }), SCALE)
+		foot(front, 6.4, 1.5, 8.2)
+		front:add(rod({ { 6.6, 9.5, 5.6, 0.7 }, { 6.9, 10.5, 3.6, 0.2 } }), HORN)
+		veins(front, { { 0, 15.5, 6 }, { 0, 10, 7.5 }, { 0, 5, 7 }, { 0, 2.5, 8.5 } })
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 5.6, 12.5, -11 }, { 3, 5.2, 4.2 }), SCALE)
+		back:add(rod({ { 6.1, 8.5, -13, 2.1 }, { 6.4, 3.6, -14.8, 1.7 } }), SCALE)
+		back:add(rod({ { 6.4, 3.6, -14.8, 1.6 }, { 6.4, 1.6, -12.4, 1.5 } }), SCALE)
+		foot(back, 6.4, 1.4, -11.2)
+		back:add(rod({ { 6.4, 9, -14.6, 0.7 }, { 6.7, 10.5, -16.4, 0.2 } }), HORN)
+		veins(back, { { 0, 17, -10 }, { 0, 12, -12 }, { 0, 7, -14 }, { 0, 3, -14.5 } })
+
+		-- A long tail sweeping round, spiked along its top, molten underneath, ending in a glowing spade of lava.
+		local tail = newSculpt(U)
+		local spine = {
+			{ 0, 14, -14, 3.6 },
+			{ 0, 12.5, -20, 2.9 },
+			{ 1.5, 9, -26, 2.2 },
+			{ 3.5, 6.5, -31, 1.6 },
+			{ 4.6, 5.5, -35, 1.1 },
+			{ 4.4, 6.5, -38.5, 0.7 },
+		}
+		tail:add(rod(spine), SCALE)
+		for index = 2, #spine - 1 do
+			local p = spine[index]
+			tail:add(
+				rod({ { p[1], p[2] + p[4] - 0.4, p[3], p[4] * 0.45 }, { p[1], p[2] + p[4] + 1.8, p[3] - 1.6, 0.25 } }),
+				HORN
+			)
+		end
+		tail:add(ellipsoid({ 4.4, 7.4, -40.2 }, { 0.7, 2.4, 2 }), LAVA)
+		tail:add(ellipsoid({ 4.4, 7.4, -40.2 }, { 0.75, 1.3, 1.1 }), HOT)
+		tail:coat(function(p, open)
+			if open(0, -1, 0) and p[3] > -37 then
+				return plates(p, 3)
+			end
+			return nil
+		end)
+
+		local frontMirror, backMirror = front:mirror(), back:mirror()
+		body:draw(pet:limb("Body", at({ 0, 14, -2 })), { head, front, frontMirror, back, backMirror, tail }, SCALE)
+		local headLimb = pet:limb("Head", at({ 0, 19, 9 }))
+		head:draw(headLimb, { body }, SCALE)
+		-- The eyes: flat on the sides of its head under the brow, narrow and pointed at both ends, slanting up
+		-- towards the back, glowing, each set in a dark rim with a slit pupil.
+		for _, s in { 1, -1 } do
+			local out = { s, 0, 0 }
+			local function almond(depth: number, grow: number, color: Color, material: string?, thick: number)
+				local nose = { s * depth, 28.9 - grow * 0.2, 20.7 + grow }
+				local backPoint = { s * depth, 29.95 + grow * 0.2, 16.3 - grow }
+				local p1, p2 = vlerp(nose, backPoint, 0.3), vlerp(nose, backPoint, 0.7)
+				local width = 1.05 + grow
+				taper(headLimb, at(p1), at(nose), width / U, thick / U, out, color, material)
+				blade(headLimb, at(p1), at(p2), width / U, thick / U, out, color, material)
+				taper(headLimb, at(p2), at(backPoint), width / U, thick / U, out, color, material)
+			end
+			almond(3.62, 0.45, CLAW.color, nil, 0.2)
+			almond(3.74, 0, HOT.color, NEON, 0.2)
+			blade(
+				headLimb,
+				at({ s * 3.86, 28.75, 18.75 }),
+				at({ s * 3.86, 29.95, 18.45 }),
+				0.32 / U,
+				0.12 / U,
+				out,
+				PUPIL.color
+			)
+		end
+		headLimb:fire(at(hp({ 0, 25.4, 27.2 })), 4, rgb(255, 90, 20), rgb(255, 210, 60))
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", at({ 5, 15, 5 }), function(limb)
+			front:draw(limb, { body }, SCALE)
+		end)
+		pet:limbPair("BackLeftLeg", "BackRightLeg", at({ 5, 14, -11 }), function(limb)
+			back:draw(limb, { body }, SCALE)
+		end)
+		local tailLimb = pet:limb("Tail", at({ 0, 14, -15 }))
+		tail:draw(tailLimb, { body }, SCALE)
+		tailLimb:fire(at({ 4.4, 9.5, -40.2 }), 5, rgb(255, 90, 20), rgb(255, 210, 60))
+
+		-- Great bat wings raised and swept back: dark bones, membranes of deep red veined with glowing lava, a hooked
+		-- claw at each wrist, a spike at each elbow, and flame at the tips.
+		pet:limbPair("LeftWing", "RightWing", at({ 4.5, 21, 2 }), function(wing)
+			local MEMBRANE, VEIN, BONE = rgb(120, 22, 18), rgb(255, 120, 24), rgb(66, 52, 52)
+			local FLAT = { 0, 0, 1 }
+			-- Drawn 1.15 times the size of the numbers below, out from the shoulder.
+			local root = { 4.5, 21, 2 }
+			local function grow(p: Vec): Vec
+				return vadd(root, vscale(vsub(p, root), 1.15))
+			end
+			local shoulderJoint, elbow, wrist = root, grow({ 10.5, 28.5, -1.5 }), grow({ 14.5, 34, -4.5 })
+			local tips = {
+				grow({ 27, 31, -7.5 }),
+				grow({ 24.5, 22.5, -9 }),
+				grow({ 19.5, 16.5, -9.5 }),
+				grow({ 13.5, 15.5, -8 }),
+			}
+			local scallops = { grow({ 22.5, 26.5, -8 }), grow({ 19.5, 20.5, -8.8 }), grow({ 15.5, 18, -8.5 }) }
+			local flank, shoulder = { 6, 17, -6 }, { 5, 19.5, -2 }
+			local function membrane(a: Vec, b: Vec, c: Vec)
+				triangle(wing, at(a), at(b), at(c), 0.35 / U, MEMBRANE)
+			end
+			for i = 1, 3 do
+				membrane(wrist, tips[i], scallops[i])
+				membrane(wrist, scallops[i], tips[i + 1])
+			end
+			membrane(elbow, wrist, tips[4])
+			membrane(elbow, tips[4], flank)
+			membrane(elbow, flank, shoulder)
+			for _, vein in { { wrist, scallops[1] }, { wrist, scallops[2] }, { wrist, scallops[3] }, { elbow, flank } } do
+				blade(wing, at(vein[1]), at(vlerp(vein[1], vein[2], 0.85)), 0.3 / U, 0.6 / U, FLAT, VEIN, NEON)
+			end
+			blade(wing, at(shoulderJoint), at(elbow), 1.7 / U, 1.4 / U, FLAT, BONE)
+			blade(wing, at(elbow), at(wrist), 1.4 / U, 1.2 / U, FLAT, BONE)
+			for index, tip in tips do
+				local mid = vlerp(wrist, tip, 0.7)
+				blade(wing, at(wrist), at(mid), (1 - index * 0.08) / U, 0.9 / U, FLAT, BONE)
+				taper(wing, at(mid), at(tip), 0.8 / U, 0.8 / U, FLAT, BONE)
+			end
+			taper(wing, at(wrist), at(grow({ 15.5, 36.5, -2.8 })), 0.9 / U, 0.8 / U, { 1, 0, 0 }, CLAW.color)
+			taper(wing, at(elbow), at(grow({ 10, 30.8, -4.4 })), 0.8 / U, 0.7 / U, { 1, 0, 0 }, HORN.color)
+			wing:fire(at(tips[1]), 4, rgb(255, 90, 20), rgb(255, 210, 60))
+		end)
+
+		pet:light(rgb(255, 110, 30), 3.4, 26)
+		pet:particles("Embers", rgb(255, 200, 70), 18)
+		pet:seat(0, 22 / U, -3 / U)
 	end,
 }
 

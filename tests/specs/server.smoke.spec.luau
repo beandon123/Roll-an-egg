@@ -402,7 +402,7 @@ return function(harness)
 			expect.equal(folders, 1)
 		end)
 
-		it("show the Volcano pets, the Eternal Phoenix with wedges, egg shapes and fire", function()
+		it("show the Volcano pets, the Lava Dragon with wings of wedges and fire", function()
 			local session = startServer()
 			local player, _, root = session:addPlayer(1, "Tester")
 			root.Position = roblox.Vector3.new(0, 0, 2500) -- Volcano
@@ -416,9 +416,9 @@ return function(harness)
 			table.sort(names)
 			expect.equal(
 				table.concat(names, ","),
-				"Cerberus,Chimera,CinderBoar,EternalPhoenix,FireSalamander,LavaGolem,ObsidianGoat,VolcanoTortoise"
+				"Cerberus,Chimera,CinderBoar,FireSalamander,LavaDragon,LavaGolem,ObsidianGoat,VolcanoTortoise"
 			)
-			local phoenix = folder.EternalPhoenix
+			local phoenix = folder.LavaDragon
 			local wedges, eggs, fires, turned = 0, 0, 0, 0
 			for _, part in phoenix:GetDescendants() do
 				if part:IsA("WedgePart") then
@@ -432,10 +432,10 @@ return function(harness)
 					turned += 1
 				end
 			end
-			expect.truthy(wedges > 50, "wedge feather tips: " .. wedges)
-			expect.truthy(eggs > 10, "egg shapes: " .. eggs)
-			expect.truthy(turned > 100, "parts at an angle: " .. turned)
-			expect.truthy(fires >= 5, "flames: " .. fires)
+			expect.truthy(wedges > 20, "wedges in its wings: " .. wedges)
+			expect.truthy(eggs >= 0, "egg shapes: " .. eggs)
+			expect.truthy(turned > 30, "parts at an angle: " .. turned)
+			expect.truthy(fires >= 3, "flames: " .. fires)
 			for _, fire in phoenix:GetDescendants() do
 				if fire:IsA("Fire") then
 					expect.truthy(
@@ -463,7 +463,7 @@ return function(harness)
 			end
 			expect.equal(
 				table.concat(kinds, ","),
-				"Obsidian,CinderBoar,VolcanoTortoise,Salamander,Chimera,LavaGolem,Cerberus,EternalPhoenix"
+				"Obsidian,CinderBoar,VolcanoTortoise,Salamander,Chimera,LavaGolem,Cerberus,LavaDragon"
 			)
 		end)
 

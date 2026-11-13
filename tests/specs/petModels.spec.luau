@@ -26,7 +26,7 @@ return function(harness)
 			"Chimera",
 			"LavaGolem",
 			"Cerberus",
-			"EternalPhoenix",
+			"LavaDragon",
 		},
 	}
 	local MATERIALS = { SmoothPlastic = true, Neon = true, Glass = true }
@@ -225,9 +225,9 @@ return function(harness)
 			end)
 		end)
 
-		it("flies and hovers winged pets off the ground, wings spread and beating", function()
+		it("flies and hovers winged pets (birds and dragons) off the ground, wings spread and beating", function()
 			each(function(model)
-				if model.skeleton ~= "Winged" then
+				if PetAnimations.MOVES[model.skeleton].Hover == nil then
 					return
 				end
 				expect.equal(PetAnimations.defaultMove(model.skeleton, model.gait), "Hover")

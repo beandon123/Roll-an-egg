@@ -457,7 +457,7 @@ return function(harness)
 			folder.Name = "StudioPets"
 			folder.Parent = workspace
 			session:fire(workspace, "ChildAdded", folder)
-			local phoenix = PetRig.build("EternalPhoenix")
+			local phoenix = PetRig.build("LavaDragon")
 			phoenix.Parent = folder
 			session:fire(folder, "ChildAdded", phoenix)
 			local fox = PetRig.build("Fox")

@@ -171,11 +171,11 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     4 Ocean:    Rare: Sea Turtle, Dolphin | Epic: Manta Ray, Great Shark | Legendary: Narwhal | Mythic: Hippocampus
                 Secret: Kraken, Leviathan
     5 Volcano:  Rare: Obsidian Goat | Epic: Cinder Boar | Legendary: Volcano Tortoise, Fire Salamander
-                Mythic: Chimera, Lava Golem | Secret: Cerberus | Eternal: Eternal Phoenix
+                Mythic: Chimera, Lava Golem | Secret: Cerberus | Eternal: Lava Dragon
 
     Shelved for now (designed, out of the game): Frost Dragon and Magma Dragon (decided), plus the Hermit Crab,
     Fire Salamander (old Common egg), and Magma Toad eggs, whose rarities those zones no longer drop, and the
-    King Crab egg (replaced by the Great Shark).
+    King Crab egg (replaced by the Great Shark), and the Eternal Phoenix egg and pet (replaced by the Lava Dragon).
 
 ### Plot & Pen
 - [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided
@@ -260,8 +260,10 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
               Motor6D per limb; all 40 zone pets done (Forest, Desert, Snow, Ocean, Volcano)
         - [ ] Secret and Eternal pets are exceptionally detailed, well beyond every other pet (decided)
         - [ ] Where blocks on the grid are not enough, showpieces may use parts at any angle, wedges, egg shapes
-              (sphere meshes) and Roblox Fire, so they hold their detail at every pet size (decided; the Eternal
-              Phoenix does)
+              (sphere meshes) and Roblox Fire, so they hold their detail at every pet size (decided; the Lava
+              Dragon's wings and fire do, and the shelved Eternal Phoenix is built wholly from them)
+        - [ ] Flying animations for winged pets and dragons: Fly and a hovering idle (done for the owls and
+              the Lava Dragon)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow

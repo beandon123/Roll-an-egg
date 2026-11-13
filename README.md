@@ -95,7 +95,7 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
-- Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Eternal Phoenix
+- Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 
 The rarer the pet, the more detailed it is. Secret and Eternal pets are the showpieces: the tests require each to
 have at least 150 blocks and at least 30% more than any other pet in the game.
@@ -104,18 +104,21 @@ Most blocks are placed by hand. Curved and rounded parts are drawn with helpers 
 `tube` runs a rounded, tapering tube through points (tentacles, coils, horns, whiskers), `curl` adds a spiral to
 the end of one, and `blob` fills a rounded shape such as the Kraken's mantle or the Great Shark's body.
 Cerberus is sculpted: `newSculpt` models a whole limb cell by cell out of rounded shapes that can be turned to any
-angle, then packs it into as few blocks as it can. The Eternal Phoenix leaves the grid altogether: it is built from
-parts at any angle (`blade`, `taper` for wedge points, `egg` for egg shapes, and `feather` for a banded feather of
-them) plus Roblox `Fire`, so it keeps its detail however big a pet is shown. `PetRig` builds those as turned parts,
+angle, then packs it into as few blocks as it can. Some parts leave the grid altogether and are built from parts
+at any angle (`blade`, `taper` for wedge points, `egg` for egg shapes, `triangle` for a flat three-cornered sheet,
+and `feather` for a banded feather of them) plus Roblox `Fire`, so they keep their detail however big a pet is
+shown. The Lava Dragon is both: a sculpted body, head, legs and tail laced with glowing veins, and wings of angled
+membranes on angled bones, with fire at its jaw, tail and wing tips. (The Eternal Phoenix, built wholly from angled
+parts, is shelved for now, its design kept.) `PetRig` builds those as turned parts,
 `WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
-four-legged, winged, two legs, six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a
-chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its
-joint, so pets that share a skeleton can share their animations.
+four-legged, winged, dragon (four legs and wings), two legs, six legs, swimmer (fins and a tail; these float),
+eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a
+`Motor6D` at its joint, so pets that share a skeleton can share their animations.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
-Crawl, Swim), each a set of waves that turn or shift its limbs. Winged pets (the owls and the Eternal Phoenix) also
+Crawl, Swim), each a set of waves that turn or shift its limbs. Winged pets (the owls) and dragons (the Lava Dragon) also
 **Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
 on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
 (`wingSpread`), so owls that fold their wings at their sides open them to fly. The same moves drive the gallery

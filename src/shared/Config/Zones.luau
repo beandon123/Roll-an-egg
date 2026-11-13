@@ -130,7 +130,7 @@ local list: { ZoneInfo } = {
 			{ egg = "Chimera", rarity = "Mythic", pet = "Chimera" },
 			{ egg = "LavaGolem", rarity = "Mythic", pet = "LavaGolem" },
 			{ egg = "Cerberus", rarity = "Secret", pet = "Cerberus" },
-			{ egg = "EternalPhoenix", rarity = "Eternal", pet = "EternalPhoenix" },
+			{ egg = "LavaDragon", rarity = "Eternal", pet = "LavaDragon" },
 		},
 		stamina = {
 			Rare = 55000,
