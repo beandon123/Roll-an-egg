@@ -44,6 +44,10 @@ return function(harness)
 			return (options and options.shop) or { coins = 0, penLevel = 1, passes = {}, luck = {} }
 		end
 		session.invokeHandlers.GetSettings = function()
+			-- `settingsDelay` holds the reply back, like a server still loading the player's data.
+			if options and options.settingsDelay then
+				task.wait(options.settingsDelay)
+			end
 			return (options and options.settings) or {}
 		end
 
@@ -672,6 +676,33 @@ return function(harness)
 			expect.equal(#saves, 1, "one save for all the changes")
 			expect.equal(saves[1].args[1].MusicVolume, 0.75)
 			expect.equal(saves[1].args[1].ShowMyPets, false)
+		end)
+
+		it("keeps changes made before the saved settings arrive, and saves them", function()
+			local session, parts = startClient(nil, {
+				settings = { MusicVolume = 0.3, ShowOthersPets = false },
+				settingsDelay = 0.3,
+			})
+			local sound = session:service("SoundService")
+			local slider = settingsRow(parts, "MusicVolume").Slider
+			slider.Track.AbsolutePosition = Vector2.new(100, 0)
+			slider.Track.AbsoluteSize = Vector2.new(200, 44)
+
+			-- The player moves the slider while the server is still answering.
+			press(session, slider.Track, 250)
+			expect.equal(slider.Percent.Text, "75%")
+
+			task.wait(0.4)
+			-- The player's change wins; saved settings they did not touch are loaded.
+			expect.equal(slider.Percent.Text, "75%")
+			expect.near(sound.Music.Volume, 0.75, 1e-6)
+			expect.equal(settingsRow(parts, "ShowOthersPets").Toggle.State.Text, "OFF")
+
+			task.wait(1.7)
+			local saves = session:sent("SaveSettings", "server")
+			expect.equal(#saves, 1, "the early change is saved")
+			expect.equal(saves[1].args[1].MusicVolume, 0.75)
+			expect.equal(saves[1].args[1].ShowOthersPets, false)
 		end)
 	end)
 end
