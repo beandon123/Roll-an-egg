@@ -44,9 +44,12 @@ local UiState = {
 
 	-- Shop state from the server.
 	penLevel = scope:Value(1),
+	-- "Double your Max Stamina": 1, 2, 4 ... 1024.
+	staminaMultiplier = scope:Value(1),
 	-- passId -> true
 	ownedPasses = scope:Value({} :: { [string]: boolean }),
-	-- itemId (or "PenLevel<n>") -> Robux price, once loaded from Roblox. Until then the shop shows Config/Shop's.
+	-- itemId (or "PenLevel<n>", "StaminaDoubling<n>") -> Robux price, once loaded from Roblox. Until then the shop
+	-- shows Config/Shop's.
 	prices = scope:Value({} :: { [string]: number }),
 	-- The server luck in effect, and whole seconds until it ends (0 when none).
 	luck = scope:Value(1),

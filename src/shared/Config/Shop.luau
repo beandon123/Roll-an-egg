@@ -13,6 +13,7 @@ export type Grant =
 	| { kind: "MaxStamina", amount: number }
 	| { kind: "Luck", multiplier: number, duration: number }
 	| { kind: "PenLevel" }
+	| { kind: "StaminaDoubling" }
 
 -- A developer product: bought with Robux, can be bought again.
 export type Product = {
@@ -45,6 +46,15 @@ export type Pass = {
 export type PenLevel = {
 	level: number,
 	coins: number,
+	productId: number,
+	robux: number,
+}
+
+-- One step of "Double your Max Stamina": from one multiplier to twice it. One developer product per step, so each
+-- step can have its own price.
+export type StaminaDoubling = {
+	from: number,
+	to: number,
 	productId: number,
 	robux: number,
 }
@@ -153,19 +163,24 @@ local passes: { Pass } = {
 		gamePassId = 0,
 		robux = 199,
 	},
-	{
-		id = "DoubleStamina",
-		order = 2,
-		title = "x2 MAX STAMINA",
-		tagline = "FOREVER!",
-		description = "Doubles your Max Stamina, upgrades included",
-		gamePassId = 0,
-		robux = 249,
-	},
 }
 
--- What the x2 Max Stamina pass multiplies by.
-Shop.STAMINA_PASS_MULTIPLIER = 2
+-- "Double your Max Stamina": bought again and again, each purchase doubles the player's Max Stamina multiplier,
+-- from x1 up to this cap (x2, x4, x8 ... ten doublings). Kept forever.
+Shop.MAX_STAMINA_MULTIPLIER = 1024
+-- The id the client sends to buy the next doubling.
+Shop.STAMINA_DOUBLING_ID = "StaminaDoubling"
+
+-- Keyed by the multiplier the step reaches (2, 4, 8 ... 1024).
+local staminaDoublings: { [number]: StaminaDoubling } = {}
+local DOUBLING_PRICES = { 49, 79, 99, 117, 149, 199, 249, 349, 449, 599 }
+do
+	local to = 2
+	for _, robux in DOUBLING_PRICES do
+		staminaDoublings[to] = { from = to / 2, to = to, productId = 0, robux = robux }
+		to *= 2
+	end
+end
 
 -- Pen capacity: 10 pets at level 1, +1 per level, up to level 9 (18 pets) for now.
 Shop.PEN_BASE_CAPACITY = 10
@@ -190,6 +205,7 @@ end
 Shop.Products = products
 Shop.Passes = passes
 Shop.PenLevels = penLevels
+Shop.StaminaDoublings = staminaDoublings
 
 local productsById: { [string]: Product } = {}
 for _, product in products do
@@ -223,28 +239,34 @@ function Shop.productsIn(section: string): { Product }
 	return list
 end
 
--- What a Roblox developer product ID pays for: a product, or a pen level. Nil for unknown IDs (and for 0).
-function Shop.findByProductId(productId: number): (Product?, PenLevel?)
+-- What a Roblox developer product ID pays for, and the id of the shop item it belongs to. Nil for unknown IDs (and
+-- for 0, the ID of an item not set up yet).
+function Shop.rewardForProductId(productId: number): (Grant?, string?)
 	if productId == 0 then
 		return nil, nil
 	end
 	for _, product in products do
 		if product.productId == productId then
-			return product, nil
+			return product.grant, product.id
 		end
 	end
 	for _, penLevel in penLevels do
 		if penLevel.productId == productId then
-			return nil, penLevel
+			return { kind = "PenLevel" }, Shop.PEN_UPGRADE_ID
+		end
+	end
+	for _, doubling in staminaDoublings do
+		if doubling.productId == productId then
+			return { kind = "StaminaDoubling" }, Shop.STAMINA_DOUBLING_ID
 		end
 	end
 	return nil, nil
 end
 
--- Max Stamina from what the player owns. Later, stamina upgrades bought with coins add to `bonus` too.
-function Shop.maxStamina(baseStamina: number, bonus: number, hasStaminaPass: boolean): number
-	local total = baseStamina + bonus
-	return if hasStaminaPass then total * Shop.STAMINA_PASS_MULTIPLIER else total
+-- Max Stamina from what the player owns: the base plus Max Stamina bought, times the doubling multiplier.
+-- Later, stamina upgrades bought with coins add to `bonus` too.
+function Shop.maxStamina(baseStamina: number, bonus: number, multiplier: number): number
+	return (baseStamina + bonus) * multiplier
 end
 
 return Shop

@@ -7,8 +7,9 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway and riding**, plus **the shop and settings**.
 
-- A placeholder map: the hub, a painted START ZONE where the runway begins, five walled zone slabs (Forest, Desert,
-  Snow, Ocean, Volcano) and their signs. The runway is 120 studs wide.
+- A placeholder map: the hub, a painted START ZONE where the runway begins, five zone slabs (Forest, Desert, Snow,
+  Ocean, Volcano) and their signs. The runway is 120 studs wide, with walls down both sides that are broken by gaps
+  (marked with red strips) where a player on foot can fall off.
 - A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
   back to the players in the server when the store cannot be reached).
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed, color and stamina requirement.
@@ -21,8 +22,8 @@ The first playable slice: **the runway and riding**, plus **the shop and setting
   under them (the "+" buttons open the shop at that section), a timer while a server luck boost runs, and the
   stamina and claim meters (bottom).
 - **Shop** ("Coop Shop"): next pen level for Robux or coins, x2 / x4 server luck for 15 minutes (rarer eggs for
-  everyone), Max Stamina packs, coin packs, and the x2 Coins and x2 Max Stamina passes. Robux purchases are
-  granted exactly once, and only reported to Roblox once saved.
+  everyone), Max Stamina packs, Double Your Stamina (each purchase doubles Max Stamina, from x2 up to x1024), coin
+  packs, and the x2 Coins pass. Robux purchases are granted exactly once, and only reported to Roblox once saved.
 - **Settings**: Music / Effects / Nature volume, show others' pets / your pets, reduce camera shake, vibration.
   Saved to the player's account.
 
@@ -63,7 +64,8 @@ Services* is on. Otherwise the game still runs and simply does not save.
 
 Every price and amount is in `src/shared/Config/Shop.luau`. Each Robux item needs its ID from the Creator
 Dashboard (*Monetization > Developer Products* or *Passes*), pasted into its `productId` / `gamePassId`. There is
-one developer product per pen level, because a product's price is fixed.
+one developer product per pen level and one per stamina doubling (x1 to x2, x2 to x4 ...), because a product's
+price is fixed.
 
 While an ID is `0`, the item cannot be bought in a live game ("This isn't for sale yet"). In Studio, buying it grants
 it straight away, so the whole shop can be tried before the products exist. The price shown comes from Roblox once an
@@ -74,7 +76,7 @@ ID is set, so changing a price on the dashboard is enough.
 In Studio a small panel appears on the right of the screen. Its buttons only work in Studio, never in a live game:
 
 - **Max stamina x5**: lets you ride eggs in deeper zones before upgrades exist.
-- **Reset stamina**: back to normal (100, plus any Max Stamina bought in the shop).
+- **Reset stamina**: back to normal (100, plus any Max Stamina bought in the shop, times any doublings).
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
 
 ## Project layout

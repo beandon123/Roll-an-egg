@@ -218,4 +218,30 @@ return function(harness)
 			end
 		end)
 	end)
+
+	describe("Runway wall gaps", function()
+		it("puts gaps in both walls of every zone, clear of the zone's start and end", function()
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local startZ = Runway.zoneStartZ(zoneId)
+				local sides = {}
+				local lastEnd = { [1] = -math.huge, [-1] = -math.huge }
+				for _, gap in Runway.wallGaps(zoneId) do
+					expect.truthy(gap.side == 1 or gap.side == -1, "side")
+					sides[gap.side] = true
+					expect.near(gap.endZ - gap.startZ, Runway.WALL_GAP_LENGTH)
+					expect.truthy(gap.startZ >= startZ + 60, "clear of the sign and egg drop")
+					expect.truthy(gap.endZ <= startZ + Runway.ZONE_LENGTH - 30, "clear of the next zone")
+					expect.truthy(gap.startZ > lastEnd[gap.side], "gaps on one side do not overlap")
+					lastEnd[gap.side] = gap.endZ
+				end
+				expect.truthy(sides[1] and sides[-1], "zone " .. zoneId .. " has gaps on both sides")
+			end
+		end)
+
+		it("does not repeat the same pattern in neighbouring zones", function()
+			for zoneId = 2, Runway.ZONE_COUNT do
+				expect.truthy(Runway.wallGaps(zoneId)[1].side ~= Runway.wallGaps(zoneId - 1)[1].side, "zone " .. zoneId)
+			end
+		end)
+	end)
 end

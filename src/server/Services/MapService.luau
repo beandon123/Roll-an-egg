@@ -182,28 +182,85 @@ local function buildStartZone(map: Instance)
 	end
 end
 
--- The walls down both sides of one zone's slab, sloping with it.
-local function buildWalls(
-	folder: Instance,
-	zone,
-	surfaceMiddle: Vector3,
-	along: Vector3,
-	normal: Vector3,
-	length: number
-)
-	for _, side in { -1, 1 } do
-		local offset = Vector3.new(side * (Runway.WIDTH / 2 + WALL_THICKNESS / 2), 0, 0)
-		local wall = newPart(if side < 0 then "WallRight" else "WallLeft", folder)
-		wall.Size = Vector3.new(WALL_THICKNESS, WALL_HEIGHT + SLAB_THICKNESS, length)
-		local wallCenter = surfaceMiddle + offset + normal * ((WALL_HEIGHT - SLAB_THICKNESS) / 2)
-		wall.CFrame = CFrame.lookAt(wallCenter, wallCenter + along, normal)
-		wall.Color = rgb(zone.accent)
+-- A part lying along the runway between two distances down it, following the slope. `lateral` is its centre's
+-- sideways position and `lift` how far its centre sits above the runway surface.
+local function slopedPart(
+	name: string,
+	parent: Instance,
+	fromZ: number,
+	toZ: number,
+	lateral: number,
+	lift: number,
+	size: Vector2
+): Part
+	local angle = math.atan(Runway.SLOPE)
+	local along = Vector3.new(0, -math.sin(angle), math.cos(angle))
+	local normal = Vector3.new(0, math.cos(angle), math.sin(angle))
+	local middleZ = (fromZ + toZ) / 2
+	local center = Vector3.new(lateral, Runway.surfaceY(middleZ), middleZ) + normal * lift
+	local part = newPart(name, parent)
+	part.Size = Vector3.new(size.X, size.Y, (toZ - fromZ) / math.cos(angle))
+	part.CFrame = CFrame.lookAt(center, center + along, normal)
+	return part
+end
 
-		local cap = newPart(if side < 0 then "CapRight" else "CapLeft", folder)
-		cap.Size = Vector3.new(WALL_THICKNESS + 2, 1.5, length)
-		local capCenter = surfaceMiddle + offset + normal * (WALL_HEIGHT + 0.75)
-		cap.CFrame = CFrame.lookAt(capCenter, capCenter + along, normal)
-		cap.Color = rgb(zone.ground)
+-- The walls down both sides of one zone, broken by the gaps in Shared/Runway. Each gap has a red strip along the
+-- runway's edge, so it is easy to spot before walking into it.
+local function buildWalls(folder: Instance, zone)
+	local startZ = Runway.zoneStartZ(zone.id)
+	local gaps = Runway.wallGaps(zone.id)
+	for _, side in { -1, 1 } do
+		local sideName = if side < 0 then "Right" else "Left"
+		local lateral = side * (Runway.WIDTH / 2 + WALL_THICKNESS / 2)
+
+		-- The stretches of wall between this side's gaps.
+		local stretches = {}
+		local from = startZ
+		for _, gap in gaps do
+			if gap.side == side then
+				table.insert(stretches, { from, gap.startZ })
+				from = gap.endZ
+
+				local strip = slopedPart(
+					"GapWarning" .. sideName,
+					folder,
+					gap.startZ,
+					gap.endZ,
+					side * (Runway.WIDTH / 2 - 1),
+					0.1,
+					Vector2.new(2, 0.2)
+				)
+				strip.Color = Color3.fromRGB(255, 70, 60)
+				strip.Material = Enum.Material.Neon
+				strip.CanCollide = false
+				strip.CanQuery = false
+			end
+		end
+		table.insert(stretches, { from, startZ + Runway.ZONE_LENGTH })
+
+		for index, stretch in stretches do
+			local wall = slopedPart(
+				`Wall{sideName}{index}`,
+				folder,
+				stretch[1],
+				stretch[2],
+				lateral,
+				(WALL_HEIGHT - SLAB_THICKNESS) / 2,
+				Vector2.new(WALL_THICKNESS, WALL_HEIGHT + SLAB_THICKNESS)
+			)
+			wall.Color = rgb(zone.accent)
+
+			local cap = slopedPart(
+				`Cap{sideName}{index}`,
+				folder,
+				stretch[1],
+				stretch[2],
+				lateral,
+				WALL_HEIGHT + 0.75,
+				Vector2.new(WALL_THICKNESS + 2, 1.5)
+			)
+			cap.Color = rgb(zone.ground)
+		end
 	end
 end
 
@@ -229,7 +286,7 @@ local function buildRunway(map: Instance)
 		slab.CFrame = CFrame.lookAt(center, center + along, normal)
 		slab.Color = rgb(zone.ground)
 
-		buildWalls(folder, zone, surfaceMiddle, along, normal, slopeLength)
+		buildWalls(folder, zone)
 
 		-- A sign over the start of the zone, held up by posts standing on the walls: the zone's name and the
 		-- stamina its eggs need.

@@ -140,14 +140,14 @@ local function productCard(scope, product, accent)
 	})
 end
 
-local function productGrid(scope, section: string, accent, columns: number)
+local function productGrid(scope, section: string, accent, columns: number, layoutOrder: number?)
 	local cards = {}
 	for _, product in Shop.productsIn(section) do
 		table.insert(cards, productCard(scope, product, accent))
 	end
 	return scope:New("Frame")({
 		Name = "Grid",
-		LayoutOrder = 2,
+		LayoutOrder = layoutOrder or 2,
 		Size = UDim2.fromScale(1, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
@@ -353,12 +353,189 @@ local function penCard(scope)
 	})
 end
 
+-- "Double your Max Stamina": the multiplier now, what the next purchase makes it, and that purchase's price.
+local function doublingCard(scope)
+	local accent = Theme.Sections.Stamina
+	local multiplier = UiState.staminaMultiplier
+	local isMax = scope:Computed(function(use)
+		return use(multiplier) >= Shop.MAX_STAMINA_MULTIPLIER
+	end)
+	local notMax = scope:Computed(function(use)
+		return not use(isMax)
+	end)
+	local nextStep = scope:Computed(function(use)
+		return Shop.StaminaDoublings[math.min(use(multiplier) * 2, Shop.MAX_STAMINA_MULTIPLIER)]
+	end)
+
+	return scope:New("Frame")({
+		Name = "StaminaDoubling",
+		LayoutOrder = 2,
+		Size = UDim2.new(1, -8, 0, 150),
+		BackgroundColor3 = Theme.WHITE,
+		[Children] = {
+			Widgets.corner(scope, 24),
+			Widgets.gradient(scope, accent.light, accent.deep, 100),
+			Widgets.stroke(scope, 4),
+			Widgets.speckles(scope, { { 0.35, 0.18, 16 }, { 0.6, 0.86, 10 }, { 0.72, 0.2, 8 }, { 0.5, 0.5, 6 } }),
+
+			scope:New("Frame")({
+				Name = "Seal",
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 16, 0.5, 0),
+				Size = UDim2.fromOffset(108, 108),
+				BackgroundColor3 = Theme.CREAM,
+				[Children] = {
+					Widgets.round(scope),
+					Widgets.stroke(scope, 3.5),
+					Widgets.text(scope, {
+						Name = "Icon",
+						Position = UDim2.fromOffset(0, 10),
+						Size = UDim2.new(1, 0, 0, 40),
+						Text = "⚡",
+						TextSize = 36,
+					}),
+					Widgets.text(scope, {
+						Name = "Multiplier",
+						Position = UDim2.fromOffset(0, 54),
+						Size = UDim2.new(1, 0, 0, 40),
+						Font = Theme.TITLE_FONT,
+						Text = "x2",
+						TextColor3 = accent.deep,
+						TextSize = 40,
+					}),
+				},
+			}),
+
+			Widgets.text(scope, {
+				Name = "Title",
+				Position = UDim2.fromOffset(140, 14),
+				Size = UDim2.new(1, -320, 0, 36),
+				Font = Theme.TITLE_FONT,
+				Text = scope:Computed(function(use)
+					return if use(isMax) then "STAMINA MAXED OUT!" else "DOUBLE YOUR STAMINA!"
+				end),
+				TextColor3 = Theme.WHITE,
+				TextScaled = true,
+				MaxTextSize = 32,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Stroke = 3,
+			}),
+			-- "x32 ▸ x64": the multiplier now and after this purchase.
+			scope:New("Frame")({
+				Name = "Multipliers",
+				Position = UDim2.fromOffset(140, 54),
+				Size = UDim2.new(1, -320, 0, 58),
+				BackgroundTransparency = 1,
+				[Children] = {
+					Widgets.list(scope, {
+						FillDirection = Enum.FillDirection.Horizontal,
+						Padding = 8,
+						VerticalAlignment = Enum.VerticalAlignment.Center,
+					}),
+					Widgets.text(scope, {
+						Name = "From",
+						LayoutOrder = 1,
+						Size = UDim2.fromOffset(118, 50),
+						Font = Theme.TITLE_FONT,
+						Text = scope:Computed(function(use)
+							return `x{use(multiplier)}`
+						end),
+						TextColor3 = Theme.WHITE,
+						TextScaled = true,
+						MaxTextSize = 44,
+						TextXAlignment = Enum.TextXAlignment.Right,
+						Stroke = 3,
+					}),
+					Widgets.text(scope, {
+						Name = "Arrow",
+						LayoutOrder = 2,
+						Size = UDim2.fromOffset(34, 50),
+						Visible = notMax,
+						Text = "▸",
+						TextColor3 = Theme.WHITE,
+						TextSize = 40,
+						Stroke = 3,
+					}),
+					Widgets.text(scope, {
+						Name = "To",
+						LayoutOrder = 3,
+						Size = UDim2.fromOffset(150, 58),
+						Visible = notMax,
+						Font = Theme.TITLE_FONT,
+						Text = scope:Computed(function(use)
+							return `x{use(nextStep).to}`
+						end),
+						TextColor3 = Theme.YOLK,
+						TextScaled = true,
+						MaxTextSize = 54,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						Stroke = 3.5,
+					}),
+				},
+			}),
+			Widgets.text(scope, {
+				Name = "Note",
+				Position = UDim2.fromOffset(140, 114),
+				Size = UDim2.new(1, -320, 0, 22),
+				Font = Theme.SMALL_FONT,
+				Text = `Kept forever  •  up to x{Shop.MAX_STAMINA_MULTIPLIER}`,
+				TextColor3 = Theme.WHITE,
+				TextSize = 15,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Stroke = 1.5,
+			}),
+
+			Widgets.button(scope, {
+				Name = "Buy",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -18, 0.5, 0),
+				Size = UDim2.fromOffset(150, 58),
+				Visible = notMax,
+				Text = robuxText(
+					scope,
+					scope:Computed(function(use)
+						return "StaminaDoubling" .. use(nextStep).to
+					end),
+					scope:Computed(function(use)
+						return use(nextStep).robux
+					end)
+				),
+				TextSize = 26,
+				OnActivated = function()
+					buy(Shop.STAMINA_DOUBLING_ID)
+				end,
+			}),
+			scope:New("Frame")({
+				Name = "Maxed",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -18, 0.5, 0),
+				Size = UDim2.fromOffset(150, 54),
+				Visible = isMax,
+				BackgroundColor3 = Theme.GREEN,
+				[Children] = {
+					Widgets.corner(scope, 14),
+					Widgets.stroke(scope, 3),
+					Widgets.text(scope, {
+						Text = "MAXED ✔",
+						TextColor3 = Theme.WHITE,
+						TextSize = 24,
+						Stroke = 2.5,
+					}),
+				},
+			}),
+		},
+	})
+end
+
+-- Icons for pass seals, by pass id.
+local PASS_ICONS = { DoubleCoins = "💰" }
+
 local function passCard(scope, pass)
 	local accent = Theme.Sections.Passes
 	local owned = scope:Computed(function(use)
 		return use(UiState.ownedPasses)[pass.id] == true
 	end)
-	local icon = if pass.id == "DoubleStamina" then "⚡" else "💰"
+	local icon = PASS_ICONS[pass.id] or "🎟️"
 
 	return scope:New("Frame")({
 		Name = pass.id,
@@ -537,7 +714,7 @@ function ShopPanel.build(scope)
 	local contents = {
 		Featured = penCard(scope),
 		Luck = productGrid(scope, "Luck", Theme.Sections.Luck, 2),
-		Stamina = productGrid(scope, "Stamina", Theme.Sections.Stamina, 3),
+		Stamina = { doublingCard(scope), productGrid(scope, "Stamina", Theme.Sections.Stamina, 3, 3) },
 		Coins = productGrid(scope, "Coins", Theme.Sections.Coins, 3),
 		Passes = passList,
 	}

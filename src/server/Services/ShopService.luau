@@ -64,6 +64,7 @@ local function stateOf(player: Player)
 	return {
 		coins = if data then data.Coins else 0,
 		penLevel = if data then data.PenLevel else 1,
+		staminaMultiplier = if data then data.StaminaMultiplier else 1,
 		passes = passList(player),
 	}
 end
@@ -127,6 +128,11 @@ local function grant(player: Player, reward: Shop.Grant): string
 		data.PenLevel = math.min(Shop.MAX_PEN_LEVEL, data.PenLevel + 1)
 		pushState(player)
 		return `Pen upgraded to level {data.PenLevel}! Room for {Shop.penCapacity(data.PenLevel)} pets.`
+	elseif reward.kind == "StaminaDoubling" then
+		data.StaminaMultiplier = math.min(Shop.MAX_STAMINA_MULTIPLIER, data.StaminaMultiplier * 2)
+		RunwayService.RefreshMaxStamina(player)
+		pushState(player)
+		return `Max Stamina doubled! Now x{data.StaminaMultiplier}.`
 	end
 	error(`unknown grant {reward.kind}`)
 end
@@ -137,14 +143,7 @@ local function grantPass(player: Player, passId: string)
 		return
 	end
 	owned[passId] = true
-	if passId == "DoubleStamina" then
-		RunwayService.SetStaminaPass(player, true)
-	end
 	pushState(player)
-end
-
-local function itemIdOf(product: Shop.Product?): string
-	return if product then product.id else Shop.PEN_UPGRADE_ID
 end
 
 -- Roblox calls this for every developer product purchase, possibly more than once, possibly after the player
@@ -154,8 +153,8 @@ local function processReceipt(receipt)
 	if player == nil then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local product, penLevel = Shop.findByProductId(receipt.ProductId)
-	if product == nil and penLevel == nil then
+	local reward, itemId = Shop.rewardForProductId(receipt.ProductId)
+	if reward == nil or itemId == nil then
 		warn(`[ShopService] no shop item for developer product {receipt.ProductId}`)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
@@ -170,17 +169,16 @@ local function processReceipt(receipt)
 	end
 	local purchaseId = receipt.PurchaseId
 	if table.find(data.PurchaseIds, purchaseId) == nil then
-		local reward: Shop.Grant = if product then product.grant else { kind = "PenLevel" }
 		local ok, result = pcall(grant, player, reward)
 		if not ok then
-			warn(`[ShopService] could not grant {itemIdOf(product)}: {result}`)
+			warn(`[ShopService] could not grant {itemId}: {result}`)
 			return Enum.ProductPurchaseDecision.NotProcessedYet
 		end
 		while #data.PurchaseIds >= PURCHASE_ID_MEMORY do
 			table.remove(data.PurchaseIds, 1)
 		end
 		table.insert(data.PurchaseIds, purchaseId)
-		sendResult(player, itemIdOf(product), true, result)
+		sendResult(player, itemId, true, result)
 	end
 
 	local saved = DataService.SaveAndWait(player, function(lastSaved)
@@ -228,6 +226,13 @@ local function onRequestPurchase(player: Player, itemId: unknown)
 			return
 		end
 		productId, reward = next.productId, { kind = "PenLevel" }
+	elseif itemId == Shop.STAMINA_DOUBLING_ID then
+		local next = Shop.StaminaDoublings[data.StaminaMultiplier * 2]
+		if next == nil then
+			sendResult(player, itemId, false, "Your Max Stamina is already doubled all the way!")
+			return
+		end
+		productId, reward = next.productId, { kind = "StaminaDoubling" }
 	else
 		local product = Shop.ProductsById[itemId]
 		if product == nil then

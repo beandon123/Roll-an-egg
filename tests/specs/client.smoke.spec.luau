@@ -556,14 +556,38 @@ return function(harness)
 			expect.equal(pen.Current.Level.Text, "LEVEL 3")
 			expect.equal(buttonText(pen.Buttons.BuyCoins), "40K")
 
-			session:fromServer("PlayerStateUpdated", { coins = 0, penLevel = 9, passes = { "DoubleStamina" } })
+			session:fromServer("PlayerStateUpdated", { coins = 0, penLevel = 9, passes = { "DoubleCoins" } })
 			expect.equal(root.Wallet.Coins.Value.Text, "0")
 			expect.equal(pen.Headline.Text, "YOUR PEN IS MAXED!")
 			expect.equal(pen.Buttons.Visible, false)
 			expect.equal(pen.Next.Visible, false)
-			local pass = shopBody(parts).Passes.List.DoubleStamina
+			local pass = shopBody(parts).Passes.List.DoubleCoins
 			expect.equal(pass.Owned.Visible, true)
 			expect.equal(pass.Buy.Visible, false)
+		end)
+
+		it("shows the stamina doubling, from x1 up to maxed out at x1024", function()
+			local session, parts = startClient()
+			local card = shopBody(parts).Stamina.StaminaDoubling
+			local robux = utf8.char(0xE002)
+			expect.equal(card.Multipliers.From.Text, "x1")
+			expect.equal(card.Multipliers.To.Text, "x2")
+			expect.equal(buttonText(card.Buy), robux .. " 49")
+			session:fire(card.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "StaminaDoubling")
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 32 })
+			expect.equal(card.Multipliers.From.Text, "x32")
+			expect.equal(card.Multipliers.To.Text, "x64")
+			expect.equal(buttonText(card.Buy), robux .. " 199")
+			expect.equal(card.Maxed.Visible, false)
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 1024 })
+			expect.equal(card.Title.Text, "STAMINA MAXED OUT!")
+			expect.equal(card.Multipliers.From.Text, "x1024")
+			expect.equal(card.Multipliers.To.Visible, false)
+			expect.equal(card.Buy.Visible, false)
+			expect.equal(card.Maxed.Visible, true)
 		end)
 
 		it("shows how each purchase went", function()

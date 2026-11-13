@@ -22,6 +22,8 @@ local TEMPLATE = {
 	Upgrades = {},
 	-- Max Stamina bought in the shop, added to the base (see Config/Shop).
 	MaxStaminaBonus = 0,
+	-- "Double your Max Stamina" purchases: 1, 2, 4 ... up to Shop.MAX_STAMINA_MULTIPLIER.
+	StaminaMultiplier = 1,
 	-- Pet pen level: 1 holds 10 pets, each level adds 1 (see Config/Shop).
 	PenLevel = 1,
 	-- settingKey -> value (see Config/Settings). Missing keys use the default.

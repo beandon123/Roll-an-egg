@@ -35,8 +35,6 @@ end)
 -- Players whose data has loaded, by UserId (the rules know riders only by that number).
 local playersByUserId: { [number]: Player } = {}
 local lastLateralAt: { [Player]: number } = {}
--- Players who own the x2 Max Stamina pass (ShopService checks ownership and tells this service).
-local staminaPass: { [Player]: boolean } = {}
 
 -- While a player rides, their character is held in place on their own device, so the server's copy of it stays
 -- where they got on. Streaming would then load the map around the wrong spot. So every player gets an invisible
@@ -81,11 +79,13 @@ local function updateFocusParts(time: number)
 	end
 end
 
--- Max Stamina from what the player owns: the base, plus Max Stamina bought in the shop, doubled by the pass.
+-- Max Stamina from what the player owns: the base plus Max Stamina bought in the shop, times their doublings.
 local function maxStaminaOf(player: Player): number
 	local data = DataService.GetData(player)
-	local bonus = if data then data.MaxStaminaBonus else 0
-	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, bonus, staminaPass[player] == true)
+	if data == nil then
+		return Tuning.BASE_MAX_STAMINA
+	end
+	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, data.MaxStaminaBonus, data.StaminaMultiplier)
 end
 
 local function killCharacter(player: Player)
@@ -273,7 +273,6 @@ local function onPlayerRemoving(player: Player)
 	sim:removeRider(player.UserId, now())
 	playersByUserId[player.UserId] = nil
 	lastLateralAt[player] = nil
-	staminaPass[player] = nil
 	local part = focusParts[player]
 	if part then
 		focusParts[player] = nil
@@ -287,12 +286,6 @@ end
 -- Works a player's Max Stamina out again from what they own. Call after anything that changes it.
 function RunwayService.RefreshMaxStamina(player: Player)
 	sim:setMaxStamina(player.UserId, maxStaminaOf(player), now())
-end
-
--- Records whether a player owns the x2 Max Stamina pass, and applies it.
-function RunwayService.SetStaminaPass(player: Player, owned: boolean)
-	staminaPass[player] = owned
-	RunwayService.RefreshMaxStamina(player)
 end
 
 -- Server luck for every egg dropped from now on (1 = normal). See Shared/LuckBoost.

@@ -43,6 +43,7 @@ Original theme, art, and creatures.
     - [ ] Anyone can walk or ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
           (proposed, from the owner's reference screenshots)
+    - [ ] Gaps in the walls where players on foot can fall off (decided); each gap is marked by a red strip
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with coins (decided)
@@ -119,7 +120,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
     - [ ] Bounces by rarity (decided for now): Common/Uncommon 1, Rare/Epic 2, Legendary/Mythic/Secret 3, Eternal 4
     - [ ] An egg with bounces left keeps rolling, and anyone can jump on (claim progress starts from 0)
 - [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost
-- [ ] Death (lethal obstacle, riding over the end cliff, resetting; the side walls stop falls off the edge): cartoon splat,
+- [ ] Death (lethal obstacle, falling off the runway's side edge through a gap in the walls, riding over the end cliff,
+      resetting): cartoon splat,
       respawn at your plot; current ride lost; no coins or items lost
 - [ ] Egg-to-egg hopping: progress resets on the new egg; landing within 1 s of leaving the last one refunds 10% stamina
       and builds a hop-combo counter (the egg you left still loses a bounce)
@@ -242,8 +244,10 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
       (an extra Titan Egg for the server, limited frequency), coin packs
     - [ ] Server Luck: x2 and x4 for 15 minutes; every rarity above Common becomes that many times as likely; boosts
           stack by adding time, and the strongest running one applies (proposed)
-    - [ ] Max Stamina packs (+500 / +5K / +25K, permanent) and an x2 Max Stamina game pass (proposed, asked for by
-          the owner; amounts and prices set during economy tuning)
+    - [ ] Max Stamina packs (+500 / +5K / +25K, permanent) (proposed, asked for by the owner; amounts and prices set
+          during economy tuning)
+    - [ ] Double Your Stamina (decided): a repeatable product; each purchase doubles Max Stamina, starting at x2, up to
+          x1024 (ten doublings; the owner said "1096x", read as the nearest doubling); one developer product per step
 - [ ] Shop UI ("Coop Shop"): sections Featured (next pen level, Robux or coins), Luck, Stamina, Coins, Passes;
       original look (eggshell cream, yolk-yellow buttons, speckled cards)
 - [ ] Settings: Music / Effects / Nature volume, show others' pets, show your pets, reduce camera shake, vibration;

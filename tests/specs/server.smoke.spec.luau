@@ -380,12 +380,36 @@ return function(harness)
 			local session = startServer()
 			local map = session:service("Workspace").Map
 			local width = shared(session).Runway.WIDTH
-			for _, zoneName in { "Forest", "Volcano" } do
+			local runway = shared(session).Runway
+			local slope = math.cos(math.atan(runway.SLOPE))
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano" } do
 				local zone = map[zoneName]
-				local left, right = zone.WallLeft.CFrame.Position, zone.WallRight.CFrame.Position
+				local left, right = zone.WallLeft1.CFrame.Position, zone.WallRight1.CFrame.Position
 				expect.truthy(left.X > width / 2, zoneName .. " left wall")
 				expect.truthy(right.X < -width / 2, zoneName .. " right wall")
 				expect.truthy(left.Y > zone.Ground.CFrame.Position.Y, zoneName .. " wall stands up")
+
+				-- No wall covers a gap, and every gap has a warning strip along the runway's edge.
+				local gaps = runway.wallGaps(zoneId)
+				local strips, wallLength = 0, 0
+				for _, part in zone:GetChildren() do
+					local side = if part.Name:match("Left") then 1 elseif part.Name:match("Right") then -1 else nil
+					if part.Name:match("^Wall") then
+						local center, half = part.CFrame.Position.Z, part.Size.Z * slope / 2
+						wallLength += half * 2
+						for _, gap in gaps do
+							if gap.side == side then
+								-- Half a stud of slack: a sloped wall's centre sits a little down-runway of its footprint.
+								local overlaps = center + half > gap.startZ + 0.5 and center - half < gap.endZ - 0.5
+								expect.falsy(overlaps, `{zoneName} {part.Name} covers a gap`)
+							end
+						end
+					elseif part.Name:match("^GapWarning") then
+						strips += 1
+					end
+				end
+				expect.equal(strips, #gaps, zoneName .. " warning strips")
+				expect.near(wallLength, 2 * runway.ZONE_LENGTH - #gaps * runway.WALL_GAP_LENGTH, 1e-3)
 			end
 
 			local strip = map.StartZone.Strip
@@ -561,16 +585,11 @@ return function(harness)
 			local service = session:require(session:service("ServerScriptService").Server.Services.ShopService)
 			expect.equal(service.OwnsPass(player, "DoubleCoins"), true, "owned before joining")
 
-			-- A pass with no ID yet, bought in Studio: x2 Max Stamina.
-			session:fromClient("RequestPurchase", player, "DoubleStamina")
-			session:heartbeat(1 / 60)
-			expect.equal(service.OwnsPass(player, "DoubleStamina"), true)
-			expect.equal(session:lastSent("StaminaChanged", player).args[4], 200)
 			local passes = session:lastSent("PlayerStateUpdated", player).args[1].passes
-			expect.equal(table.concat(passes, ","), "DoubleCoins,DoubleStamina")
-			task.wait(SHOP_COOLDOWN)
-			session:fromClient("RequestPurchase", player, "DoubleStamina")
+			expect.equal(table.concat(passes, ","), "DoubleCoins")
+			session:fromClient("RequestPurchase", player, "DoubleCoins")
 			expect.equal(purchaseResult(session, player)[3], "You already own this!")
+			expect.equal(#session.prompts, 0)
 
 			-- Bought through Roblox's prompt during the game.
 			local buyer = session:addPlayer(2, "Buyer")
@@ -578,6 +597,60 @@ return function(harness)
 			expect.equal(service.OwnsPass(buyer, "DoubleCoins"), false)
 			session:fire(session:service("MarketplaceService"), "PromptGamePassPurchaseFinished", buyer, 2222, true)
 			expect.equal(service.OwnsPass(buyer, "DoubleCoins"), true)
+		end)
+
+		it("doubles Max Stamina with each purchase, up to x1024", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			session:heartbeat(1 / 60)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 2)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 200)
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].staminaMultiplier, 2)
+			expect.truthy(purchaseResult(session, player)[3]:match("^Max Stamina doubled! Now x2%."), "message")
+
+			-- Max Stamina bought in packs is doubled too.
+			dataOf(session, 1).MaxStaminaBonus = 400
+			dataOf(session, 1).StaminaMultiplier = 512
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			session:heartbeat(1 / 60)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 1024)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 500 * 1024)
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(purchaseResult(session, player)[2], false)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 1024)
+		end)
+
+		it("sells each stamina doubling as its own developer product", function()
+			local session = startServer()
+			local shop = shopConfig(session)
+			shop.StaminaDoublings[2].productId = 4002
+			shop.StaminaDoublings[4].productId = 4004
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(session.prompts[1].id, 4002)
+			local granted = roblox.Enum.ProductPurchaseDecision.PurchaseGranted
+			expect.equal(processReceipt(session, { PlayerId = 1, ProductId = 4002, PurchaseId = "d1" }), granted)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 2)
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(session.prompts[2].id, 4004, "the next step's product")
+		end)
+
+		it("starts players at the stamina they have doubled to", function()
+			local session = startServer()
+			session.saved.Player_1 = { StaminaMultiplier = 8, MaxStaminaBonus = 50 }
+			local player = session:addPlayer(1, "Returning")
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 150 * 8)
 		end)
 
 		it("ignores requests for things that are not for sale", function()

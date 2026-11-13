@@ -165,6 +165,7 @@ return function(harness)
 				expect.truthy(pass.robux > 0, pass.id .. " price")
 			end
 			expect.falsy(seen[Shop.PEN_UPGRADE_ID], "the pen upgrade id is not used by anything else")
+			expect.falsy(seen[Shop.STAMINA_DOUBLING_ID], "the stamina doubling id is not used by anything else")
 		end)
 
 		it("lists each section's products in order, bigger packs costing more", function()
@@ -194,16 +195,50 @@ return function(harness)
 			expect.equal(Shop.PenLevels[Shop.MAX_PEN_LEVEL + 1], nil)
 		end)
 
-		it("never matches the unset product ID 0", function()
-			local product, penLevel = Shop.findByProductId(0)
-			expect.equal(product, nil)
-			expect.equal(penLevel, nil)
+		it("doubles Max Stamina one step at a time, from x2 up to x1024", function()
+			expect.equal(Shop.MAX_STAMINA_MULTIPLIER, 1024)
+			local steps = 0
+			local to = 2
+			while to <= Shop.MAX_STAMINA_MULTIPLIER do
+				local doubling = Shop.StaminaDoublings[to]
+				expect.truthy(doubling, "step to x" .. to)
+				expect.equal(doubling.from, to / 2)
+				expect.equal(doubling.to, to)
+				if to > 2 then
+					expect.truthy(doubling.robux > Shop.StaminaDoublings[to / 2].robux, "price rises at x" .. to)
+				end
+				steps += 1
+				to *= 2
+			end
+			expect.equal(steps, 10)
+			expect.equal(Shop.StaminaDoublings[1], nil)
+			expect.equal(Shop.StaminaDoublings[2048], nil)
 		end)
 
-		it("works out Max Stamina from the base, the bonus bought, and the pass", function()
-			expect.equal(Shop.maxStamina(100, 0, false), 100)
-			expect.equal(Shop.maxStamina(100, 500, false), 600)
-			expect.equal(Shop.maxStamina(100, 500, true), 1200)
+		it("knows what each developer product ID pays for, and never matches the unset ID 0", function()
+			expect.equal(Shop.rewardForProductId(0), nil)
+			Shop.StaminaDoublings[8].productId = 555
+			Shop.PenLevels[3].productId = 556
+			Shop.ProductsById.Coins2.productId = 557
+			local reward, itemId = Shop.rewardForProductId(555)
+			expect.equal(reward.kind, "StaminaDoubling")
+			expect.equal(itemId, Shop.STAMINA_DOUBLING_ID)
+			reward, itemId = Shop.rewardForProductId(556)
+			expect.equal(reward.kind, "PenLevel")
+			expect.equal(itemId, Shop.PEN_UPGRADE_ID)
+			reward, itemId = Shop.rewardForProductId(557)
+			expect.equal(reward.amount, 50000)
+			expect.equal(itemId, "Coins2")
+			expect.equal(Shop.rewardForProductId(999), nil)
+			Shop.StaminaDoublings[8].productId = 0
+			Shop.PenLevels[3].productId = 0
+			Shop.ProductsById.Coins2.productId = 0
+		end)
+
+		it("works out Max Stamina from the base, the bonus bought, and the doublings", function()
+			expect.equal(Shop.maxStamina(100, 0, 1), 100)
+			expect.equal(Shop.maxStamina(100, 500, 1), 600)
+			expect.equal(Shop.maxStamina(100, 500, 32), 19200)
 		end)
 	end)
 

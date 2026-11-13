@@ -24,6 +24,9 @@ local function applyState(state)
 	if typeof(state.penLevel) == "number" then
 		UiState.penLevel:set(state.penLevel)
 	end
+	if typeof(state.staminaMultiplier) == "number" then
+		UiState.staminaMultiplier:set(state.staminaMultiplier)
+	end
 	if typeof(state.passes) == "table" then
 		local owned = {}
 		for _, passId in state.passes do
@@ -50,6 +53,14 @@ local function loadPrices()
 			table.insert(
 				wanted,
 				{ key = "PenLevel" .. level, id = penLevel.productId, infoType = Enum.InfoType.Product }
+			)
+		end
+	end
+	for to, doubling in Shop.StaminaDoublings do
+		if doubling.productId ~= 0 then
+			table.insert(
+				wanted,
+				{ key = "StaminaDoubling" .. to, id = doubling.productId, infoType = Enum.InfoType.Product }
 			)
 		end
 	end
