@@ -157,9 +157,11 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] All pets rideable, built on ~7 shared skeletons (four-legged, two-legged, winged, low-slung, many-legged,
       floating/swimming for Ocean pets, special) so animations are reused
 - [ ] Sell pets for coins
-- [ ] Pet limit (decided): a player can own at most 100 pets in total, pen and inventory together
-    - [ ] A nest that finishes hatching while you own 100 pets keeps the pet waiting in the nest until you sell one
-          to make room (proposed)
+- [ ] Pet limit (decided): a player can own at most 100 pets in total, pen and inventory together;
+      the limit is fixed and can't be upgraded
+    - [ ] At 100 pets, eggs can still be placed in nests, but they won't hatch: the game says "You have too many pets"
+          (decided)
+    - [ ] The egg stays in its nest and hatches once you sell a pet to make room (proposed)
 
 Draft roster (edit freely; Robux-egg pets designed during the art phase):
 
