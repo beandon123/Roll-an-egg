@@ -8,6 +8,8 @@ return function(harness)
 	local Zones = harness.load("src/shared/Config/Zones")
 	local Runway = harness.load("src/shared/Runway")
 	local EggSpec = harness.load("src/shared/EggSpec")
+	local Trails = harness.load("src/shared/Config/Trails")
+	local Economy = harness.load("src/shared/Config/Economy")
 
 	describe("Rarities", function()
 		it("has info for every rarity, in order", function()
@@ -137,6 +139,52 @@ return function(harness)
 					expect.truthy(rideDistance < room * 0.95, zone.name .. " " .. rarity)
 				end
 			end
+		end)
+	end)
+	describe("Trails", function()
+		it("lists each trail once, each costing more and boosting more than the last", function()
+			expect.truthy(#Trails.List >= 5, "trail count")
+			local previous = nil
+			for _, trail in Trails.List do
+				expect.equal(Trails.ById[trail.id], trail, trail.id)
+				expect.truthy(trail.name:match("Trail$"), trail.id .. " name")
+				expect.truthy(#trail.colors >= 1 and #trail.colors <= 20, trail.id .. " colors")
+				for _, color in trail.colors do
+					for channel = 1, 3 do
+						expect.truthy(color[channel] >= 0 and color[channel] <= 255, trail.id .. " color")
+					end
+				end
+				if previous then
+					expect.truthy(trail.price > previous.price, trail.id .. " price")
+					expect.truthy(trail.stamina > previous.stamina, trail.id .. " stamina")
+				else
+					expect.truthy(trail.stamina > 1, "the first trail boosts stamina")
+				end
+				previous = trail
+			end
+			local count = 0
+			for _ in Trails.ById do
+				count += 1
+			end
+			expect.equal(count, #Trails.List, "unique ids")
+		end)
+	end)
+
+	describe("Economy", function()
+		it("prices every egg at half its stamina requirement", function()
+			for _, zone in Zones.List do
+				for rarity, requirement in zone.stamina do
+					expect.equal(Economy.eggSellValue(zone.id, rarity), math.floor(requirement / 2))
+				end
+			end
+			expect.equal(Economy.eggSellValue(1, "Common"), 25)
+			expect.falsy(Economy.eggSellValue(1, "Mythic"))
+			expect.falsy(Economy.eggSellValue(6, "Common"))
+		end)
+
+		it("makes the first trail cost a handful of Forest eggs", function()
+			local commons = Trails.List[1].price / Economy.eggSellValue(1, "Common")
+			expect.truthy(commons >= 2 and commons <= 10, "Forest Commons for the first trail: " .. commons)
 		end)
 	end)
 end

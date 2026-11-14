@@ -18,8 +18,10 @@ Runway.BASE_Y = 10
 -- Studs of drop per stud travelled; the runway is a gentle downhill.
 Runway.SLOPE = 0.04
 
-Runway.HUB_LENGTH = 220
-Runway.HUB_WIDTH = 240
+-- The walkable hub behind the start of the runway (x from -HUB_WIDTH / 2 to +HUB_WIDTH / 2, z from -HUB_LENGTH
+-- to 0). Everything inside it is laid out in Shared/HubLayout.
+Runway.HUB_LENGTH = 260
+Runway.HUB_WIDTH = 300
 
 -- Height of the walking surface at a given distance down the runway.
 function Runway.surfaceY(z: number): number

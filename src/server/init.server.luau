@@ -9,6 +9,7 @@ local Services = script.Services
 local ORDER = {
 	"DataService",
 	"RunwayService",
+	"ShopService",
 	"MapService",
 	"DevService",
 }

@@ -5,19 +5,25 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 ## What works so far
 
-The first playable slice: **the runway and riding**.
+The first playable slice: **the runway and riding**, plus **the hub** with its shops.
 
-- A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
+- A placeholder map: five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs, and the hub behind the
+  start of the runway: the START ZONE pad, the Trails stall, the Sell stall, the fuse machine, eight fenced pens,
+  and a ring of low-poly mountains round it all (the only way out is the runway).
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed, color and stamina requirement.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
 - The 3-minute runway cycle: a warning, then a 10-second closure that clears every egg without a rider.
 - Claimed eggs are saved to the player's data (ProfileStore).
-- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
+- **Sell stall**: sell eggs you don't want for coins (half the egg's stamina requirement each).
+- **Trails shop**: buy trails with coins. The equipped trail streams behind you and multiplies your Max Stamina.
+- **Fuse machine**: its panel explains it (3 of the same pet -> that pet's egg); fusing arrives with pets.
+- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter, and the station panels.
 
-Everything visual is a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
-pets and mounts, coins and upgrades, teleport pads, server events, the tutorial, and all final art and sound.
+Everything visual is a placeholder made of plain parts. Not built yet: obstacles, duels, pen ownership and nests,
+hatching, pets and mounts, fusing, selling pets, upgrades, teleport pads, server events, the tutorial, and all final
+art and sound.
 
 ## Try it in Roblox Studio
 
@@ -46,14 +52,16 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Get on an egg | Jump (Space) next to it | Jump button | A |
 | Steer | A / D | Thumbstick | Left stick |
 | Hop off | Jump again | Jump button | A |
+| Use a stall or the fuse machine | E next to it | Tap its prompt | X |
 
 ### Studio test tools
 
 In Studio a small panel appears on the right of the screen. Its buttons only work in Studio, never in a live game:
 
 - **Max stamina x5**: lets you ride eggs in deeper zones before upgrades exist.
-- **Reset stamina**: back to 100.
+- **Reset stamina**: back to normal (100, times your trail's boost).
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
+- **+10K coins**: coins to try the Trails shop with.
 
 ## Project layout
 
@@ -61,13 +69,15 @@ In Studio a small panel appears on the right of the screen. Its buttons only wor
 default.project.json   How the folders below map into the Roblox place (read by Rojo)
 docs/REQUEST.md        The agreed game design
 src/shared/            ReplicatedStorage.Shared: config and math used by both server and client
-  Config/                Zones, rarities, tuning numbers. Change game balance here.
+  Config/                Zones, rarities, tuning numbers, trails, sell prices. Change game balance here.
+  HubLayout.luau         Where everything at the hub is (stations, pens, mountains). Change the hub's layout here.
 src/server/            ServerScriptService.Server
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
+  Map/                   Builds the placeholder hub, mountains, and shared part helpers
   Services/              Connect the rules to players, saved data, the map, and remotes
 src/client/            StarterPlayerScripts.Client
-  Controllers/           Egg drawing, riding, HUD updates
-  Ui/                    The Fusion HUD
+  Controllers/           Egg drawing, riding, the hub stations, HUD updates
+  Ui/                    The Fusion HUD and the station panels
 tests/                 Automated tests (see below)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```
@@ -89,7 +99,7 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures).
+  stamina, bounces, closures, the hub layout, buying trails, selling eggs).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
 

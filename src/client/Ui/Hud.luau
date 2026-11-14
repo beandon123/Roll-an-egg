@@ -9,6 +9,7 @@ local Load = require(script.Parent.Parent.Load)
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
 
+local StationPanels = require(script.Parent.StationPanels)
 local UiState = require(script.Parent.UiState)
 
 local Fusion = UiState.Fusion
@@ -117,7 +118,7 @@ local function devPanel(scope)
 		Name = "StudioTestPanel",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -10, 0.4, 0),
-		Size = UDim2.fromOffset(170, 150),
+		Size = UDim2.fromOffset(170, 190),
 		BackgroundColor3 = PANEL,
 		BackgroundTransparency = 0.2,
 		[Children] = {
@@ -144,6 +145,7 @@ local function devPanel(scope)
 			devButton(scope, "Max stamina x5", "StaminaUp", 1),
 			devButton(scope, "Reset stamina", "StaminaReset", 2),
 			devButton(scope, "Drop best egg here", "DropBestEgg", 3),
+			devButton(scope, "+10K coins", "AddCoins", 4),
 		},
 	})
 end
@@ -337,6 +339,9 @@ function Hud.mount(playerGui: Instance)
 							}),
 						},
 					}),
+
+					-- The Trails shop, Sell stall, and fuse machine panels (hidden until a station is used).
+					StationPanels.create(scope),
 
 					if RunService:IsStudio() then devPanel(scope) else nil,
 				},

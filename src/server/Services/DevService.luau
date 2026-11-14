@@ -11,9 +11,13 @@ local Net = require(Shared.Net)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
+local DataService = require(script.Parent.DataService)
 local RunwayService = require(script.Parent.RunwayService)
+local ShopService = require(script.Parent.ShopService)
+local Stats = require(script.Parent.Parent.Logic.Stats)
 
 local MAX_TEST_STAMINA = 1e7
+local TEST_COINS = 10000
 
 local DevService = {}
 
@@ -23,8 +27,14 @@ local commands: { [string]: (Player) -> () } = {
 		local current = RunwayService.GetMaxStamina(player)
 		RunwayService.SetMaxStamina(player, math.min(MAX_TEST_STAMINA, current * 5))
 	end,
+	-- Back to what the player's data gives them (base stamina times their equipped trail).
 	StaminaReset = function(player)
-		RunwayService.SetMaxStamina(player, Tuning.BASE_MAX_STAMINA)
+		local data = DataService.GetData(player)
+		RunwayService.SetMaxStamina(player, if data then Stats.maxStamina(data) else Tuning.BASE_MAX_STAMINA)
+	end,
+	-- Coins to try the Trails shop with.
+	AddCoins = function(player)
+		ShopService.AddCoins(player, TEST_COINS)
 	end,
 	-- Drops the rarest egg of the zone the player is standing in.
 	DropBestEgg = function(player)

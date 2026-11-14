@@ -113,6 +113,7 @@ fakeEvent("BaseRemoteEvent", "OnServerEvent")
 fakeEvent("BaseRemoteEvent", "OnClientEvent")
 fakeEvent("UserInputService", "JumpRequest")
 fakeEvent("GuiButton", "Activated")
+fakeEvent("ProximityPromptService", "PromptTriggered")
 fakeEvent("Instance", "Destroying")
 fakeEvent("Instance", "AncestryChanged")
 fakeEvent("Instance", "ChildAdded")
@@ -277,6 +278,10 @@ function Session:environment(scriptInstance)
 		UDim2 = roblox.UDim2,
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }

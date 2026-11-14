@@ -12,6 +12,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local CycleClock = require(Shared.CycleClock)
+local HubLayout = require(Shared.HubLayout)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
@@ -19,7 +20,11 @@ local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
 local DataService = require(script.Parent.DataService)
-local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
+local Logic = script.Parent.Parent.Logic
+local Inventory = require(Logic.Inventory)
+local RunwaySim = require(Logic.RunwaySim)
+local Shop = require(Logic.Shop)
+local Stats = require(Logic.Stats)
 
 -- Fastest a client may report steering; extra reports are dropped.
 local MIN_LATERAL_INTERVAL = 1 / 30
@@ -55,7 +60,7 @@ local function createFocus(player: Player)
 	part.CanTouch = false
 	part.Transparency = 1
 	part.Size = Vector3.one
-	part.Position = Vector3.new(0, Runway.BASE_Y, -Runway.HUB_LENGTH / 2)
+	part.Position = Vector3.new(HubLayout.SPAWN.x, Runway.BASE_Y, HubLayout.SPAWN.z)
 	part.Parent = focusFolder
 	focusParts[player] = part
 	player.ReplicationFocus = part
@@ -98,7 +103,7 @@ local function grantEgg(player: Player, zone: number, rarity: string)
 		claimedAt = os.time(),
 	})
 	data.Stats.EggsClaimed += 1
-	Net.InventoryUpdated:FireClient(player, #data.Eggs)
+	Net.InventoryUpdated:FireClient(player, Inventory.eggGroups(data.Eggs))
 end
 
 -- Turns what the rules say happened into remotes and saved data.
@@ -225,8 +230,9 @@ local function onGetSnapshot(player: Player)
 			}
 			else nil,
 		agility = if rider then rider.agility else Tuning.BASE_AGILITY,
-		eggCount = if data then #data.Eggs else 0,
+		inventory = if data then Inventory.eggGroups(data.Eggs) else {},
 		coins = if data then data.Coins else 0,
+		trails = if data then { owned = Shop.ownedTrails(data), equipped = data.Trails.Equipped } else nil,
 		serverTime = time,
 	}
 end
@@ -243,10 +249,10 @@ local function hookCharacter(player: Player, character: Model)
 	end
 end
 
-local function onDataLoaded(player: Player, _data)
+local function onDataLoaded(player: Player, data)
 	playersByUserId[player.UserId] = player
 	createFocus(player)
-	sim:addRider(player.UserId, Tuning.BASE_MAX_STAMINA, Tuning.BASE_AGILITY, now())
+	sim:addRider(player.UserId, Stats.maxStamina(data), Tuning.BASE_AGILITY, now())
 
 	player.CharacterAdded:Connect(function(character)
 		hookCharacter(player, character)
@@ -273,7 +279,7 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other services
 
--- Changes a player's Max Stamina (upgrades will call this; for now only the Studio test panel does).
+-- Changes a player's Max Stamina (ShopService calls this when a trail is equipped; so does the Studio test panel).
 function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
 end

@@ -24,8 +24,14 @@ local TEMPLATE = {
 	Eggs = {},
 	-- Hatched pets (filled in once hatching is built)
 	Pets = {},
+	-- Trails from the Trails shop. Owned: trailId -> true. Equipped: a trailId, or "" for none.
+	Trails = {
+		Owned = {},
+		Equipped = "",
+	},
 	Stats = {
 		EggsClaimed = 0,
+		EggsSold = 0,
 	},
 }
 

@@ -18,7 +18,9 @@ local EVENTS = {
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
 	"RideEnded", -- (reason, { eggId, zone, rarity })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
-	"InventoryUpdated", -- (eggCount)
+	"InventoryUpdated", -- ({ { zone, rarity, count } }): the player's unhatched eggs, grouped by kind
+	"CoinsChanged", -- (coins)
+	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
@@ -31,8 +33,12 @@ local UNRELIABLE_EVENTS = {
 	"EggLateral", -- server -> everyone (eggId, x)
 }
 
+-- Player -> server requests that need an answer.
 local FUNCTIONS = {
-	"GetSnapshot", -- player -> server: () -> { eggs }
+	"GetSnapshot", -- () -> { eggs, stamina, agility, inventory, coins, trails, serverTime }
+	"BuyTrail", -- (trailId) -> (ok, result): see Logic/Shop's TrailResult
+	"EquipTrail", -- (trailId) -> (ok, result)
+	"SellEggs", -- (zone, rarity, count) -> (sold, coins)
 }
 
 local Net = {}

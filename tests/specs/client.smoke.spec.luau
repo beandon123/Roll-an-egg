@@ -34,8 +34,9 @@ return function(harness)
 				eggs = eggs or {},
 				stamina = { value = 100, time = session.clock, rate = 12, max = 100 },
 				agility = 14,
-				eggCount = 2,
+				inventory = { { zone = 1, rarity = "Common", count = 2 } },
 				coins = 0,
+				trails = { owned = {}, equipped = "" },
 			}
 		end
 
@@ -322,7 +323,7 @@ return function(harness)
 
 			session:fromServer("RideEnded", "Claimed", { eggId = 1, zone = 1, rarity = "Common" })
 			session:fromServer("EggRemoved", 1, "Claimed", LOCAL_USER_ID)
-			session:fromServer("InventoryUpdated", 3)
+			session:fromServer("InventoryUpdated", { { zone = 1, rarity = "Common", count = 3 } })
 			session:renderFrame(1 / 60)
 
 			expect.equal(parts.root.Anchored, false)
@@ -382,16 +383,173 @@ return function(harness)
 		end)
 	end)
 
+	describe("Client: hub stations", function()
+		local function layoutOf(session)
+			return session:require(session:service("ReplicatedStorage").Shared.HubLayout)
+		end
+
+		-- Stands the character beside a station and uses its prompt. (A key that is not a station's is tried from
+		-- beside the Sell stall.)
+		local function useStation(session, parts, key)
+			local stations = layoutOf(session).STATIONS
+			local station = stations[key] or stations.Sell
+			parts.root.Position = Vector3.new(station.x + 4, 13, station.z + 4)
+			local prompt = roblox.Instance.new("ProximityPrompt")
+			prompt:SetAttribute("Station", key)
+			session:fire(session:service("ProximityPromptService"), "PromptTriggered", prompt, parts.player)
+			session:heartbeat(1 / 60)
+			session:renderFrame(1 / 60)
+		end
+
+		local function click(session, button)
+			session:fire(button, "Activated")
+			session:renderFrame(1 / 60)
+		end
+
+		it("opens a station's panel from its prompt and closes it when the player walks away", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			expect.equal(root.Trails.Visible, false)
+
+			useStation(session, parts, "Trails")
+			expect.equal(root.Trails.Visible, true)
+			expect.equal(root.Sell.Visible, false)
+			expect.equal(root.Fuse.Visible, false)
+
+			parts.root.Position = Vector3.new(0, 13, 0)
+			session:heartbeat(1 / 60)
+			expect.equal(root.Trails.Visible, false)
+
+			-- The close button works too, and prompts that are not stations are ignored.
+			useStation(session, parts, "Sell")
+			expect.equal(root.Sell.Visible, true)
+			click(session, root.Sell.Close)
+			expect.equal(root.Sell.Visible, false)
+			useStation(session, parts, "Nothing")
+			for _, name in { "Trails", "Sell", "Fuse" } do
+				expect.equal(root[name].Visible, false, name)
+			end
+		end)
+
+		it("shows each trail's price, and whether it is owned or equipped", function()
+			local session, parts = startClient()
+			local panel = hud(parts).Trails
+			useStation(session, parts, "Trails")
+			local leaf = panel.List.Leaf.Action
+			expect.equal(panel.List.Leaf.TrailName.Text, "Leaf Trail")
+			expect.equal(panel.List.Leaf.Boost.Text, "Stamina x1.2")
+			expect.equal(leaf.Text, "100 coins")
+			expect.equal(panel.List.Rainbow.Action.Text, "2.5M coins")
+			local tooExpensive = leaf.BackgroundColor3
+
+			session:fromServer("CoinsChanged", 600)
+			session:renderFrame(1 / 60)
+			expect.truthy(leaf.BackgroundColor3 ~= tooExpensive, "affordable trails light up")
+			expect.equal(labelOf(hud(parts).Wallet.Coins).Text, "Coins  600")
+
+			session:fromServer("TrailsUpdated", { "Leaf" }, "Leaf")
+			session:renderFrame(1 / 60)
+			expect.equal(leaf.Text, "Equipped")
+			expect.equal(panel.List.Sunbeam.Action.Text, "500 coins")
+			expect.equal(panel.Footer.Text, "Coins: 600     Stamina boost: x1.2")
+
+			session:fromServer("TrailsUpdated", { "Leaf", "Sunbeam" }, "Sunbeam")
+			session:renderFrame(1 / 60)
+			expect.equal(leaf.Text, "Equip")
+			expect.equal(panel.List.Sunbeam.Action.Text, "Equipped")
+		end)
+
+		it("asks the server to buy and equip trails, and says how it went", function()
+			local session, parts = startClient()
+			local panel = hud(parts).Trails
+			useStation(session, parts, "Trails")
+			session.invokeHandlers.BuyTrail = function(trailId)
+				if trailId == "Rainbow" then
+					return false, "NotEnoughCoins"
+				end
+				return true, "BoughtAndEquipped"
+			end
+			session.invokeHandlers.EquipTrail = function()
+				return true, "Equipped"
+			end
+
+			click(session, panel.List.Sunbeam.Action)
+			expect.equal(session:lastSent("BuyTrail", "server").args[1], "Sunbeam")
+			expect.equal(hud(parts).Toast.Text, "Sunbeam Trail equipped! Stamina x1.5")
+
+			click(session, panel.List.Rainbow.Action)
+			expect.equal(hud(parts).Toast.Text, "Not enough coins")
+
+			-- Owned trails are equipped instead of bought; the one already equipped does nothing.
+			session:fromServer("TrailsUpdated", { "Leaf", "Sunbeam" }, "Sunbeam")
+			session:renderFrame(1 / 60)
+			click(session, panel.List.Leaf.Action)
+			expect.equal(session:lastSent("EquipTrail", "server").args[1], "Leaf")
+			click(session, panel.List.Sunbeam.Action)
+			expect.equal(#session:sent("EquipTrail", "server"), 1)
+			expect.equal(#session:sent("BuyTrail", "server"), 2)
+		end)
+
+		it("lists the player's eggs at the Sell stall and sells them", function()
+			local session, parts = startClient()
+			local panel = hud(parts).Sell
+			useStation(session, parts, "Sell")
+			session:fromServer("InventoryUpdated", {
+				{ zone = 1, rarity = "Common", count = 3 },
+				{ zone = 2, rarity = "Mythic", count = 1 },
+			})
+			session:renderFrame(1 / 60)
+			expect.equal(panel.List.Empty.Visible, false)
+			local commons = panel.List.Egg_1_Common
+			expect.equal(commons.EggName.Text, "Common Forest egg")
+			expect.equal(commons.Details.Text, "x3   25 coins each")
+			expect.equal(panel.List.Egg_2_Mythic.Details.Text, "x1   900 coins each")
+			expect.truthy(commons.LayoutOrder < panel.List.Egg_2_Mythic.LayoutOrder, "in inventory order")
+			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  4")
+
+			session.invokeHandlers.SellEggs = function(_zone, _rarity, count)
+				return count, count * 25
+			end
+			click(session, commons.SellAll)
+			local request = session:lastSent("SellEggs", "server")
+			expect.equal(request.args[1], 1)
+			expect.equal(request.args[2], "Common")
+			expect.equal(request.args[3], 3)
+			expect.equal(hud(parts).Toast.Text, "Sold 3 Common Forest eggs for 75 coins")
+
+			click(session, commons.SellOne)
+			expect.equal(session:lastSent("SellEggs", "server").args[3], 1)
+			expect.equal(hud(parts).Toast.Text, "Sold 1 Common Forest egg for 25 coins")
+
+			-- Once everything is sold, the panel says so.
+			session:fromServer("InventoryUpdated", {})
+			session:renderFrame(1 / 60)
+			expect.equal(panel.List.Empty.Visible, true)
+			expect.falsy(panel.List:FindFirstChild("Egg_1_Common"), "sold rows are gone")
+			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  0")
+			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
+		end)
+
+		it("explains the fuse machine", function()
+			local session, parts = startClient()
+			useStation(session, parts, "Fuse")
+			local panel = hud(parts).Fuse
+			expect.equal(panel.Visible, true)
+			expect.truthy(panel.List.HowItWorks.Text:find("3 of the same pet"), panel.List.HowItWorks.Text)
+		end)
+	end)
+
 	describe("Client: HUD", function()
 		it("builds the HUD with Fusion", function()
-			local _, parts = startClient()
+			local session, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters", "StudioTestPanel" } do
+			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters", "StudioTestPanel", "Trails", "Sell", "Fuse" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
 			expect.equal(labelOf(root.Wallet.Eggs).Text, "Eggs  2")
 			expect.equal(labelOf(root.Wallet.Coins).Text, "Coins  0")
+			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
 		end)
 
 		it("shows stamina, the runway cycle, and the zone", function()

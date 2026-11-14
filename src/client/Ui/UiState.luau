@@ -12,6 +12,14 @@ local UiState = {
 
 	coins = scope:Value(0),
 	eggCount = scope:Value(0),
+	-- Unhatched eggs grouped by kind: { { zone, rarity, count } }
+	inventory = scope:Value({}),
+	-- Trails from the Trails shop: owned is a set of trail ids; equipped is a trail id or "".
+	trailsOwned = scope:Value({}),
+	trailEquipped = scope:Value(""),
+
+	-- Which hub station panel is open: "Trails", "Sell", "Fuse", or "" for none.
+	openPanel = scope:Value(""),
 
 	stamina = scope:Value(100),
 	maxStamina = scope:Value(100),
@@ -37,7 +45,46 @@ local UiState = {
 	staminaState = { value = 100, time = 0, rate = 0, max = 100 },
 	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain }
 	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number }?,
+
+	-- What the panels' buttons do. ShopController fills these in; the HUD only calls them.
+	actions = {
+		buyTrail = function(_trailId: string) end,
+		equipTrail = function(_trailId: string) end,
+		sellEggs = function(_zone: number, _rarity: string, _count: number) end,
+		closePanel = function() end,
+	},
 }
+
+-- The player's eggs, as the server summarizes them: { { zone, rarity, count } }.
+function UiState.setInventory(groups: unknown)
+	if typeof(groups) ~= "table" then
+		return
+	end
+	local list = {}
+	local total = 0
+	for _, group in groups :: { any } do
+		if typeof(group) == "table" and typeof(group.count) == "number" then
+			table.insert(list, group)
+			total += group.count
+		end
+	end
+	UiState.inventory:set(list)
+	UiState.eggCount:set(total)
+end
+
+-- The player's trails, as the server sends them: a list of owned ids and the equipped id ("" for none).
+function UiState.setTrails(owned: unknown, equipped: unknown)
+	local set = {}
+	if typeof(owned) == "table" then
+		for _, id in owned :: { any } do
+			if typeof(id) == "string" then
+				set[id] = true
+			end
+		end
+	end
+	UiState.trailsOwned:set(set)
+	UiState.trailEquipped:set(if typeof(equipped) == "string" then equipped else "")
+end
 
 local toastToken = 0
 
