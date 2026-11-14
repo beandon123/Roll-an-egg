@@ -1,8 +1,8 @@
--- The local player's eggs, nests and pets: keeps UiState up to date with what the server sends, does what the
--- Eggs and Pets panels' buttons ask (Ui/Panels), announces hatches, and fills the panels' 3D preview with the
--- selected egg or pet, turning slowly.
+-- The local player's eggs, pen, pets and dollars: keeps UiState up to date with what the server sends, does what
+-- the Eggs and Pets panels' buttons ask (Ui/Panels), shows the server's messages and announces hatches, and fills
+-- the panels' 3D preview with the selected egg or pet, turning slowly.
 --
--- The server decides everything (see InventoryService): this only asks, and shows.
+-- The server decides everything (see InventoryService and MountService): this only asks, and shows.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,10 +10,9 @@ local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
 local EggRig = Load.shared("EggRig")
-local HatchMath = Load.shared("HatchMath")
 local Net = Load.shared("Net")
-local NumberFormat = Load.shared("NumberFormat")
 local PetRig = Load.shared("PetRig")
+local Plots = Load.shared("Plots")
 
 local Panels = require(script.Parent.Parent.Ui.Panels)
 local UiState = require(script.Parent.Parent.Ui.UiState)
@@ -27,11 +26,10 @@ local InventoryController = {}
 local CLOCK_RATE = 4
 -- How fast the preview turns, in radians per second.
 local PREVIEW_TURN = 0.7
--- An egg in the preview is shown at nest size.
+-- An egg in the preview is shown at the size it has in the pen.
 local PREVIEW_EGG = { radius = 2.2, halfLength = 2.9 }
+local WARN = Color3.fromRGB(255, 190, 90)
 
--- The egg the player last asked to place, until the server answers.
-local pendingPlace: string? = nil
 local lastClockAt = -math.huge
 
 local preview = {
@@ -43,8 +41,28 @@ local preview = {
 	angle = math.pi,
 }
 
-local function freeNests(): number
-	return peek(UiState.nestCount) - #peek(UiState.nests)
+local function rgb(color: { number }?): Color3?
+	return if color then Color3.fromRGB(color[1], color[2], color[3]) else nil
+end
+
+-- Whether the local player is standing in their own pen.
+local function inOwnPen(): boolean
+	local character = localPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local map = Workspace:FindFirstChild("Map")
+	local plots = map and map:FindFirstChild("Plots")
+	if root == nil or not root:IsA("BasePart") or plots == nil then
+		return false
+	end
+	for _, plot in plots:GetChildren() do
+		if plot:GetAttribute("Owner") == localPlayer.UserId then
+			local index = plot:GetAttribute("Index") :: number
+			local position = root.CFrame.Position
+			local inward, along = Plots.toLocal(index, position.X, position.Z)
+			return Plots.inPen(peek(UiState.penLevel), inward, along, 0)
+		end
+	end
+	return false
 end
 
 -- The first item of a panel, to show when it opens with nothing of its own selected.
@@ -55,7 +73,9 @@ local function firstOf(panel: string)
 	end
 	local pets = peek(UiState.pets)
 	local pet = pets[#pets]
-	return if pet then { type = "Pet", kind = pet.kind, rarity = pet.rarity } else nil
+	return if pet
+		then { type = "Pet", kind = pet.kind, rarity = pet.rarity, variant = pet.variant, uid = pet.uid }
+		else nil
 end
 
 local function openPanel(panel: string)
@@ -71,11 +91,17 @@ local function openPanel(panel: string)
 end
 
 local function placeEgg(uid: string)
-	if freeNests() <= 0 then
-		UiState.showToast("Your nests are full: wait for an egg to hatch", Color3.fromRGB(255, 190, 90))
+	if #peek(UiState.hatching) >= peek(UiState.eggCapacity) then
+		UiState.showToast(
+			`Your pen can only hatch {peek(UiState.eggCapacity)} eggs at once: wait, or buy a bigger pen`,
+			WARN
+		)
 		return
 	end
-	pendingPlace = uid
+	if not inOwnPen() then
+		UiState.showToast("Walk into your pen to put eggs down", WARN)
+		return
+	end
 	Net.PlaceEgg:FireServer(uid)
 end
 
@@ -85,22 +111,27 @@ function InventoryController.Apply(state)
 		return
 	end
 	UiState.eggs:set(state.eggs or {})
-	UiState.nests:set(state.nests or {})
+	UiState.hatching:set(state.hatching or {})
 	UiState.pets:set(state.pets or {})
-	UiState.nestCount:set(state.nestCount or 2)
+	UiState.penLevel:set(state.penLevel or 1)
+	UiState.eggCapacity:set(state.eggCapacity or 2)
+	UiState.petCapacity:set(state.petCapacity or 10)
+	UiState.mountChoice:set(state.mount or "")
 	UiState.eggCount:set(#(state.eggs or {}))
-
-	if pendingPlace then
-		for _, nest in state.nests or {} do
-			if nest.uid == pendingPlace then
-				local left = HatchMath.timeLeft(nest.placedAt, nest.bonus, nest.rarity, Workspace:GetServerTimeNow())
-				UiState.showToast(
-					`Placed in nest {nest.slot}: hatches in {NumberFormat.duration(left)}`,
-					Panels.rarityColor(nest.rarity)
-				)
-			end
+	if state.dollars then
+		UiState.dollars:set(state.dollars)
+		UiState.income:set(state.income or 0)
+	end
+	-- A selected pet that has been sold is no longer shown.
+	local selected = peek(UiState.selected)
+	if selected and selected.type == "Pet" and selected.uid then
+		local found = false
+		for _, pet in state.pets or {} do
+			found = found or pet.uid == selected.uid
 		end
-		pendingPlace = nil
+		if not found then
+			UiState.selected:set(firstOf("Pets"))
+		end
 	end
 end
 
@@ -108,7 +139,12 @@ local function onHatched(pet)
 	if typeof(pet) ~= "table" then
 		return
 	end
-	UiState.showToast(`Your {Panels.petName(pet.kind)} hatched! ({pet.rarity})`, Panels.rarityColor(pet.rarity), 4)
+	local variant = if pet.variant and pet.variant ~= "Normal" then `{pet.variant} ` else ""
+	UiState.showToast(
+		`Your {Panels.fullPetName(pet.kind, pet.variant)} hatched! ({variant}{pet.rarity})`,
+		Panels.rarityColor(pet.rarity),
+		4
+	)
 	if peek(UiState.panel) ~= "Pets" then
 		UiState.newPets:set(peek(UiState.newPets) + 1)
 	end
@@ -152,7 +188,7 @@ local function showInPreview(viewport: ViewportFrame, selected)
 		preview.focus = Vector3.zero
 		preview.distance = PREVIEW_EGG.halfLength * 4.6
 	else
-		model = PetRig.build(selected.kind)
+		model = PetRig.build(selected.kind, selected.variant)
 		if model then
 			local root = model.PrimaryPart :: BasePart
 			preview.focus = root.CFrame.Position
@@ -176,7 +212,7 @@ local function showInPreview(viewport: ViewportFrame, selected)
 end
 
 local function selectionKey(selected): string?
-	return if selected then `{selected.type}:{selected.kind}:{selected.rarity}` else nil
+	return if selected then `{selected.type}:{selected.kind}:{selected.rarity}:{selected.variant or ""}` else nil
 end
 
 local function update(deltaTime: number)
@@ -211,8 +247,30 @@ end
 function InventoryController.Init()
 	UiState.actions.placeEgg = placeEgg
 	UiState.actions.openPanel = openPanel
+	UiState.actions.setInPen = function(uid: string, inPen: boolean)
+		Net.SetInPen:FireServer(uid, inPen)
+	end
+	UiState.actions.equipBest = function()
+		Net.EquipBest:FireServer()
+	end
+	UiState.actions.sellPet = function(uid: string)
+		Net.SellPet:FireServer(uid)
+	end
+	UiState.actions.ridePet = function(uid: string)
+		Net.RidePet:FireServer(uid)
+	end
 	Net.InventoryChanged.OnClientEvent:Connect(InventoryController.Apply)
 	Net.PetHatched.OnClientEvent:Connect(onHatched)
+	Net.DollarsChanged.OnClientEvent:Connect(function(dollars: number, income: number)
+		UiState.dollars:set(dollars)
+		UiState.income:set(income)
+	end)
+	Net.Notice.OnClientEvent:Connect(function(text: string, color: { number }?)
+		UiState.showToast(text, rgb(color), 3)
+	end)
+	Net.MountChanged.OnClientEvent:Connect(function(uid: string)
+		UiState.riddenPet:set(uid or "")
+	end)
 	RunService.RenderStepped:Connect(update)
 end
 

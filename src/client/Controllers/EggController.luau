@@ -457,8 +457,13 @@ function EggController.Wobble(eggId: number)
 end
 
 -- The closest egg a jumping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
--- player just jumped off).
-function EggController.FindMountable(position: Vector3, now: number, ignoreEggId: number?): number?
+-- player just jumped off). `extraHeight` lets a player riding a tall pet, held high above the ground, reach down.
+function EggController.FindMountable(
+	position: Vector3,
+	now: number,
+	ignoreEggId: number?,
+	extraHeight: number?
+): number?
 	local bestId: number? = nil
 	local bestDistance = math.huge
 	for eggId, egg in eggs do
@@ -478,7 +483,7 @@ function EggController.FindMountable(position: Vector3, now: number, ignoreEggId
 			continue
 		end
 		-- The player must be at least level with the middle of the egg, so running into one does nothing.
-		if position.Y < y - 1 or position.Y > y + egg.spec.radius + 9 then
+		if position.Y < y - 1 or position.Y > y + egg.spec.radius + 9 + (extraHeight or 0) then
 			continue
 		end
 		local distance = dx * dx + dz * dz

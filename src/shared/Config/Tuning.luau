@@ -70,7 +70,7 @@ Tuning.HIT_BACKUP_INSET = 4
 Tuning.HIT_GRAZE = 0.6
 
 -- Hatching (times are per rarity, in Config/Rarities)
--- How many times as fast nests hatch while the runway is closed.
+-- How many times as fast eggs hatch while the runway is closed.
 Tuning.HATCH_BOOST = 30
 
 -- Characters

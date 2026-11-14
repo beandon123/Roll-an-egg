@@ -1,6 +1,8 @@
--- The Eggs and Pets tabs on the right of the screen, built with Fusion:
---     Eggs  the eggs the player has claimed; Place puts one in a free nest on their plot
---     Pets  their nests, each with its egg's countdown, and the pets that have hatched
+-- The Eggs and Pets tabs on the right of the screen, built with Fusion, and the Ride button under them:
+--     Eggs  the eggs the player has claimed; Place puts one down where they stand in their pen
+--     Pets  the eggs hatching in the pen, each with its countdown, and every pet that has hatched: put it in the
+--           pen or take it out, ride it, or sell it; Equip best fills the pen with the best ones
+--     Ride  gets on the chosen pet, or off it
 -- A 3D preview at the top of each panel shows the selected egg or pet (filled in by InventoryController).
 -- Like the rest of the HUD, this only reads UiState; the buttons call UiState.actions.
 
@@ -10,10 +12,9 @@ local EggModels = Load.shared("EggModels")
 local HatchMath = Load.shared("HatchMath")
 local NumberFormat = Load.shared("NumberFormat")
 local PetModels = Load.shared("PetModels")
-local Plots = Load.shared("Plots")
+local PetWorth = Load.shared("PetWorth")
 local Rarities = Load.shared("Config", "Rarities")
 local Tuning = Load.shared("Config", "Tuning")
-local Zones = Load.shared("Config", "Zones")
 
 local UiState = require(script.Parent.UiState)
 
@@ -26,8 +27,17 @@ local PANEL = Color3.fromRGB(26, 28, 36)
 local CARD = Color3.fromRGB(44, 47, 60)
 local MUTED = Color3.fromRGB(170, 176, 192)
 local GO = Color3.fromRGB(70, 190, 100)
+local OFF = Color3.fromRGB(84, 90, 110)
+local SELL = Color3.fromRGB(205, 70, 70)
 local EGGS_COLOR = Color3.fromRGB(70, 140, 255)
 local PETS_COLOR = Color3.fromRGB(255, 140, 60)
+local RIDE_COLOR = Color3.fromRGB(60, 190, 120)
+
+local VARIANT_COLORS = {
+	Silver = Color3.fromRGB(214, 222, 236),
+	Gold = Color3.fromRGB(255, 205, 70),
+	Rainbow = Color3.fromRGB(255, 120, 200),
+}
 
 local PANEL_WIDTH = 420
 local PANEL_HEIGHT = 500
@@ -57,9 +67,17 @@ function Panels.petName(kind: string): string
 	return if design then design.name else kind
 end
 
-local function zoneName(zone: number): string
-	local info = Zones.List[zone]
-	return if info then info.name else ""
+-- "Gold Bear", or just "Bear" for a Normal one.
+function Panels.fullPetName(kind: string, variant: string?): string
+	local name = Panels.petName(kind)
+	if variant and variant ~= "Normal" then
+		return `{variant} {name}`
+	end
+	return name
+end
+
+function Panels.money(amount: number): string
+	return "$" .. NumberFormat.abbreviate(amount)
 end
 
 local function corner(scope, radius: number)
@@ -199,49 +217,50 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- Nests and pets
 
--- One nest: its egg, a bar filling as it hatches, and the time left. Or an empty nest.
-local function nestRow(scope, slot: number, nest)
-	if nest == nil then
-		return scope:New("Frame")({
-			Name = "Nest" .. slot,
-			LayoutOrder = slot,
-			Size = UDim2.new(1, 0, 0, 52),
-			BackgroundColor3 = CARD,
-			[Children] = {
-				corner(scope, 10),
-				label(scope, {
-					Position = UDim2.fromOffset(12, 0),
-					Size = UDim2.new(1, -140, 1, 0),
-					Text = `Nest {slot}: empty`,
-					Color = MUTED,
-					XAlignment = Enum.TextXAlignment.Left,
-				}),
-				scope:New("TextButton")({
-					Name = "Fill",
-					AnchorPoint = Vector2.new(1, 0.5),
-					Position = UDim2.new(1, -8, 0.5, 0),
-					Size = UDim2.fromOffset(120, 34),
-					BackgroundColor3 = EGGS_COLOR,
-					Font = Enum.Font.GothamBold,
-					Text = "Place an egg",
-					TextColor3 = WHITE,
-					TextSize = 13,
-					[OnEvent("Activated")] = function()
-						UiState.actions.openPanel("Eggs")
-					end,
-					[Children] = { corner(scope, 8) },
-				}),
-			},
-		})
-	end
+-- A free spot for an egg in the pen.
+local function freeRow(scope, order: number)
+	return scope:New("Frame")({
+		Name = "Free" .. order,
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, 52),
+		BackgroundColor3 = CARD,
+		[Children] = {
+			corner(scope, 10),
+			label(scope, {
+				Position = UDim2.fromOffset(12, 0),
+				Size = UDim2.new(1, -140, 1, 0),
+				Text = "Room for another egg",
+				Color = MUTED,
+				XAlignment = Enum.TextXAlignment.Left,
+			}),
+			scope:New("TextButton")({
+				Name = "Fill",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -8, 0.5, 0),
+				Size = UDim2.fromOffset(120, 34),
+				BackgroundColor3 = EGGS_COLOR,
+				Font = Enum.Font.GothamBold,
+				Text = "Put an egg down",
+				TextColor3 = WHITE,
+				TextSize = 13,
+				[OnEvent("Activated")] = function()
+					UiState.actions.openPanel("Eggs")
+				end,
+				[Children] = { corner(scope, 8) },
+			}),
+		},
+	})
+end
 
-	local color = Panels.rarityColor(nest.rarity)
+-- An egg hatching in the pen: a bar filling as it hatches, and the time left.
+local function hatchRow(scope, order: number, entry)
+	local color = Panels.rarityColor(entry.rarity)
 	local progress = scope:Computed(function(use)
-		return HatchMath.progress(nest.placedAt, nest.bonus, nest.rarity, use(UiState.clock))
+		return HatchMath.progress(entry.placedAt, entry.bonus, entry.rarity, use(UiState.clock))
 	end)
 	local timeText = scope:Computed(function(use)
 		local now = use(UiState.clock)
-		local left = HatchMath.timeLeft(nest.placedAt, nest.bonus, nest.rarity, now)
+		local left = HatchMath.timeLeft(entry.placedAt, entry.bonus, entry.rarity, now)
 		if left <= 0 then
 			return "Hatching!"
 		end
@@ -252,29 +271,29 @@ local function nestRow(scope, slot: number, nest)
 		return text
 	end)
 	return scope:New("TextButton")({
-		Name = "Nest" .. slot,
-		LayoutOrder = slot,
+		Name = "Egg_" .. entry.uid,
+		LayoutOrder = order,
 		Size = UDim2.new(1, 0, 0, 52),
 		BackgroundColor3 = CARD,
 		AutoButtonColor = true,
 		Text = "",
 		[OnEvent("Activated")] = function()
-			UiState.selected:set({ type = "Egg", kind = nest.kind, rarity = nest.rarity })
+			UiState.selected:set({ type = "Egg", kind = entry.kind, rarity = entry.rarity })
 		end,
 		[Children] = {
 			corner(scope, 10),
-			cardStroke(scope, nest.kind, nest.rarity),
+			cardStroke(scope, entry.kind, entry.rarity),
 			scope:New("Frame")({
 				Position = UDim2.fromOffset(8, 0),
 				Size = UDim2.fromOffset(40, 52),
 				BackgroundTransparency = 1,
-				[Children] = { eggIcon(scope, nest.rarity, 36) },
+				[Children] = { eggIcon(scope, entry.rarity, 36) },
 			}),
 			label(scope, {
 				Name = "Title",
 				Position = UDim2.fromOffset(54, 4),
 				Size = UDim2.new(1, -62, 0, 18),
-				Text = `Nest {slot}: {Panels.eggName(nest.kind)}`,
+				Text = Panels.eggName(entry.kind),
 				XAlignment = Enum.TextXAlignment.Left,
 				TextSize = 13,
 			}),
@@ -307,63 +326,126 @@ local function nestRow(scope, slot: number, nest)
 	})
 end
 
-local function petCard(scope, pet, inPen: boolean)
+local function smallButton(scope, props)
+	return scope:New("TextButton")({
+		Name = props.Name,
+		Position = props.Position,
+		Size = props.Size,
+		BackgroundColor3 = props.Color,
+		Font = Enum.Font.GothamBold,
+		Text = props.Text,
+		TextColor3 = WHITE,
+		TextSize = 12,
+		TextWrapped = true,
+		[OnEvent("Activated")] = props.Activated,
+		[Children] = { corner(scope, 7) },
+	})
+end
+
+local function petCard(scope, pet)
 	local name = Panels.petName(pet.kind)
+	local variant = pet.variant or "Normal"
+	-- Selling takes two taps: the first asks "Sure?".
+	local confirming = scope:Value(false)
+	local riding = scope:Computed(function(use)
+		return use(UiState.mountChoice) == pet.uid
+	end)
 	return scope:New("TextButton")({
 		Name = "Pet_" .. pet.uid,
 		BackgroundColor3 = CARD,
 		AutoButtonColor = true,
 		Text = "",
 		[OnEvent("Activated")] = function()
-			UiState.selected:set({ type = "Pet", kind = pet.kind, rarity = pet.rarity })
+			UiState.selected:set({
+				type = "Pet",
+				kind = pet.kind,
+				rarity = pet.rarity,
+				variant = variant,
+				uid = pet.uid,
+			})
 		end,
 		[Children] = {
 			corner(scope, 10),
 			cardStroke(scope, pet.kind, pet.rarity),
-			petIcon(scope, name, pet.rarity, 42),
+			petIcon(scope, name, pet.rarity, 40),
 			label(scope, {
 				Name = "Title",
-				Position = UDim2.fromOffset(4, 54),
-				Size = UDim2.new(1, -8, 0, 30),
+				Position = UDim2.fromOffset(4, 50),
+				Size = UDim2.new(1, -8, 0, 28),
 				Text = name,
 				TextSize = 13,
 			}),
 			label(scope, {
 				Name = "Rarity",
-				Position = UDim2.fromOffset(4, 84),
+				Position = UDim2.fromOffset(4, 78),
 				Size = UDim2.new(1, -8, 0, 14),
-				Text = pet.rarity,
-				Color = Panels.rarityColor(pet.rarity),
+				Text = if variant ~= "Normal" then `{variant} {pet.rarity}` else pet.rarity,
+				Color = VARIANT_COLORS[variant] or Panels.rarityColor(pet.rarity),
 				TextSize = 11,
 			}),
 			label(scope, {
-				Name = "Where",
-				Position = UDim2.fromOffset(4, 100),
+				Name = "Income",
+				Position = UDim2.fromOffset(4, 93),
 				Size = UDim2.new(1, -8, 0, 14),
-				Text = if inPen then "In your pen" else zoneName(pet.zone),
-				Color = MUTED,
-				TextSize = 10,
+				Text = `{Panels.money(PetWorth.income(pet))}/s`,
+				Color = Color3.fromRGB(140, 235, 140),
+				TextSize = 11,
+			}),
+			smallButton(scope, {
+				Name = "Pen",
+				Position = UDim2.fromOffset(6, 112),
+				Size = UDim2.new(1, -12, 0, 24),
+				Color = if pet.inPen then GO else OFF,
+				Text = if pet.inPen then "In pen" else "Put in pen",
+				Activated = function()
+					UiState.actions.setInPen(pet.uid, not pet.inPen)
+				end,
+			}),
+			scope:New("TextButton")({
+				Name = "Ride",
+				Position = UDim2.fromOffset(6, 140),
+				Size = UDim2.new(0.5, -8, 0, 24),
+				BackgroundColor3 = scope:Computed(function(use)
+					return if use(riding) then RIDE_COLOR else OFF
+				end),
+				Font = Enum.Font.GothamBold,
+				Text = scope:Computed(function(use)
+					return if use(riding) then "Riding" else "Ride"
+				end),
+				TextColor3 = WHITE,
+				TextSize = 12,
+				[OnEvent("Activated")] = function()
+					UiState.actions.ridePet(if Fusion.peek(riding) then "" else pet.uid)
+				end,
+				[Children] = { corner(scope, 7) },
+			}),
+			scope:New("TextButton")({
+				Name = "Sell",
+				Position = UDim2.new(0.5, 2, 0, 140),
+				Size = UDim2.new(0.5, -8, 0, 24),
+				BackgroundColor3 = SELL,
+				Font = Enum.Font.GothamBold,
+				Text = scope:Computed(function(use)
+					return if use(confirming) then "Sure?" else Panels.money(PetWorth.sellPrice(pet))
+				end),
+				TextColor3 = WHITE,
+				TextSize = 11,
+				TextWrapped = true,
+				[OnEvent("Activated")] = function()
+					if Fusion.peek(confirming) then
+						confirming:set(false)
+						UiState.actions.sellPet(pet.uid)
+					else
+						confirming:set(true)
+						task.delay(3, function()
+							confirming:set(false)
+						end)
+					end
+				end,
+				[Children] = { corner(scope, 7) },
 			}),
 		},
 	})
-end
-
--- The pets that roam the pen: the rarest, then the newest (as the server picks them).
-local function penUids(pets): { [string]: boolean }
-	local sorted = table.clone(pets)
-	table.sort(sorted, function(a, b)
-		local orderA = if Rarities.Info[a.rarity] then Rarities.Info[a.rarity].order else 0
-		local orderB = if Rarities.Info[b.rarity] then Rarities.Info[b.rarity].order else 0
-		if orderA ~= orderB then
-			return orderA > orderB
-		end
-		return a.hatchedAt > b.hatchedAt
-	end)
-	local chosen = {}
-	for index = 1, math.min(Plots.PEN_CAPACITY, #sorted) do
-		chosen[sorted[index].uid] = true
-	end
-	return chosen
 end
 
 ----------------------------------------------------------------------------------------------------------------
@@ -403,11 +485,18 @@ local function previewText(use): string
 	if selected == nil then
 		return ""
 	end
-	local name = if selected.type == "Egg" then Panels.eggName(selected.kind) else Panels.petName(selected.kind)
-	local extra = if selected.type == "Egg"
-		then `Hatches in {NumberFormat.duration(HatchMath.hatchTime(selected.rarity))}`
-		else "Hatched pet"
-	return `{name}\n{selected.rarity} - {extra}`
+	if selected.type == "Egg" then
+		local hatch = NumberFormat.duration(HatchMath.hatchTime(selected.rarity))
+		return `{Panels.eggName(selected.kind)}\n{selected.rarity} - hatches in {hatch}`
+	end
+	local pet = { zone = selected.zone or 1, rarity = selected.rarity, variant = selected.variant }
+	for _, owned in use(UiState.pets) do
+		if owned.uid == selected.uid then
+			pet = owned
+		end
+	end
+	return `{Panels.fullPetName(selected.kind, selected.variant)}  ({selected.rarity})\n`
+		.. `Earns {Panels.money(PetWorth.income(pet))}/s - runs {PetWorth.mountSpeed(pet)} studs/s`
 end
 
 local function panel(scope)
@@ -415,29 +504,44 @@ local function panel(scope)
 		return eggCard(innerScope, item)
 	end)
 
-	local nestRows = scope:Computed(function(use, innerScope)
-		local bySlot = {}
-		for _, nest in use(UiState.nests) do
-			bySlot[nest.slot] = nest
-		end
+	local hatchRows = scope:Computed(function(use, innerScope)
 		local rows = {}
-		for slot = 1, use(UiState.nestCount) do
-			table.insert(rows, nestRow(innerScope, slot, bySlot[slot]))
+		local hatching = use(UiState.hatching)
+		for index, entry in hatching do
+			table.insert(rows, hatchRow(innerScope, index, entry))
+		end
+		for order = #hatching + 1, use(UiState.eggCapacity) do
+			table.insert(rows, freeRow(innerScope, order))
 		end
 		return rows
 	end)
 
 	local petCards = scope:Computed(function(use, innerScope)
 		local pets = use(UiState.pets)
-		local inPen = penUids(pets)
 		local cards = {}
-		-- Newest first.
-		for index = #pets, 1, -1 do
-			local card = petCard(innerScope, pets[index], inPen[pets[index].uid] == true)
-			card.LayoutOrder = #pets - index
-			table.insert(cards, card)
+		-- Pets in the pen first, then the rest; newest first within each.
+		local order = 0
+		for _, inPen in { true, false } do
+			for index = #pets, 1, -1 do
+				if pets[index].inPen == inPen then
+					local card = petCard(innerScope, pets[index])
+					order += 1
+					card.LayoutOrder = order
+					table.insert(cards, card)
+				end
+			end
 		end
 		return cards
+	end)
+
+	local penCount = scope:Computed(function(use)
+		local count = 0
+		for _, pet in use(UiState.pets) do
+			if pet.inPen then
+				count += 1
+			end
+		end
+		return count
 	end)
 
 	local isEggs = scope:Computed(function(use)
@@ -560,11 +664,13 @@ local function panel(scope)
 								scope,
 								1,
 								scope:Computed(function(use)
-									local free = use(UiState.nestCount) - #use(UiState.nests)
+									local free = use(UiState.eggCapacity) - #use(UiState.hatching)
 									if #use(UiState.eggs) == 0 then
 										return "No eggs yet: ride one to the end of its claim meter!"
 									end
-									return `Free nests: {math.max(0, free)} of {use(UiState.nestCount)}`
+									return `Stand in your pen to put eggs down ({math.max(0, free)} of {use(
+										UiState.eggCapacity
+									)} free)`
 								end)
 							),
 							grid(scope, "Eggs", 2, 150, eggsContent),
@@ -583,9 +689,15 @@ local function panel(scope)
 								Padding = UDim.new(0, 8),
 								SortOrder = Enum.SortOrder.LayoutOrder,
 							}),
-							sectionTitle(scope, 1, "Hatching"),
+							sectionTitle(
+								scope,
+								1,
+								scope:Computed(function(use)
+									return `Hatching ({#use(UiState.hatching)} of {use(UiState.eggCapacity)})`
+								end)
+							),
 							scope:New("Frame")({
-								Name = "Nests",
+								Name = "Hatching",
 								LayoutOrder = 2,
 								Size = UDim2.fromScale(1, 0),
 								AutomaticSize = Enum.AutomaticSize.Y,
@@ -595,18 +707,47 @@ local function panel(scope)
 										Padding = UDim.new(0, 6),
 										SortOrder = Enum.SortOrder.LayoutOrder,
 									}),
-									nestRows,
+									hatchRows,
 								},
 							}),
-							sectionTitle(
-								scope,
-								3,
-								scope:Computed(function(use)
-									local count = #use(UiState.pets)
-									return if count == 0 then "No pets yet" else `Pets ({count})`
-								end)
-							),
-							grid(scope, "Pets", 4, 120, petCards),
+							-- Pets, and the button that fills the pen with the best of them.
+							scope:New("Frame")({
+								Name = "PetsHeader",
+								LayoutOrder = 3,
+								Size = UDim2.new(1, 0, 0, 34),
+								BackgroundTransparency = 1,
+								[Children] = {
+									label(scope, {
+										Name = "Count",
+										Size = UDim2.new(1, -130, 1, 0),
+										Text = scope:Computed(function(use)
+											local count = #use(UiState.pets)
+											if count == 0 then
+												return "No pets yet"
+											end
+											return `Pets ({count}) - in pen {use(penCount)} of {use(UiState.petCapacity)}`
+										end),
+										XAlignment = Enum.TextXAlignment.Left,
+										TextSize = 14,
+									}),
+									scope:New("TextButton")({
+										Name = "EquipBest",
+										AnchorPoint = Vector2.new(1, 0),
+										Position = UDim2.fromScale(1, 0),
+										Size = UDim2.fromOffset(124, 34),
+										BackgroundColor3 = GO,
+										Font = Enum.Font.GothamBold,
+										Text = "Equip best",
+										TextColor3 = WHITE,
+										TextSize = 14,
+										[OnEvent("Activated")] = function()
+											UiState.actions.equipBest()
+										end,
+										[Children] = { corner(scope, 8) },
+									}),
+								},
+							}),
+							grid(scope, "Pets", 4, 172, petCards),
 						},
 					}),
 				},
@@ -667,7 +808,7 @@ function Panels.build(scope)
 			Name = "SideTabs",
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -10, 0.5, 0),
-			Size = UDim2.fromOffset(84, 180),
+			Size = UDim2.fromOffset(84, 252),
 			BackgroundTransparency = 1,
 			[Children] = {
 				scope:New("UIListLayout")({
@@ -684,6 +825,36 @@ function Panels.build(scope)
 					end)
 				),
 				tabButton(scope, "Pets", 2, PETS_COLOR, UiState.newPets),
+				-- Get on the chosen pet, or off it (only once one has been chosen).
+				scope:New("TextButton")({
+					Name = "RideTab",
+					LayoutOrder = 3,
+					Size = UDim2.fromOffset(84, 60),
+					BackgroundColor3 = RIDE_COLOR,
+					Font = Enum.Font.FredokaOne,
+					Text = scope:Computed(function(use)
+						return if use(UiState.riddenPet) ~= "" then "GET OFF" else "RIDE"
+					end),
+					TextColor3 = WHITE,
+					TextSize = 18,
+					TextStrokeTransparency = 0.5,
+					Visible = scope:Computed(function(use)
+						return use(UiState.mountChoice) ~= ""
+					end),
+					[OnEvent("Activated")] = function()
+						local riding = Fusion.peek(UiState.riddenPet) ~= ""
+						UiState.actions.ridePet(if riding then "" else Fusion.peek(UiState.mountChoice))
+					end,
+					[Children] = {
+						corner(scope, 16),
+						scope:New("UIStroke")({
+							Color = Color3.new(0, 0, 0),
+							Thickness = 3,
+							Transparency = 0.3,
+							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						}),
+					},
+				}),
 			},
 		}),
 		panel(scope),

@@ -10,7 +10,9 @@ local UiState = {
 	Fusion = Fusion,
 	scope = scope,
 
-	coins = scope:Value(0),
+	-- Dollars, and how many a second the pets in the pen earn.
+	dollars = scope:Value(0),
+	income = scope:Value(0),
 	eggCount = scope:Value(0),
 
 	stamina = scope:Value(100),
@@ -29,11 +31,16 @@ local UiState = {
 	rideDoomed = scope:Value(false),
 
 	-- The player's inventory (see the server's Logic/Hatchery for the shapes): eggs held, eggs hatching in their
-	-- nests, hatched pets, and how many nests they have.
+	-- pen, hatched pets, and the pen's size.
 	eggs = scope:Value({}),
-	nests = scope:Value({}),
+	hatching = scope:Value({}),
 	pets = scope:Value({}),
-	nestCount = scope:Value(2),
+	penLevel = scope:Value(1),
+	eggCapacity = scope:Value(2),
+	petCapacity = scope:Value(10),
+	-- The pet chosen to ride (its uid, "" for none), and the one being ridden right now ("" when on foot).
+	mountChoice = scope:Value(""),
+	riddenPet = scope:Value(""),
 	-- Which panel is open on the right: "None", "Eggs" or "Pets".
 	panel = scope:Value("None"),
 	-- What is shown in the panel's 3D preview: { type = "Egg" | "Pet", kind = string, rarity = string } or nil.
@@ -57,6 +64,10 @@ local UiState = {
 	actions = {
 		placeEgg = function(_uid: string) end,
 		openPanel = function(_panel: string) end,
+		setInPen = function(_uid: string, _inPen: boolean) end,
+		equipBest = function() end,
+		sellPet = function(_uid: string) end,
+		ridePet = function(_uid: string) end,
 	},
 }
 

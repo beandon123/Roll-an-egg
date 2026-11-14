@@ -11,25 +11,28 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
 
+local Hatchery = require(script.Parent.Parent.Logic.Hatchery)
+
 -- Bump the store name's version only if saved data must be wiped (never after launch).
 local STORE_NAME = "PlayerData_v1"
 
 -- What a brand-new player starts with. Fields added here later are filled in for existing players on load.
 local TEMPLATE = {
-	SchemaVersion = 1,
-	Coins = 0,
+	SchemaVersion = 2,
+	-- The currency.
+	Dollars = 0,
 	-- upgradeId -> level bought
 	Upgrades = {},
-	-- The shapes of these three are in Logic/Hatchery.
-	-- Eggs in the inventory: { uid, zone, rarity, kind, claimedAt }. `kind` is the egg's design name (e.g.
-	-- "MossStag"). Eggs claimed before kinds existed have none; they count as the zone's first egg of that rarity.
+	-- The shapes of these are in Logic/Hatchery, which also brings older saves up to date (migrate).
+	-- Eggs in the inventory: { uid, zone, rarity, kind, claimedAt }.
 	Eggs = {},
-	-- Eggs hatching in the nests on the player's plot: { slot, uid, zone, rarity, kind, placedAt, bonus }.
-	Nests = {},
-	-- How many nests the player has (more can be bought later).
-	NestCount = 2,
-	-- Hatched pets: { uid, kind, egg, zone, rarity, hatchedAt }.
+	-- Eggs hatching in the pen: { uid, zone, rarity, kind, placedAt, bonus, inward, along }.
+	Hatching = {},
+	-- Hatched pets: { uid, kind, egg, zone, rarity, variant, inPen, hatchedAt }.
 	Pets = {},
+	-- How big the pen is (Shared/Plots), and the pet the player rides (its uid, or "").
+	PenLevel = 1,
+	Mount = "",
 	Stats = {
 		EggsClaimed = 0,
 	},
@@ -80,6 +83,8 @@ local function onPlayerAdded(player: Player)
 
 	profile:AddUserId(player.UserId)
 	profile:Reconcile()
+	Hatchery.migrate(profile.Data)
+	profile.Data.SchemaVersion = TEMPLATE.SchemaVersion
 
 	profile.OnSessionEnd:Connect(function()
 		profiles[player] = nil

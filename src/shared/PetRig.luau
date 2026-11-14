@@ -16,6 +16,7 @@
 
 local PetModels = require(script.Parent.PetModels)
 local ModelEffects = require(script.Parent.ModelEffects)
+local PetVariants = require(script.Parent.PetVariants)
 
 local PetRig = {}
 
@@ -35,9 +36,10 @@ local function newPart(name: string, parent: Instance, className: string?): Base
 	return part
 end
 
--- The rigged Model for a pet (a design name such as "MossStag"), or nil if that pet has no model yet.
+-- The rigged Model for a pet (a design name such as "MossStag"), or nil if that pet has no model yet. `variant`
+-- ("Silver", "Gold", "Rainbow"; Normal if left out) recolours it (Shared/PetVariants).
 -- It is built at the origin; move it with Model:PivotTo.
-function PetRig.build(kind: string): Model?
+function PetRig.build(kind: string, variant: string?): Model?
 	local design = PetModels.get(kind)
 	if design == nil then
 		return nil
@@ -67,6 +69,12 @@ function PetRig.build(kind: string): Model?
 		return CFrame.new(position.X, position.Y, position.Z, r[1], -r[2], r[3], -r[4], r[5], -r[6], r[7], -r[8], r[9])
 	end
 
+	-- How far along the pet (tail to nose) a design point is, for a Rainbow pet's stripes. Designs face +z.
+	local backZ = design.center[3] - design.size[3] / 2
+	local function along(z: number): number
+		return math.clamp((z - backZ) / math.max(1, design.size[3]), 0, 1)
+	end
+
 	local joints: { [string]: BasePart } = {}
 	for _, limb in design.limbs do
 		local joint = newPart(limb.name, model)
@@ -85,9 +93,11 @@ function PetRig.build(kind: string): Model?
 				mesh.MeshType = Enum.MeshType.Sphere
 				mesh.Parent = block
 			end
-			block.Color = Color3.fromRGB(box.color[1], box.color[2], box.color[3])
+			block.Color =
+				PetVariants.tint(Color3.fromRGB(box.color[1], box.color[2], box.color[3]), variant, along(box.z))
 			block.Material = (Enum.Material :: any)[box.material]
 			block.Transparency = box.transparency
+			block.Reflectance = PetVariants.reflectance(variant)
 
 			local weld = Instance.new("WeldConstraint")
 			weld.Part0 = joint
@@ -126,6 +136,8 @@ function PetRig.build(kind: string): Model?
 	end
 
 	ModelEffects.add(root, design.light, design.particles, scale)
+	PetVariants.addGlint(root, variant)
+	model:SetAttribute("Variant", variant or "Normal")
 
 	model:SetAttribute("GroundOffset", (design.center[2] + design.hover) * scale)
 	model:SetAttribute("SeatOffset", toStuds(design.seat) - root.CFrame.Position)

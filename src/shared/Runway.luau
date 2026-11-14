@@ -22,7 +22,7 @@ Runway.FADE_INTO_NEXT = 0.25
 
 -- The hub behind the start of the runway: a plaza with the players' plots down both sides (see Shared/Plots).
 Runway.HUB_LENGTH = 400
-Runway.HUB_WIDTH = 360
+Runway.HUB_WIDTH = 440
 
 -- Height of the walking surface at a given distance down the runway.
 function Runway.surfaceY(_z: number): number

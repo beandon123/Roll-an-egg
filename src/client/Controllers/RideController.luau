@@ -32,6 +32,8 @@ local SAME_EGG_IGNORE_TIME = 1
 -- A jump press only counts as "hop off" once the jump input that got the player onto the egg has been released.
 local JUMP_RELEASE_GAP = 0.15
 local MIN_RIDE_BEFORE_HOP = 0.3
+-- How much higher above an egg a player riding a pet may be when they jump onto it (as on the server).
+local MOUNTED_REACH = 40
 
 local RideController = {}
 
@@ -258,7 +260,9 @@ local function lookForEgg()
 	end
 
 	local ignore = if clock - lastLeftAt < SAME_EGG_IGNORE_TIME then lastLeftEggId else nil
-	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore)
+	-- Riding a pet holds the player high up, so they may reach further down to an egg.
+	local reach = if UiState.Fusion.peek(UiState.riddenPet) ~= "" then MOUNTED_REACH else 0
+	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore, reach)
 	if eggId then
 		lastMountRequestAt = clock
 		Net.RequestMount:FireServer(eggId)
@@ -394,7 +398,7 @@ function RideController.Start()
 		end
 		agility = snapshot.agility or agility
 		InventoryController.Apply(snapshot.inventory)
-		UiState.coins:set(snapshot.coins or 0)
+		UiState.dollars:set(snapshot.dollars or 0)
 	else
 		warn(`[RideController] could not load the runway snapshot: {snapshot}`)
 	end

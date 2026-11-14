@@ -20,10 +20,13 @@ local Zones = require(Shared.Config.Zones)
 
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
+local MountService = require(script.Parent.MountService)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
 
 -- Fastest a client may report steering; extra reports are dropped.
 local MIN_LATERAL_INTERVAL = 1 / 30
+-- How much higher above an egg a player riding a pet may be when they jump onto it.
+local MOUNTED_REACH = 40
 
 local RunwayService = {}
 
@@ -161,6 +164,8 @@ local function dispatch(events)
 		elseif kind == "RideStarted" then
 			local player = playersByUserId[event.rider]
 			if player then
+				-- A pet the player was riding goes away while they ride the egg.
+				MountService.OnRideStarted(player)
 				Net.RideStarted:FireClient(player, event.id, {
 					startTime = event.startTime,
 					startStamina = event.startStamina,
@@ -172,6 +177,7 @@ local function dispatch(events)
 		elseif kind == "RideEnded" then
 			local player = playersByUserId[event.rider]
 			if player then
+				MountService.OnRideEnded(player)
 				Net.RideEnded:FireClient(player, event.reason, {
 					eggId = event.id,
 					zone = event.zone,
@@ -219,8 +225,13 @@ local function onRequestMount(player: Player, eggId: unknown)
 	-- The player must really be next to the egg, with some slack for network delay.
 	local time = now()
 	local x, y, z = sim:eggCenter(egg, time)
-	local distance = (root.Position - Vector3.new(x, y, z)).Magnitude
-	local inReach = distance <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
+	-- (A player riding a tall pet is held high above the ground, so is allowed to be further above the egg.)
+	local offset = root.Position - Vector3.new(x, y, z)
+	local across = Vector3.new(offset.X, 0, offset.Z).Magnitude
+	local above = if MountService.IsMounted(player) then MOUNTED_REACH else 0
+	local inReach = across <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
+		and offset.Y <= egg.spec.radius + Tuning.MOUNT_TOLERANCE + above
+		and offset.Y >= -Tuning.MOUNT_TOLERANCE
 
 	sim:requestMount(player.UserId, eggId, time, inReach)
 end
@@ -270,7 +281,7 @@ local function onGetSnapshot(player: Player)
 			else nil,
 		agility = if rider then rider.agility else Tuning.BASE_AGILITY,
 		inventory = InventoryService.GetState(player),
-		coins = if data then data.Coins else 0,
+		dollars = if data then data.Dollars else 0,
 		serverTime = time,
 	}
 end

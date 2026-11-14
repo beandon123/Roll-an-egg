@@ -83,29 +83,55 @@ local function moveModel(model, target)
 	end
 end
 local showcase = {
-	{ plot = 2, eggs = { "Toadstool", "MossStag" }, pets = { "Bear", "Fox", "Owl", "MossStag", "Bunny" } },
-	{ plot = 6, eggs = { "Sphinx", "Yeti" }, pets = { "Camel", "SabertoothCat", "WoollyMammoth", "Meerkat" } },
+	{
+		plot = 2,
+		level = 1,
+		eggs = { { "Toadstool", 12, -18 }, { "MossStag", 26, 14 } },
+		pets = {
+			{ "Bear", "Gold" },
+			{ "Fox", "Normal" },
+			{ "Owl", "Silver" },
+			{ "MossStag", "Normal" },
+			{ "Bunny", "Rainbow" },
+		},
+	},
+	{
+		plot = 6,
+		level = 5,
+		eggs = { { "Sphinx", 14, 20 }, { "Yeti", 40, -10 }, { "FrostWolf", 70, 24 } },
+		pets = {
+			{ "Camel", "Normal" },
+			{ "SabertoothCat", "Gold" },
+			{ "WoollyMammoth", "Normal" },
+			{ "Meerkat", "Rainbow" },
+			{ "Reindeer", "Silver" },
+			{ "Yeti", "Normal" },
+		},
+	},
 }
 for _, entry in showcase do
 	local plot = workspace.Map.Plots["Plot" .. entry.plot]
 	PlotModels.signText(plot.Sign, "Player's Pen")
-	for slot, kind in entry.eggs do
-		local spec = PlotModels.NEST_EGG
-		local egg = EggRig.build(kind, spec)
-		local bed = plot.Nests["Nest" .. slot].Bed
-		moveModel(
-			egg,
-			bed.CFrame * roblox.CFrame.new(0, 0.4 + spec.halfLength, 0) * roblox.CFrame.Angles(0, 0, math.pi / 2)
-		)
-		egg.Parent = eggFolder
+	PlotModels.sizePen(plot, entry.plot, entry.level)
+	for index, egg in entry.eggs do
+		local model = PlotModels.buildEgg(plot.Eggs, entry.plot, {
+			uid = "preview" .. index,
+			kind = egg[1],
+			rarity = "Rare",
+			placedAt = 0,
+			bonus = 0,
+			inward = egg[2],
+			along = egg[3],
+		})
+		model.Parent = eggFolder
 	end
-	for index, kind in entry.pets do
-		local pet = PetRig.build(kind)
+	for index, pair in entry.pets do
+		local pet = PetRig.build(pair[1], pair[2])
 		local root = pet.PrimaryPart
 		local reach = math.max(root.Size.X, root.Size.Z) / 2 + 1
-		local x0, x1, z0, z1 = Plots.roamArea(entry.plot, reach)
+		local x0, x1, z0, z1 = Plots.roamArea(entry.plot, entry.level, reach)
 		local t = (index - 0.5) / #entry.pets
-		local x = x0 + (x1 - x0) * (if index % 2 == 0 then 0.25 else 0.75)
+		local x = x0 + (x1 - x0) * (if index % 2 == 0 then 0.3 else 0.75)
 		local z = z0 + (z1 - z0) * t
 		moveModel(
 			pet,

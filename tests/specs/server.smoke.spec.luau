@@ -211,7 +211,8 @@ return function(harness)
 			expect.equal(type(snapshot.eggs), "table")
 			expect.equal(snapshot.stamina.max, 100)
 			expect.equal(#snapshot.inventory.eggs, 0)
-			expect.equal(snapshot.inventory.nestCount, 2)
+			expect.equal(snapshot.inventory.eggCapacity, 2)
+			expect.equal(snapshot.dollars, 0)
 			expect.equal(#session.kicks, 0)
 		end)
 
@@ -315,7 +316,8 @@ return function(harness)
 			local egg = mount(session, player, root, 1, "Epic") -- needs 200 stamina; the player has 100
 			expect.truthy(session:lastSent("RideStarted", player), "RideStarted")
 
-			session:heartbeat(0.1, 80)
+			-- Steering clear of the obstacles, the stamina runs out after 7.5 s.
+			rideAlongPath(session, player, egg, 8)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "ThrownOff")
 			local left = session:lastSent("EggLeft", "all")
 			expect.equal(left.args[1], egg.id)
@@ -452,10 +454,12 @@ return function(harness)
 		end)
 	end)
 
-	describe("Server: plots and hatching", function()
+	describe("Server: plots, pens and pets", function()
 		local function services(session)
 			local folder = session:service("ServerScriptService").Server.Services
-			return session:require(folder.InventoryService), session:require(folder.PlotService)
+			return session:require(folder.InventoryService),
+				session:require(folder.PlotService),
+				session:require(folder.MountService)
 		end
 
 		local function plotModel(session, index)
@@ -463,10 +467,25 @@ return function(harness)
 		end
 
 		local function signText(plot)
-			return plot.Sign:FindFirstChildOfClass("SurfaceGui").TextLabel.Text
+			return plot.Sign:FindFirstChildOfClass("SurfaceGui"):FindFirstChildOfClass("TextLabel").Text
 		end
 
-		it("gives each player a plot with two nests, and frees it when they leave", function()
+		local function plots(session)
+			return session:require(session:service("ReplicatedStorage").Shared.Plots)
+		end
+
+		-- Stands the player's character in their pen, at (inward, along), facing up the plot.
+		local function standInPen(session, root, index, inward, along)
+			local x, z = plots(session).point(index, inward, along)
+			root.CFrame = roblox.CFrame.new(x, 13, z)
+		end
+
+		local function lastNotice(session, player)
+			local notice = session:lastSent("Notice", player)
+			return if notice then notice.args[1] else ""
+		end
+
+		it("gives each player a plot with an open pen and an upgrade button, and frees it when they leave", function()
 			local session = startServer()
 			local first = session:addPlayer(1, "Tester")
 			local second = session:addPlayer(2, "Other")
@@ -476,8 +495,14 @@ return function(harness)
 			expect.equal(PlotService.GetPlot(second), 2)
 			local plot = plotModel(session, 1)
 			expect.equal(plot:GetAttribute("Owner"), 1)
+			expect.equal(plot:GetAttribute("PenLevel"), 1)
 			expect.equal(signText(plot), "Tester's Pen")
-			expect.equal(#plot.Nests:GetChildren(), 2)
+			expect.near(plot.Pen.Floor.Size.X, plots(session).penWidth(1))
+			expect.falsy(plot:FindFirstChild("Nests"), "no nests: eggs go anywhere")
+			local prompt = plot.UpgradeButton.Pad.Upgrade
+			expect.truthy(prompt:IsA("ProximityPrompt"))
+			expect.equal(plot.UpgradeButton.Pad.Material, roblox.Enum.Material.Neon)
+			expect.equal(prompt.ObjectText, "$750")
 			expect.equal(signText(plotModel(session, 3)), "Free plot")
 
 			session:fire(session:service("Players"), "PlayerRemoving", first)
@@ -498,30 +523,39 @@ return function(harness)
 			character.Parent = session:service("Workspace")
 			session:fire(player, "CharacterAdded", character)
 			task.wait()
-			local Plots = session:require(session:service("ReplicatedStorage").Shared.Plots)
-			local x, z = Plots.spawnPoint(1)
+			local x, z = plots(session).spawnPoint(1)
 			expect.near(root.CFrame.Position.X, x, 1e-3)
 			expect.near(root.CFrame.Position.Z, z, 1e-3)
 		end)
 
-		it("places an egg in a nest, where it hatches on a timer into a pet in the pen", function()
+		it("puts an egg down where the player stands in their pen, where it hatches into a pet", function()
 			local session = startServer()
-			local player = session:addPlayer(1, "Tester")
+			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local InventoryService = services(session)
 			InventoryService.AddEgg(player, 1, "Common", "Leafy")
 			local data = session.profiles.Player_1.Data
 			local uid = data.Eggs[1].uid
 
+			-- Not in the pen: nothing happens but a hint.
+			session:fromClient("PlaceEgg", player, uid)
+			expect.equal(#data.Hatching, 0)
+			expect.truthy(string.find(lastNotice(session, player), "Walk into your pen"), lastNotice(session, player))
+
+			standInPen(session, root, 1, 30, 10)
+			session:heartbeat(0.3)
 			session:fromClient("PlaceEgg", player, uid)
 			expect.equal(#data.Eggs, 0)
-			expect.equal(data.Nests[1].slot, 1)
-			local inventory = session:lastSent("InventoryChanged", player).args[1]
-			expect.equal(#inventory.nests, 1)
-			local nest = plotModel(session, 1).Nests.Nest1
-			expect.equal(nest:GetAttribute("EggKind"), "Leafy")
-			expect.equal(nest:GetAttribute("EggName"), "Leafy Egg")
-			expect.truthy(nest:FindFirstChild("Egg"), "the egg sits in the nest")
+			local entry = data.Hatching[1]
+			expect.near(entry.along, 10, 5)
+			expect.near(entry.inward, 30, 5)
+			local egg = plotModel(session, 1).Eggs["Egg_" .. uid]
+			expect.equal(egg:GetAttribute("EggKind"), "Leafy")
+			expect.equal(egg:GetAttribute("EggName"), "Leafy Egg")
+			local x, z = plots(session).point(1, entry.inward, entry.along)
+			expect.near(egg.Bed.CFrame.Position.X, x, 1e-3)
+			expect.near(egg.Bed.CFrame.Position.Z, z, 1e-3)
+			expect.equal(#session:lastSent("InventoryChanged", player).args[1].hatching, 1)
 
 			-- A Common egg takes 30 seconds.
 			session:heartbeat(1, 29)
@@ -530,38 +564,41 @@ return function(harness)
 			session:heartbeat(1, 2)
 			task.wait(0.6)
 			expect.equal(#data.Pets, 1)
-			expect.equal(data.Pets[1].kind, "Squirrel")
-			expect.equal(#data.Nests, 0)
-			local hatched = session:lastSent("PetHatched", player)
-			expect.equal(hatched.args[1].kind, "Squirrel")
-			expect.equal(nest:GetAttribute("EggKind"), "")
-			expect.falsy(nest:FindFirstChild("Egg"))
-			expect.truthy(nest:GetAttribute("HatchedAt"), "marked for the burst")
-			expect.equal(plotModel(session, 1):GetAttribute("Pets"), "Squirrel")
-			expect.equal(#session:lastSent("InventoryChanged", player).args[1].pets, 1)
+			local pet = data.Pets[1]
+			expect.equal(pet.kind, "Squirrel")
+			expect.truthy(pet.variant, "a variant")
+			expect.equal(pet.inPen, true)
+			expect.equal(session:lastSent("PetHatched", player).args[1].kind, "Squirrel")
+			expect.truthy(egg:GetAttribute("HatchedAt"), "bursting open")
+			expect.equal(plotModel(session, 1):GetAttribute("Pets"), "Squirrel:" .. pet.variant)
 		end)
 
-		it("ignores eggs the player does not have, and keeps eggs when the nests are full", function()
+		it("hatches only as many eggs at once as the pen allows, spaced apart", function()
 			local session = startServer()
-			local player = session:addPlayer(1, "Tester")
+			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local InventoryService = services(session)
 			for _ = 1, 3 do
 				InventoryService.AddEgg(player, 1, "Rare", "Toadstool")
 			end
 			local data = session.profiles.Player_1.Data
+			standInPen(session, root, 1, 30, 0)
 			session:fromClient("PlaceEgg", player, "not-an-egg")
 			session:fromClient("PlaceEgg", player, 42)
-			expect.equal(#data.Nests, 0)
+			expect.equal(#data.Hatching, 0)
 			for index = 1, 3 do
 				session:heartbeat(0.3)
 				session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
-				expect.equal(#data.Nests, math.min(index, 2))
+				expect.equal(#data.Hatching, math.min(index, 2))
 			end
 			expect.equal(#data.Eggs, 1, "the third egg waits in the inventory")
+			expect.truthy(string.find(lastNotice(session, player), "only hatch 2 eggs"), lastNotice(session, player))
+			local a, b = data.Hatching[1], data.Hatching[2]
+			local dx, dz = a.inward - b.inward, a.along - b.along
+			expect.truthy(math.sqrt(dx * dx + dz * dz) >= 8 - 1e-6, "spaced apart")
 		end)
 
-		it("hatches eggs that finished while the player was away", function()
+		it("hatches eggs that finished while the player was away, from an old save too", function()
 			local session = startServer()
 			local now = session.clock
 			session.saved.Player_1 = {
@@ -577,6 +614,8 @@ return function(harness)
 						bonus = 0,
 					},
 				},
+				NestCount = 2,
+				Coins = 5,
 				Pets = {},
 			}
 			local player = session:addPlayer(1, "Tester")
@@ -584,38 +623,210 @@ return function(harness)
 			local data = session.profiles.Player_1.Data
 			expect.equal(#data.Pets, 1)
 			expect.equal(data.Pets[1].kind, "Bear")
-			expect.equal(data.NestCount, 2, "filled in for an old save")
+			expect.equal(data.Nests, nil, "moved over")
+			expect.equal(data.SchemaVersion, 2)
+			expect.truthy(data.Dollars >= 5)
 			expect.equal(session:lastSent("PetHatched", player).args[1].kind, "Bear")
 		end)
 
 		it("banks the closure's 30x hatching when the next cycle starts", function()
 			local session = startServer()
-			local player = session:addPlayer(1, "Tester")
+			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			task.wait(0.1)
 			local InventoryService = services(session)
 			InventoryService.AddEgg(player, 1, "Epic", "Bear")
 			local data = session.profiles.Player_1.Data
-			-- Placed shortly before the runway closes, then through to the next cycle.
+			standInPen(session, root, 1, 30, 0)
+			-- Put down shortly before the runway closes, then through to the next cycle.
 			local cycleStart = (math.floor(session.clock / 180) + 1) * 180
 			session.clock = cycleStart - 25
 			session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
 			session.clock = cycleStart + 1
 			task.wait(0.6)
-			expect.near(data.Nests[1].bonus, 29 * 10)
+			expect.near(data.Hatching[1].bonus, 29 * 10)
 		end)
 
-		it("can give eggs and finish hatching from the Studio test panel", function()
+		it("pays dollars every second for the pets in the pen", function()
 			local session = startServer()
 			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			for index = 1, 2 do
+				table.insert(data.Pets, {
+					uid = "p" .. index,
+					kind = "Bear",
+					egg = "Bear",
+					zone = 1,
+					rarity = "Epic",
+					variant = "Normal",
+					inPen = index == 1,
+					hatchedAt = 0,
+				})
+			end
+			task.wait(0.6)
+			local before = data.Dollars
+			session:heartbeat(2)
+			task.wait(0.6)
+			-- One Forest Epic pet in the pen earns $4 a second; the other is not in the pen.
+			expect.near(data.Dollars - before, 8, 0.5)
+			local paid = session:lastSent("DollarsChanged", player)
+			expect.equal(paid.args[2], 4)
+		end)
+
+		it("lets players choose their pen's pets, equip the best, and sell pets", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			for index, rarity in { "Common", "Mythic" } do
+				table.insert(data.Pets, {
+					uid = "p" .. index,
+					kind = "Bear",
+					egg = "Bear",
+					zone = 1,
+					rarity = rarity,
+					variant = "Normal",
+					inPen = false,
+					hatchedAt = index,
+				})
+			end
+			session:fromClient("SetInPen", player, "p1", true)
+			expect.equal(data.Pets[1].inPen, true)
+			expect.equal(plotModel(session, 1):GetAttribute("Pets"), "Bear:Normal")
+			session:heartbeat(0.3)
+			session:fromClient("SetInPen", player, "p1", "yes")
+			session:fromClient("SetInPen", player, "p1", false)
+			expect.equal(data.Pets[1].inPen, false)
+			session:heartbeat(0.3)
+			session:fromClient("EquipBest", player)
+			expect.equal(data.Pets[1].inPen, true)
+			expect.equal(data.Pets[2].inPen, true)
+
+			session:heartbeat(0.3)
+			local before = data.Dollars
+			session:fromClient("SellPet", player, "p2")
+			expect.equal(#data.Pets, 1)
+			expect.near(data.Dollars - before, 10 * 150)
+			expect.truthy(string.find(lastNotice(session, player), "Sold Bear for %$1.5K"), lastNotice(session, player))
+		end)
+
+		it("buys a bigger pen when its owner presses the green button and can pay", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			local other = session:addPlayer(2, "Other")
+			session:heartbeat(1 / 60)
+			local plot = plotModel(session, 1)
+			local prompt = plot.UpgradeButton.Pad.Upgrade
+			local data = session.profiles.Player_1.Data
+
+			session:fire(prompt, "Triggered", player)
+			expect.equal(data.PenLevel, 1)
+			expect.truthy(string.find(lastNotice(session, player), "costs %$750"), lastNotice(session, player))
+
+			data.Dollars = 1000
+			session:fire(prompt, "Triggered", other)
+			expect.equal(data.PenLevel, 1, "only the owner")
+			session:fire(prompt, "Triggered", player)
+			expect.equal(data.PenLevel, 2)
+			expect.equal(data.Dollars, 250)
+			expect.equal(plot:GetAttribute("PenLevel"), 2)
+			expect.near(plot.Pen.Floor.Size.X, plots(session).penWidth(2))
+			expect.equal(prompt.ObjectText, "$5K")
+			expect.equal(session:lastSent("InventoryChanged", player).args[1].eggCapacity, 3)
+		end)
+
+		it("lets players ride their pets, faster than walking, and get off again", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			table.insert(data.Pets, {
+				uid = "steed",
+				kind = "Bear",
+				egg = "Bear",
+				zone = 1,
+				rarity = "Epic",
+				variant = "Gold",
+				inPen = true,
+				hatchedAt = 0,
+			})
+			humanoid.WalkSpeed = 16
+			humanoid.HipHeight = 2
+			session:fromClient("RidePet", player, "steed")
+			local mounts = session:service("Workspace").Mounts:GetChildren()
+			expect.equal(#mounts, 1)
+			local ridden = mounts[1]
+			expect.equal(ridden.Name, "Bear")
+			expect.equal(ridden:GetAttribute("Rider"), 1)
+			expect.equal(ridden:GetAttribute("Variant"), "Gold")
+			expect.equal(ridden.PrimaryPart.MountWeld.Part0, root)
+			expect.equal(ridden.PrimaryPart.Anchored, false)
+			expect.equal(humanoid.WalkSpeed, 30 + 4, "an Epic pet, plus Gold")
+			expect.truthy(humanoid.HipHeight > 2, "lifted onto its back")
+			expect.equal(data.Mount, "steed")
+			expect.equal(session:lastSent("MountChanged", player).args[1], "steed")
+
+			session:heartbeat(0.3)
+			session:fromClient("RidePet", player, "")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			expect.equal(humanoid.WalkSpeed, 16)
+			expect.equal(humanoid.HipHeight, 2)
+			expect.equal(session:lastSent("MountChanged", player).args[1], "")
+
+			-- Someone else's pet cannot be ridden.
+			session:heartbeat(0.3)
+			session:fromClient("RidePet", player, "not-mine")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+		end)
+
+		it("sends a ridden pet away while its rider is on an egg, and brings it back after", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			table.insert(data.Pets, {
+				uid = "steed",
+				kind = "Fox",
+				egg = "Foxtail",
+				zone = 1,
+				rarity = "Uncommon",
+				variant = "Normal",
+				inPen = true,
+				hatchedAt = 0,
+			})
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
+			mount(session, player, root, 1, "Common")
+			expect.equal(session:lastSent("RideStarted", player).args[1] ~= nil, true)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0, "away while on the egg")
+			session:fromClient("RequestDismount", player)
+			session:heartbeat(1 / 60)
+			task.wait(3.3)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1, "back after leaving the egg")
+			expect.equal(humanoid.WalkSpeed, 24)
+
+			-- Selling the pet sends it away for good.
+			session:heartbeat(0.3)
+			session:fromClient("SellPet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			expect.equal(data.Mount, "")
+		end)
+
+		it("can give eggs, dollars and finish hatching from the Studio test panel", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			session:fromClient("DevCommand", player, "GiveEggs")
 			local data = session.profiles.Player_1.Data
 			expect.equal(#data.Eggs, 8, "one of each Forest egg")
+			standInPen(session, root, 1, 30, 0)
 			session:fromClient("PlaceEgg", player, data.Eggs[8].uid)
 			session:fromClient("DevCommand", player, "HatchNow")
 			expect.equal(#data.Pets, 1)
 			expect.equal(data.Pets[1].kind, "Treant")
+			session:fromClient("DevCommand", player, "GiveDollars")
+			expect.equal(data.Dollars, 1e6)
 		end)
 	end)
 

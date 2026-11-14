@@ -118,7 +118,7 @@ local function devPanel(scope)
 	return scope:New("Frame")({
 		Name = "StudioTestPanel",
 		Position = UDim2.fromOffset(10, 100),
-		Size = UDim2.fromOffset(170, 306),
+		Size = UDim2.fromOffset(170, 345),
 		BackgroundColor3 = PANEL,
 		BackgroundTransparency = 0.2,
 		[Children] = {
@@ -148,7 +148,8 @@ local function devPanel(scope)
 			devButton(scope, "Drop each egg here", "DropEachEgg", 4),
 			devButton(scope, "Show this zone's pets", "ShowPets", 5),
 			devButton(scope, "Get this zone's eggs", "GiveEggs", 6),
-			devButton(scope, "Hatch my nests now", "HatchNow", 7),
+			devButton(scope, "Hatch my eggs now", "HatchNow", 7),
+			devButton(scope, "Give $1M", "GiveDollars", 8),
 		},
 	})
 end
@@ -172,7 +173,7 @@ function Hud.mount(playerGui: Instance)
 		local phase = use(UiState.cyclePhase)
 		local clock = NumberFormat.clock(use(UiState.cycleSeconds))
 		if phase == "Closed" then
-			return `Runway closed - nests hatch 30x!  {clock}`
+			return `Runway closed - eggs hatch 30x!  {clock}`
 		elseif phase == "Warning" then
 			return `Runway closing in {clock}!`
 		end
@@ -251,11 +252,11 @@ function Hud.mount(playerGui: Instance)
 						TextStrokeTransparency = 0.3,
 					}),
 
-					-- Top left: coins and eggs held.
+					-- Top left: dollars (and what the pen earns a second) and eggs held.
 					scope:New("Frame")({
 						Name = "Wallet",
 						Position = UDim2.fromOffset(10, 8),
-						Size = UDim2.fromOffset(150, 80),
+						Size = UDim2.fromOffset(190, 80),
 						BackgroundTransparency = 1,
 						[Children] = {
 							scope:New("UIListLayout")({
@@ -263,11 +264,17 @@ function Hud.mount(playerGui: Instance)
 								SortOrder = Enum.SortOrder.LayoutOrder,
 							}),
 							pill(scope, {
-								Name = "Coins",
+								Name = "Dollars",
 								LayoutOrder = 1,
 								Size = UDim2.new(1, 0, 0, 34),
+								Color = Color3.fromRGB(30, 86, 46),
 								Text = scope:Computed(function(use)
-									return `Coins  {NumberFormat.abbreviate(use(UiState.coins))}`
+									local text = `${NumberFormat.abbreviate(math.floor(use(UiState.dollars)))}`
+									local income = use(UiState.income)
+									if income > 0 then
+										text ..= `  +${NumberFormat.abbreviate(income)}/s`
+									end
+									return text
 								end),
 								TextSize = 16,
 							}),

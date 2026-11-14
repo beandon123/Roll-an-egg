@@ -1,8 +1,7 @@
--- Keeps the countdown board over every nest at the hub up to date, worked out on this device from the nest's
--- attributes (set by the server's PlotService) and the shared clock, and bursts an egg open when it hatches.
--- Empty nests only show their board to the plot's owner.
+-- Keeps the countdown board over every egg hatching in the pens at the hub up to date, worked out on this device
+-- from the egg's attributes (set by the server's PlotService) and the shared clock, and bursts an egg open when it
+-- hatches.
 
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
@@ -12,9 +11,7 @@ local NumberFormat = Load.shared("NumberFormat")
 
 local Panels = require(script.Parent.Parent.Ui.Panels)
 
-local localPlayer = Players.LocalPlayer
-
-local NestController = {}
+local HatchController = {}
 
 -- Countdowns refresh this many times a second.
 local UPDATE_RATE = 5
@@ -22,11 +19,11 @@ local UPDATE_RATE = 5
 local BURST_WINDOW = 3
 
 local lastUpdateAt = -math.huge
-local seenHatch: { [Instance]: number } = {}
+local burst: { [Instance]: boolean } = {}
 
--- Bits of shell and sparkles flying out of a nest.
-local function burst(nest: Model)
-	local bed = nest:FindFirstChild("Bed")
+-- Bits of shell and sparkles flying out of an egg's bed.
+local function burstOpen(egg: Model)
+	local bed = egg:FindFirstChild("Bed")
 	if bed == nil or not bed:IsA("BasePart") then
 		return
 	end
@@ -39,7 +36,7 @@ local function burst(nest: Model)
 	holder.Transparency = 1
 	holder.Size = Vector3.new(2, 1, 2)
 	holder.CFrame = bed.CFrame * CFrame.new(0, 2.5, 0)
-	holder.Parent = nest
+	holder.Parent = Workspace
 	local shells = Instance.new("ParticleEmitter")
 	shells.Color = ColorSequence.new(Color3.fromRGB(250, 246, 232))
 	shells.Size = NumberSequence.new(0.6, 0.2)
@@ -67,8 +64,16 @@ local function burst(nest: Model)
 	end)
 end
 
-local function updateNest(nest: Model, owner: number, now: number)
-	local board = nest:FindFirstChild("Board")
+local function updateEgg(egg: Model, now: number)
+	local hatchedAt = egg:GetAttribute("HatchedAt")
+	if typeof(hatchedAt) == "number" then
+		if not burst[egg] and now - hatchedAt < BURST_WINDOW then
+			burst[egg] = true
+			burstOpen(egg)
+		end
+		return
+	end
+	local board = egg:FindFirstChild("Board")
 	local billboard = board and board:FindFirstChild("Countdown")
 	if billboard == nil or not billboard:IsA("BillboardGui") then
 		return
@@ -77,30 +82,11 @@ local function updateNest(nest: Model, owner: number, now: number)
 	local bar = billboard:FindFirstChild("Bar") :: Frame
 	local fill = bar:FindFirstChild("Fill") :: Frame
 	local time = bar:FindFirstChild("Time") :: TextLabel
-
-	local hatchedAt = nest:GetAttribute("HatchedAt")
-	if typeof(hatchedAt) == "number" and seenHatch[nest] ~= hatchedAt then
-		seenHatch[nest] = hatchedAt
-		if now - hatchedAt < BURST_WINDOW then
-			burst(nest)
-		end
-	end
-
-	local kind = nest:GetAttribute("EggKind")
-	if typeof(kind) ~= "string" or kind == "" then
-		billboard.Enabled = owner == localPlayer.UserId
-		title.Text = "Empty nest"
-		title.TextColor3 = Color3.new(1, 1, 1)
-		bar.Visible = false
-		return
-	end
-	local rarity = nest:GetAttribute("Rarity") :: string
-	local placedAt = nest:GetAttribute("PlacedAt") :: number
-	local bonus = (nest:GetAttribute("Bonus") or 0) :: number
-	billboard.Enabled = true
-	title.Text = (nest:GetAttribute("EggName") or "Egg") :: string
+	local rarity = (egg:GetAttribute("Rarity") or "Common") :: string
+	local placedAt = (egg:GetAttribute("PlacedAt") or now) :: number
+	local bonus = (egg:GetAttribute("Bonus") or 0) :: number
+	title.Text = (egg:GetAttribute("EggName") or "Egg") :: string
 	title.TextColor3 = Panels.rarityColor(rarity)
-	bar.Visible = true
 	fill.BackgroundColor3 = Panels.rarityColor(rarity)
 	fill.Size = UDim2.fromScale(HatchMath.progress(placedAt, bonus, rarity, now), 1)
 	local left = HatchMath.timeLeft(placedAt, bonus, rarity, now)
@@ -112,6 +98,11 @@ local function update()
 		return
 	end
 	lastUpdateAt = os.clock()
+	for egg in burst do
+		if egg.Parent == nil then
+			burst[egg] = nil
+		end
+	end
 	local map = Workspace:FindFirstChild("Map")
 	local plots = map and map:FindFirstChild("Plots")
 	if plots == nil then
@@ -119,20 +110,19 @@ local function update()
 	end
 	local now = Workspace:GetServerTimeNow()
 	for _, plot in plots:GetChildren() do
-		local nests = plot:FindFirstChild("Nests")
-		if nests then
-			local owner = (plot:GetAttribute("Owner") or 0) :: number
-			for _, nest in nests:GetChildren() do
-				if nest:IsA("Model") then
-					updateNest(nest, owner, now)
+		local eggs = plot:FindFirstChild("Eggs")
+		if eggs then
+			for _, egg in eggs:GetChildren() do
+				if egg:IsA("Model") then
+					updateEgg(egg, now)
 				end
 			end
 		end
 	end
 end
 
-function NestController.Start()
+function HatchController.Start()
 	RunService.RenderStepped:Connect(update)
 end
 
-return NestController
+return HatchController

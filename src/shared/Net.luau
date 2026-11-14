@@ -19,13 +19,20 @@ local EVENTS = {
 	"RideEnded", -- (reason, { eggId, zone, rarity, kind })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"ObstacleHit", -- (obstacleId, tier, lateral): the rider's egg hit an obstacle (Shared/Obstacles)
-	"InventoryChanged", -- ({ eggs, nests, pets, nestCount }): see Logic/Hatchery's state()
+	"InventoryChanged", -- ({ eggs, hatching, pets, penLevel, ... }): see Logic/Hatchery's state()
 	"PetHatched", -- (pet): one of the player's eggs has hatched
+	"DollarsChanged", -- (dollars, incomePerSecond)
+	"Notice", -- (text, colorRgb?): a message for this player alone
+	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
 	"ReportHit", -- (obstacleId): the rider's device saw their egg hit an obstacle
-	"PlaceEgg", -- (eggUid): put an egg from the inventory into a free nest on the player's plot
+	"PlaceEgg", -- (eggUid): put an egg from the inventory down where the player stands in their pen
+	"SetInPen", -- (petUid, inPen): put a pet in the pen or take it out
+	"EquipBest", -- (): fill the pen with the player's best pets
+	"SellPet", -- (petUid)
+	"RidePet", -- (petUid or ""): ride a pet, or get off
 	"DevCommand", -- (command) Studio only
 }
 

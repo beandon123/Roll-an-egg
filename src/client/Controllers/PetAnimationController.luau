@@ -93,8 +93,8 @@ local function watchFolder(folder: Instance)
 	end)
 end
 
--- The folders of pets to animate.
-local FOLDERS = { StudioPets = true, PenPets = true }
+-- The folders of pets to animate: Studio's ShowPets, the pens, and pets being ridden.
+local FOLDERS = { StudioPets = true, PenPets = true, Mounts = true }
 
 function PetAnimationController.Init()
 	for name in FOLDERS do

@@ -14,8 +14,9 @@ local ORDER = {
 	"PetAnimationController",
 	"ObstacleController",
 	"DayNightController",
-	"NestController",
+	"HatchController",
 	"PenController",
+	"MountController",
 }
 
 local loaded = {}

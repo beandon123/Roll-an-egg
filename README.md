@@ -22,16 +22,18 @@ The first playable slice: **the runway, riding, and hatching**.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
 - The 3-minute runway cycle: a warning, then a 10-second closure before dawn that clears every egg without a
   rider.
-- Claimed eggs go into your inventory (the **Eggs** tab on the right). **Place** one and it goes into a nest on
-  your plot at the hub, where it hatches on a timer, faster while the runway is closed. The **Pets** tab shows
-  each nest's countdown and every pet you have hatched. Hatched pets roam your pen (see
-  [Eggs, nests and pets](#eggs-nests-and-pets)). Everything is saved (ProfileStore).
-- Each player gets one of 8 plots when they join, with their name over the gate, and respawns there.
-- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
+- Claimed eggs go into your inventory (the **Eggs** tab on the right). Stand anywhere in your pen and **Place** one:
+  it hatches there on a timer, faster while the runway is closed, sometimes into a Silver, Gold or Rainbow pet.
+- The **Pets** tab shows the eggs hatching and every pet you have. Put pets in your pen or take them out, or
+  **Equip best**. Pets in the pen roam it and earn dollars every second. Sell pets for dollars.
+- The green button at the front of your pen buys a bigger pen: room for more eggs at once and more pets.
+- Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
+- Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
+  saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
+- A simple HUD: dollars (and what your pen earns a second), runway timer, zone, eggs held, stamina bar, claim meter.
 
-The eggs, pets, runway and plots have their real look; the hub's plaza is still plain. Not built yet: riding your
-pets, duels, coins and upgrades (more nests, a bigger pen), selling pets, teleport pads, server events, the
-tutorial, and all sound.
+The eggs, pets, runway and plots have their real look; the hub's plaza is still plain. Not built yet: duels, other
+upgrades (Max Stamina and the rest), offline earnings, teleport pads, server events, the tutorial, and all sound.
 
 ## Try it in Roblox Studio
 
@@ -61,6 +63,8 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Steer | A / D | Thumbstick | Left stick |
 | Hop off | Jump again | Jump button | A |
 | Eggs and pets | Click the **Eggs** / **Pets** tabs on the right | Tap them | Select them |
+| Ride / get off your pet | **Ride** on its card, then the **RIDE** / **GET OFF** button | Tap them | Select them |
+| Buy a bigger pen | Walk up to the green button by your gate, hold E | Hold its prompt | Hold X |
 
 ### Studio test tools
 
@@ -72,24 +76,44 @@ In Studio a small panel appears on the left of the screen. Its buttons only work
 - **Drop each egg here**: drops each of the zone's 8 eggs in turn.
 - **Show this zone's pets**: stands the pets of the zone you are in (those with models so far) in front of you.
 - **Get this zone's eggs**: puts one of each of the zone's 8 eggs straight into your inventory.
-- **Hatch my nests now**: finishes hatching every egg in your nests.
+- **Hatch my eggs now**: finishes hatching every egg in your pen.
+- **Give $1M**: a million dollars, to try buying a bigger pen.
 
-## Eggs, nests and pets
+## Eggs, pens and pets
 
 Every egg you claim on the runway goes into your inventory. Open the **Eggs** tab on the right of the screen to see
-them, each with its rarity and how long it takes to hatch, and a 3D preview of the one you pick. **Place** puts an
-egg into the first empty nest on your plot; you start with 2 nests.
+them, each with its rarity and how long it takes to hatch, and a 3D preview of the one you pick.
 
-Your plot is one of 8 fenced pens at the hub, four down each side of the plaza, with your name over the gate
-(`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds them). The
-egg sits in its nest with a countdown above it. Hatch times go by rarity, from 30 seconds for a Common egg to 6 hours
-for an Eternal one (`src/shared/Config/Rarities.luau`). They are worked out from timestamps
-(`src/shared/HatchMath.luau`), so eggs keep hatching while you are offline. While the runway is closed every nest in
-the server hatches 30 times as fast, and that extra time is kept when the next cycle starts.
+**Your pen.** Your plot is one of 8 fenced pens at the hub, four down each side of the plaza, with your name over
+the gate (`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds
+them). It is open grass: walk in, stand anywhere and press **Place**, and the egg goes down just in front of you
+(not too close to another one), on a little straw bed with a countdown above it. A new pen hatches 2 eggs at once
+and holds 10 pets.
 
-When an egg hatches it bursts open, and the pet joins your pets: the **Pets** tab lists them, with each nest's
-countdown above. The 10 rarest walk round your pen, wandering from spot to spot (each player's device moves them,
-`PenController`). The rules are in `src/server/Logic/Hatchery.luau`, run by
+**Hatching.** Hatch times go by rarity, from 30 seconds for a Common egg to 6 hours for an Eternal one
+(`src/shared/Config/Rarities.luau`). They are worked out from timestamps (`src/shared/HatchMath.luau`), so eggs keep
+hatching while you are offline. While the runway is closed every egg in the server hatches 30 times as fast, and that
+extra time is kept when the next cycle starts. When an egg hatches it bursts open. Its pet is Normal, or with luck
+**Silver** (8%), **Gold** (2.5%) or **Rainbow** (0.5%): recoloured, shinier (Gold and Rainbow sparkle), worth 2, 5
+or 15 times as much, and a little faster to ride.
+
+**Pets and dollars.** The **Pets** tab lists the eggs hatching and every pet you have, each with what it earns. Pets
+in your pen wander round it and earn dollars every second, more for rarer pets, pets from deeper zones (10 times the
+zone before) and variants. **Put in pen** / **In pen** chooses which pets are in it; **Equip best** fills it with
+the ones that earn the most. **Sell** (tap twice) pays 150 seconds of the pet's earnings. Dollars show at the top
+left, with what your pen earns a second.
+
+**A bigger pen.** The green button at the front of your pen, beside the gate, buys the next size up (the price is
+over it): the fence moves out 10 studs, and the pen hatches one more egg at once and holds one more pet, up to 10 eggs
+and 18 pets at level 9. The numbers are in `src/shared/Config/Economy.luau`.
+
+**Riding pets.** **Ride** on a pet's card brings it out under you; then the **RIDE** / **GET OFF** button below the
+tabs gets you on and off it. A pet carries you faster than walking (22 studs a second for a Common pet, up to 44
+for an Eternal one, plus a little for variants), round the hub and down the runway. Jump from it onto an egg as usual:
+the pet goes away while you ride the egg and comes back 3 seconds after you leave it
+(`src/server/Services/MountService.luau`).
+
+The rules are in `src/server/Logic/Hatchery.luau` and `src/shared/PetWorth.luau`, run by
 `src/server/Services/InventoryService.luau`.
 
 ## The runway

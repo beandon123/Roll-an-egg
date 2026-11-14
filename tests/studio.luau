@@ -113,6 +113,7 @@ fakeEvent("BaseRemoteEvent", "OnServerEvent")
 fakeEvent("BaseRemoteEvent", "OnClientEvent")
 fakeEvent("UserInputService", "JumpRequest")
 fakeEvent("GuiButton", "Activated")
+fakeEvent("ProximityPrompt", "Triggered")
 fakeEvent("Instance", "Destroying")
 fakeEvent("Instance", "AncestryChanged")
 fakeEvent("Instance", "ChildAdded")
@@ -390,6 +391,7 @@ function Session:addPlayer(userId: number, name: string)
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
 	root.Position = roblox.Vector3.new(0, 13, -100)
+	root.AssemblyLinearVelocity = roblox.Vector3.new(0, 0, 0)
 	root.Parent = character
 	character.Parent = self:service("Workspace")
 	player.Character = character

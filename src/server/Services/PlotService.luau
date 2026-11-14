@@ -1,11 +1,12 @@
 -- The players' plots at the hub: each player gets one when they join and gives it back when they leave.
 --
--- A plot (Workspace.Map.Plots.PlotN, laid out by Shared/Plots) is a fenced pen with a gate onto the plaza, the
--- owner's name over the gate, and nests. Each nest shows the egg hatching in it, with a countdown above it that
--- every client keeps up to date from the nest's attributes (see the client's NestController):
---     Plot   Owner (UserId, 0 when free), OwnerName, Pets (the pet kinds roaming the pen, comma-separated)
---     Nest   Slot, EggKind, EggName, Rarity, PlacedAt, Bonus (empty EggKind: no egg), HatchedAt (the last hatch)
--- The pets themselves are drawn and walked round by each client (PenController); the server only says which.
+-- A plot (Workspace.Map.Plots.PlotN, built by Map/PlotModels, laid out by Shared/Plots) is one open pen: its size
+-- follows the owner's pen level, eggs they put down hatch where they lie, and their pets roam it. Attributes:
+--     Plot  Owner (UserId, 0 when free), OwnerName, PenLevel, Pets (the pets roaming the pen, as "Kind:Variant"
+--           pairs, comma-separated; the clients draw and walk them: PenController)
+--     Egg   Uid, EggKind, EggName, Rarity, PlacedAt, Bonus, and HatchedAt once it hatches (it is removed a moment
+--           later, so clients can burst it open)
+-- The green button at the front of each pen buys its owner a bigger pen (InventoryService does the buying).
 --
 -- Players appear at their own plot when they respawn.
 
@@ -15,7 +16,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local EggModels = require(Shared.EggModels)
-local EggRig = require(Shared.EggRig)
+local PetWorth = require(Shared.PetWorth)
 local Plots = require(Shared.Plots)
 local Runway = require(Shared.Runway)
 
@@ -25,88 +26,104 @@ local PlotModels = require(script.Parent.Parent.Map.PlotModels)
 
 local PlotService = {}
 
-local NEST_EGG = PlotModels.NEST_EGG
+-- How long a hatched egg stays (bursting open on clients) before it is removed.
+local HATCH_LINGER = 1
 
 local plotFolder: Folder
 local plotModels: { [number]: Model } = {}
 local owners: { [number]: Player } = {}
 local plotOf: { [Player]: number } = {}
+local upgradeHandler: ((Player) -> ())? = nil
 
--- Shows a nest's egg (or none), and sets the attributes its countdown is drawn from.
-local function showNestEgg(nest: Model, entry: Hatchery.Nest?)
-	local old = nest:FindFirstChild("Egg")
-	local kind = if entry then entry.kind else ""
-	if old and old:GetAttribute("Uid") ~= (entry and entry.uid) then
-		old:Destroy()
-		old = nil
+-- Puts the plot's eggs in step with the owner's hatching eggs: new ones are built, gone ones removed (unless they
+-- have just hatched, and are bursting open).
+local function syncEggs(plot: Model, index: number, hatching: { Hatchery.Incubating })
+	local folder = plot:FindFirstChild("Eggs") :: Folder
+	local wanted = {}
+	for _, entry in hatching do
+		wanted[entry.uid] = entry
 	end
-	nest:SetAttribute("EggKind", kind)
-	if entry == nil then
-		return
+	for _, model in folder:GetChildren() do
+		local uid = model:GetAttribute("Uid")
+		local entry = wanted[uid]
+		if entry then
+			model:SetAttribute("Bonus", entry.bonus)
+			wanted[uid] = nil
+		elseif model:GetAttribute("HatchedAt") == nil then
+			model:Destroy()
+		end
 	end
-	nest:SetAttribute("Rarity", entry.rarity)
-	nest:SetAttribute("PlacedAt", entry.placedAt)
-	nest:SetAttribute("Bonus", entry.bonus)
-	local about = EggModels.describe(entry.kind)
-	nest:SetAttribute("EggName", if about then about.name else "Egg")
-	if old == nil then
-		local egg = EggRig.build(entry.kind, NEST_EGG)
-		egg:SetAttribute("Uid", entry.uid)
-		local bed = nest.PrimaryPart :: BasePart
-		-- The egg model lies with its top towards +X; stand it on end in the nest.
-		local root = egg.PrimaryPart :: BasePart
-		root.CFrame = bed.CFrame * CFrame.new(0, 0.4 + NEST_EGG.halfLength, 0) * CFrame.Angles(0, 0, math.pi / 2)
-		egg.Parent = nest
+	for _, entry in wanted do
+		local model = PlotModels.buildEgg(folder, index, entry)
+		local about = EggModels.describe(entry.kind)
+		model:SetAttribute("EggName", if about then about.name else "Egg")
 	end
 end
 
--- Brings a player's plot up to date with their data: nests, eggs in them, and the pets in the pen.
+-- Brings a player's plot up to date with their data: pen size, eggs, the pets in the pen, the button's price.
 function PlotService.Refresh(player: Player)
 	local index = plotOf[player]
 	local data = DataService.GetData(player)
 	if index == nil or data == nil then
 		return
 	end
-	local model = plotModels[index]
-	local nests = model:FindFirstChild("Nests") :: Folder
-	-- Build any nests bought since.
-	for slot = 1, Hatchery.nestCount(data) do
-		if nests:FindFirstChild("Nest" .. slot) == nil then
-			PlotModels.buildNest(nests, index, slot)
-		end
+	local plot = plotModels[index]
+	if plot:GetAttribute("PenLevel") ~= data.PenLevel then
+		PlotModels.sizePen(plot, index, data.PenLevel)
 	end
-	local bySlot = {}
-	for _, entry in data.Nests do
-		bySlot[entry.slot] = entry
+	PlotModels.setButton(plot, data.PenLevel, PetWorth.penUpgradeCost(data.PenLevel))
+	syncEggs(plot, index, data.Hatching)
+	local pets = {}
+	for _, pet in Hatchery.penPets(data) do
+		table.insert(pets, `{pet.kind}:{pet.variant}`)
 	end
-	for _, nest in nests:GetChildren() do
-		if nest:IsA("Model") then
-			showNestEgg(nest, bySlot[nest:GetAttribute("Slot")])
-		end
-	end
-	local kinds = {}
-	for _, pet in Hatchery.penPets(data, Plots.PEN_CAPACITY) do
-		table.insert(kinds, pet.kind)
-	end
-	model:SetAttribute("Pets", table.concat(kinds, ","))
+	plot:SetAttribute("Pets", table.concat(pets, ","))
 end
 
--- Marks the moment a nest's egg hatched, so clients can burst it open.
-function PlotService.Hatched(player: Player, slot: number, time: number)
+-- Marks an egg as hatched so clients burst it open, and removes it a moment later.
+function PlotService.Hatched(player: Player, uid: string, time: number)
 	local index = plotOf[player]
 	if index == nil then
 		return
 	end
-	local nests = plotModels[index]:FindFirstChild("Nests")
-	local nest = nests and nests:FindFirstChild("Nest" .. slot)
-	if nest then
-		nest:SetAttribute("HatchedAt", time)
+	local folder = plotModels[index]:FindFirstChild("Eggs")
+	local model = folder and folder:FindFirstChild("Egg_" .. uid)
+	if model then
+		model:SetAttribute("HatchedAt", time)
+		task.delay(HATCH_LINGER, function()
+			model:Destroy()
+		end)
 	end
 end
 
 -- The plot a player owns (its index), or nil.
 function PlotService.GetPlot(player: Player): number?
 	return plotOf[player]
+end
+
+-- Where the player is standing in their own pen, as (inward, along), or nil if they are not in it.
+function PlotService.SpotInPen(player: Player): (number?, number?)
+	local index = plotOf[player]
+	local data = DataService.GetData(player)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if index == nil or data == nil or root == nil or not root:IsA("BasePart") then
+		return nil, nil
+	end
+	local position = root.CFrame.Position
+	local inward, along = Plots.toLocal(index, position.X, position.Z)
+	if not Plots.inPen(data.PenLevel, inward, along, 0) or position.Y > Runway.BASE_Y + 12 then
+		return nil, nil
+	end
+	-- A little in front of the player, so the egg is not under their feet.
+	local ahead = root.CFrame.LookVector * 4
+	local aheadInward, aheadAlong = Plots.toLocal(index, position.X + ahead.X, position.Z + ahead.Z)
+	return aheadInward, aheadAlong
+end
+
+-- Who presses the green button is handed to `handler` (InventoryService buys the upgrade).
+function PlotService.OnUpgradePressed(handler: (Player) -> ())
+	upgradeHandler = handler
 end
 
 local function spawnAtPlot(player: Player, character: Model)
@@ -166,14 +183,10 @@ local function release(player: Player)
 	model:SetAttribute("OwnerName", "")
 	model:SetAttribute("Pets", "")
 	PlotModels.signText(model:FindFirstChild("Sign") :: BasePart, "Free plot")
-	local nests = model:FindFirstChild("Nests") :: Folder
-	for _, nest in nests:GetChildren() do
-		local slot = nest:GetAttribute("Slot")
-		if typeof(slot) == "number" and slot > Plots.START_NESTS then
-			nest:Destroy()
-		elseif nest:IsA("Model") then
-			showNestEgg(nest, nil)
-		end
+	PlotModels.sizePen(model, index, 1)
+	PlotModels.setButton(model, 1, PetWorth.penUpgradeCost(1))
+	for _, egg in (model:FindFirstChild("Eggs") :: Folder):GetChildren() do
+		egg:Destroy()
 	end
 end
 
@@ -184,7 +197,15 @@ function PlotService.Init()
 	plotFolder.Name = "Plots"
 	plotFolder.Parent = map
 	for index = 1, Plots.COUNT do
-		plotModels[index] = PlotModels.buildPlot(plotFolder, index)
+		local plot = PlotModels.buildPlot(plotFolder, index)
+		plotModels[index] = plot
+		local prompt = (plot :: any).UpgradeButton.Pad.Upgrade :: ProximityPrompt
+		prompt.Triggered:Connect(function(player: Player)
+			-- Only the plot's owner can buy its upgrade.
+			if owners[index] == player and upgradeHandler then
+				upgradeHandler(player)
+			end
+		end)
 	end
 
 	DataService.OnLoaded(function(player)

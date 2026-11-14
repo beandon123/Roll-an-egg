@@ -84,9 +84,13 @@ local commands: { [string]: (Player) -> () } = {
 			InventoryService.AddEgg(player, zone.id, entry.rarity, entry.egg)
 		end
 	end,
-	-- Finishes hatching every egg in the player's nests.
+	-- Finishes hatching every egg in the player's pen.
 	HatchNow = function(player)
 		InventoryService.FinishHatching(player)
+	end,
+	-- A million dollars, to try buying a bigger pen.
+	GiveDollars = function(player)
+		InventoryService.AddDollars(player, 1e6)
 	end,
 	-- Drops each of the zone's eggs in turn, a moment apart, so all of them can be looked at on the runway.
 	DropEachEgg = function(player)

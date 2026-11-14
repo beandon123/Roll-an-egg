@@ -1,10 +1,14 @@
 -- Draws the pets in every pen at the hub and walks them round. Which pets a pen holds comes from its plot's "Pets"
--- attribute (set by the server's PlotService); the models and their wandering exist only on this device, so the
--- server never moves pets about. PetAnimationController animates them (they live in Workspace.PenPets).
+-- attribute ("Kind:Variant" pairs, set by the server's PlotService) and how big it is from "PenLevel"; the models
+-- and their wandering exist only on this device, so the server never moves pets about. PetAnimationController
+-- animates them (they live in Workspace.PenPets).
 --
 -- Each pet strolls to a random spot in the pen, stops for a while, and picks another. Pens far from the camera
 -- are left empty, so only nearby pets cost anything.
+--
+-- Also shows the green "bigger pen" button's prompt on this player's own plot only.
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
@@ -40,7 +44,7 @@ type Roamer = {
 	walkMove: string,
 }
 
-type Pen = { kinds: string, roamers: { Roamer } }
+type Pen = { key: string, roamers: { Roamer } }
 
 local folder: Folder
 local pens: { [number]: Pen } = {}
@@ -48,14 +52,15 @@ local templates: { [string]: Model } = {}
 local random = Random.new()
 local clock = 0
 
-local function template(kind: string): Model?
-	local cached = templates[kind]
+local function template(kind: string, variant: string): Model?
+	local key = kind .. ":" .. variant
+	local cached = templates[key]
 	if cached == nil then
-		local built = PetRig.build(kind)
+		local built = PetRig.build(kind, variant)
 		if built == nil then
 			return nil
 		end
-		templates[kind] = built
+		templates[key] = built
 		cached = built
 	end
 	return cached
@@ -82,19 +87,22 @@ local function clearPen(index: number)
 	end
 end
 
-local function fillPen(index: number, kinds: string)
+local function fillPen(index: number, key: string, pets: string, level: number)
 	clearPen(index)
-	local pen: Pen = { kinds = kinds, roamers = {} }
+	local pen: Pen = { key = key, roamers = {} }
 	pens[index] = pen
-	for kind in string.gmatch(kinds, "[^,]+") do
+	for entry in string.gmatch(pets, "[^,]+") do
+		local kind, variant = string.match(entry, "^([^:]+):?(.*)$")
+		kind = kind or entry
+		variant = if variant and variant ~= "" then variant else "Normal"
 		local design = PetModels.get(kind)
-		local source = template(kind)
+		local source = template(kind, variant)
 		if design and source then
 			local model = source:Clone()
 			local root = model.PrimaryPart :: BasePart
 			-- Keep the whole pet inside the fence.
 			local reach = math.max(root.Size.X, root.Size.Z) / 2 + 1
-			local x0, x1, z0, z1 = Plots.roamArea(index, reach)
+			local x0, x1, z0, z1 = Plots.roamArea(index, level, reach)
 			local moves = PetAnimations.movesOf(design.skeleton)
 			local walkMove = PetAnimations.defaultMove(design.skeleton, design.gait)
 			local roamer: Roamer = {
@@ -146,6 +154,17 @@ local function stepRoamer(roamer: Roamer, deltaTime: number)
 	place(roamer)
 end
 
+-- The green button's prompt works only for the plot's owner, so it is only shown to them.
+local function showPrompt(plot: Instance)
+	local button = plot:FindFirstChild("UpgradeButton")
+	local pad = button and button:FindFirstChild("Pad")
+	local prompt = pad and pad:FindFirstChild("Upgrade")
+	if prompt and prompt:IsA("ProximityPrompt") then
+		local mine = plot:GetAttribute("Owner") == Players.LocalPlayer.UserId
+		prompt.Enabled = mine and plot:GetAttribute("Maxed") ~= true
+	end
+end
+
 local function update(deltaTime: number)
 	clock += deltaTime
 	local map = Workspace:FindFirstChild("Map")
@@ -158,16 +177,19 @@ local function update(deltaTime: number)
 	for _, plot in plots:GetChildren() do
 		local index = plot:GetAttribute("Index")
 		if typeof(index) == "number" then
-			local kinds = (plot:GetAttribute("Pets") or "") :: string
+			showPrompt(plot)
+			local pets = (plot:GetAttribute("Pets") or "") :: string
+			local level = (plot:GetAttribute("PenLevel") or 1) :: number
+			local key = `{level}|{pets}`
 			local x, z = Plots.center(index)
 			local distance = (Vector3.new(x, Runway.BASE_Y, z) - eye).Magnitude
 			local pen = pens[index]
 			local near = distance < (if pen then HIDE_DISTANCE else SHOW_DISTANCE)
-			if not near or kinds == "" then
+			if not near or pets == "" then
 				clearPen(index)
 			else
-				if pen == nil or pen.kinds ~= kinds then
-					fillPen(index, kinds)
+				if pen == nil or pen.key ~= key then
+					fillPen(index, key, pets, level)
 					pen = pens[index]
 				end
 				for _, roamer in (pen :: Pen).roamers do
