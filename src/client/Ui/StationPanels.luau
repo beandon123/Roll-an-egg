@@ -393,7 +393,7 @@ local function fusePanel(scope)
 				Name = "HowItWorks",
 				LayoutOrder = 1,
 				Size = UDim2.new(1, -10, 0, 64),
-				Text = "Put in 3 of the same pet and get back an egg of that pet, one size bigger.",
+				Text = "Put in 3 of the same pet and get back an egg of that pet, usually one size bigger.",
 				TextSize = 22,
 				Wrapped = true,
 				XAlignment = Enum.TextXAlignment.Center,
@@ -401,9 +401,10 @@ local function fusePanel(scope)
 			text(scope, {
 				Name = "Odds",
 				LayoutOrder = 2,
-				Size = UDim2.new(1, -10, 0, 96),
+				Size = UDim2.new(1, -10, 0, 118),
 				Text = "Mix any variants and sizes. Each pet you put in has a 1 in 3 chance to pass on its variant, "
-					.. "and a 1 in 3 chance to set the size: one size up from its own.",
+					.. "and a 1 in 3 chance to set the size, which then grows one step. Growing past Big gets "
+					.. "harder: 90% to Huge, 80% to Giant, 70% to Colossal, 60% to Titanic.",
 				Color = BOOST,
 				TextSize = 17,
 				Wrapped = true,

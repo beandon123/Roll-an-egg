@@ -18,9 +18,9 @@ The first playable slice: **the runway and riding**, plus **the hub** with its s
 - Claimed eggs are saved to the player's data (ProfileStore).
 - **Sell stall**: sell eggs you don't want for coins (half the egg's stamina requirement each).
 - **Trails shop**: buy trails with coins. The equipped trail streams behind you and multiplies your Max Stamina.
-- **Fuse machine**: its panel explains it (3 of the same pet -> an egg of that pet, one size bigger; each pet put in
-  has a 1 in 3 chance to pass on its variant and to set the size). The rules are written and tested
-  (`Logic/Fuse`); fusing itself arrives with pets.
+- **Fuse machine**: its panel explains it (3 of the same pet -> an egg of that pet, usually one size bigger; each
+  pet put in has a 1 in 3 chance to pass on its variant and to set the size). The rules, the eight pet sizes, and
+  the hatch-size odds are written and tested (`Logic/Fuse`, `Config/PetTraits`); fusing itself arrives with pets.
 - A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter, and the station panels.
 
 Everything visual is a placeholder made of plain parts. Not built yet: obstacles, duels, pen ownership and nests,

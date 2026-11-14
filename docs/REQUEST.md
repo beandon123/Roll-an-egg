@@ -133,15 +133,27 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
     - [ ] Eggs: sell 1 or all of a kind; an egg is worth half its stamina requirement (proposed: Forest Common 25,
           Desert Mythic 900, Volcano Eternal 75K)
     - [ ] Pets: once hatching exists (price by zone, rarity, variant and size; set during economy tuning)
-- [ ] Fuse machine (decided): put in 3 of the same pet -> get an egg of that pet, which hatches one size bigger;
-      it consolidates small pets into bigger ones and clears spare pets out of inventories
+- [ ] Fuse machine (decided): put in 3 of the same pet -> get an egg of that pet, which usually hatches one size
+      bigger; it consolidates small pets into bigger ones and clears spare pets out of inventories
     - [ ] Exactly 3 pets of the same species (decided): 3 Woolly Mammoths, never a Mammoth and a Dolphin
     - [ ] Variants and sizes can be mixed (decided)
     - [ ] Variant (decided): each pet put in passes on its variant with a 1 in 3 chance
           (1 Golden + 2 Normal -> 33% Golden; 3 Golden -> 100% Golden)
-    - [ ] Size (decided): each pet put in has a 1 in 3 chance to set the size, and the result is one size up from it
-          (1 Tiny + 2 Normal -> Normal 33% or Big 67%; 3 Tiny -> Normal; 3 Normal -> Big); the variant and size
-          rolls are independent (proposed); Colossal stays Colossal (proposed)
+    - [ ] Size (decided): each pet put in has a 1 in 3 chance to set the size; the result then grows one size from
+          it, for sure up to Big and less often after that; if it does not grow it keeps that size:
+
+          Three of      Come out
+          Tiny          Small 100%
+          Small         Normal 100%
+          Normal        Big 100%
+          Big           Huge 90%, else Big
+          Huge          Giant 80%, else Huge
+          Giant         Colossal 70%, else Giant
+          Colossal      Titanic 60%, else Colossal
+          Titanic       Titanic (the biggest)
+
+          Mixed sizes: 1 Tiny + 2 Normal -> Small 33% or Big 67%; 1 Big + 2 Normal -> Huge 30% or Big 70%
+    - [ ] The variant and size rolls are independent (proposed)
     - [ ] The egg always hatches that species (decided), with the rolled variant and size; it takes that rarity's
           hatch time and its result stays hidden ("?") until it hatches (proposed)
     - [ ] Built together with pets and hatching; the rules are in `Logic/Fuse` and its panel explains them until then
@@ -193,9 +205,20 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 ### Pets
 - [ ] Each pet: species, zone, rarity, variant (Normal / Golden / Rainbow mutation chance on hatch), size, Income/sec,
       Mount Speed
-    - [ ] Sizes, smallest first (proposed; the reference screenshot shows Big / Giant / Huge / Colossal tags):
-          Tiny, Normal, Big, Huge, Giant, Colossal
-    - [ ] Hatched pets come out Tiny or Normal; bigger sizes come only from the fuse machine (proposed)
+    - [ ] Sizes, smallest first (decided): Tiny, Small, Normal, Big, Huge, Giant, Colossal, Titanic
+    - [ ] Every hatch rolls a size; the bigger the size, the lower its chance (decided); first-pass odds (proposed):
+
+          Size       Runway egg   Titan Egg
+          Tiny       40%          30%
+          Small      28%          25%
+          Normal     18%          20%
+          Big        8%           12%
+          Huge       4%           7%
+          Giant      1.5%         3.5%
+          Colossal   0.5%         1.5%
+          Titanic    -            1%
+
+    - [ ] Titanic pets come only from Titan Eggs and the fuse machine (decided)
     - [ ] Bigger pets are drawn bigger and earn more (proposed; multipliers set during economy tuning)
     - [ ] Each zone's pets out-earn the zone before it (a new zone's Commons roughly match the previous zone's best)
 - [ ] Mounts: equip one pet as your active mount; summon/unsummon from the HUD
@@ -275,6 +298,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
     - [ ] Riders' stamina drains at that zone's Common rate (decided)
     - [ ] Everyone still on at 100% gets a Titan egg that can only hatch pets from that zone,
           with odds tilted toward the zone's rarer pets (decided)
+    - [ ] Titan eggs are the only eggs that can hatch Titanic-size pets (decided; see Pets)
 - [ ] Egg Avalanche: once an hour, one full cycle with 2x eggs in every zone (decided)
 
 ### Social

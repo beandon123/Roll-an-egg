@@ -1,6 +1,6 @@
 --!nocheck
--- Checks the fuse machine's rules (Logic/Fuse) and the pet trait ladder they use (Config/PetTraits), with the
--- examples the game's owner gave.
+-- Checks the fuse machine's rules (Logic/Fuse) and the pet traits they use (Config/PetTraits): the size ladder,
+-- how often each size grows when fused, and how often each size hatches. Uses the examples the game's owner gave.
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
@@ -14,6 +14,11 @@ return function(harness)
 		return { uid = "pet" .. nextUid, species = species, variant = variant or "Normal", size = size or "Normal" }
 	end
 
+	-- Three pets of one species, all the same size and variant.
+	local function three(size, variant)
+		return { pet("Bunny", variant, size), pet("Bunny", variant, size), pet("Bunny", variant, size) }
+	end
+
 	-- A random source that hands out the given numbers in turn.
 	local function sequence(...)
 		local values = { ... }
@@ -24,19 +29,87 @@ return function(harness)
 		end
 	end
 
+	-- A fixed-seed generator, so statistical tests always see the same numbers.
+	local function seeded(seed)
+		local state = seed
+		return function()
+			state = (state * 16807) % 2147483647
+			return (state - 1) / 2147483646
+		end
+	end
+
 	describe("Pet traits", function()
-		it("orders sizes from Tiny to Colossal, one step at a time", function()
-			expect.equal(PetTraits.Sizes[1], "Tiny")
-			expect.equal(PetTraits.Sizes[#PetTraits.Sizes], "Colossal")
-			expect.equal(PetTraits.nextSize("Tiny"), "Normal")
-			expect.equal(PetTraits.nextSize("Normal"), "Big")
-			expect.equal(PetTraits.nextSize("Colossal"), "Colossal")
-			for index, size in PetTraits.Sizes do
+		it("orders sizes from Tiny to Titanic, one step at a time", function()
+			local expected = { "Tiny", "Small", "Normal", "Big", "Huge", "Giant", "Colossal", "Titanic" }
+			expect.equal(#PetTraits.Sizes, #expected)
+			for index, size in expected do
+				expect.equal(PetTraits.Sizes[index], size)
 				expect.equal(PetTraits.sizeIndex(size), index)
 			end
+			expect.equal(PetTraits.nextSize("Tiny"), "Small")
+			expect.equal(PetTraits.nextSize("Normal"), "Big")
+			expect.equal(PetTraits.nextSize("Colossal"), "Titanic")
+			expect.equal(PetTraits.nextSize("Titanic"), "Titanic")
 			expect.falsy(PetTraits.sizeIndex("Medium"))
 			expect.truthy(PetTraits.isVariant("Golden"))
 			expect.falsy(PetTraits.isVariant("Shiny"))
+		end)
+
+		it("grows sizes for sure up to Big, then 10% less often for each step after it", function()
+			local expected = {
+				Tiny = 1,
+				Small = 1,
+				Normal = 1,
+				Big = 0.9,
+				Huge = 0.8,
+				Giant = 0.7,
+				Colossal = 0.6,
+				Titanic = 0,
+			}
+			for _, size in PetTraits.Sizes do
+				expect.near(PetTraits.GROW_CHANCE[size], expected[size], 1e-9, size)
+			end
+		end)
+
+		it("hatches bigger sizes less often", function()
+			for kind, weights in PetTraits.HATCH_SIZE_WEIGHTS do
+				local previous = math.huge
+				for _, size in PetTraits.Sizes do
+					local weight = weights[size]
+					if weight then
+						expect.truthy(weight > 0 and weight < previous, `{kind}: {size} is rarer than the size below`)
+						previous = weight
+					end
+				end
+				local total = 0
+				for _, chance in PetTraits.hatchSizeOdds(kind) do
+					total += chance
+				end
+				expect.near(total, 1, 1e-9, kind .. " odds add up")
+			end
+		end)
+
+		it("hatches Titanic pets only from Titan Eggs", function()
+			expect.falsy(PetTraits.HATCH_SIZE_WEIGHTS.Egg.Titanic, "runway eggs")
+			expect.truthy(PetTraits.hatchSizeOdds("TitanEgg").Titanic > 0, "Titan Eggs")
+			for step = 0, 9999 do
+				expect.truthy(PetTraits.rollHatchSize("Egg", step / 10000) ~= "Titanic", "rolled from a runway egg")
+			end
+			expect.equal(PetTraits.rollHatchSize("TitanEgg", 0.99999), "Titanic")
+			expect.equal(PetTraits.rollHatchSize("Egg", 0), "Tiny")
+			expect.equal(PetTraits.rollHatchSize("Egg", 0.99999), "Colossal")
+		end)
+
+		it("rolls hatch sizes at their odds", function()
+			local random = seeded(777)
+			local counts, rolls = {}, 40000
+			for _ = 1, rolls do
+				local size = PetTraits.rollHatchSize("Egg", random())
+				counts[size] = (counts[size] or 0) + 1
+			end
+			for size, chance in PetTraits.hatchSizeOdds("Egg") do
+				expect.near((counts[size] or 0) / rolls, chance, 0.01, size)
+			end
 		end)
 	end)
 
@@ -45,7 +118,7 @@ return function(harness)
 			expect.truthy(Fuse.check({
 				pet("Woolly Mammoth", "Golden", "Tiny"),
 				pet("Woolly Mammoth", "Normal", "Normal"),
-				pet("Woolly Mammoth", "Rainbow", "Big"),
+				pet("Woolly Mammoth", "Rainbow", "Titanic"),
 			}))
 
 			local ok, reason = Fuse.check({ pet("Woolly Mammoth"), pet("Woolly Mammoth"), pet("Dolphin") })
@@ -75,68 +148,74 @@ return function(harness)
 			expect.near(oneGolden.Golden, 1 / 3)
 			expect.near(oneGolden.Normal, 2 / 3)
 
-			local allGolden = Fuse.odds({ pet("Bunny", "Golden"), pet("Bunny", "Golden"), pet("Bunny", "Golden") })
+			local allGolden = Fuse.odds(three("Normal", "Golden"))
 			expect.near(allGolden.Golden, 1)
 			expect.falsy(allGolden.Normal)
 		end)
 
-		it("comes out one size up from a pet picked at random", function()
-			-- One Tiny and two Normal: Normal or the next size up, Big.
-			local _, mixed = Fuse.odds({ pet("Bunny", "Normal", "Tiny"), pet("Bunny"), pet("Bunny") })
-			expect.near(mixed.Normal, 1 / 3)
-			expect.near(mixed.Big, 2 / 3)
-			expect.falsy(mixed.Tiny, "never smaller than the smallest pet put in, plus one")
+		it("always grows three pets up to Big", function()
+			for _, case in { { "Tiny", "Small" }, { "Small", "Normal" }, { "Normal", "Big" } } do
+				local _, sizes = Fuse.odds(three(case[1]))
+				expect.near(sizes[case[2]], 1, 1e-9, case[1])
+			end
+		end)
 
-			local _, tiny = Fuse.odds({
-				pet("Bunny", "Normal", "Tiny"),
-				pet("Bunny", "Normal", "Tiny"),
-				pet("Bunny", "Normal", "Tiny"),
-			})
-			expect.near(tiny.Normal, 1)
-			local _, normal = Fuse.odds({ pet("Bunny"), pet("Bunny"), pet("Bunny") })
-			expect.near(normal.Big, 1)
-			local _, colossal = Fuse.odds({
-				pet("Bunny", "Normal", "Colossal"),
-				pet("Bunny", "Normal", "Colossal"),
-				pet("Bunny", "Normal", "Colossal"),
-			})
-			expect.near(colossal.Colossal, 1)
+		it("grows bigger pets less often: 90% Huge, 80% Giant, 70% Colossal, 60% Titanic", function()
+			local steps = {
+				{ "Big", "Huge", 0.9 },
+				{ "Huge", "Giant", 0.8 },
+				{ "Giant", "Colossal", 0.7 },
+				{ "Colossal", "Titanic", 0.6 },
+			}
+			for _, step in steps do
+				local _, sizes = Fuse.odds(three(step[1]))
+				expect.near(sizes[step[2]], step[3], 1e-9, step[1] .. " grows")
+				expect.near(sizes[step[1]], 1 - step[3], 1e-9, step[1] .. " stays")
+			end
+			local _, titanic = Fuse.odds(three("Titanic"))
+			expect.near(titanic.Titanic, 1, 1e-9, "Titanic stays Titanic")
+		end)
+
+		it("lets each pet put in set the size a third of the time", function()
+			-- One Tiny and two Normal: Tiny grows to Small, Normal to Big.
+			local _, mixed = Fuse.odds({ pet("Bunny", "Normal", "Tiny"), pet("Bunny"), pet("Bunny") })
+			expect.near(mixed.Small, 1 / 3)
+			expect.near(mixed.Big, 2 / 3)
+			-- One Big and two Normal: Big grows 90% of the time.
+			local _, bigger = Fuse.odds({ pet("Bunny", "Normal", "Big"), pet("Bunny"), pet("Bunny") })
+			expect.near(bigger.Huge, 0.3)
+			expect.near(bigger.Big, 0.1 / 3 + 2 / 3)
 		end)
 
 		it("rolls the variant and the size separately", function()
 			local pets = { pet("Fox", "Golden", "Tiny"), pet("Fox", "Normal", "Normal"), pet("Fox", "Rainbow", "Big") }
-			-- First number picks the variant's pet, second the size's.
-			local variant, size = Fuse.roll(pets, sequence(0, 0.99))
+			-- The numbers pick the variant's pet, then the size's pet, then whether that size grows.
+			local variant, size = Fuse.roll(pets, sequence(0, 0.99, 0.5))
 			expect.equal(variant, "Golden")
 			expect.equal(size, "Huge")
-			variant, size = Fuse.roll(pets, sequence(0.5, 0))
+			variant, size = Fuse.roll(pets, sequence(0.5, 0, 0.99))
 			expect.equal(variant, "Normal")
-			expect.equal(size, "Normal")
-			variant, size = Fuse.roll(pets, sequence(0.9999, 0.5))
+			expect.equal(size, "Small", "Tiny always grows")
+			variant, size = Fuse.roll(pets, sequence(0.9999, 0.9999, 0.95))
 			expect.equal(variant, "Rainbow")
-			expect.equal(size, "Big")
+			expect.equal(size, "Big", "Big did not grow")
 		end)
 
 		it("matches its odds over many fusions", function()
-			local pets = { pet("Owl", "Golden", "Tiny"), pet("Owl"), pet("Owl") }
-			-- A fixed-seed generator, so the test always sees the same numbers.
-			local state = 12345
-			local function random()
-				state = (state * 16807) % 2147483647
-				return (state - 1) / 2147483646
-			end
-			local golden, big, rolls = 0, 0, 30000
+			local pets = { pet("Owl", "Golden", "Big"), pet("Owl", "Normal", "Big"), pet("Owl", "Normal", "Big") }
+			local random = seeded(12345)
+			local golden, huge, rolls = 0, 0, 30000
 			for _ = 1, rolls do
 				local variant, size = Fuse.roll(pets, random)
 				if variant == "Golden" then
 					golden += 1
 				end
-				if size == "Big" then
-					big += 1
+				if size == "Huge" then
+					huge += 1
 				end
 			end
 			expect.near(golden / rolls, 1 / 3, 0.02, "Golden")
-			expect.near(big / rolls, 2 / 3, 0.02, "Big")
+			expect.near(huge / rolls, 0.9, 0.02, "Huge")
 		end)
 	end)
 end
