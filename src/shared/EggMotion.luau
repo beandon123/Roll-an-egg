@@ -10,15 +10,6 @@ function EggMotion.zAt(spawnTime: number, startZ: number, rollSpeed: number, now
 	return startZ + rollSpeed * math.max(0, now - spawnTime)
 end
 
--- Extra height while an egg drops in from its chute. `age` is seconds since it spawned.
-function EggMotion.dropOffset(age: number, dropTime: number, dropHeight: number): number
-	if age >= dropTime or dropTime <= 0 then
-		return 0
-	end
-	local remaining = 1 - math.max(0, age) / dropTime
-	return dropHeight * remaining * remaining
-end
-
 -- Extra height during the hop an egg makes when it is left without a rider.
 -- `bounceTime` is when the hop began, or nil if the egg has never hopped.
 function EggMotion.hopOffset(bounceTime: number?, now: number, hopDuration: number, hopHeight: number): number

@@ -43,8 +43,7 @@ return function(harness)
 	local function eggPosition(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
-		local startZ = modules.Runway.zoneStartZ(egg.zone) + modules.Tuning.EGG_SPAWN_OFFSET
-		local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
+		local z = modules.EggMotion.zAt(egg.spawnTime, spec.startZ, spec.rollSpeed, session.clock)
 		return roblox.Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z)
 	end
 
@@ -115,6 +114,17 @@ return function(harness)
 			for zoneId = 1, 5 do
 				expect.truthy(zonesSeen[zoneId], "zone " .. zoneId)
 			end
+		end)
+
+		it("leaves the rare-egg messages to the clients", function()
+			-- Every client gets EggSpawned and shows the message for Secret and rarer eggs itself, in the player's
+			-- own time zone. The server sends no text of its own for any egg.
+			local session = startServer()
+			for _, rarity in { "Common", "Legendary", "Mythic", "Secret" } do
+				dropEgg(session, 3, rarity)
+			end
+			dropEgg(session, 5, "Eternal")
+			expect.equal(#session:sent("Announce"), 0)
 		end)
 
 		it("clears eggs without riders when the runway closes", function()
@@ -261,15 +271,18 @@ return function(harness)
 			session:heartbeat(1 / 60)
 			local egg = mount(session, player, root, 1, "Common")
 
+			-- Steer 4 studs toward the centre line, so the move never runs into the edge of the runway wherever the egg
+			-- happened to land.
+			local target = egg.lateral + (if egg.lateral > 0 then -4 else 4)
 			session:heartbeat(0.5)
-			session:fromClient("RideLateral", player, egg.lateral + 4)
+			session:fromClient("RideLateral", player, target)
 			local relayed = session:lastSent("EggLateral", "all")
 			expect.truthy(relayed, "EggLateral")
 			expect.equal(relayed.args[1], egg.id)
-			expect.near(relayed.args[2], egg.lateral + 4, 1e-6)
+			expect.near(relayed.args[2], target, 1e-6)
 
 			-- Reports arriving faster than 30 a second are dropped.
-			session:fromClient("RideLateral", player, egg.lateral + 5)
+			session:fromClient("RideLateral", player, target + 1)
 			expect.equal(#session:sent("EggLateral", "all"), 1)
 		end)
 
@@ -338,7 +351,6 @@ return function(harness)
 				end
 			end
 			expect.truthy(found, "a Mythic Desert egg")
-			expect.truthy(session:lastSent("Announce", "all"), "announcement")
 		end)
 
 		it("do nothing in a live server", function()

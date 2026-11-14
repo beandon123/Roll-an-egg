@@ -224,6 +224,11 @@ roblox.implementMethod("Humanoid", "ChangeState", function(self, state)
 	current.humanoidStates[self] = state
 end)
 
+-- Particles are not drawn here; bursts are counted per emitter in `session.emitted`.
+roblox.implementMethod("ParticleEmitter", "Emit", function(self, count)
+	current.emitted[self] = (current.emitted[self] or 0) + (count or 16)
+end)
+
 roblox.implementMethod("HttpService", "GenerateGUID", function()
 	current.guid += 1
 	return "test-guid-" .. current.guid
@@ -277,6 +282,10 @@ function Session:environment(scriptInstance)
 		UDim2 = roblox.UDim2,
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }
@@ -600,6 +609,7 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		modules = {},
 		overrides = {},
 		humanoidStates = {},
+		emitted = {},
 		invokeHandlers = {},
 		kicks = {},
 		warnings = {},

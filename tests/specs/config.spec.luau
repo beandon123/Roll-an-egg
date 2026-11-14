@@ -8,6 +8,7 @@ return function(harness)
 	local Zones = harness.load("src/shared/Config/Zones")
 	local Runway = harness.load("src/shared/Runway")
 	local EggSpec = harness.load("src/shared/EggSpec")
+	local Tuning = harness.load("src/shared/Config/Tuning")
 
 	describe("Rarities", function()
 		it("has info for every rarity, in order", function()
@@ -28,6 +29,15 @@ return function(harness)
 				expect.truthy(higher.rollSpeed > lower.rollSpeed, "rollSpeed")
 				expect.truthy(higher.bounces >= lower.bounces, "bounces")
 				expect.truthy(higher.hatchTime > lower.hatchTime, "hatchTime")
+			end
+		end)
+	end)
+
+	describe("Rarities: announcements", function()
+		it("puts a message on screen only for Secret and rarer eggs", function()
+			for _, rarity in Rarities.Order do
+				local expected = Rarities.Info[rarity].order >= Rarities.Info.Secret.order
+				expect.equal(Rarities.Info[rarity].announce, expected, rarity)
 			end
 		end)
 	end)
@@ -124,6 +134,17 @@ return function(harness)
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					expect.truthy(Runway.maxLateral(spec.halfLength) > 10, rarity .. " steering room")
+				end
+			end
+		end)
+
+		it("starts every egg on the ground right at the start of its zone", function()
+			for _, zone in Zones.List do
+				for rarity in zone.stamina do
+					local spec = EggSpec.get(zone.id, rarity)
+					local back = spec.startZ - spec.radius
+					expect.near(back, Runway.zoneStartZ(zone.id) + Tuning.EGG_SPAWN_GAP, 1e-9, rarity)
+					expect.equal(Runway.zoneAt(back), zone.id, rarity .. " starts inside its own zone")
 				end
 			end
 		end)

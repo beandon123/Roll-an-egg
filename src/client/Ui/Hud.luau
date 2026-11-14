@@ -293,6 +293,43 @@ function Hud.mount(playerGui: Instance)
 						Visible = UiState.toastVisible,
 					}),
 
+					-- Secret and rarer eggs: what spawned, where, and when. The banner takes the rarity's color.
+					scope:New("Frame")({
+						Name = "Announcement",
+						AnchorPoint = Vector2.new(0.5, 0),
+						Position = UDim2.new(0.5, 0, 0, 142),
+						Size = UDim2.fromOffset(480, 74),
+						BackgroundColor3 = UiState.announceColor,
+						BackgroundTransparency = 0.15,
+						Visible = UiState.announceVisible,
+						[Children] = {
+							corner(scope, 12),
+							outline(scope),
+							scope:New("TextLabel")({
+								Name = "Title",
+								BackgroundTransparency = 1,
+								Position = UDim2.fromOffset(0, 6),
+								Size = UDim2.new(1, 0, 0, 34),
+								Font = Enum.Font.FredokaOne,
+								Text = UiState.announceTitle,
+								TextColor3 = WHITE,
+								TextSize = 30,
+								TextStrokeTransparency = 0.2,
+							}),
+							scope:New("TextLabel")({
+								Name = "Detail",
+								BackgroundTransparency = 1,
+								Position = UDim2.fromOffset(0, 42),
+								Size = UDim2.new(1, 0, 0, 24),
+								Font = Enum.Font.GothamBold,
+								Text = UiState.announceDetail,
+								TextColor3 = WHITE,
+								TextSize = 17,
+								TextStrokeTransparency = 0.3,
+							}),
+						},
+					}),
+
 					-- Bottom centre: claim meter (while riding) above the stamina bar.
 					scope:New("Frame")({
 						Name = "Meters",

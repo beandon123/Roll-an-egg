@@ -19,7 +19,7 @@ export type RarityInfo = {
 	hatchTime: number,
 	-- RGB 0-255.
 	color: { number },
-	-- Whether the whole server is told when one drops.
+	-- Whether every player gets an on-screen message (where and when) when one spawns.
 	announce: boolean,
 }
 
@@ -86,7 +86,7 @@ local info: { [string]: RarityInfo } = {
 		duelTempo = 135,
 		hatchTime = 45 * 60,
 		color = { 255, 190, 40 },
-		announce = true,
+		announce = false,
 	},
 	Mythic = {
 		order = 6,
@@ -98,7 +98,7 @@ local info: { [string]: RarityInfo } = {
 		duelTempo = 150,
 		hatchTime = 2 * 60 * 60,
 		color = { 255, 70, 110 },
-		announce = true,
+		announce = false,
 	},
 	Secret = {
 		order = 7,

@@ -88,13 +88,6 @@ return function(harness)
 			expect.equal(EggMotion.zAt(100, 612, 12, 99), 612)
 		end)
 
-		it("drops in from above and then stays on the ground", function()
-			expect.equal(EggMotion.dropOffset(0, 0.6, 24), 24)
-			expect.truthy(EggMotion.dropOffset(0.3, 0.6, 24) < 24)
-			expect.equal(EggMotion.dropOffset(0.6, 0.6, 24), 0)
-			expect.equal(EggMotion.dropOffset(5, 0.6, 24), 0)
-		end)
-
 		it("hops once when left without a rider", function()
 			expect.equal(EggMotion.hopOffset(nil, 10, 0.7, 5), 0)
 			expect.equal(EggMotion.hopOffset(10, 10, 0.7, 5), 0)

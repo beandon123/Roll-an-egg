@@ -47,6 +47,7 @@ return function(harness)
 				root = root,
 				playerGui = playerGui,
 				eggFolder = session:service("Workspace"):FindFirstChild("Eggs"),
+				dustFolder = session:service("Workspace"):FindFirstChild("EggDust"),
 			}
 	end
 
@@ -78,8 +79,7 @@ return function(harness)
 	local function eggCenter(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
-		local startZ = modules.Runway.zoneStartZ(egg.zone) + modules.Tuning.EGG_SPAWN_OFFSET
-		local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
+		local z = modules.EggMotion.zAt(egg.spawnTime, spec.startZ, spec.rollSpeed, session.clock)
 		return Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z), spec
 	end
 
@@ -205,6 +205,123 @@ return function(harness)
 		end)
 	end)
 
+	describe("Client: eggs appear, roll, and kick up dust", function()
+		local function dustOf(parts, eggId)
+			return parts.dustFolder:FindFirstChild("Dust" .. eggId)
+		end
+
+		it("puts a new egg on the ground at the start of its zone and rolls it without bouncing", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			for zone, rarity in { "Common", "Rare", "Secret", "Secret", "Eternal" } do
+				local egg = eggData(session, zone, zone, rarity, 0, 0)
+				session:fromServer("EggSpawned", egg)
+				local spec = modules.EggSpec.get(zone, rarity)
+				local position = parts.eggFolder["Egg" .. zone].Shell.CFrame.Position
+				-- On the ground, its back just past the zone's start line, from the very first frame.
+				local back = modules.Runway.zoneStartZ(zone) + modules.Tuning.EGG_SPAWN_GAP
+				expect.near(position.Z - spec.radius, back, 1e-3, rarity .. " start")
+				expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, rarity .. " height")
+			end
+
+			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway.
+			local lastZ = {}
+			for _ = 1, 120 do
+				session:renderFrame(1 / 60)
+				for zone = 1, 5 do
+					local spec = modules.EggSpec.get(zone, ({ "Common", "Rare", "Secret", "Secret", "Eternal" })[zone])
+					local position = parts.eggFolder["Egg" .. zone].Shell.CFrame.Position
+					expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, "on the ground")
+					expect.truthy(lastZ[zone] == nil or position.Z > lastZ[zone], "rolls forward")
+					lastZ[zone] = position.Z
+				end
+			end
+		end)
+
+		it("fades a new egg in with a puff of dust", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 0))
+			local dust = dustOf(parts, 1)
+			expect.truthy(dust, "dust strip")
+			expect.truthy((session.emitted[dust.Dust] or 0) > 0, "puff where it appears")
+			-- An egg that was already rolling when the player joined just shows up.
+			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 20, 10))
+			expect.equal(session.emitted[dustOf(parts, 2).Dust], nil)
+		end)
+
+		it("leaves a dust trail behind rolling eggs near the camera", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			local egg = eggData(session, 1, 1, "Rare", 3, 5)
+			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+
+			local dust = dustOf(parts, 1)
+			local center, spec = eggCenter(session, egg)
+			expect.equal(dust.Transparency, 1)
+			expect.equal(dust.Dust.Enabled, true)
+			expect.equal(dust.Dust.Texture, "rbxasset://textures/particles/smoke_main.dds")
+			-- On the ground, just behind where the egg touches it, and not spinning with the egg.
+			expect.near(dust.CFrame.Position.X, 5, 1e-3)
+			expect.truthy(dust.CFrame.Position.Z < center.Z, "behind the egg")
+			expect.truthy(center.Z - dust.CFrame.Position.Z < spec.radius, "close behind the egg")
+			expect.near(dust.CFrame.Position.Y, modules.Runway.surfaceY(center.Z), 0.5)
+			expect.near(dust.CFrame.LookVector.Z, -1, 1e-6)
+
+			session:renderFrame(1 / 60, 30)
+			center = eggCenter(session, egg)
+			expect.truthy(center.Z - dust.CFrame.Position.Z < spec.radius, "follows the egg")
+			expect.near(dust.CFrame.LookVector.Z, -1, 1e-6)
+
+			-- Far down the runway from the camera: no dust.
+			session:fromServer("EggSpawned", eggData(session, 2, 4, "Common", 3))
+			session:renderFrame(1 / 60)
+			expect.equal(dustOf(parts, 2).Dust.Enabled, false)
+		end)
+
+		it("takes its dust color from the ground the egg is rolling on", function()
+			local session, parts = startClient()
+			-- A Forest egg that has rolled into the Snow.
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 100))
+			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 1))
+			session:renderFrame(1 / 60)
+			local snow = dustOf(parts, 1).Dust.Color.Keypoints[1].Value
+			local forest = dustOf(parts, 2).Dust.Color.Keypoints[1].Value
+			expect.truthy(snow.R > forest.R and snow.B > forest.B, "paler dust on snow than on grass")
+		end)
+
+		it("stops the dust while an egg hops, and puffs when it lands", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Rare", 3)
+			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+			local emitter = dustOf(parts, 1).Dust
+			expect.equal(emitter.Enabled, true)
+
+			session:fromServer("EggLeft", 1, session.clock, 1, 0)
+			session:renderFrame(0.2)
+			expect.equal(emitter.Enabled, false, "in the air")
+			local before = session.emitted[emitter] or 0
+			session:renderFrame(0.6)
+			expect.equal(emitter.Enabled, true, "back on the ground")
+			expect.truthy((session.emitted[emitter] or 0) > before, "landing puff")
+		end)
+
+		it("stops the dust when an egg is removed and clears it once the puffs have faded", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 3))
+			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 3, 10))
+			session:renderFrame(1 / 60)
+			local first, second = dustOf(parts, 1), dustOf(parts, 2)
+			session:fromServer("EggRemoved", 1, "Cracked")
+			session:fromServer("EggRemoved", 2, "Claimed", LOCAL_USER_ID)
+			expect.equal(first.Dust.Enabled, false)
+			expect.equal(second.Dust.Enabled, false)
+			task.wait(0.9)
+			expect.equal(#parts.dustFolder:GetChildren(), 0)
+		end)
+	end)
+
 	describe("Client: riding", function()
 		it("asks to mount when jumping next to an egg, and not otherwise", function()
 			local session, parts = startClient()
@@ -231,14 +348,22 @@ return function(harness)
 			expect.equal(request.args[1], 1)
 		end)
 
-		it("does not try to mount an egg that is taken, cracking, or still dropping in", function()
+		it("lets a player jump on an egg the moment it appears", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Common", 0)
+			session:fromServer("EggSpawned", egg)
+			jumpOnto(session, parts, egg)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("RequestMount", "server").args[1], 1)
+		end)
+
+		it("does not try to mount an egg that is taken or cracking", function()
 			local session, parts = startClient()
 			local taken = eggData(session, 1, 1, "Common")
 			taken.rider = 999
 			local cracking = eggData(session, 2, 1, "Common", 5, 10)
 			cracking.cracking = true
-			local dropping = eggData(session, 3, 1, "Common", 0.1, -10)
-			for _, egg in { taken, cracking, dropping } do
+			for _, egg in { taken, cracking } do
 				session:fromServer("EggSpawned", egg)
 				jumpOnto(session, parts, egg)
 				session:heartbeat(1 / 60)
@@ -386,7 +511,7 @@ return function(harness)
 		it("builds the HUD with Fusion", function()
 			local _, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters", "StudioTestPanel" } do
+			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Announcement", "Meters", "StudioTestPanel" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
@@ -452,10 +577,57 @@ return function(harness)
 
 		it("shows server announcements", function()
 			local session, parts = startClient()
-			session:fromServer("Announce", "A Legendary egg just dropped in the Forest!", { 255, 190, 40 })
+			session:fromServer("Announce", "Alex stole a Legendary egg from Sam!", { 255, 190, 40 })
 			session:renderFrame(1 / 60)
-			expect.equal(hud(parts).Toast.Text, "A Legendary egg just dropped in the Forest!")
+			expect.equal(hud(parts).Toast.Text, "Alex stole a Legendary egg from Sam!")
 			expect.equal(hud(parts).Toast.Visible, true)
+		end)
+
+		it("says where and when a Secret or rarer egg spawned", function()
+			local session, parts = startClient()
+			local banner = hud(parts).Announcement
+			expect.equal(banner.Visible, false)
+
+			local secret = eggData(session, 1, 3, "Secret", 0)
+			session:fromServer("EggSpawned", secret)
+			session:renderFrame(1 / 60)
+			expect.equal(banner.Visible, true)
+			expect.equal(banner.Title.Text, "SECRET EGG SPAWNED!")
+			local date = os.date("*t", math.floor(secret.spawnTime))
+			local hour = if date.hour % 12 == 0 then 12 else date.hour % 12
+			local clock =
+				string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
+			expect.equal(banner.Detail.Text, `Start of the Snow zone at {clock}`)
+			expect.equal(banner.BackgroundColor3, roblox.Color3.fromRGB(45, 45, 60))
+
+			-- Other messages use the toast and do not hide it.
+			session:fromServer("Announce", "Something else", nil)
+			expect.equal(hud(parts).Toast.Text, "Something else")
+			expect.equal(banner.Visible, true)
+
+			session:fromServer("EggSpawned", eggData(session, 2, 5, "Eternal", 0))
+			session:renderFrame(1 / 60)
+			expect.equal(banner.Title.Text, "ETERNAL EGG SPAWNED!")
+			expect.truthy(banner.Detail.Text:find("Start of the Volcano zone at ", 1, true) == 1, banner.Detail.Text)
+		end)
+
+		it("says nothing when an egg below Secret spawns", function()
+			local session, parts = startClient()
+			for index, rarity in { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } do
+				session:fromServer("EggSpawned", eggData(session, index, 3, rarity, 0))
+			end
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Announcement.Visible, false)
+			expect.equal(hud(parts).Toast.Visible, false)
+		end)
+
+		it("does not announce rare eggs that were already rolling when the player joined", function()
+			local probe = Studio.open(place, { isServer = false })
+			local _, parts = startClient({
+				{ id = 9, zone = 3, rarity = "Secret", spawnTime = probe.clock - 4, lateral = 0, bounces = 3 },
+			})
+			expect.truthy(parts.eggFolder:FindFirstChild("Egg9"))
+			expect.equal(hud(parts).Announcement.Visible, false)
 		end)
 	end)
 end

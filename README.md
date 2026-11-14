@@ -8,7 +8,10 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 The first playable slice: **the runway and riding**.
 
 - A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
-- Eggs drop in every zone and roll down the runway. Rarity sets their size, speed, color and stamina requirement.
+- Eggs appear on the ground at the start of every zone and roll down the runway, leaving a small trail of dust.
+  Rarity sets their size, speed, color and stamina requirement.
+- When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when. Other eggs
+  spawn quietly.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.

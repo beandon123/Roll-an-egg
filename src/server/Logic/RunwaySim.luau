@@ -185,7 +185,7 @@ function RunwaySim._removeEgg(self: RunwaySim, egg: Egg, reason: EggRemoveReason
 	self:_emit({ type = "EggRemoved", id = egg.id, reason = reason, by = by })
 end
 
--- Drops a new egg at the start of a zone. `forcedRarity` skips the random roll.
+-- Puts a new egg on the ground at the start of a zone. `forcedRarity` skips the random roll.
 function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forcedRarity: string?): Egg?
 	local rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
 	local spec = EggSpec.get(zoneId, rarity)
@@ -201,7 +201,7 @@ function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forced
 		rarity = rarity,
 		spec = spec,
 		spawnTime = now,
-		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET,
+		startZ = spec.startZ,
 		lateral = (self.random() * 2 - 1) * limit,
 		bouncesLeft = spec.bounces,
 		riderId = nil,

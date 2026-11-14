@@ -48,6 +48,8 @@ Original theme, art, and creatures.
           (decided; exact prices set during economy tuning)
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
+    - [ ] Eggs appear on the ground at the start of their zone (no drop from above), roll straight down the strip,
+          and leave a small dust trail behind them (decided)
 - [ ] Zone rarity caps (decided):
     - [ ] Forest: Common-Legendary
     - [ ] Desert: Common-Mythic
@@ -65,7 +67,8 @@ Original theme, art, and creatures.
     - [ ] Rarer eggs are bigger and need more stamina (decided)
     - [ ] Readable from a distance: zone-themed shell + rarity color/glow/particles + size; icon/shape for colorblind players
     - [ ] Secret and Eternal pets show as "???" in the collection book until hatched (proposed)
-    - [ ] Server-wide announcement when a Legendary+ egg is in the cycle's lineup
+    - [ ] On-screen message for every player when a Secret or Eternal egg spawns, saying where (zone) and when
+          (the player's local time); no message for anything below Secret (decided)
 
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 

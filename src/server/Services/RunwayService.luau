@@ -13,10 +13,8 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage.Shared
 local CycleClock = require(Shared.CycleClock)
 local Net = require(Shared.Net)
-local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
-local Zones = require(Shared.Config.Zones)
 
 local DataService = require(script.Parent.DataService)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
@@ -106,16 +104,9 @@ local function dispatch(events)
 	for _, event in events do
 		local kind = event.type
 		if kind == "EggSpawned" then
+			-- Every client also shows the on-screen message for Secret and rarer eggs from this, in the player's own
+			-- local time (see the client's EggController).
 			Net.EggSpawned:FireAllClients(event.egg)
-			local info = Rarities.Info[event.egg.rarity]
-			if info.announce then
-				local zone = Zones.List[event.egg.zone]
-				local article = if event.egg.rarity == "Eternal" then "An" else "A"
-				Net.Announce:FireAllClients(
-					`{article} {event.egg.rarity} egg just dropped in the {zone.name}!`,
-					info.color
-				)
-			end
 		elseif kind == "EggRemoved" then
 			Net.EggRemoved:FireAllClients(event.id, event.reason, event.by)
 		elseif kind == "EggMounted" then

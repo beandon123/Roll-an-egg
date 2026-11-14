@@ -3,6 +3,7 @@
 
 local Config = script.Parent.Config
 local Rarities = require(Config.Rarities)
+local Runway = require(script.Parent.Runway)
 local StaminaMath = require(script.Parent.StaminaMath)
 local Tuning = require(Config.Tuning)
 local Zones = require(Config.Zones)
@@ -14,6 +15,8 @@ export type Spec = {
 	radius: number,
 	-- Half the egg's side-to-side length in studs.
 	halfLength: number,
+	-- Distance down the runway where the egg's centre starts: resting on the ground, just past its zone's start line.
+	startZ: number,
 	rollSpeed: number,
 	claimTime: number,
 	bounces: number,
@@ -51,6 +54,7 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 		rarity = rarity,
 		radius = radius,
 		halfLength = radius * Tuning.EGG_LENGTH_RATIO,
+		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_GAP + radius,
 		rollSpeed = info.rollSpeed,
 		claimTime = info.claimTime,
 		bounces = info.bounces,

@@ -62,12 +62,13 @@ return function(harness)
 			expect.truthy(forest >= Tuning.EGGS_PER_ZONE - 2 and forest <= Tuning.EGGS_PER_ZONE + 2, "got " .. forest)
 		end)
 
-		it("places a new egg just past the start of its zone", function()
+		it("places a new egg on the ground at the start of its zone", function()
 			local sim = newSim()
 			local egg = sim:spawnEgg(3, 50, "Common")
 			local x, y, z = sim:eggCenter(egg, 50)
 			expect.equal(x, 0)
-			expect.equal(z, Runway.zoneStartZ(3) + Tuning.EGG_SPAWN_OFFSET)
+			-- The back of the egg sits just past the zone's start line.
+			expect.near(z - egg.spec.radius, Runway.zoneStartZ(3) + Tuning.EGG_SPAWN_GAP)
 			expect.near(y, Runway.surfaceY(z) + egg.spec.radius)
 			expect.falsy(sim:spawnEgg(1, 50, "Eternal"), "Eternal cannot drop in the Forest")
 		end)
@@ -364,13 +365,15 @@ return function(harness)
 			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
 			-- Plenty of stamina, but Alice gets on a Volcano egg far too late to finish the claim.
 			sim:addRider(ALICE, 1e9, 14, 0)
-			local egg = sim:spawnEgg(5, 0, "Eternal") -- 21 studs/s, 26 s to claim, 588 studs to the end
+			local egg = sim:spawnEgg(5, 0, "Eternal") -- 21 studs/s, 26 s to claim, about 28 s to the end
+			local reachesEnd = (Runway.LENGTH - egg.startZ) / egg.spec.rollSpeed
+			expect.truthy(reachesEnd > 27 and reachesEnd < 29, "about 28 s to the end")
 			sim:requestMount(ALICE, egg.id, 10, true)
 			sim:takeEvents()
 
-			sim:step(27.9)
+			sim:step(reachesEnd - 0.1)
 			expect.equal(#eventsOfType(sim:takeEvents(), "RideEnded"), 0)
-			sim:step(28.1)
+			sim:step(reachesEnd + 0.1)
 			local events = sim:takeEvents()
 			expect.equal(firstOfType(events, "RideEnded").reason, "Cliff")
 			expect.equal(firstOfType(events, "EggRemoved").reason, "Cliff")

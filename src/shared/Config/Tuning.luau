@@ -21,11 +21,9 @@ Tuning.EGG_LENGTH_RATIO = 1.3
 Tuning.EGG_UNRIDDEN_LIFETIME = 60
 -- Target number of eggs alive per zone; sets the drop rate.
 Tuning.EGGS_PER_ZONE = 8
--- Studs past the start of its zone where an egg lands.
-Tuning.EGG_SPAWN_OFFSET = 12
--- Eggs drop in from above when they spawn.
-Tuning.EGG_DROP_TIME = 0.6
-Tuning.EGG_DROP_HEIGHT = 24
+-- Eggs appear on the ground at the start of their zone. This is the gap in studs between the zone's start line
+-- and the back of a new egg.
+Tuning.EGG_SPAWN_GAP = 2
 -- The hop an egg makes when it is left without a rider.
 Tuning.HOP_DURATION = 0.7
 Tuning.HOP_HEIGHT = 5
