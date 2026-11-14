@@ -5,11 +5,15 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 ## What works so far
 
-The first playable slice: **the runway, riding, and hatching**.
+The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub, then a level, 120-stud-wide runway through six zones (Forest, Desert, Snow, Ocean, Volcano,
-  Prehistoric), each with its own checkered ground, stepped cliffs (a boardwalk over a reef in the Ocean), plants
-  and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)).
+- The map: the hub with a painted START ZONE where the runway begins, then a level, 120-stud-wide runway through six
+  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each with its own checkered ground, stepped cliffs (a
+  boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
+  [The runway](#the-runway)). The banks down both sides are broken by gaps (marked with red strips) where a player
+  on foot can fall off.
+- A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
+  back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that roll down the
   runway lap after lap; now and then an extra egg drops mid-cycle. Rarity sets their size, speed and stamina
   requirement. Rolling eggs kick up dust.
@@ -30,10 +34,22 @@ The first playable slice: **the runway, riding, and hatching**.
 - Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
   saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
-- A simple HUD: dollars (and what your pen earns a second), runway timer, zone, eggs held, stamina bar, claim meter.
+- The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge with Max Stamina, dollars (and what
+  your pen earns a second) and eggs under them (the "+" buttons open the shop at that section), the Eggs, Pets and
+  Ride tabs on the right edge, a timer while a server luck boost runs, and the stamina and claim meters (bottom).
+- **Shop** ("Coop Shop"): the next pen level for Robux or dollars (the same upgrade as the green button), x2 / x4
+  server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
+  Max Stamina, from x2 up to x1024), dollar packs, and the x2 Dollars pass (every pet in your pen earns double).
+  Robux purchases are granted exactly once, and only reported to Roblox once saved.
+- **Settings**: Music / Effects / Nature volume, show others' pets / your pets, reduce camera shake, vibration.
+  Saved to the player's account.
+- The Egg Avalanche server event: twice the eggs in every zone for one runway cycle, once an hour.
+- An admin panel for testing (see below), and a Model Showroom far from the hub where every pet and egg stands on
+  display.
 
-The eggs, pets, runway and plots have their real look; the hub's plaza is still plain. Not built yet: duels, other
-upgrades (Max Stamina and the rest), offline earnings, teleport pads, server events, the tutorial, and all sound.
+The eggs, pets, runway and plots have their real look; the hub's plaza is still plain and the UI uses emoji for
+icons. Not built yet: duels, other upgrades, offline earnings, teleport pads, the Titan Egg event, the tutorial, and
+all sound. The pet and comfort settings are saved for the systems that will read them.
 
 ## Try it in Roblox Studio
 
@@ -66,18 +82,50 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Ride / get off your pet | **Ride** on its card, then the **RIDE** / **GET OFF** button | Tap them | Select them |
 | Buy a bigger pen | Walk up to the green button by your gate, hold E | Hold its prompt | Hold X |
 
-### Studio test tools
+### Selling things for Robux
 
-In Studio a small panel appears on the left of the screen. Its buttons only work in Studio, never in a live game:
+Every price and amount is in `src/shared/Config/Shop.luau`. Each Robux item needs its ID from the Creator
+Dashboard (*Monetization > Developer Products* or *Passes*), pasted into its `productId` / `gamePassId`. There is
+one developer product per pen level and one per stamina doubling (x1 to x2, x2 to x4 ...), because a product's
+price is fixed.
 
-- **Max stamina x5**: lets you ride eggs in deeper zones before upgrades exist.
-- **Reset stamina**: back to 100.
-- **Drop best egg here**: drops the rarest egg of the zone you are standing in.
-- **Drop each egg here**: drops each of the zone's 8 eggs in turn.
-- **Show this zone's pets**: stands the pets of the zone you are in (those with models so far) in front of you.
-- **Get this zone's eggs**: puts one of each of the zone's 8 eggs straight into your inventory.
-- **Hatch my eggs now**: finishes hatching every egg in your pen.
-- **Give $1M**: a million dollars, to try buying a bigger pen.
+While an ID is `0`, the item cannot be bought in a live game ("This isn't for sale yet"). In Studio, buying it grants
+it straight away, so the whole shop can be tried before the products exist. The price shown comes from Roblox once an
+ID is set, so changing a price on the dashboard is enough.
+
+### Admin panel
+
+Admins get a red **ADMIN** button at the top right of the screen. In Studio everyone is an admin. In a live game the
+experience's owner is (the user who owns it, or the owner of the community that owns it), plus anyone whose user ID
+is listed in `src/server/Config/Admins.luau`. The server checks every command, so nobody else can use them.
+
+| Tab | What it does |
+| --- | --- |
+| Eggs | Pick a zone, then **Drop** any of its eggs on the runway or **Give** it to your inventory. Eggs drop in front of you (on the runway) or at the zone's chute. Drop a random egg, every egg of the zone, or clear the runway. |
+| Pets | Pick a zone, then **Spawn** any of its pets next to you or **Give** it to your inventory. Stand all of the zone's pets in front of you, or remove the ones you spawned. |
+| Me | **Fly** (move to fly where the camera looks; Space or E to rise, Q or Ctrl to sink) at 40 to 320 studs a second. Walk speed. Stamina: Max x5, 10M, refill, and reset (back to 100 plus what you bought in the shop). Dollars: add $1K, $1M or $1B, or reset to 0. What is in your inventory, clearing it, and **Hatch eggs now** (finishes every egg hatching in your pen). |
+| Events | Start or stop an **Egg Avalanche**. Close the runway now, or open it now (skipping the rest of a closure). |
+| Teleport | The hub, the **Model Showroom**, the end cliff, the start of any zone, or any other player. |
+
+Eggs and pets given to you are saved like any others: eggs go into your inventory, ready to place in your pen, and
+pets go straight into your pen if there is room. The Titan Egg event is not built yet, so the panel cannot start one.
+
+### Model Showroom
+
+A floor 3,000 studs to the side of the hub where every pet and egg model stands on display, with a name over each.
+Get there from the admin panel's Teleport tab; a prompt on the pad where you arrive takes you back to the hub.
+
+If you imported the pet and egg models into the place (see *Pet models* below), they are moved onto the showroom floor
+when the game starts, laid out as you left them and with any changes you made: pets on the left of the yellow aisle,
+eggs on the right. Whatever was not imported is built from the game's code the first time someone goes there (it
+takes a few seconds), so the showroom always has everything.
+
+That move only lasts while the game runs. To move the imported models out of the hub for good, so they are out of the
+way while you build too, stop the game, run this once in Studio's command bar (*View > Command Bar*), and save:
+
+```lua
+require(game.ServerScriptService.Server.Services.ShowroomService).MoveImportedModels()
+```
 
 ## Eggs, pens and pets
 
@@ -183,8 +231,8 @@ Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom
 On the runway the egg lies on its side and rolls. A design marked `shelved` is out of the game for now (the Frost
 Dragon and Magma Dragon eggs, among others); put it back in a zone's list to bring it back.
 
-In Studio, **Drop each egg here** on the test panel drops all 8 of the zone's eggs, one after another. To see every
-egg in 3D without opening Studio:
+In the game, the admin panel's Eggs tab drops any egg, or all 8 of a zone's eggs one after another, and the Model
+Showroom stands every egg on end. To see every egg in 3D without opening Studio:
 
 ```bash
 lune run tools/egg-gallery
@@ -234,8 +282,9 @@ on the spot, upright, rising with each beat). A winged design says how far its w
 pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can
 fly and walks (or swims, or crawls) on the spot if not.
 
-In Studio, **Show this zone's pets** on the test panel stands the zone's pets in front of you. They move as they would in
-the game; set a pet's `Move` attribute in the Properties window (for example to `Fly`) to see its other moves.
+In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
+Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window
+(for example to `Fly`) to see its other moves.
 
 To work on the models by hand in Studio, export them as model files:
 
@@ -247,6 +296,8 @@ This writes `tools/out/RollAnEgg-Pets.rbxm` and `tools/out/RollAnEgg-Eggs.rbxm`:
 the game's own code (`PetRig`, `EggRig`), in a folder per zone, standing in rows on the ground (swimmers float). In
 Studio, right-click Workspace in the Explorer, choose **Insert > Import Roblox Model**, and pick a file (older
 Studios call it **Insert from File...**; or drag the file into the viewport). The pets come rigged, with a `Motor6D` per limb; they move when the game plays their animations.
+Keep the folder names (`Roll an Egg Pets`, `Roll an Egg Eggs`): that is how the game finds them to move them into the
+Model Showroom (see above).
 
 ## Project layout
 
@@ -256,12 +307,16 @@ docs/REQUEST.md        The agreed game design
 src/shared/            ReplicatedStorage.Shared: config and math used by both server and client
   Config/                Zones, rarities, tuning numbers. Change game balance here.
 src/server/            ServerScriptService.Server
+  Config/                Server-only settings: who the admins are
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
   Map/                   Builds the look of the map: zone scenery, obstacle models, the players' plots
-  Services/              Connect the rules to players, saved data, the map, and remotes
+  Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
+                         the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
-  Controllers/           Egg drawing, riding, HUD updates
-  Ui/                    The Fusion HUD
+  Controllers/           Egg drawing, riding, HUD updates, the shop and settings, pet animation, admin flight,
+                         the admin panel
+  Ui/                    The Fusion HUD, Shop and Settings panels (Theme and Widgets hold the shared look), and
+                         the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        map-preview.luau: a web page that shows the map in 3D;
@@ -286,11 +341,13 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures), and that every egg and pet model exists, is unique and has nothing floating loose,
-  and that every egg stays within its part budget. Pets have none. They are also checked for the limbs their skeleton needs, and for differently coloured
-  blocks sharing a face (which flicker in Roblox).
+  stamina, bounces, closures, shop prices, settings, luck boosts), and that every egg and pet model exists, is
+  unique and has nothing floating loose, and that every egg stays within its part budget. Pets have none. They are
+  also checked for the limbs their skeleton needs, and for differently coloured blocks sharing a face (which flicker
+  in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
-  Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
+  Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes. Purchases are tested
+  by calling the game's own ProcessReceipt with made-up receipts.
 
 The tests cannot check anything that needs the real engine: physics, animation, input, how things look and feel.
 Those need a play test in Studio.

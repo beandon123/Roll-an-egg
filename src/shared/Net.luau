@@ -14,6 +14,7 @@ local EVENTS = {
 	"EggMounted", -- (eggId, userId, time)
 	"EggLeft", -- (eggId, time, bouncesLeft, lateral)
 	"Announce", -- (text, colorRgb?)
+	"LuckChanged", -- (boosts): see LuckBoost
 	-- Server -> one player
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
 	"RideEnded", -- (reason, { eggId, zone, rarity, kind })
@@ -24,6 +25,8 @@ local EVENTS = {
 	"DollarsChanged", -- (dollars, incomePerSecond)
 	"Notice", -- (text, colorRgb?): a message for this player alone
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
+	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
+	"PurchaseResult", -- (itemId, ok, message)
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
@@ -33,7 +36,9 @@ local EVENTS = {
 	"EquipBest", -- (): fill the pen with the player's best pets
 	"SellPet", -- (petUid)
 	"RidePet", -- (petUid or ""): ride a pet, or get off
-	"DevCommand", -- (command) Studio only
+	"RequestPurchase", -- (itemId) a Robux item from Config/Shop; the server shows Roblox's purchase prompt
+	"BuyWithDollars", -- (itemId) an item with a dollar price
+	"SaveSettings", -- ({ [key]: value }) see Config/Settings
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.
@@ -44,6 +49,9 @@ local UNRELIABLE_EVENTS = {
 
 local FUNCTIONS = {
 	"GetSnapshot", -- player -> server: () -> { eggs, inventory, ... }
+	"GetShopState", -- player -> server: () -> { dollars, penLevel, passes, luck }
+	"GetSettings", -- player -> server: () -> { [key]: value }
+	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
 }
 
 local Net = {}

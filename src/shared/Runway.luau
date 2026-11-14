@@ -12,6 +12,7 @@ local Runway = {}
 Runway.ZONE_COUNT = 6
 Runway.ZONE_LENGTH = 600
 Runway.LENGTH = Runway.ZONE_COUNT * Runway.ZONE_LENGTH
+-- Wide enough for a whole server to chase eggs side by side; cliff banks run down both sides.
 Runway.WIDTH = 120
 
 -- Height of the walking surface, at the hub and all the way down the runway.
@@ -23,6 +24,28 @@ Runway.FADE_INTO_NEXT = 0.25
 -- The hub behind the start of the runway: a plaza with the players' plots down both sides (see Shared/Plots).
 Runway.HUB_LENGTH = 400
 Runway.HUB_WIDTH = 440
+
+-- Gaps in the banks down the sides: a player on foot who wanders through one falls off the runway. Eggs never do,
+-- because they are kept within the runway's width.
+Runway.WALL_GAP_LENGTH = 24
+-- Where each zone's gaps open, in studs from the start of the zone. They skip the zone's first stretch (its sign
+-- stands on the walls and its eggs drop in there) and its last stretch, and alternate sides.
+Runway.WALL_GAP_OFFSETS = { 150, 300, 450 }
+
+export type WallGap = { side: number, startZ: number, endZ: number }
+
+-- The gaps in one zone's walls. `side` is 1 for the wall at +x (the left, looking down the runway) and -1 for -x.
+-- The first gap switches side from one zone to the next, so the pattern does not repeat exactly.
+function Runway.wallGaps(zoneId: number): { WallGap }
+	local gaps = {}
+	local zoneStart = Runway.zoneStartZ(zoneId)
+	for index, offset in Runway.WALL_GAP_OFFSETS do
+		local side = if (index + zoneId) % 2 == 0 then 1 else -1
+		local startZ = zoneStart + offset
+		table.insert(gaps, { side = side, startZ = startZ, endZ = startZ + Runway.WALL_GAP_LENGTH })
+	end
+	return gaps
+end
 
 -- Height of the walking surface at a given distance down the runway.
 function Runway.surfaceY(_z: number): number

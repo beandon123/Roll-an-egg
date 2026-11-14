@@ -346,6 +346,39 @@ local function pickProp(random: Random, props: { Prop }): Prop
 end
 
 ----------------------------------------------------------------------------------------------------------------
+-- Gaps in the banks
+
+-- The stretches of one side of a zone (side = -1 or 1) with no gap in its bank, as { from z, to z }. Through the gaps
+-- (Shared/Runway.wallGaps) a player on foot can fall off the runway.
+local function stretchesOf(zoneId: number, side: number): { { number } }
+	local startZ = Runway.zoneStartZ(zoneId)
+	local list = {}
+	local from = startZ
+	for _, gap in Runway.wallGaps(zoneId) do
+		if gap.side == side then
+			table.insert(list, { from, gap.startZ })
+			from = gap.endZ
+		end
+	end
+	table.insert(list, { from, startZ + Runway.ZONE_LENGTH })
+	return list
+end
+
+-- Splits each stretch into pieces no longer than `size`: { centre z, length }.
+local function piecesOf(stretches: { { number } }, size: number): { { number } }
+	local pieces = {}
+	for _, stretch in stretches do
+		local z = stretch[1]
+		while z < stretch[2] - 0.01 do
+			local length = math.min(size, stretch[2] - z)
+			table.insert(pieces, { z + length / 2, length })
+			z += length
+		end
+	end
+	return pieces
+end
+
+----------------------------------------------------------------------------------------------------------------
 -- Ground
 
 local function buildGround(folder: Instance, zoneId: number, palette: Palette, nextPalette: Palette?, random: Random)
@@ -381,15 +414,30 @@ local function buildGround(folder: Instance, zoneId: number, palette: Palette, n
 		end
 	end
 
-	-- A kerb along each edge.
+	-- A kerb along each edge, broken where the bank has a gap; a glowing red strip warns of each gap.
 	for _, side in { -1, 1 } do
+		for _, stretch in stretchesOf(zoneId, side) do
+			block(
+				ground,
+				Vector3.new(2, 1, stretch[2] - stretch[1]),
+				CFrame.new(side * (Runway.WIDTH / 2 + 1), Runway.BASE_Y + 0.5, (stretch[1] + stretch[2]) / 2),
+				palette.kerb,
+				{ material = M.Concrete }
+			).Name = if side
+					> 0
+				then "KerbLeft"
+				else "KerbRight"
+		end
+	end
+	for _, gap in Runway.wallGaps(zoneId) do
 		block(
 			ground,
-			Vector3.new(2, 1, Runway.ZONE_LENGTH),
-			CFrame.new(side * (Runway.WIDTH / 2 + 1), Runway.BASE_Y + 0.5, startZ + Runway.ZONE_LENGTH / 2),
-			palette.kerb,
-			{ material = M.Concrete }
-		)
+			Vector3.new(2, 0.2, gap.endZ - gap.startZ),
+			CFrame.new(gap.side * (Runway.WIDTH / 2 - 1), Runway.BASE_Y + 0.1, (gap.startZ + gap.endZ) / 2),
+			{ 255, 70, 60 },
+			{ material = M.Neon, collide = false }
+		).Name =
+			"GapWarning"
 	end
 
 	-- The volcano's ground glows through cracks.
@@ -415,11 +463,10 @@ end
 
 -- Stepped cliffs up one side of the runway (side = -1 or 1). Returns the steps' tops, for the props.
 local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random)
-	local startZ = Runway.zoneStartZ(zoneId)
 	local phase = random() * 10
 	local tops = {}
-	for col = 0, Runway.ZONE_LENGTH // TILE - 1 do
-		local z = startZ + TILE * (col + 0.5)
+	for col, piece in piecesOf(stretchesOf(zoneId, side), TILE) do
+		local z, length = piece[1], piece[2]
 		local wave = math.sin(z / 85 + phase) + 0.5 * math.sin(z / 37 + phase * 2)
 		local steps = {
 			{ width = 18 + 6 * random(), height = 12 + 3 * wave + 3 * random() },
@@ -442,7 +489,7 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 					local height = math.min(top - 1.5 - y, 3 + (band % 2) * 1.5)
 					block(
 						folder,
-						Vector3.new(step.width, height, TILE),
+						Vector3.new(step.width, height, length),
 						CFrame.new(x, y + height / 2, z),
 						palette.bands[band % #palette.bands + 1],
 						{ material = palette.cliffMaterial }
@@ -453,7 +500,7 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 			else
 				block(
 					folder,
-					Vector3.new(step.width, top - 1.5 - bottom, TILE),
+					Vector3.new(step.width, top - 1.5 - bottom, length),
 					CFrame.new(x, (top - 1.5 + bottom) / 2, z),
 					shade(face, -0.04 * (index - 1)),
 					{ material = palette.cliffMaterial }
@@ -461,7 +508,7 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 			end
 			block(
 				folder,
-				Vector3.new(step.width + 0.6, 1.5, TILE),
+				Vector3.new(step.width + 0.6, 1.5, length),
 				CFrame.new(x - side * 0.3, top - 0.75, z),
 				vary(random, palette.top, 0.03),
 				{ material = palette.topMaterial }
@@ -470,7 +517,7 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 				-- A lava river along the top of the first step, set into the rock.
 				block(
 					folder,
-					Vector3.new(4, 0.4, TILE),
+					Vector3.new(4, 0.4, length),
 					CFrame.new(side * (inner + step.width * 0.62), top - 0.1, z),
 					{ 255, 110, 26 },
 					{ material = M.Neon, collide = false }
@@ -506,10 +553,23 @@ local function buildSea(folder: Instance, zoneId: number, palette: Palette, side
 	local seabedY = Runway.BASE_Y - 7
 	local waterY = Runway.BASE_Y - 1.5
 	local outer = 260
+	-- The seabed. Next to the boardwalk it is broken where the railing has a gap: a deep hole that swallows a
+	-- player who falls through.
+	local near = EDGE + 30
+	local stretches = stretchesOf(zoneId, side)
+	for _, stretch in stretches do
+		block(
+			folder,
+			Vector3.new(near - EDGE, 4, stretch[2] - stretch[1]),
+			CFrame.new(side * (EDGE + (near - EDGE) / 2), seabedY - 2, (stretch[1] + stretch[2]) / 2),
+			palette.cliff,
+			{ material = M.Sand }
+		)
+	end
 	block(
 		folder,
-		Vector3.new(outer - EDGE, 4, length),
-		CFrame.new(side * (EDGE + (outer - EDGE) / 2), seabedY - 2, middleZ),
+		Vector3.new(outer - near, 4, length),
+		CFrame.new(side * (near + (outer - near) / 2), seabedY - 2, middleZ),
 		palette.cliff,
 		{ material = M.Sand }
 	)
@@ -520,32 +580,35 @@ local function buildSea(folder: Instance, zoneId: number, palette: Palette, side
 		{ 56, 168, 214 },
 		{ material = M.Glass, transparency = 0.45, collide = false }
 	)
-	block(
-		folder,
-		Vector3.new(1, 24, length),
-		CFrame.new(side * (EDGE + 0.5), Runway.BASE_Y + 10, middleZ),
-		{ 255, 255, 255 },
-		{ transparency = 1 }
-	).Name =
-		"SeaWall"
-	-- Posts with a rope between them, and piles under the boardwalk.
-	for z = startZ + 5, startZ + length, 10 do
-		block(folder, Vector3.new(1.2, 4, 1.2), CFrame.new(side * EDGE, Runway.BASE_Y + 2, z), palette.kerb, {
-			material = M.Wood,
-		})
-		column(folder, 1.6, 9, CFrame.new(side * (EDGE - 1), seabedY, z), shade(palette.kerb, -0.15), {
-			material = M.Wood,
-			collide = false,
-		})
-	end
-	for _, height in { 2.4, 3.6 } do
-		block(
-			folder,
-			Vector3.new(0.3, 0.3, length),
-			CFrame.new(side * EDGE, Runway.BASE_Y + height, middleZ),
-			{ 214, 190, 140 },
-			{ material = M.Fabric, collide = false }
-		)
+	-- Posts with ropes between them, piles under the boardwalk, and an invisible wall so nobody wanders off into the
+	-- sea: all broken at the gaps.
+	for _, stretch in stretches do
+		local span = stretch[2] - stretch[1]
+		local mid = (stretch[1] + stretch[2]) / 2
+		block(folder, Vector3.new(1, 24, span), CFrame.new(side * (EDGE + 0.5), Runway.BASE_Y + 10, mid), {
+			255,
+			255,
+			255,
+		}, { transparency = 1 }).Name =
+			"SeaWall"
+		for _, height in { 2.4, 3.6 } do
+			block(
+				folder,
+				Vector3.new(0.3, 0.3, span),
+				CFrame.new(side * EDGE, Runway.BASE_Y + height, mid),
+				{ 214, 190, 140 },
+				{ material = M.Fabric, collide = false }
+			)
+		end
+		for z = stretch[1] + 0.6, stretch[2], 10 do
+			block(folder, Vector3.new(1.2, 4, 1.2), CFrame.new(side * EDGE, Runway.BASE_Y + 2, z), palette.kerb, {
+				material = M.Wood,
+			})
+			column(folder, 1.6, 9, CFrame.new(side * (EDGE - 1), seabedY, z), shade(palette.kerb, -0.15), {
+				material = M.Wood,
+				collide = false,
+			})
+		end
 	end
 	-- A lighthouse on a rock off one side.
 	if side > 0 then

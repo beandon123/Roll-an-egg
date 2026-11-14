@@ -4,7 +4,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Fusion = require(ReplicatedStorage:WaitForChild("Packages"):WaitForChild("Fusion"))
 
+local Load = require(script.Parent.Parent.Load)
+local Settings = Load.shared("Config", "Settings")
+
 local scope = Fusion.scoped(Fusion)
+
+-- One value per setting, starting at its default until the saved settings arrive.
+local settings = {}
+for _, setting in Settings.List do
+	settings[setting.key] = scope:Value(setting.default)
+end
 
 local UiState = {
 	Fusion = Fusion,
@@ -23,6 +32,8 @@ local UiState = {
 	cycleSeconds = scope:Value(0),
 
 	zoneName = scope:Value("Hub"),
+	-- The server event running now ("Avalanche"), or nil.
+	serverEvent = scope:Value(nil :: string?),
 
 	riding = scope:Value(false),
 	rideTitle = scope:Value(""),
@@ -50,6 +61,26 @@ local UiState = {
 	-- The shared clock, refreshed a few times a second, for countdowns.
 	clock = scope:Value(0),
 
+	-- Which panel is open on the left: "Shop", "Settings", or nil. Opening it closes the right one, and back.
+	openPanel = scope:Value(nil :: string?),
+	-- A shop section to scroll to when the shop opens (the "+" buttons next to dollars and stamina set this).
+	shopSection = scope:Value(nil :: string?),
+
+	-- Shop state from the server (the pen level is above, with the inventory).
+	-- "Double your Max Stamina": 1, 2, 4 ... 1024.
+	staminaMultiplier = scope:Value(1),
+	-- passId -> true
+	ownedPasses = scope:Value({} :: { [string]: boolean }),
+	-- itemId (or "PenLevel<n>", "StaminaDoubling<n>") -> Robux price, once loaded from Roblox. Until then the shop
+	-- shows Config/Shop's.
+	prices = scope:Value({} :: { [string]: number }),
+	-- The server luck in effect, and whole seconds until it ends (0 when none).
+	luck = scope:Value(1),
+	luckSeconds = scope:Value(0),
+
+	-- settingKey -> Value. See Config/Settings.
+	settings = settings,
+
 	toastText = scope:Value(""),
 	toastColor = scope:Value(Color3.new(1, 1, 1)),
 	toastVisible = scope:Value(false),
@@ -69,7 +100,28 @@ local UiState = {
 		sellPet = function(_uid: string) end,
 		ridePet = function(_uid: string) end,
 	},
+	-- The server's luck boosts (Shared/LuckBoost); the HUD works the timer out from these each frame.
+	luckBoosts = {} :: { { multiplier: number, endsAt: number } },
 }
+
+-- Opens a panel on the left, or closes it if it is already open. The Eggs or Pets panel on the right closes.
+function UiState.togglePanel(name: string)
+	if Fusion.peek(UiState.openPanel) == name then
+		UiState.openPanel:set(nil)
+	else
+		UiState.openPanel:set(name)
+		UiState.panel:set("None")
+	end
+end
+
+-- Opens the shop at one section.
+function UiState.openShop(section: string?)
+	UiState.openPanel:set("Shop")
+	UiState.panel:set("None")
+	-- Cleared first, so asking for the same section twice still scrolls to it.
+	UiState.shopSection:set(nil)
+	UiState.shopSection:set(section)
+end
 
 local toastToken = 0
 

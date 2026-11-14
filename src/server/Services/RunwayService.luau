@@ -15,6 +15,7 @@ local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
+local Shop = require(Shared.Config.Shop)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -80,6 +81,15 @@ local function updateFocusParts(time: number)
 			end
 		end
 	end
+end
+
+-- Max Stamina from what the player owns: the base plus Max Stamina bought in the shop, times their doublings.
+local function maxStaminaOf(player: Player): number
+	local data = DataService.GetData(player)
+	if data == nil then
+		return Tuning.BASE_MAX_STAMINA
+	end
+	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, data.MaxStaminaBonus, data.StaminaMultiplier)
 end
 
 local function killCharacter(player: Player)
@@ -301,7 +311,7 @@ end
 local function onDataLoaded(player: Player, _data)
 	playersByUserId[player.UserId] = player
 	createFocus(player)
-	sim:addRider(player.UserId, Tuning.BASE_MAX_STAMINA, Tuning.BASE_AGILITY, now())
+	sim:addRider(player.UserId, maxStaminaOf(player), Tuning.BASE_AGILITY, now())
 
 	player.CharacterAdded:Connect(function(character)
 		hookCharacter(player, character)
@@ -328,7 +338,17 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other services
 
--- Changes a player's Max Stamina (upgrades will call this; for now only the Studio test panel does).
+-- Works a player's Max Stamina out again from what they own. Call after anything that changes it.
+function RunwayService.RefreshMaxStamina(player: Player)
+	sim:setMaxStamina(player.UserId, maxStaminaOf(player), now())
+end
+
+-- Server luck for every egg dropped from now on (1 = normal). See Shared/LuckBoost.
+function RunwayService.SetLuck(luck: number)
+	sim:setLuck(luck)
+end
+
+-- Sets a player's Max Stamina directly, ignoring what they own (only the admin panel does this).
 function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
 end
@@ -345,9 +365,30 @@ function RunwayService.GetMaxStamina(player: Player): number
 end
 
 -- Drops an egg of a chosen rarity in a zone, if that rarity can drop there. Returns whether it did.
--- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup).
-function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?): boolean
-	return sim:spawnEgg(zoneId, now(), rarity, kind) ~= nil
+-- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup). `placement`
+-- ({ z, lateral }) drops it somewhere on the runway other than the zone's chute.
+function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?, placement: RunwaySim.Placement?): boolean
+	return sim:spawnEgg(zoneId, now(), rarity, kind, placement) ~= nil
+end
+
+-- Removes every egg nobody is riding, as a closure does. Returns how many went.
+function RunwayService.ClearEggs(): number
+	return sim:clearUnridden()
+end
+
+-- Fills a player's stamina to their Max Stamina.
+function RunwayService.RefillStamina(player: Player)
+	sim:refillStamina(player.UserId, now())
+end
+
+-- Takes a player off the egg they are riding, as if they had hopped off. Does nothing if they are not riding.
+function RunwayService.Dismount(player: Player)
+	sim:requestDismount(player.UserId, now())
+end
+
+-- How many eggs drop, as a multiple of the usual rate (2 during an Egg Avalanche).
+function RunwayService.SetEggRate(multiplier: number)
+	sim:setEggRate(multiplier, now())
 end
 
 -- The zone a player's character is standing in (1 when they are at the hub).

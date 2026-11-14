@@ -36,6 +36,7 @@ local Zones = session:require(Shared.Config.Zones)
 MapService.Init()
 local PlotService = session:require(Server.Services.PlotService)
 PlotService.Init()
+session:require(Server.Services.LeaderboardService).Init()
 local workspace = session:service("Workspace")
 
 -- A few eggs on the runway, each where its path round the obstacles has taken it.

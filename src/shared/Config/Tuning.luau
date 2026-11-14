@@ -31,6 +31,8 @@ Tuning.WILD_RARE_ODDS = 0.1
 Tuning.WILD_RARE_FROM = "Secret"
 -- Studs past the start of its zone where an egg lands.
 Tuning.EGG_SPAWN_OFFSET = 12
+-- During an Egg Avalanche, eggs drop this many times as often (and up to this many times as many per zone).
+Tuning.AVALANCHE_EGG_MULTIPLIER = 2
 -- Eggs drop in from above when they spawn.
 Tuning.EGG_DROP_TIME = 0.6
 Tuning.EGG_DROP_HEIGHT = 24

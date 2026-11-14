@@ -42,10 +42,29 @@ CycleClock.DAY_FRACTION = 0.7
 CycleClock.EVENT_PERIOD = 20
 CycleClock.TITAN_CYCLE = 0
 CycleClock.AVALANCHE_CYCLE = 10
+-- The event running now ("Avalanche"), or nil: the server's EventService keeps it in this Workspace attribute.
+CycleClock.EVENT_ATTRIBUTE = "ServerEvent"
+-- What each event is called on screen.
+CycleClock.EVENT_NAMES = { Titan = "Titan Egg", Avalanche = "Egg Avalanche" }
+
+-- Seconds the cycle has been moved forward on top of the server clock: the admin panel's "Close the runway now"
+-- and "Open the runway now" jump ahead to the next closure or cycle. The server shares it with every device in the
+-- Workspace attribute OFFSET_ATTRIBUTE; each device passes it to setOffset, and getState adds it.
+CycleClock.OFFSET_ATTRIBUTE = "CycleOffset"
+local offset = 0
+
+function CycleClock.setOffset(seconds: number)
+	offset = seconds
+end
+
+function CycleClock.getOffset(): number
+	return offset
+end
 
 function CycleClock.getState(serverTime: number): State
-	local index = math.floor(serverTime / CycleClock.CYCLE_LENGTH)
-	local elapsed = serverTime - index * CycleClock.CYCLE_LENGTH
+	local cycleTime = serverTime + offset
+	local index = math.floor(cycleTime / CycleClock.CYCLE_LENGTH)
+	local elapsed = cycleTime - index * CycleClock.CYCLE_LENGTH
 	local phase: Phase
 	if elapsed >= CycleClock.CLOSE_AT then
 		phase = "Closed"

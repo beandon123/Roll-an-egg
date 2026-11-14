@@ -23,6 +23,14 @@ local TEMPLATE = {
 	Dollars = 0,
 	-- upgradeId -> level bought
 	Upgrades = {},
+	-- Max Stamina bought in the shop, added to the base (see Config/Shop).
+	MaxStaminaBonus = 0,
+	-- "Double your Max Stamina" purchases: 1, 2, 4 ... up to Shop.MAX_STAMINA_MULTIPLIER.
+	StaminaMultiplier = 1,
+	-- settingKey -> value (see Config/Settings). Missing keys use the default.
+	Settings = {},
+	-- The latest Robux purchase IDs already granted, oldest first, so a purchase is never granted twice.
+	PurchaseIds = {},
 	-- The shapes of these are in Logic/Hatchery, which also brings older saves up to date (migrate).
 	-- Eggs in the inventory: { uid, zone, rarity, kind, claimedAt }.
 	Eggs = {},
@@ -30,7 +38,8 @@ local TEMPLATE = {
 	Hatching = {},
 	-- Hatched pets: { uid, kind, egg, zone, rarity, variant, inPen, hatchedAt }.
 	Pets = {},
-	-- How big the pen is (Shared/Plots), and the pet the player rides (its uid, or "").
+	-- How big the pen is (Shared/Plots; the green button at its front, or the shop, buys the next level), and the
+	-- pet the player rides (its uid, or "").
 	PenLevel = 1,
 	Mount = "",
 	Stats = {
@@ -53,6 +62,71 @@ function DataService.GetData(player: Player)
 		return profile.Data
 	end
 	return nil
+end
+
+-- Waits (up to `timeout` seconds) for a player's data to load. Returns it, or nil if they left or it timed out.
+function DataService.WaitForData(player: Player, timeout: number?)
+	local deadline = os.clock() + (timeout or 15)
+	while player.Parent == Players and os.clock() < deadline do
+		local data = DataService.GetData(player)
+		if data then
+			return data
+		end
+		task.wait(0.25)
+	end
+	return DataService.GetData(player)
+end
+
+-- Saves a player's data now and waits until a save satisfies `isSaved(lastSavedData)`.
+-- Returns false if the session ends or `timeout` seconds pass first. Used so a Robux purchase is only reported
+-- to Roblox as granted once the grant is safely stored.
+function DataService.SaveAndWait(player: Player, isSaved: (any) -> boolean, timeout: number?): boolean
+	local profile = profiles[player]
+	if profile == nil or not profile:IsActive() then
+		return false
+	end
+	if isSaved(profile.LastSavedData) then
+		return true
+	end
+
+	local thread = coroutine.running()
+	local result: boolean? = nil
+	local waiting = false
+	local connections = {}
+	local function finish(value: boolean)
+		if result ~= nil then
+			return
+		end
+		result = value
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		if waiting then
+			task.spawn(thread, value)
+		end
+	end
+	table.insert(
+		connections,
+		profile.OnAfterSave:Connect(function(saved)
+			if isSaved(saved) then
+				finish(true)
+			end
+		end)
+	)
+	table.insert(
+		connections,
+		profile.OnSessionEnd:Connect(function()
+			finish(false)
+		end)
+	)
+	task.delay(timeout or 30, finish, false)
+	profile:Save()
+	-- A save can finish before Save() returns; only wait if it has not.
+	if result ~= nil then
+		return result
+	end
+	waiting = true
+	return coroutine.yield()
 end
 
 -- Runs `callback(player, data)` once a player's data is ready. Also runs for players already loaded.

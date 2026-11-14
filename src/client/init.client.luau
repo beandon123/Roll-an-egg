@@ -17,6 +17,10 @@ local ORDER = {
 	"HatchController",
 	"PenController",
 	"MountController",
+	"ShopController",
+	"SettingsController",
+	"FlyController",
+	"AdminController",
 }
 
 local loaded = {}

@@ -80,6 +80,10 @@ end
 
 local function openPanel(panel: string)
 	UiState.panel:set(panel)
+	if panel ~= "None" then
+		-- One panel at a time: close the Shop or Settings.
+		UiState.openPanel:set(nil)
+	end
 	if panel == "Pets" then
 		UiState.newPets:set(0)
 	end

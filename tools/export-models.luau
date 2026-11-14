@@ -68,8 +68,8 @@ local function extents(model: Instance, turn: CFrame): ({ number }, { number })
 	return low, high
 end
 
--- Moves a whole model so its root ends up at `target`, carrying every part with it. (Lune's stand-in for Studio
--- only moves the root on Model:PivotTo, and the saved file keeps every other part where it was left.)
+-- Moves a whole model so its root ends up at `target`, carrying every part with it (what Model:PivotTo does in
+-- Roblox, done by hand so this tool does not depend on the test stand-in's version of it).
 local function moveTo(model: Instance, target: CFrame)
 	local move = target * model.PrimaryPart.CFrame:Inverse()
 	for _, part in model:GetDescendants() do

@@ -345,14 +345,15 @@ end
 -- Money and the pen
 
 -- Dollars a second the pets in the pen earn together.
-function Hatchery.income(data: Data): number
+-- Dollars a second from the pets in the pen. `multiplier` is for boosts such as the x2 Dollars pass.
+function Hatchery.income(data: Data, multiplier: number?): number
 	local total = 0
 	for _, pet in data.Pets do
 		if pet.inPen then
 			total += PetWorth.income(pet)
 		end
 	end
-	return total
+	return total * (multiplier or 1)
 end
 
 -- Buys the next pen level. Returns whether it worked and why not ("Max", "Money"), and what it cost.
@@ -369,10 +370,19 @@ function Hatchery.upgradePen(data: Data): (boolean, string?, number?)
 	return true, nil, cost
 end
 
+-- Raises the pen a level for free (a Robux purchase). Returns whether it could.
+function Hatchery.raisePen(data: Data): boolean
+	if PetWorth.penUpgradeCost(data.PenLevel) == nil then
+		return false
+	end
+	data.PenLevel += 1
+	return true
+end
+
 ----------------------------------------------------------------------------------------------------------------
 
 -- What the player's device is told: copies of their eggs, hatching eggs and pets, and their pen and money.
-function Hatchery.state(data: Data)
+function Hatchery.state(data: Data, incomeMultiplier: number?)
 	local eggs = {}
 	for _, item in data.Eggs do
 		table.insert(eggs, {
@@ -391,7 +401,7 @@ function Hatchery.state(data: Data)
 		eggCapacity = Hatchery.eggCapacity(data),
 		petCapacity = Hatchery.petCapacity(data),
 		dollars = data.Dollars,
-		income = Hatchery.income(data),
+		income = Hatchery.income(data, incomeMultiplier),
 		mount = data.Mount,
 	}
 end

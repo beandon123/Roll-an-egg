@@ -690,6 +690,16 @@ function PetModels.all(): { string }
 	return list
 end
 
+-- A pet's name for people (e.g. "Moss Stag" for "MossStag"), without building its model, or nil if it has no
+-- design.
+function PetModels.describe(kind: string): { name: string }?
+	local design = Designs[kind]
+	if design == nil then
+		return nil
+	end
+	return { name = design.name }
+end
+
 -- The pet that hatches from an egg (its design name), or nil.
 function PetModels.fromEgg(eggKind: string): string?
 	for _, zone in Zones.List do

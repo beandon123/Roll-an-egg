@@ -265,8 +265,12 @@ local function addEgg(data)
 
 	local model, root, needLabel = buildModel(spec, kind, data.rarity, data.id)
 	local dust, dustEmitter = addDust(model, spec)
-	local startZ = Runway.zoneStartZ(data.zone) + Tuning.EGG_SPAWN_OFFSET
-	local fadeZ = Runway.fadeZ(data.zone)
+	-- Eggs land at their zone's chute unless an admin dropped one somewhere else (the server worked out its fade
+	-- line the same way: Logic/RunwaySim).
+	local startZ = if typeof(data.startZ) == "number"
+		then data.startZ
+		else Runway.zoneStartZ(data.zone) + Tuning.EGG_SPAWN_OFFSET
+	local fadeZ = math.max(Runway.fadeZ(data.zone), math.min(startZ + Runway.ZONE_LENGTH, Runway.LENGTH))
 	local pathZ = if typeof(data.pathZ) == "number" then data.pathZ else startZ
 	local egg: ClientEgg = {
 		id = data.id,
