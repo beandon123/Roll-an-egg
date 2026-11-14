@@ -10,14 +10,14 @@ Core loop:
 1. One long straight runway passes through six zones in order: Forest, Desert, Snow, Ocean, Volcano, Prehistoric.
    Anyone can go anywhere; deeper zones drop rarer, bigger eggs that need more stamina to hold on to.
 2. The runway runs in 3-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
-   rider disappears, every nest hatches 30x faster, and a fresh lineup of eggs starts.
+   rider disappears, every egg in a pen hatches 30x faster, and a fresh lineup of eggs starts.
 3. Players chase eggs on foot or riding a pet and jump on. While riding they steer to dodge obstacles as stamina drains,
    staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
    Leaving an egg makes it bounce and crack; rarer eggs survive more bounces.
 4. Another player can jump onto the same egg to challenge the rider -> a rhythm-tap duel graded Perfect / Great / Good / Poor;
    the better score wins. A winning challenger steals the egg and its progress, but must have the stamina to cover it.
-5. Claimed eggs go straight to inventory. Players put them down anywhere in their pen; eggs hatch over real time,
-   including while offline.
+5. Claimed eggs go straight to inventory. Players put them down anywhere in their pen; eggs grow over real time,
+   including while offline, and players open them by hand once they're ready.
 6. Hatched pets roam the pen, earn dollars, and double as rideable mounts. Rarer pets earn more and run faster.
 7. Dollars buy upgrades (above all Max Stamina) and zone teleports -> hold on to bigger, rarer eggs deeper down the
    runway -> better pets.
@@ -114,7 +114,7 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] 10 s on-screen warning before each closure (proposed)
 - [ ] At closing: every egg without a rider disappears; anyone riding stays on and keeps going; players stay on the track
     - [ ] An egg that loses its rider during the closure disappears too (proposed)
-- [ ] During the 10 s closure every nest in the server hatches 30x faster (10 s = 5 min of hatch progress)
+- [ ] During the 10 s closure every egg in the server hatches 30x faster (10 s = 5 min of hatch progress)
 - [ ] HUD shows the time left until the runway closes
 
 ### Riding & Claiming
@@ -183,7 +183,11 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] 1 Robux egg with 5 unique pets on top of the core set (decided) -> 45 pets at launch; event pets later
 - [ ] All pets rideable, built on ~7 shared skeletons (four-legged, two-legged, winged, low-slung, many-legged,
       floating/swimming for Ocean pets, special) so animations are reused
-- [ ] Sell pets for dollars (built); pet inventory cap (upgradeable)
+- [ ] Sell pets for dollars (built)
+- [ ] Pet limit (decided): a player can own at most 100 pets in total, pen and inventory together;
+      the limit is fixed and can't be upgraded
+    - [ ] At 100 pets, eggs can still be placed in the pen and keep growing, but a ready egg can't be opened: the game
+          says "You have too many pets" (decided); the egg waits in the pen until you sell a pet to make room
 
 Roster, one pet per egg (edit freely; Robux-egg pets designed during the art phase). The eggs are in
 `src/shared/Config/Zones.luau`:
@@ -220,21 +224,27 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Each level bought with dollars, or buy the next level with Robux (decided)
     - [ ] Every pet in the pen roams freely
     - [ ] Eggs hatching at once: 2 at Pen Level 1, +1 per level, up to 10 (built; replaces nests, decided)
-    - [ ] Hatched pets pop out of the nest and start roaming (built: the egg bursts open; the 10 rarest pets roam,
+    - [ ] Hatched pets pop out of the egg and start roaming (built: the egg bursts open; the 10 rarest pets roam,
           walked round by each player's device)
     - [ ] Dollars are paid straight to the player every second (built; replaces the collect pad)
 - [ ] Hatch times: Common 30 s, Uncommon 2 m, Rare 5 m, Epic 15 m, Legendary 45 m, Mythic 2 h, Secret 4 h, Eternal 6 h
       (Titan/Robux eggs set per egg)
     - [ ] Hatching continues offline at normal speed; 30x during each runway closure while you're in a server (decided);
           that works out to ~2.6x faster while online (e.g., Legendary ~17 min)
-    - [ ] Hatch animation + rarity reveal on completion
+- [ ] Hatching is manual (decided): when an egg's timer finishes, it waits, ready, in the pen; nothing hatches on its own (not built yet: today eggs hatch
+      by themselves when the timer ends)
+    - [ ] Open it in the pen (walk up to it and press Open), or from anywhere in the Growing Eggs menu (see UI/UX)
+    - [ ] Hatch animation + rarity reveal when you open it
+- [ ] Skipping growth with Robux (decided): Skip on one growing egg (at the egg, or on its row in the Growing Eggs
+      menu), or Grow All for every growing egg at once; skipped eggs become ready to open (see Monetization)
 - [ ] Getting home (decided): ride back up, or reset/die to respawn at your plot (~2 s)
     - [ ] Optional on-screen Reset shortcut, because Roblox's built-in reset is buried in the menu on mobile
 
 ### Progression
 - [ ] Single soft currency: Dollars (decided; built): earned every second by pets in the pen and by selling pets
 - [ ] Upgrades: Max Stamina (main progression stat: lets you hold on to bigger eggs deeper down), Stamina Regen,
-      Agility, Run Speed, Jump, Pen Level, Hatch Speed, Inventory Size
+      Agility, Run Speed, Jump, Pen Level, Hatch Speed
+    - [ ] Max Stamina has no cap (decided): it can be upgraded forever, at rising cost, so future zones can ask for more
     - [ ] Costs rise steeply; big numbers shown abbreviated (1.2K, 30K, 4.5M)
 - [ ] Zone teleport pads bought with dollars, in order (decided)
 - [ ] Collection book (index) with per-rarity, per-zone, and full-completion rewards
@@ -243,8 +253,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 ### Onboarding / FTUE
 - [ ] Guided first ride in the Forest on a slow tutorial egg (guaranteed claim) that teaches steering and stamina
 - [ ] Practice duel against an NPC coach that teaches Perfect / Great / Good / Poor timing
-- [ ] Arrow to your plot -> place egg in a nest -> 30 s hatch -> starter pet -> teaches mounting and pet income
-- [ ] First runway closure explained with a quick popup ("Nests hatch 30x faster right now!")
+- [ ] Arrow to your plot -> place egg in your pen -> 30 s hatch -> open it -> starter pet -> teaches mounting and pet income
+- [ ] First runway closure explained with a quick popup ("Eggs hatch 30x faster right now!")
 - [ ] First time a player tries an egg above their stamina, a tip explains the requirement number
 - [ ] Tutorial unlocks HUD elements step by step; skippable for returning players
 
@@ -252,10 +262,12 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - [ ] Daily login streak rewards
 - [ ] Playtime gifts (5 / 10 / 20 / 30 min)
 - [ ] Daily quests (e.g., claim 5 eggs, win 2 duels, claim a Desert egg, hatch 2 Rares, get 3 Perfects in one duel)
-- [ ] Offline earnings (capped) + "Welcome back" summary
+- [ ] Offline earnings (decided): you get the dollars your pets would have earned in your first hour offline, and no
+      dollars at all beyond that hour; a "Welcome back" summary shows what you got (eggs keep growing the whole time
+      you're away)
 - [ ] Global leaderboards: eggs claimed, eggs stolen, total dollars, rarest hatch
-    - [ ] Shown on boards beside the start zone (proposed); "Top Egg Claimers" is the first
-- [ ] Community-join reward; opt-in Roblox experience notifications ("Your Mythic egg hatched!")
+    - [ ] Shown on boards beside the start zone (proposed); "Top Egg Claimers" is the first (built)
+- [ ] Community-join reward; opt-in Roblox experience notifications ("Your Mythic egg is ready to open!")
 
 ### Server Events (decided: Titan Egg + Egg Avalanche; Shiny Hour on hold)
 - [ ] Rotation (decided): each event happens once an hour, alternating every 30 min
@@ -279,24 +291,41 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Odds shown before purchase; hidden where PolicyService reports paid random items are restricted
 - [ ] Game passes: VIP (tag + x1.5 dollars), x2 Dollars, +2 egg spots, Auto-Collect, Faster Hatch, Lucky (better Golden/Rainbow
       chance on hatches)
-- [ ] Developer products: Next Pen Level (decided), Instant Hatch, Server Luck boost (helps everyone), Call the Titan
-      (an extra Titan Egg for the server, limited frequency), coin packs
+- [ ] Developer products: Next Pen Level (decided), Skip Growth (below), Server Luck boost (helps everyone),
+      Call the Titan (an extra Titan Egg for the server, limited frequency), dollar packs
     - [ ] Server Luck: x2 and x4 for 15 minutes; every rarity above Common becomes that many times as likely; boosts
           stack by adding time, and the strongest running one applies (proposed)
     - [ ] Max Stamina packs (+500 / +5K / +25K, permanent) (proposed, asked for by the owner; amounts and prices set
           during economy tuning)
     - [ ] Double Your Stamina (decided): a repeatable product; each purchase doubles Max Stamina, starting at x2, up to
           x1024 (ten doublings; the owner said "1096x", read as the nearest doubling); one developer product per step
-- [ ] Shop UI ("Coop Shop"): sections Featured (next pen level, Robux or coins), Luck, Stamina, Coins, Passes;
-      original look (eggshell cream, yolk-yellow buttons, speckled cards)
+- [ ] Skip Growth (decided): Grow All finishes every growing egg; Skip finishes one egg
+    - [ ] Price scales with the time left, worked out automatically (decided): Grow All adds up the time left on
+          every growing egg, Skip uses that one egg's time left; the button always shows the current price, and it
+          keeps scaling past 24 hours (decided)
+    - [ ] Owner's example prices: about 29 Robux for 1 hour, 79 for 3.5 hours, about 329 for 24 hours. Formula
+          (proposed): Robux = 29 x (hours left)^0.764, rounded to the nearest price step; Skip uses the same formula
+          (proposed)
+    - [ ] Price steps (decided: bigger steps above 300 Robux): every 10 up to 299 (9, 19, 29 ... 299), then every 50
+          (349, 399 ... 999); 999 is the top price (about 100 hours, more than a full top-level pen of 6-hour eggs)
+          (proposed). Some prices it gives:
+
+          Time left   15 min  30 min  1 h  2 h  3 h  3.5 h  6 h  12 h  24 h  48 h  72 h
+          Robux       9       19      29   49   69   79     119  189   349   549   749
+
+    - [ ] Time left is counted at normal speed; the 30x closure boost isn't predicted (proposed)
+    - [ ] At 100 pets, the purchase prompt warns first that the eggs will be ready but can't be opened (proposed)
+    - [ ] Grow All is hidden when no egg is growing (proposed)
+- [ ] Shop UI ("Coop Shop"): sections Featured (next pen level, Robux or dollars), Luck, Stamina, Dollars, Passes;
+      original look (eggshell cream, yolk-yellow buttons, speckled cards) (built)
 - [ ] Settings: Music / Effects / Nature volume, show others' pets, show your pets, reduce camera shake, vibration;
-      saved to the account
+      saved to the account (built)
 - [ ] Premium player perk + Premium payouts
 - [ ] Nothing sold affects duels; they're decided by timing alone
 
 ## Design Requests
 - [ ] Art style: original, bright, stylized low-poly cartoon
-- [ ] All 3D art made by Claude in Blender (decided): pets, obstacles, zone kits, hub, plots, pens, nests,
+- [ ] All 3D art made by Claude in Blender (decided): pets, obstacles, zone kits, hub, plots, pens,
       teleport pads
     - [ ] Eggs (decided): blocky voxel-style eggs built from parts (no meshes), every egg its own design (40, 8 per
           zone, plus 5 shelved): Commons plain, Uncommon/Rare a zone pattern hinting at the pet inside, Epic and up
@@ -320,9 +349,15 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Built from parts in code, in the blocky style of the eggs and pets (done for the runway: checkered
           ground, stepped cliff banks, a railed boardwalk over a reef, zone plants and rocks, distant scenery,
           gates; the hub and plots are still placeholders)
-- [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, nests glow and pulse during the 30x hatch
-- [ ] UI/UX: mobile-first, large touch targets; main HUD = dollars, stamina, inventory, shop, index, mount, Reset shortcut,
-      runway-closing timer, next-event timer
+- [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, eggs in pens glow and pulse during the 30x hatch
+- [ ] UI/UX: mobile-first, large touch targets; main HUD = dollars, stamina, inventory, growing eggs, shop, index, mount,
+      Reset shortcut, runway-closing timer, next-event timer
+    - [ ] Growing Eggs menu (decided): a scrolling list of every egg in your pen, each with its egg icon and either a
+          progress bar with the time left or, once ready, an Open button; opens from a HUD button (today the Pets tab
+          lists the eggs hatching, and they hatch on their own when the timer ends)
+        - [ ] A Grow All button in the header and a Skip button on each growing egg's row, each showing its
+              Robux price (decided)
+        - [ ] The HUD button shows how many eggs are ready to open (proposed)
     - [ ] Riding HUD (only while riding): stamina bar, claim meter, bounces-left pips, obstacle warning markers
     - [ ] Marker above every egg: its stamina requirement, green if you have enough and red if not;
           above ridden eggs: crossed swords = you can challenge, gold lock = Locked In (75%+)
@@ -354,8 +389,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - Runway cycle: CycleService derives the cycle number and phase (open / warning / closed) from the server clock, so every
   client and late joiner agrees; at each cycle start the server rolls each zone's egg lineup and sends it to clients;
   at closure it removes every egg without a rider
-- Closure hatch boost: at each closure the server adds 290 s of bonus progress (29 x 10 s) to every nest of players
-  in that server; stored on the nest, so hatch math stays timestamp-based
+- Closure hatch boost: at each closure the server adds 290 s of bonus progress (29 x 10 s) to every hatching egg of players
+  in that server; stored on the egg, so hatch math stays timestamp-based
 - Egg motion (decided): down-runway position = EggMotion(serverTime - spawnTime), fixed by time; side-to-side position is
   steered by the rider: the rider's client predicts it and sends updates ~10x/s, the server caps them at the rider's
   Agility speed and replicates them; riderless eggs follow a path round the obstacles from where they were left,
@@ -378,8 +413,13 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   anything faster than the current mount/egg speed + tolerance (lag-aware to avoid false positives)
 - Remotes: one Net module; type and range checks; per-player rate limits; client never sends currency, rarity, or time values
 - Purchases: ProcessReceipt records each handled purchase ID in the player's profile, so every Robux purchase is granted
-  exactly once even if a server crashes mid-purchase; one developer product per pen level (developer product prices are fixed)
-- Hatching & income: calculated from timestamps (plus closure bonus) on demand; offline earnings capped
+  exactly once even if a server crashes mid-purchase; one developer product per pen level and one per Skip Growth price step
+  (30 steps of 10 up to 299, then 14 steps of 50 up to 999: 44 products), because developer product prices are fixed
+- Skip Growth: when the player presses Skip or Grow All, the server works out the price from the eggs' time left and
+  saves which eggs that purchase covers in the player's data; when the receipt arrives it finishes exactly those
+  eggs, so eggs placed while the prompt was open aren't included for free
+- Hatching & income: calculated from timestamps (plus closure bonus) on demand; opening an egg is a request the server
+  checks (timer finished, player owns fewer than 100 pets) before it creates the pet; offline earnings capped at 1 hour of income
 - Pens: roaming is cosmetic and runs only on each player's device (the server only stores which pets are in the pen);
   up to 18 pets x 8 pens; only nearby pens animate; distant pets freeze or switch to low-detail models
 - StreamingEnabled on: client code tolerates parts that haven't loaded yet; hub, plots, teleport pads, and zone signposts
@@ -403,7 +443,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   no off-platform links; complete Roblox's maturity questionnaire; splats stay cartoonish
 - Roadmap:
     - MVP (internal playtest, placeholder art): Forest + Desert zones, runway cycle + closures, steering rides,
-      obstacles, bounces/cracking, claiming, rhythm duels, pen + nests + hatching, ~6 pets with mounting, dollars,
+      obstacles, bounces/cracking, claiming, rhythm duels, pen + hatching, ~6 pets with mounting, dollars,
       core upgrades, saving, tutorial
     - Launch: all 5 zones, 40 core pets + Robux egg (5 pets), teleport pads, final art, retention features,
       Titan Egg + Egg Avalanche, monetization, compliance pass, analytics
