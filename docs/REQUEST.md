@@ -248,18 +248,16 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - [ ] Developer products: Next Pen Level (decided), Skip Growth (below), Server Luck boost (helps everyone),
       Call the Titan (an extra Titan Egg for the server, limited frequency), coin packs
 - [ ] Skip Growth (decided): Grow All finishes every growing egg; Skip finishes one egg
-    - [ ] Priced in tiers by time left, picked automatically (decided): Grow All adds up the time left on every
-          growing egg, Skip uses that one egg's time left; the button always shows the current price
-    - [ ] Prices are examples from the owner, to be tuned: about 29 Robux for up to 1 hour, about 329 Robux for
-          24 hours or more; the steps between, and Skip sharing Grow All's tiers, are proposed:
+    - [ ] Price scales with the time left, worked out automatically (decided): Grow All adds up the time left on
+          every growing egg, Skip uses that one egg's time left; the button always shows the current price, and it
+          keeps scaling past 24 hours (decided)
+    - [ ] Owner's example prices: about 29 Robux for 1 hour, 79 for 3.5 hours, about 329 for 24 hours. A formula that
+          hits all three (proposed): Robux = 29 x (hours left)^0.764, rounded to the nearest price ending in 9,
+          at least 9 and at most 999 (999 is about 100 hours, more than 12 nests of 6-hour eggs); Skip uses the
+          same formula (proposed). Some prices it gives:
 
-          Time left       Price
-          up to 1 h       29
-          up to 3 h       59
-          up to 6 h       99
-          up to 12 h      179
-          up to 24 h      249
-          over 24 h       329
+          Time left   15 min  30 min  1 h  2 h  3 h  3.5 h  6 h  12 h  24 h  48 h  72 h
+          Robux       9       19      29   49   69   79     119  189   329   559   759
 
     - [ ] Time left is counted at normal speed; the 30x closure boost isn't predicted (proposed)
     - [ ] At 100 pets, the purchase prompt warns first that the eggs will be ready but can't be opened (proposed)
@@ -343,9 +341,9 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   anything faster than the current mount/egg speed + tolerance (lag-aware to avoid false positives)
 - Remotes: one Net module; type and range checks; per-player rate limits; client never sends currency, rarity, or time values
 - Purchases: ProcessReceipt records each handled purchase ID in the player's profile, so every Robux purchase is granted
-  exactly once even if a server crashes mid-purchase; one developer product per pen level and one per Skip Growth tier
-  (developer product prices are fixed)
-- Skip Growth: when the player presses Skip or Grow All, the server works out the tier from the eggs' time left and
+  exactly once even if a server crashes mid-purchase; one developer product per pen level and one per Skip Growth price
+  (9, 19, 29 ... 999 Robux: 100 products), because developer product prices are fixed
+- Skip Growth: when the player presses Skip or Grow All, the server works out the price from the eggs' time left and
   saves which eggs that purchase covers in the player's data; when the receipt arrives it finishes exactly those
   eggs, so eggs placed while the prompt was open aren't included for free
 - Hatching & income: calculated from timestamps (plus closure bonus) on demand; opening an egg is a request the server
