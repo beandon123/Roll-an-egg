@@ -70,7 +70,20 @@ Then build a place file and open it in Studio:
 rojo build -o RollAnEgg.rbxl
 ```
 
-Press **Play**. To keep editing code while Studio is open, use `rojo serve` with the Rojo Studio plugin instead.
+Open it with *File > Open from File* and press **Play**.
+
+### Keeping Studio up to date
+
+The code lives in this repository; a place file is a snapshot of it. Two ways to get new changes into Studio:
+
+- **Rebuild** (simplest): get the latest code (`git pull`), run `rojo build -o RollAnEgg.rbxl` again, and open the
+  new file. Anything you built by hand in the old place file is not in the new one.
+- **Live sync** (keeps your place): install the Rojo plugin once (`rojo plugin install`, then restart Studio), open
+  your place, run `rojo serve` in this folder, and press **Connect** in Studio's Rojo plugin. Studio then picks up
+  every change to the code as soon as it lands in the folder (after a `git pull`, too). Rojo only replaces the
+  scripts it manages (`ReplicatedStorage.Shared` and `.Packages`, `ServerScriptService.Server` and
+  `.ServerPackages`, `StarterPlayer.StarterPlayerScripts.Client`); parts and models you added yourself are left
+  alone. Publish from Studio as usual when you are happy with it.
 
 Saving works in Studio only if the place is published and *Game Settings > Security > Enable Studio Access to API
 Services* is on. Otherwise the game still runs and simply does not save.
