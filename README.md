@@ -5,9 +5,13 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 ## What works so far
 
-The first playable slice: **the runway and riding**.
+The first playable slice: **the runway and riding**, plus **the shop and settings**.
 
-- A placeholder map: the hub, six zone slabs (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) and their signs.
+- A placeholder map: the hub, a painted START ZONE where the runway begins, six zone slabs (Forest, Desert, Snow,
+  Ocean, Volcano, Prehistoric) and their signs. The runway is 120 studs wide, with walls down both sides that are
+  broken by gaps (marked with red strips) where a player on foot can fall off.
+- A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
+  back to the players in the server when the store cannot be reached).
 - Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated
@@ -17,13 +21,23 @@ The first playable slice: **the runway and riding**.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
 - The 3-minute runway cycle: a warning, then a 10-second closure that clears every egg without a rider.
 - Claimed eggs are saved to the player's data (ProfileStore).
-- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
+- The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge with Max Stamina, coins and eggs
+  under them (the "+" buttons open the shop at that section), a timer while a server luck boost runs, and the
+  stamina and claim meters (bottom).
+- **Shop** ("Coop Shop"): next pen level for Robux or coins, x2 / x4 server luck for 15 minutes (rarer eggs for
+  everyone), Max Stamina packs, Double Your Stamina (each purchase doubles Max Stamina, from x2 up to x1024), coin
+  packs, and the x2 Coins pass. Robux purchases are granted exactly once, and only reported to Roblox once saved.
+- **Settings**: Music / Effects / Nature volume, show others' pets / your pets, reduce camera shake, vibration.
+  Saved to the player's account.
 - The Egg Avalanche server event: twice the eggs in every zone for one runway cycle, once an hour.
 - An admin panel for testing (see below), and a Model Showroom far from the hub where every pet and egg stands on
   display.
 
-The eggs have their real look; everything else visual is still a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
-pets and mounts, coins and upgrades, teleport pads, the Titan Egg event, the tutorial, and all final art and sound.
+The eggs and pets have their real look; the rest of the world is a placeholder made of plain parts, and the UI uses
+emoji for icons. Not built yet: obstacles, duels, plots and pens, hatching, pets and mounts, coin income and upgrades,
+teleport pads, the Titan Egg event, the tutorial, and all final art and sound. So for now, pen levels and the x2 Coins
+pass are recorded but have nothing to act on, and the pet and comfort settings are saved for the systems that will
+read them.
 
 ## Try it in Roblox Studio
 
@@ -53,6 +67,17 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Steer | A / D | Thumbstick | Left stick |
 | Hop off | Jump again | Jump button | A |
 
+### Selling things for Robux
+
+Every price and amount is in `src/shared/Config/Shop.luau`. Each Robux item needs its ID from the Creator
+Dashboard (*Monetization > Developer Products* or *Passes*), pasted into its `productId` / `gamePassId`. There is
+one developer product per pen level and one per stamina doubling (x1 to x2, x2 to x4 ...), because a product's
+price is fixed.
+
+While an ID is `0`, the item cannot be bought in a live game ("This isn't for sale yet"). In Studio, buying it grants
+it straight away, so the whole shop can be tried before the products exist. The price shown comes from Roblox once an
+ID is set, so changing a price on the dashboard is enough.
+
 ### Admin panel
 
 Admins get a red **ADMIN** button at the top right of the screen. In Studio everyone is an admin. In a live game the
@@ -63,7 +88,7 @@ is listed in `src/server/Config/Admins.luau`. The server checks every command, s
 | --- | --- |
 | Eggs | Pick a zone, then **Drop** any of its eggs on the runway or **Give** it to your inventory. Eggs drop in front of you (on the runway) or at the zone's chute. Drop a random egg, every egg of the zone, or clear the runway. |
 | Pets | Pick a zone, then **Spawn** any of its pets next to you or **Give** it to your inventory. Stand all of the zone's pets in front of you, or remove the ones you spawned. |
-| Me | **Fly** (move to fly where the camera looks; Space or E to rise, Q or Ctrl to sink) at 40 to 320 studs a second. Walk speed. Stamina: Max x5, 10M, refill, reset. What is in your inventory, and clearing it. |
+| Me | **Fly** (move to fly where the camera looks; Space or E to rise, Q or Ctrl to sink) at 40 to 320 studs a second. Walk speed. Stamina: Max x5, 10M, refill, and reset (back to 100 plus what you bought in the shop). Coins: add 1K, 100K or 10M, or reset to 0. What is in your inventory, and clearing it. |
 | Events | Start or stop an **Egg Avalanche**. Close the runway now, or open it now (skipping the rest of a closure). |
 | Teleport | The hub, the **Model Showroom**, the end cliff, the start of any zone, or any other player. |
 
@@ -185,8 +210,10 @@ src/server/            ServerScriptService.Server
   Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
                          the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
-  Controllers/           Egg drawing, riding, HUD updates, pet animation, admin flight, the admin panel
-  Ui/                    The Fusion HUD and admin panel
+  Controllers/           Egg drawing, riding, HUD updates, the shop and settings, pet animation, admin flight,
+                         the admin panel
+  Ui/                    The Fusion HUD, Shop and Settings panels (Theme and Widgets hold the shared look), and
+                         the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        export-models.luau: every pet and egg as Studio model files (.rbxm)
@@ -210,11 +237,13 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures), and that every egg and pet model exists, is unique and has nothing floating loose,
-  and that every egg stays within its part budget. Pets have none. They are also checked for the limbs their skeleton needs, and for differently coloured
-  blocks sharing a face (which flicker in Roblox).
+  stamina, bounces, closures, shop prices, settings, luck boosts), and that every egg and pet model exists, is
+  unique and has nothing floating loose, and that every egg stays within its part budget. Pets have none. They are
+  also checked for the limbs their skeleton needs, and for differently coloured blocks sharing a face (which flicker
+  in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
-  Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
+  Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes. Purchases are tested
+  by calling the game's own ProcessReceipt with made-up receipts.
 
 The tests cannot check anything that needs the real engine: physics, animation, input, how things look and feel.
 Those need a play test in Studio.

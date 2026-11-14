@@ -62,19 +62,31 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 	return spec
 end
 
+-- A rarity's drop weight in a zone under a luck multiplier: every rarity above Common is `luck` times as likely
+-- (compared with Common) as normal.
+local function luckyWeight(zone, rarity: string, luck: number): number
+	local weight = zone.weights[rarity] or 0
+	if rarity ~= "Common" then
+		weight *= luck
+	end
+	return weight
+end
+
 -- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights.
-function EggSpec.rollRarity(zoneId: number, random01: number): string
+-- `luck` (default 1) comes from server luck boosts; see Shared/LuckBoost.
+function EggSpec.rollRarity(zoneId: number, random01: number, luck: number?): string
 	local zone = Zones.List[zoneId]
+	local multiplier = math.max(1, luck or 1)
 	local total = 0
 	for _, rarity in Rarities.Order do
-		total += zone.weights[rarity] or 0
+		total += luckyWeight(zone, rarity, multiplier)
 	end
 
 	local target = random01 * total
 	local running = 0
 	local last = ""
 	for _, rarity in Rarities.Order do
-		local weight = zone.weights[rarity] or 0
+		local weight = luckyWeight(zone, rarity, multiplier)
 		if weight > 0 then
 			running += weight
 			last = rarity

@@ -20,15 +20,17 @@ local EggSpec = require(Shared.EggSpec)
 local Net = require(Shared.Net)
 local PetModels = require(Shared.PetModels)
 local PetRig = require(Shared.PetRig)
+local NumberFormat = require(Shared.NumberFormat)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
-local Tuning = require(Shared.Config.Tuning)
+local Shop = require(Shared.Config.Shop)
 local Zones = require(Shared.Config.Zones)
 
 local Admins = require(script.Parent.Parent.Config.Admins)
 local DataService = require(script.Parent.DataService)
 local EventService = require(script.Parent.EventService)
 local RunwayService = require(script.Parent.RunwayService)
+local ShopService = require(script.Parent.ShopService)
 local ShowroomService = require(script.Parent.ShowroomService)
 local TeleportService = require(script.Parent.TeleportService)
 
@@ -488,10 +490,27 @@ commands.Stamina = function(player, args)
 		RunwayService.RefillStamina(player)
 		return true, "Stamina refilled."
 	elseif action == "Reset" then
-		RunwayService.SetMaxStamina(player, Tuning.BASE_MAX_STAMINA)
-		return true, `Max Stamina is back to {Tuning.BASE_MAX_STAMINA}.`
+		-- Back to what the player really has: the base, plus anything bought in the shop.
+		RunwayService.RefreshMaxStamina(player)
+		return true, `Max Stamina is back to {RunwayService.GetMaxStamina(player)}.`
 	end
 	return false, "Unknown stamina action."
+end
+
+commands.Coins = function(player, args)
+	local data = DataService.GetData(player)
+	if data == nil then
+		return false, "Your data has not loaded yet."
+	end
+	if args.action == "Add" and table.find(AdminTools.COIN_AMOUNTS, args.amount) then
+		data.Coins = math.min(AdminTools.MAX_COINS, data.Coins + args.amount)
+	elseif args.action == "Reset" then
+		data.Coins = 0
+	else
+		return false, "Unknown coins action."
+	end
+	ShopService.RefreshPlayer(player)
+	return true, `You have {NumberFormat.abbreviate(data.Coins)} coins.`
 end
 
 commands.Teleport = function(player, args)
@@ -541,6 +560,22 @@ end
 
 commands.StopEvent = function()
 	return EventService.StopEvent()
+end
+
+commands.StartLuck = function(player, args)
+	if not table.find(AdminTools.LUCK_MULTIPLIERS, args.multiplier) then
+		return false, "Pick one of the luck boosts."
+	end
+	ShopService.AddLuck(args.multiplier, Shop.LUCK_DURATION, player)
+	return true, `Luck x{args.multiplier} for everyone for {Shop.LUCK_DURATION // 60} minutes.`
+end
+
+commands.StopLuck = function()
+	if #ShopService.GetLuckBoosts() == 0 then
+		return false, "No luck boost is running."
+	end
+	ShopService.ClearLuck()
+	return true, "Ended the luck boosts."
 end
 
 commands.CloseRunway = function()

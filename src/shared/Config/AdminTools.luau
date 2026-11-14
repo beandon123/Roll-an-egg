@@ -20,6 +20,13 @@ AdminTools.DEFAULT_WALK_SPEED = 16
 -- Max Stamina the panel's "Max" button sets.
 AdminTools.MAX_STAMINA = 1e7
 
+-- Coins the panel can add at a click, and the most a player can be given that way.
+AdminTools.COIN_AMOUNTS = { 1e3, 1e5, 1e7 }
+AdminTools.MAX_COINS = 1e12
+
+-- Server luck boosts the panel can start (they last as long as the shop's, Config/Shop.LUCK_DURATION).
+AdminTools.LUCK_MULTIPLIERS = { 2, 4 }
+
 -- Most of one kind of egg or pet given at once, and most kept in an inventory in total, so a stuck button cannot
 -- fill a player's saved data.
 AdminTools.MAX_GIVE = 10

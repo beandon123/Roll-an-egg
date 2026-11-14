@@ -114,6 +114,11 @@ fakeEvent("BaseRemoteEvent", "OnClientEvent")
 fakeEvent("UserInputService", "JumpRequest")
 fakeEvent("GuiButton", "Activated")
 fakeEvent("ProximityPrompt", "Triggered")
+fakeEvent("GuiObject", "InputBegan")
+fakeEvent("GuiObject", "InputEnded")
+fakeEvent("UserInputService", "InputChanged")
+fakeEvent("UserInputService", "InputEnded")
+fakeEvent("MarketplaceService", "PromptGamePassPurchaseFinished")
 fakeEvent("Instance", "Destroying")
 fakeEvent("Instance", "AncestryChanged")
 fakeEvent("Instance", "ChildAdded")
@@ -123,6 +128,10 @@ fakeEvent("Instance", "Changed")
 fakeEvent("Instance", "AttributeChanged")
 
 fakeValue("RemoteFunction", "OnServerInvoke")
+fakeValue("MarketplaceService", "ProcessReceipt")
+-- Lune has no layout engine; tests set these on the frames they press or drag.
+fakeValue("GuiObject", "AbsolutePosition")
+fakeValue("GuiObject", "AbsoluteSize")
 
 roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 	local child = self:FindFirstChild(name)
@@ -219,6 +228,22 @@ roblox.implementMethod("RemoteFunction", "InvokeServer", function(self, ...)
 	return handler(...)
 end)
 
+-- Purchases: prompts are recorded in `session.prompts`; tests answer them by calling ProcessReceipt themselves.
+-- Game pass ownership comes from `session.ownedGamePasses[userId][gamePassId]`.
+roblox.implementMethod("MarketplaceService", "PromptProductPurchase", function(_, player, productId)
+	table.insert(current.prompts, { kind = "Product", player = player, id = productId })
+end)
+roblox.implementMethod("MarketplaceService", "PromptGamePassPurchase", function(_, player, gamePassId)
+	table.insert(current.prompts, { kind = "GamePass", player = player, id = gamePassId })
+end)
+roblox.implementMethod("MarketplaceService", "UserOwnsGamePassAsync", function(_, userId, gamePassId)
+	local owned = current.ownedGamePasses[userId]
+	return owned ~= nil and owned[gamePassId] == true
+end)
+roblox.implementMethod("MarketplaceService", "GetProductInfo", function()
+	error("GetProductInfo is not available in tests")
+end)
+
 -- A model's pivot is its PrimaryPart's CFrame here (Roblox also has Model.WorldPivot for models without one).
 roblox.implementMethod("Model", "GetPivot", function(self)
 	local primary = self.PrimaryPart
@@ -302,8 +327,11 @@ function Session:environment(scriptInstance)
 		UDim2 = roblox.UDim2,
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
-		NumberSequence = roblox.NumberSequence,
 		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		utf8 = utf8,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }
@@ -393,6 +421,7 @@ function Session:addPlayer(userId: number, name: string)
 	local players = self:service("Players")
 	local player = Instance.new("Player")
 	player.Name = name
+	player.DisplayName = name
 	player.UserId = userId
 	player.Parent = players
 
@@ -561,13 +590,24 @@ function Session:useFakeProfileStore()
 				Data = deepCopy(session.saved[key] or template),
 				Key = key,
 				OnSessionEnd = Signal.new(),
+				OnAfterSave = Signal.new(),
 			}
+			profile.LastSavedData = deepCopy(profile.Data)
 			function profile.IsActive()
 				return active
 			end
 			function profile.AddUserId() end
 			function profile.Reconcile()
 				reconcile(profile.Data, template)
+			end
+			-- Saves straight away unless the test has paused saving (`session.savesPaused`).
+			function profile.Save()
+				if not active or session.savesPaused then
+					return
+				end
+				session.saved[key] = deepCopy(profile.Data)
+				profile.LastSavedData = deepCopy(profile.Data)
+				profile.OnAfterSave:Fire(profile.LastSavedData)
 			end
 			function profile.EndSession()
 				if active then
@@ -631,6 +671,8 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		humanoidStates = {},
 		invokeHandlers = {},
 		kicks = {},
+		prompts = {},
+		ownedGamePasses = {},
 		warnings = {},
 		guid = 0,
 		moveVector = roblox.Vector3.new(0, 0, 0),

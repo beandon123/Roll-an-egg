@@ -9,6 +9,7 @@ local task = require("@lune/task")
 local Studio = require("../studio")
 
 local Enum = roblox.Enum
+local Vector2 = roblox.Vector2
 local Vector3 = roblox.Vector3
 
 return function(harness)
@@ -22,8 +23,9 @@ return function(harness)
 
 	local LOCAL_USER_ID = 7
 
-	-- One player's device, with the client script running. `eggs` is what the server's snapshot contains.
-	local function startClient(eggs)
+	-- One player's device, with the client script running. `eggs` is what the server's snapshot contains;
+	-- `options.shop` and `options.settings` what the server says about the shop and the saved settings.
+	local function startClient(eggs, options)
 		local session = Studio.open(place, { isServer = false })
 		session:createRemotes()
 		local player, humanoid, root = session:addPlayer(LOCAL_USER_ID, "Me")
@@ -37,6 +39,16 @@ return function(harness)
 				eggCount = 2,
 				coins = 0,
 			}
+		end
+		session.invokeHandlers.GetShopState = function()
+			return (options and options.shop) or { coins = 0, penLevel = 1, passes = {}, luck = {} }
+		end
+		session.invokeHandlers.GetSettings = function()
+			-- `settingsDelay` holds the reply back, like a server still loading the player's data.
+			if options and options.settingsDelay then
+				task.wait(options.settingsDelay)
+			end
+			return (options and options.settings) or {}
 		end
 
 		session:run(session:service("StarterPlayer").StarterPlayerScripts.Client)
@@ -395,7 +407,7 @@ return function(harness)
 			local toast = hud(parts).Toast
 			expect.equal(toast.Text, "CLAIMED! +1 Leafy Egg")
 			expect.equal(toast.Visible, true)
-			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  3")
+			expect.equal(hud(parts).Wallet.Eggs.Value.Text, "3")
 		end)
 
 		it("stuns a rider who is thrown off", function()
@@ -523,12 +535,19 @@ return function(harness)
 		it("builds the HUD with Fusion", function()
 			local _, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters" } do
+			for _, name in { "Cycle", "Zone", "Luck", "Tabs", "Wallet", "Toast", "Meters" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
-			expect.equal(labelOf(root.Wallet.Eggs).Text, "Eggs  2")
-			expect.equal(labelOf(root.Wallet.Coins).Text, "Coins  0")
+			expect.truthy(root.Tabs.Shop and root.Tabs.Settings, "tabs")
+			expect.equal(root.Wallet.Eggs.Value.Text, "2")
+			expect.equal(root.Wallet.Coins.Value.Text, "0")
+			expect.equal(root.Wallet.Stamina.Value.Text, "100")
+			-- Nothing open, and no luck boost running.
+			expect.equal(root.ShopPanel.Visible, false)
+			expect.equal(root.SettingsPanel.Visible, false)
+			expect.equal(root.Backdrop.Visible, false)
+			expect.equal(root.Luck.Visible, false)
 		end)
 
 		it("shows stamina, the runway cycle, and the zone", function()
@@ -740,6 +759,13 @@ return function(harness)
 			click(session, body(parts).Stamina.Buttons.Max)
 			expect.equal(sent[#sent].command, "Stamina")
 			expect.equal(sent[#sent].args.action, "Max")
+			local coins = body(parts).Coins.Buttons
+			expect.equal(coins.Add100000.Text, "+100K")
+			click(session, coins.Add100000)
+			expect.equal(sent[#sent].command, "Coins")
+			expect.equal(sent[#sent].args.amount, 1e5)
+			click(session, coins.Reset)
+			expect.equal(sent[#sent].args.action, "Reset")
 			click(session, body(parts).Inventory.Buttons.ClearEggs)
 			expect.equal(sent[#sent].command, "ClearInventory")
 			expect.equal(sent[#sent].args.what, "Eggs")
@@ -758,6 +784,11 @@ return function(harness)
 			expect.equal(body(parts).Events.Status.Text, "Running: Egg Avalanche, until the runway closes")
 			click(session, body(parts).Runway.Buttons.CloseRunway)
 			expect.equal(sent[#sent].command, "CloseRunway")
+			click(session, body(parts).Luck.Buttons.Luck4)
+			expect.equal(sent[#sent].command, "StartLuck")
+			expect.equal(sent[#sent].args.multiplier, 4)
+			click(session, body(parts).Luck.Buttons.StopLuck)
+			expect.equal(sent[#sent].command, "StopLuck")
 
 			click(session, panel(parts).Window.Tabs.Teleport)
 			click(session, body(parts).Places.Buttons.Showroom)
@@ -823,6 +854,234 @@ return function(harness)
 			startRide(session, egg)
 			session:renderFrame(1 / 60)
 			expect.equal(flyVelocity(parts), nil, "the ride holds the character, not flight")
+		end)
+	end)
+
+	-- The shop panel's scrolling body, and a button's text.
+	local function shopBody(parts)
+		return hud(parts).ShopPanel.Body.Scroll
+	end
+	local function buttonText(button)
+		return button.Face.Label.Text
+	end
+
+	describe("Client: shop", function()
+		it("opens and closes from the Shop tab, the close button, and the backdrop", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			session:fire(root.Tabs.Shop, "Activated")
+			expect.equal(root.ShopPanel.Visible, true)
+			expect.equal(root.Backdrop.Visible, true)
+			session:fire(root.ShopPanel.TitleBar.Close, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+
+			session:fire(root.Tabs.Shop, "Activated")
+			session:fire(root.Backdrop, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+
+			-- The Settings tab swaps one panel for the other; pressing it again closes it.
+			session:fire(root.Tabs.Shop, "Activated")
+			session:fire(root.Tabs.Settings, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+			expect.equal(root.SettingsPanel.Visible, true)
+			session:fire(root.Tabs.Settings, "Activated")
+			expect.equal(root.SettingsPanel.Visible, false)
+		end)
+
+		it("opens at the right section from the + next to coins and stamina", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			local chips = root.ShopPanel.Body.Sections
+			local featuredColor = chips.Featured.Face.BackgroundColor3
+			session:fire(root.Wallet.Coins.Add, "Activated")
+			expect.equal(root.ShopPanel.Visible, true)
+			task.wait(0.1)
+			expect.truthy(chips.Coins.Face.BackgroundColor3 ~= chips.Luck.Face.BackgroundColor3, "Coins chip lit")
+			expect.truthy(chips.Featured.Face.BackgroundColor3 ~= featuredColor, "Featured chip no longer lit")
+			expect.falsy(root.Wallet.Eggs:FindFirstChild("Add"), "eggs cannot be bought")
+		end)
+
+		it("lists every item with its price, and asks the server to buy it", function()
+			local session, parts = startClient()
+			local body = shopBody(parts)
+			local robux = utf8.char(0xE002)
+
+			local coins = body.Coins.Grid.Coins1
+			expect.equal(coins.Title.Text, "+5K")
+			expect.equal(buttonText(coins.Buy), robux .. " 39")
+			session:fire(coins.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "Coins1")
+
+			expect.truthy(body.Stamina.Grid.Stamina3.Badge, "best value tag")
+			expect.equal(body.Luck.Grid.Luck2.Badge.Label.Text, "15 MIN")
+
+			local pen = body.Featured.PenUpgrade
+			expect.equal(pen.Current.Level.Text, "LEVEL 1")
+			expect.equal(pen.Next.Level.Text, "LEVEL 2")
+			expect.equal(pen.Next.Capacity.Text, "11 pets")
+			expect.equal(buttonText(pen.Buttons.BuyCoins), "2.5K")
+			session:fire(pen.Buttons.BuyCoins, "Activated")
+			expect.equal(session:lastSent("BuyWithCoins", "server").args[1], "PenUpgrade")
+			session:fire(pen.Buttons.BuyRobux, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "PenUpgrade")
+
+			local pass = body.Passes.List.DoubleCoins
+			expect.equal(pass.Owned.Visible, false)
+			session:fire(pass.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "DoubleCoins")
+		end)
+
+		it("follows coins, pen level, and passes from the server", function()
+			local session, parts = startClient(nil, { shop = { coins = 12500, penLevel = 3, passes = {}, luck = {} } })
+			local root = hud(parts)
+			local pen = shopBody(parts).Featured.PenUpgrade
+			expect.equal(root.Wallet.Coins.Value.Text, "12.5K")
+			expect.equal(pen.Current.Level.Text, "LEVEL 3")
+			expect.equal(buttonText(pen.Buttons.BuyCoins), "40K")
+
+			session:fromServer("PlayerStateUpdated", { coins = 0, penLevel = 9, passes = { "DoubleCoins" } })
+			expect.equal(root.Wallet.Coins.Value.Text, "0")
+			expect.equal(pen.Headline.Text, "YOUR PEN IS MAXED!")
+			expect.equal(pen.Buttons.Visible, false)
+			expect.equal(pen.Next.Visible, false)
+			local pass = shopBody(parts).Passes.List.DoubleCoins
+			expect.equal(pass.Owned.Visible, true)
+			expect.equal(pass.Buy.Visible, false)
+		end)
+
+		it("shows the stamina doubling, from x1 up to maxed out at x1024", function()
+			local session, parts = startClient()
+			local card = shopBody(parts).Stamina.StaminaDoubling
+			local robux = utf8.char(0xE002)
+			expect.equal(card.Multipliers.From.Text, "x1")
+			expect.equal(card.Multipliers.To.Text, "x2")
+			expect.equal(buttonText(card.Buy), robux .. " 49")
+			session:fire(card.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "StaminaDoubling")
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 32 })
+			expect.equal(card.Multipliers.From.Text, "x32")
+			expect.equal(card.Multipliers.To.Text, "x64")
+			expect.equal(buttonText(card.Buy), robux .. " 199")
+			expect.equal(card.Maxed.Visible, false)
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 1024 })
+			expect.equal(card.Title.Text, "STAMINA MAXED OUT!")
+			expect.equal(card.Multipliers.From.Text, "x1024")
+			expect.equal(card.Multipliers.To.Visible, false)
+			expect.equal(card.Buy.Visible, false)
+			expect.equal(card.Maxed.Visible, true)
+		end)
+
+		it("shows how each purchase went", function()
+			local session, parts = startClient()
+			session:fromServer("PurchaseResult", "Coins1", true, "+5K Coins!")
+			expect.equal(hud(parts).Toast.Text, "+5K Coins!")
+			expect.equal(hud(parts).Toast.Visible, true)
+		end)
+
+		it("counts down a server luck boost", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			session:fromServer("LuckChanged", { { multiplier = 2, endsAt = session.clock + 90 } })
+			session:renderFrame(1 / 60)
+			expect.equal(root.Luck.Visible, true)
+			expect.equal(root.Luck.Label.Text, "🍀 x2 LUCK  1:30")
+			expect.equal(shopBody(parts).Luck.Grid.Luck2.Badge.Label.Text, "ON  1:30")
+			expect.equal(shopBody(parts).Luck.Grid.Luck4.Badge.Label.Text, "15 MIN")
+
+			session:renderFrame(1, 91)
+			expect.equal(root.Luck.Visible, false)
+			expect.equal(shopBody(parts).Luck.Grid.Luck2.Badge.Label.Text, "15 MIN")
+		end)
+	end)
+
+	describe("Client: settings", function()
+		local function settingsRow(parts, key)
+			return hud(parts).SettingsPanel.Body.Scroll[key]
+		end
+
+		local function press(session, button, x)
+			session:fire(button, "InputBegan", {
+				UserInputType = Enum.UserInputType.MouseButton1,
+				Position = Vector3.new(x, 0, 0),
+			})
+		end
+
+		it("shows the saved settings and applies the volumes", function()
+			local session, parts = startClient(nil, { settings = { MusicVolume = 0.3, ShowOthersPets = false } })
+			task.wait(0.05)
+			expect.equal(settingsRow(parts, "MusicVolume").Slider.Percent.Text, "30%")
+			expect.equal(settingsRow(parts, "EffectsVolume").Slider.Percent.Text, "100%")
+			expect.equal(settingsRow(parts, "ShowOthersPets").Toggle.State.Text, "OFF")
+			expect.equal(settingsRow(parts, "ShowMyPets").Toggle.State.Text, "ON")
+			local sound = session:service("SoundService")
+			expect.near(sound.Music.Volume, 0.3, 1e-6)
+			expect.near(sound.Effects.Volume, 1, 1e-6)
+			expect.truthy(sound:FindFirstChild("Nature"), "Nature sound group")
+		end)
+
+		it("slides, switches, and saves a moment later", function()
+			local session, parts = startClient()
+			local sound = session:service("SoundService")
+			local slider = settingsRow(parts, "MusicVolume").Slider
+			slider.Track.AbsolutePosition = Vector2.new(100, 0)
+			slider.Track.AbsoluteSize = Vector2.new(200, 44)
+
+			-- Press a quarter of the way along, then drag to three quarters and let go.
+			press(session, slider.Track, 150)
+			expect.equal(slider.Percent.Text, "25%")
+			expect.near(sound.Music.Volume, 0.25, 1e-6)
+			local userInput = session:service("UserInputService")
+			session:fire(userInput, "InputChanged", {
+				UserInputType = Enum.UserInputType.MouseMovement,
+				Position = Vector3.new(250, 0, 0),
+			})
+			expect.equal(slider.Percent.Text, "75%")
+			session:fire(userInput, "InputEnded", { UserInputType = Enum.UserInputType.MouseButton1 })
+			session:fire(userInput, "InputChanged", {
+				UserInputType = Enum.UserInputType.MouseMovement,
+				Position = Vector3.new(120, 0, 0),
+			})
+			expect.equal(slider.Percent.Text, "75%", "no longer dragging")
+
+			local toggle = settingsRow(parts, "ShowMyPets").Toggle
+			session:fire(toggle, "Activated")
+			expect.equal(toggle.State.Text, "OFF")
+
+			expect.equal(#session:sent("SaveSettings"), 0, "waits before saving")
+			task.wait(1.7)
+			local saves = session:sent("SaveSettings", "server")
+			expect.equal(#saves, 1, "one save for all the changes")
+			expect.equal(saves[1].args[1].MusicVolume, 0.75)
+			expect.equal(saves[1].args[1].ShowMyPets, false)
+		end)
+
+		it("keeps changes made before the saved settings arrive, and saves them", function()
+			local session, parts = startClient(nil, {
+				settings = { MusicVolume = 0.3, ShowOthersPets = false },
+				settingsDelay = 0.3,
+			})
+			local sound = session:service("SoundService")
+			local slider = settingsRow(parts, "MusicVolume").Slider
+			slider.Track.AbsolutePosition = Vector2.new(100, 0)
+			slider.Track.AbsoluteSize = Vector2.new(200, 44)
+
+			-- The player moves the slider while the server is still answering.
+			press(session, slider.Track, 250)
+			expect.equal(slider.Percent.Text, "75%")
+
+			task.wait(0.4)
+			-- The player's change wins; saved settings they did not touch are loaded.
+			expect.equal(slider.Percent.Text, "75%")
+			expect.near(sound.Music.Volume, 0.75, 1e-6)
+			expect.equal(settingsRow(parts, "ShowOthersPets").Toggle.State.Text, "OFF")
+
+			task.wait(1.7)
+			local saves = session:sent("SaveSettings", "server")
+			expect.equal(#saves, 1, "the early change is saved")
+			expect.equal(saves[1].args[1].MusicVolume, 0.75)
+			expect.equal(saves[1].args[1].ShowOthersPets, false)
 		end)
 	end)
 end

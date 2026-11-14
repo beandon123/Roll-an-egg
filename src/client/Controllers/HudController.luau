@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
 local CycleClock = Load.shared("CycleClock")
+local LuckBoost = Load.shared("LuckBoost")
 local Runway = Load.shared("Runway")
 local Showroom = Load.shared("Showroom")
 local StaminaMath = Load.shared("StaminaMath")
@@ -34,6 +35,11 @@ local function update()
 	UiState.serverEvent:set(if typeof(event) == "string" then event else nil)
 	UiState.cyclePhase:set(cycle.phase)
 	UiState.cycleSeconds:set(math.ceil(if cycle.phase == "Closed" then cycle.untilNextCycle else cycle.untilClose))
+
+	-- Server luck: the strongest running boost and the time it has left.
+	local luck, luckEndsAt = LuckBoost.current(UiState.luckBoosts, now)
+	UiState.luck:set(luck)
+	UiState.luckSeconds:set(if luckEndsAt then math.ceil(luckEndsAt - now) else 0)
 
 	-- Claim progress, and whether stamina will run out first.
 	local ride = UiState.ride

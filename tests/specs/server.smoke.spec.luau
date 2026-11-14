@@ -73,6 +73,28 @@ return function(harness)
 		return session:require(session:service("ServerScriptService").Server.Services.RunwayService)
 	end
 
+	-- The server's own copy of Config/Shop: changing it (to give an item a product ID) changes the running game.
+	local function shopConfig(session)
+		return session:require(session:service("ReplicatedStorage").Shared.Config.Shop)
+	end
+
+	local function dataOf(session, userId)
+		return session.profiles["Player_" .. userId].Data
+	end
+
+	-- The last purchase result sent to a player: { itemId, ok, message }.
+	local function purchaseResult(session, player)
+		local entry = session:lastSent("PurchaseResult", player)
+		return entry and entry.args
+	end
+
+	local function processReceipt(session, receipt)
+		return session:service("MarketplaceService").ProcessReceipt(receipt)
+	end
+
+	-- The shop ignores requests closer together than this (seconds of real time).
+	local SHOP_COOLDOWN = 0.55
+
 	-- Where an egg (as described in an EggSpawned message) is right now.
 	local function eggPosition(session, egg)
 		local modules = shared(session)
@@ -299,18 +321,17 @@ return function(harness)
 			session:heartbeat(1 / 60)
 			local egg = mount(session, player, root, 1, "Common")
 
-			-- Eggs spawn at a random side-to-side spot, possibly right by an edge, so steer towards the middle;
-			-- steering outwards could be clamped to the edge of the runway.
-			local toward = if egg.lateral > 0 then -1 else 1
+			-- Steer toward the centre line: eggs land at a random spot, maybe too close to a wall to go further out.
+			local step = if egg.lateral > 0 then -4 else 4
 			session:heartbeat(0.5)
-			session:fromClient("RideLateral", player, egg.lateral + 4 * toward)
+			session:fromClient("RideLateral", player, egg.lateral + step)
 			local relayed = session:lastSent("EggLateral", "all")
 			expect.truthy(relayed, "EggLateral")
 			expect.equal(relayed.args[1], egg.id)
-			expect.near(relayed.args[2], egg.lateral + 4 * toward, 1e-6)
+			expect.near(relayed.args[2], egg.lateral + step, 1e-6)
 
 			-- Reports arriving faster than 30 a second are dropped.
-			session:fromClient("RideLateral", player, egg.lateral + 5 * toward)
+			session:fromClient("RideLateral", player, egg.lateral + step * 1.25)
 			expect.equal(#session:sent("EggLateral", "all"), 1)
 		end)
 
@@ -429,6 +450,40 @@ return function(harness)
 			expect.equal(changed.args[1], 1e7, "and full")
 			admin(session, player, "Stamina", { action = "Reset" })
 			expect.equal(session:lastSent("StaminaChanged", player).args[4], 100)
+		end)
+
+		it("resets Max Stamina to what the player owns from the shop", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			data.MaxStaminaBonus = 400
+			data.StaminaMultiplier = 2
+			admin(session, player, "Stamina", { action = "Max" })
+			local ok, message = admin(session, player, "Stamina", { action = "Reset" })
+			expect.truthy(ok, message)
+			expect.equal(message, "Max Stamina is back to 1000.")
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 1000, "(100 + 400 bought) x2")
+		end)
+
+		it("gives and resets coins, showing the player straight away", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			local ok, message = admin(session, player, "Coins", { action = "Add", amount = 1e5 })
+			expect.truthy(ok, message)
+			expect.equal(message, "You have 100K coins.")
+			expect.equal(data.Coins, 1e5)
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].coins, 1e5)
+			expect.falsy(
+				(admin(session, player, "Coins", { action = "Add", amount = 123 })),
+				"only the offered amounts"
+			)
+			expect.equal(data.Coins, 1e5)
+			admin(session, player, "Coins", { action = "Reset" })
+			expect.equal(data.Coins, 0)
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].coins, 0)
 		end)
 
 		it("drops any egg at its zone's chute, or on the runway in front of the player", function()
@@ -838,6 +893,25 @@ return function(harness)
 			expect.truthy(#session:sent("EggSpawned", "all") > 0, "eggs drop again")
 		end)
 
+		it("starts and ends a server luck boost without a purchase", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local ShopService = session:require(server(session).Services.ShopService)
+			local ok, message = admin(session, player, "StartLuck", { multiplier = 4 })
+			expect.truthy(ok, message)
+			expect.equal(message, "Luck x4 for everyone for 15 minutes.")
+			local boosts = session:lastSent("LuckChanged", "all").args[1]
+			expect.equal(#boosts, 1)
+			expect.equal(boosts[1].multiplier, 4)
+			expect.falsy((admin(session, player, "StartLuck", { multiplier = 3 })), "only the shop's boosts")
+
+			expect.truthy((admin(session, player, "StopLuck")))
+			expect.equal(#ShopService.GetLuckBoosts(), 0)
+			expect.equal(#session:lastSent("LuckChanged", "all").args[1], 0, "every device is told")
+			expect.falsy((admin(session, player, "StopLuck")), "nothing left to end")
+		end)
+
 		it("runs the Egg Avalanche on its own once an hour", function()
 			-- Cycle 1010 is an Avalanche cycle (10 of every 20).
 			local session = startServer({ clock = 180 * 1010 + 5 })
@@ -1053,6 +1127,323 @@ return function(harness)
 				end
 			end
 			expect.equal(labels, 96, "a name over every model")
+		end)
+	end)
+
+	describe("Server: map", function()
+		it("walls the runway and paints the start zone", function()
+			local session = startServer()
+			local map = session:service("Workspace").Map
+			local width = shared(session).Runway.WIDTH
+			local runway = shared(session).Runway
+			local slope = math.cos(math.atan(runway.SLOPE))
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano" } do
+				local zone = map[zoneName]
+				local left, right = zone.WallLeft1.CFrame.Position, zone.WallRight1.CFrame.Position
+				expect.truthy(left.X > width / 2, zoneName .. " left wall")
+				expect.truthy(right.X < -width / 2, zoneName .. " right wall")
+				expect.truthy(left.Y > zone.Ground.CFrame.Position.Y, zoneName .. " wall stands up")
+
+				-- No wall covers a gap, and every gap has a warning strip along the runway's edge.
+				local gaps = runway.wallGaps(zoneId)
+				local strips, wallLength = 0, 0
+				for _, part in zone:GetChildren() do
+					local side = if part.Name:match("Left") then 1 elseif part.Name:match("Right") then -1 else nil
+					if part.Name:match("^Wall") then
+						local center, half = part.CFrame.Position.Z, part.Size.Z * slope / 2
+						wallLength += half * 2
+						for _, gap in gaps do
+							if gap.side == side then
+								-- Half a stud of slack: a sloped wall's centre sits a little down-runway of its footprint.
+								local overlaps = center + half > gap.startZ + 0.5 and center - half < gap.endZ - 0.5
+								expect.falsy(overlaps, `{zoneName} {part.Name} covers a gap`)
+							end
+						end
+					elseif part.Name:match("^GapWarning") then
+						strips += 1
+					end
+				end
+				expect.equal(strips, #gaps, zoneName .. " warning strips")
+				expect.near(wallLength, 2 * runway.ZONE_LENGTH - #gaps * runway.WALL_GAP_LENGTH, 1e-3)
+			end
+
+			local strip = map.StartZone.Strip
+			expect.equal(strip.SurfaceGui.TextLabel.Text, "START ZONE")
+			-- Lying flat, written face up, its top edge pointing down the runway.
+			expect.near(strip.CFrame.LookVector.Y, 1, 1e-6)
+			expect.near(strip.CFrame.UpVector.Z, 1, 1e-6)
+			expect.truthy(strip.CFrame.Position.Z < 0, "on the hub, before the runway")
+		end)
+
+		it("ranks players by eggs claimed on the leaderboard", function()
+			local session = startServer()
+			local board = session:service("Workspace").Map.Leaderboard
+			local display = board.Board.Display
+			local rows = display.Rows
+			expect.equal(display.Banner.Title.Text, "TOP EGG CLAIMERS")
+			expect.truthy(rows.Row1 and rows.Row10, "ten rows")
+			expect.equal(display.Empty.Visible, true)
+
+			session:addPlayer(1, "Alice")
+			session:addPlayer(2, "Bob")
+			session:addPlayer(3, "Cara")
+			session:heartbeat(1 / 60)
+			dataOf(session, 1).Stats.EggsClaimed = 5
+			dataOf(session, 2).Stats.EggsClaimed = 1200
+			dataOf(session, 3).Stats.EggsClaimed = 0
+			session:require(session:service("ServerScriptService").Server.Services.LeaderboardService).Refresh()
+
+			expect.equal(display.Empty.Visible, false)
+			expect.equal(rows.Row1.PlayerName.Text, "Bob")
+			expect.equal(rows.Row1.Score.Text, "1.2K 🥚")
+			expect.truthy(rows.Row1.Face.Image:match("id=2&"), rows.Row1.Face.Image)
+			expect.equal(rows.Row2.PlayerName.Text, "Alice")
+			-- Nobody with zero claims is listed.
+			expect.equal(rows.Row3.Visible, false)
+			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
+		end)
+	end)
+
+	describe("Server: shop", function()
+		it("grants Studio test purchases of items with no product ID yet", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "Coins1")
+			expect.equal(dataOf(session, 1).Coins, 5000)
+			local result = purchaseResult(session, player)
+			expect.equal(result[1], "Coins1")
+			expect.equal(result[2], true)
+			expect.truthy(result[3]:match("^%+5K Coins!"), result[3])
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].coins, 5000)
+			expect.equal(#session.prompts, 0, "no Roblox prompt")
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "Stamina1")
+			session:heartbeat(1 / 60)
+			expect.equal(dataOf(session, 1).MaxStaminaBonus, 500)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 600)
+		end)
+
+		it("boosts the whole server's luck and tells everyone", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("RequestPurchase", player, "Luck4")
+
+			local boosts = session:lastSent("LuckChanged", "all").args[1]
+			expect.equal(#boosts, 1)
+			expect.equal(boosts[1].multiplier, 4)
+			expect.near(boosts[1].endsAt - session.clock, 15 * 60, 1)
+			expect.truthy(session:lastSent("Announce", "all").args[1]:match("luck x4"), "announcement")
+			local state = session:remote("GetShopState").OnServerInvoke(player)
+			expect.equal(state.luck[1].multiplier, 4)
+		end)
+
+		it("refuses items with no product ID in a live game", function()
+			local session = startServer({ live = true })
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("RequestPurchase", player, "Coins1")
+			expect.equal(dataOf(session, 1).Coins, 0)
+			local result = purchaseResult(session, player)
+			expect.equal(result[2], false)
+			expect.equal(result[3], "This isn't for sale yet.")
+		end)
+
+		it("shows Roblox's prompt for items with an ID, and grants each receipt once", function()
+			local session = startServer()
+			shopConfig(session).ProductsById.Coins2.productId = 1111
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "Coins2")
+			expect.equal(#session.prompts, 1)
+			expect.equal(session.prompts[1].kind, "Product")
+			expect.equal(session.prompts[1].id, 1111)
+			expect.equal(dataOf(session, 1).Coins, 0, "nothing granted until Roblox confirms")
+
+			local granted = roblox.Enum.ProductPurchaseDecision.PurchaseGranted
+			local receipt = { PlayerId = 1, ProductId = 1111, PurchaseId = "receipt-1" }
+			expect.equal(processReceipt(session, receipt), granted)
+			expect.equal(dataOf(session, 1).Coins, 50000)
+			-- Roblox can send the same receipt again: nothing more is granted.
+			expect.equal(processReceipt(session, receipt), granted)
+			expect.equal(dataOf(session, 1).Coins, 50000)
+			expect.truthy(table.find(session.saved.Player_1.PurchaseIds, "receipt-1"), "receipt saved")
+		end)
+
+		it("only reports a purchase as granted once it is saved", function()
+			local session = startServer()
+			shopConfig(session).ProductsById.Coins2.productId = 1111
+			session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session.savesPaused = true
+			local decision
+			task.spawn(function()
+				decision = processReceipt(session, { PlayerId = 1, ProductId = 1111, PurchaseId = "receipt-2" })
+			end)
+			expect.equal(decision, nil, "still waiting for the save")
+			expect.equal(dataOf(session, 1).Coins, 50000)
+
+			session.savesPaused = false
+			session.profiles.Player_1:Save()
+			expect.equal(decision, roblox.Enum.ProductPurchaseDecision.PurchaseGranted)
+		end)
+
+		it("leaves receipts for unknown products or absent players for later", function()
+			local session = startServer()
+			shopConfig(session).ProductsById.Coins2.productId = 1111
+			session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local later = roblox.Enum.ProductPurchaseDecision.NotProcessedYet
+			expect.equal(processReceipt(session, { PlayerId = 1, ProductId = 999, PurchaseId = "a" }), later)
+			expect.equal(processReceipt(session, { PlayerId = 42, ProductId = 1111, PurchaseId = "b" }), later)
+			expect.equal(dataOf(session, 1).Coins, 0)
+		end)
+
+		it("upgrades the pen with coins, up to the top level", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("BuyWithCoins", player, "PenUpgrade")
+			local result = purchaseResult(session, player)
+			expect.equal(result[2], false)
+			expect.equal(result[3], "You need 2.5K more coins.")
+			expect.equal(dataOf(session, 1).PenLevel, 1)
+
+			dataOf(session, 1).Coins = 3000
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("BuyWithCoins", player, "PenUpgrade")
+			expect.equal(dataOf(session, 1).PenLevel, 2)
+			expect.equal(dataOf(session, 1).Coins, 500)
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].penLevel, 2)
+			expect.equal(purchaseResult(session, player)[2], true)
+
+			dataOf(session, 1).PenLevel = 9
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("BuyWithCoins", player, "PenUpgrade")
+			expect.equal(purchaseResult(session, player)[2], false)
+			expect.equal(dataOf(session, 1).Coins, 500)
+		end)
+
+		it("unlocks game passes", function()
+			local session = startServer()
+			local shop = shopConfig(session)
+			shop.PassesById.DoubleCoins.gamePassId = 2222
+			session.ownedGamePasses[1] = { [2222] = true }
+			local player = session:addPlayer(1, "Owner")
+			session:heartbeat(1 / 60)
+			local service = session:require(session:service("ServerScriptService").Server.Services.ShopService)
+			expect.equal(service.OwnsPass(player, "DoubleCoins"), true, "owned before joining")
+
+			local passes = session:lastSent("PlayerStateUpdated", player).args[1].passes
+			expect.equal(table.concat(passes, ","), "DoubleCoins")
+			session:fromClient("RequestPurchase", player, "DoubleCoins")
+			expect.equal(purchaseResult(session, player)[3], "You already own this!")
+			expect.equal(#session.prompts, 0)
+
+			-- Bought through Roblox's prompt during the game.
+			local buyer = session:addPlayer(2, "Buyer")
+			session:heartbeat(1 / 60)
+			expect.equal(service.OwnsPass(buyer, "DoubleCoins"), false)
+			session:fire(session:service("MarketplaceService"), "PromptGamePassPurchaseFinished", buyer, 2222, true)
+			expect.equal(service.OwnsPass(buyer, "DoubleCoins"), true)
+		end)
+
+		it("doubles Max Stamina with each purchase, up to x1024", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			session:heartbeat(1 / 60)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 2)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 200)
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].staminaMultiplier, 2)
+			expect.truthy(purchaseResult(session, player)[3]:match("^Max Stamina doubled! Now x2%."), "message")
+
+			-- Max Stamina bought in packs is doubled too.
+			dataOf(session, 1).MaxStaminaBonus = 400
+			dataOf(session, 1).StaminaMultiplier = 512
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			session:heartbeat(1 / 60)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 1024)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 500 * 1024)
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(purchaseResult(session, player)[2], false)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 1024)
+		end)
+
+		it("sells each stamina doubling as its own developer product", function()
+			local session = startServer()
+			local shop = shopConfig(session)
+			shop.StaminaDoublings[2].productId = 4002
+			shop.StaminaDoublings[4].productId = 4004
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(session.prompts[1].id, 4002)
+			local granted = roblox.Enum.ProductPurchaseDecision.PurchaseGranted
+			expect.equal(processReceipt(session, { PlayerId = 1, ProductId = 4002, PurchaseId = "d1" }), granted)
+			expect.equal(dataOf(session, 1).StaminaMultiplier, 2)
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StaminaDoubling")
+			expect.equal(session.prompts[2].id, 4004, "the next step's product")
+		end)
+
+		it("starts players at the stamina they have doubled to", function()
+			local session = startServer()
+			session.saved.Player_1 = { StaminaMultiplier = 8, MaxStaminaBonus = 50 }
+			local player = session:addPlayer(1, "Returning")
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 150 * 8)
+		end)
+
+		it("ignores requests for things that are not for sale", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("RequestPurchase", player, 5)
+			session:fromClient("RequestPurchase", player, "FreeCoins")
+			session:fromClient("BuyWithCoins", player, "Coins1")
+			expect.equal(#session:sent("PurchaseResult", player), 0)
+			expect.equal(#session.prompts, 0)
+			expect.equal(dataOf(session, 1).Coins, 0)
+		end)
+	end)
+
+	describe("Server: settings", function()
+		it("saves only valid settings and hands them back with defaults", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+
+			session:fromClient("SaveSettings", player, {
+				MusicVolume = 0.456,
+				ShowMyPets = false,
+				Vibration = "yes",
+				Junk = 5,
+			})
+			session:fromClient("SaveSettings", player, "not a table")
+			local saved = dataOf(session, 1).Settings
+			expect.equal(saved.MusicVolume, 0.46)
+			expect.equal(saved.ShowMyPets, false)
+			expect.equal(saved.Vibration, nil)
+			expect.equal(saved.Junk, nil)
+
+			local values = session:remote("GetSettings").OnServerInvoke(player)
+			expect.equal(values.MusicVolume, 0.46)
+			expect.equal(values.ShowMyPets, false)
+			expect.equal(values.Vibration, true)
 		end)
 	end)
 end

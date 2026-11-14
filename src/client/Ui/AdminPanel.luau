@@ -412,6 +412,35 @@ local function speedOptions(speeds: { number }): { { text: string, value: number
 	return options
 end
 
+local function coinButtons(scope, run: Run)
+	local buttons = {}
+	for index, amount in AdminTools.COIN_AMOUNTS do
+		table.insert(
+			buttons,
+			button(scope, {
+				Name = "Add" .. tostring(amount),
+				LayoutOrder = index,
+				Text = `+{NumberFormat.abbreviate(amount)}`,
+				OnClick = function()
+					run("Coins", { action = "Add", amount = amount })
+				end,
+			})
+		)
+	end
+	table.insert(
+		buttons,
+		button(scope, {
+			Name = "Reset",
+			LayoutOrder = #buttons + 1,
+			Text = "Reset to 0",
+			OnClick = function()
+				run("Coins", { action = "Reset" })
+			end,
+		})
+	)
+	return buttons
+end
+
 local function meTab(scope, run: Run)
 	local inventoryLines = scope:Computed(function(use, inner)
 		local inventory = use(AdminState.inventory)
@@ -531,7 +560,10 @@ local function meTab(scope, run: Run)
 				}),
 			}),
 		}),
-		section(scope, "Inventory", "Your inventory", 4, {
+		section(scope, "Coins", "Coins", 4, {
+			grid(scope, "Buttons", 1, 4, coinButtons(scope, run)),
+		}),
+		section(scope, "Inventory", "Your inventory", 5, {
 			scope:New("Frame")({
 				Name = "Lines",
 				LayoutOrder = 1,
@@ -568,6 +600,35 @@ local function meTab(scope, run: Run)
 			}),
 		}),
 	}
+end
+
+local function luckButtons(scope, run: Run)
+	local buttons = {}
+	for index, multiplier in AdminTools.LUCK_MULTIPLIERS do
+		table.insert(
+			buttons,
+			button(scope, {
+				Name = "Luck" .. multiplier,
+				LayoutOrder = index,
+				Text = `Luck x{multiplier}`,
+				OnClick = function()
+					run("StartLuck", { multiplier = multiplier })
+				end,
+			})
+		)
+	end
+	table.insert(
+		buttons,
+		button(scope, {
+			Name = "StopLuck",
+			LayoutOrder = #buttons + 1,
+			Text = "End luck",
+			OnClick = function()
+				run("StopLuck")
+			end,
+		})
+	)
+	return buttons
 end
 
 local function eventsTab(scope, run: Run)
@@ -642,6 +703,9 @@ local function eventsTab(scope, run: Run)
 				TextSize = 12,
 				Font = Enum.Font.Gotham,
 			}),
+		}),
+		section(scope, "Luck", "Server luck (rarer eggs for everyone)", 3, {
+			grid(scope, "Buttons", 1, 3, luckButtons(scope, run)),
 		}),
 	}
 end

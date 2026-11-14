@@ -126,6 +126,8 @@ export type RunwaySim = typeof(setmetatable(
 		nextSpawnAt: { [number]: number },
 		phase: Phase,
 		spawnRateMultiplier: number,
+		-- Server luck (1 = normal): rarer eggs drop more often. See Shared/LuckBoost.
+		luck: number,
 		events: { Event },
 	},
 	RunwaySim
@@ -141,6 +143,7 @@ function RunwaySim.new(random: () -> number): RunwaySim
 		nextSpawnAt = {},
 		phase = "Open" :: Phase,
 		spawnRateMultiplier = 1,
+		luck = 1,
 		events = {},
 	}, RunwaySim)
 	return self
@@ -204,9 +207,10 @@ end
 -- left out. Used by the admin panel to drop an egg in front of a player.
 export type Placement = { z: number?, lateral: number? }
 
--- Drops a new egg at the start of a zone: a random rarity for the zone, then one of the zone's eggs of that
--- rarity. `forcedRarity` and `forcedKind` skip the random rolls; a forced egg must belong to the zone.
--- `placement` drops it somewhere else on the runway; it keeps its zone's rarity, size and stamina wherever it lands.
+-- Drops a new egg at the start of a zone: a random rarity for the zone (rarer ones more often with server luck),
+-- then one of the zone's eggs of that rarity. `forcedRarity` and `forcedKind` skip the random rolls; a forced egg
+-- must belong to the zone. `placement` drops it somewhere else on the runway; it keeps its zone's rarity, size and
+-- stamina wherever it lands.
 function RunwaySim.spawnEgg(
 	self: RunwaySim,
 	zoneId: number,
@@ -224,7 +228,7 @@ function RunwaySim.spawnEgg(
 		end
 		rarity, kind = placeRarity, forcedKind
 	else
-		rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
+		rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random(), self.luck)
 		kind = EggSpec.pickEgg(zoneId, rarity, self.random())
 	end
 	local spec = EggSpec.get(zoneId, rarity)
@@ -549,6 +553,11 @@ end
 
 ----------------------------------------------------------------------------------------------------------------
 -- The clock
+
+-- Sets the server luck used for every egg dropped from now on (1 = normal).
+function RunwaySim.setLuck(self: RunwaySim, luck: number)
+	self.luck = if luck == luck then math.max(1, luck) else 1
+end
 
 -- Tells the rules which part of the runway cycle it is.
 function RunwaySim.setPhase(self: RunwaySim, phase: Phase)
