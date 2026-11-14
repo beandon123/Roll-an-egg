@@ -1,5 +1,13 @@
 --!strict
--- The rules of the runway: eggs, riding, stamina, claiming, bounces and cracking, closures.
+-- The rules of the runway: the egg lineup, riding, stamina, claiming, obstacles, bounces and cracking, closures.
+--
+-- Eggs: at sunrise (the start of each cycle) every zone rolls a lineup of eggs. They leave the zone's chute a few
+-- seconds apart, roll down the runway, fade out a quarter of the way into the next zone, and drop from the chute
+-- again, lap after lap, until the runway closes. Now and then a zone also drops an extra, mid-cycle egg, which
+-- rolls once; Secret and rarer eggs are much less likely mid-cycle than in the sunrise lineup.
+--
+-- Obstacles (Shared/Obstacles): an egg without a rider steers round them on its own. A ridden egg goes wherever
+-- its rider steers, and hitting one bumps it aside, throws the rider off, or kills the rider.
 --
 -- This module holds the rules only. It never touches players, parts, or remotes: RunwayService feeds it the
 -- clock and player requests, then turns the events it emits into remotes and saved data. Keeping it free of
@@ -12,6 +20,7 @@ local Shared = ReplicatedStorage.Shared
 
 local EggMotion = require(Shared.EggMotion)
 local EggSpec = require(Shared.EggSpec)
+local Obstacles = require(Shared.Obstacles)
 local Runway = require(Shared.Runway)
 local StaminaMath = require(Shared.StaminaMath)
 local Tuning = require(Shared.Config.Tuning)
@@ -28,11 +37,17 @@ export type Egg = {
 	spec: EggSpec.Spec,
 	spawnTime: number,
 	startZ: number,
-	-- Side-to-side position; steered by the rider.
+	-- Where it fades out if nobody is riding it: a quarter of the way into the next zone.
+	fadeZ: number,
+	-- Side to side: where the rider has steered it while it is ridden. Without a rider, the egg follows `path`
+	-- round the obstacles, and `lateral` is where that path starts, `pathZ` down the runway.
 	lateral: number,
+	pathZ: number,
+	path: Obstacles.Path,
+	-- Dropped mid-cycle (rolls once) rather than rolled for the sunrise lineup.
+	wild: boolean,
 	bouncesLeft: number,
 	riderId: number?,
-	everRidden: boolean,
 	-- When the egg last started a hop (it hops each time it is left without a rider).
 	bounceTime: number?,
 	-- Set when the egg is out of bounces: it cracks at this time and cannot be mounted meanwhile.
@@ -46,6 +61,18 @@ export type Ride = {
 	claimAt: number,
 	emptyAt: number,
 	lateralTime: number,
+	-- Obstacles this ride has already hit, by id, so each one counts once.
+	hits: { [number]: boolean },
+}
+
+-- One egg of a zone's sunrise lineup: the egg, and when it next leaves the chute.
+export type Slot = {
+	zone: number,
+	rarity: string,
+	kind: string,
+	nextLaunch: number,
+	-- Seconds from the chute to the fade line.
+	lapTime: number,
 }
 
 export type Rider = {
@@ -68,7 +95,8 @@ export type Rider = {
 }
 
 -- Why a ride ended.
-export type RideEndReason = "Dismount" | "ThrownOff" | "Claimed" | "Cliff" | "Died" | "Left"
+-- (KnockedOff: hit a KnockOff obstacle. Hazard: hit a Lethal one, which kills the rider.)
+export type RideEndReason = "Dismount" | "ThrownOff" | "KnockedOff" | "Hazard" | "Claimed" | "Cliff" | "Died" | "Left"
 -- Why an egg left the runway.
 export type EggRemoveReason = "Faded" | "Cracked" | "Claimed" | "Closure" | "Cliff"
 
@@ -79,6 +107,7 @@ export type SerializedEgg = {
 	kind: string,
 	spawnTime: number,
 	lateral: number,
+	pathZ: number,
 	rider: number?,
 	bounces: number,
 	bounceTime: number?,
@@ -86,7 +115,8 @@ export type SerializedEgg = {
 }
 
 export type Event =
-	{ type: "EggSpawned", egg: SerializedEgg }
+	{ type: "EggSpawned", egg: SerializedEgg, wild: boolean }
+	| { type: "LineupRolled", eggs: { { zone: number, rarity: string, kind: string } } }
 	| { type: "EggRemoved", id: number, reason: EggRemoveReason, by: number? }
 	| { type: "EggMounted", id: number, rider: number, time: number }
 	| { type: "EggLeft", id: number, time: number, bouncesLeft: number, lateral: number }
@@ -110,6 +140,15 @@ export type Event =
 		kind: string,
 	}
 	| { type: "StaminaChanged", rider: number, value: number, time: number, rate: number, max: number }
+	| {
+		type: "ObstacleHit",
+		rider: number,
+		id: number,
+		obstacle: number,
+		tier: Obstacles.Tier,
+		lateral: number,
+		time: number,
+	}
 	| { type: "Claimed", rider: number, zone: number, rarity: string, kind: string }
 
 local RunwaySim = {}
@@ -118,10 +157,12 @@ RunwaySim.__index = RunwaySim
 export type RunwaySim = typeof(setmetatable(
 	{} :: {
 		random: () -> number,
+		obstacles: typeof(Obstacles),
 		eggs: { [number]: Egg },
 		riders: { [number]: Rider },
 		nextEggId: number,
-		nextSpawnAt: { [number]: number },
+		lineup: { Slot }?,
+		nextWildAt: { [number]: number },
 		phase: Phase,
 		spawnRateMultiplier: number,
 		events: { Event },
@@ -129,14 +170,17 @@ export type RunwaySim = typeof(setmetatable(
 	RunwaySim
 ))
 
--- `random` returns a number in [0, 1); injected so tests can make drops predictable.
-function RunwaySim.new(random: () -> number): RunwaySim
+-- `random` returns a number in [0, 1); injected so tests can make drops predictable. `obstacles` is the runway's
+-- obstacle layout (Shared/Obstacles unless a test gives its own).
+function RunwaySim.new(random: () -> number, obstacles: typeof(Obstacles)?): RunwaySim
 	local self = setmetatable({
 		random = random,
+		obstacles = obstacles or Obstacles,
 		eggs = {},
 		riders = {},
 		nextEggId = 0,
-		nextSpawnAt = {},
+		lineup = nil,
+		nextWildAt = {},
 		phase = "Open" :: Phase,
 		spawnRateMultiplier = 1,
 		events = {},
@@ -166,6 +210,7 @@ local function serialize(egg: Egg): SerializedEgg
 		kind = egg.kind,
 		spawnTime = egg.spawnTime,
 		lateral = egg.lateral,
+		pathZ = egg.pathZ,
 		rider = egg.riderId,
 		bounces = egg.bouncesLeft,
 		bounceTime = egg.bounceTime,
@@ -186,10 +231,29 @@ function RunwaySim.getEgg(self: RunwaySim, eggId: number): Egg?
 	return self.eggs[eggId]
 end
 
+function RunwaySim._eggZ(_self: RunwaySim, egg: Egg, now: number): number
+	return EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
+end
+
+-- Where an egg is side to side: where its rider has steered it, or along its path round the obstacles.
+function RunwaySim.eggLateral(self: RunwaySim, egg: Egg, now: number): number
+	if egg.riderId ~= nil then
+		return egg.lateral
+	end
+	return self.obstacles.lateralAt(egg.path, self:_eggZ(egg, now))
+end
+
 -- The centre of an egg resting on the runway: x, y, z.
-function RunwaySim.eggCenter(_self: RunwaySim, egg: Egg, now: number): (number, number, number)
-	local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
-	return egg.lateral, Runway.surfaceY(z) + egg.spec.radius, z
+function RunwaySim.eggCenter(self: RunwaySim, egg: Egg, now: number): (number, number, number)
+	local z = self:_eggZ(egg, now)
+	return self:eggLateral(egg, now), Runway.surfaceY(z) + egg.spec.radius, z
+end
+
+-- Sends a riderless egg on its way from where it is now (`lateral`, at `z`), steering round the obstacles ahead.
+function RunwaySim._setPath(self: RunwaySim, egg: Egg, lateral: number, z: number)
+	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength)
+	egg.pathZ = z
+	egg.path = self.obstacles.planPath(egg.lateral, z, egg.fadeZ, egg.spec.halfLength, egg.spec.radius)
 end
 
 function RunwaySim._removeEgg(self: RunwaySim, egg: Egg, reason: EggRemoveReason, by: number?)
@@ -197,8 +261,49 @@ function RunwaySim._removeEgg(self: RunwaySim, egg: Egg, reason: EggRemoveReason
 	self:_emit({ type = "EggRemoved", id = egg.id, reason = reason, by = by })
 end
 
--- Drops a new egg at the start of a zone: a random rarity for the zone, then one of the zone's eggs of that
--- rarity. `forcedRarity` and `forcedKind` skip the random rolls; a forced egg must belong to the zone.
+-- Puts an egg on the runway at the start of its zone (it drops in from the chute), leaving at `spawnTime`.
+function RunwaySim._launch(
+	self: RunwaySim,
+	zoneId: number,
+	rarity: string,
+	kind: string,
+	spawnTime: number,
+	wild: boolean
+): Egg?
+	local spec = EggSpec.get(zoneId, rarity)
+	if spec == nil then
+		return nil
+	end
+	self.nextEggId += 1
+	local limit = Runway.maxLateral(spec.halfLength)
+	local startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET
+	local egg: Egg = {
+		id = self.nextEggId,
+		zone = zoneId,
+		rarity = rarity,
+		kind = kind,
+		spec = spec,
+		spawnTime = spawnTime,
+		startZ = startZ,
+		fadeZ = Runway.fadeZ(zoneId),
+		lateral = 0,
+		pathZ = startZ,
+		path = nil :: any,
+		wild = wild,
+		bouncesLeft = spec.bounces,
+		riderId = nil,
+		bounceTime = nil,
+		crackAt = nil,
+	}
+	self:_setPath(egg, (self.random() * 2 - 1) * limit, startZ)
+	self.eggs[egg.id] = egg
+	self:_emit({ type = "EggSpawned", egg = serialize(egg), wild = wild })
+	return egg
+end
+
+-- Drops an extra egg at the start of a zone, now: a random rarity for the zone, then one of the zone's eggs of that
+-- rarity. It rolls once, like a mid-cycle drop. `forcedRarity` and `forcedKind` skip the random rolls; a forced
+-- egg must belong to the zone.
 function RunwaySim.spawnEgg(
 	self: RunwaySim,
 	zoneId: number,
@@ -218,31 +323,48 @@ function RunwaySim.spawnEgg(
 		rarity = forcedRarity or EggSpec.rollRarity(zoneId, self.random())
 		kind = EggSpec.pickEgg(zoneId, rarity, self.random())
 	end
-	local spec = EggSpec.get(zoneId, rarity)
-	if spec == nil or kind == nil then
+	if kind == nil then
 		return nil
 	end
+	return self:_launch(zoneId, rarity, kind, now, true)
+end
 
-	self.nextEggId += 1
-	local limit = Runway.maxLateral(spec.halfLength)
-	local egg: Egg = {
-		id = self.nextEggId,
-		zone = zoneId,
-		rarity = rarity,
-		kind = kind,
-		spec = spec,
-		spawnTime = now,
-		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET,
-		lateral = (self.random() * 2 - 1) * limit,
-		bouncesLeft = spec.bounces,
-		riderId = nil,
-		everRidden = false,
-		bounceTime = nil,
-		crackAt = nil,
-	}
-	self.eggs[egg.id] = egg
-	self:_emit({ type = "EggSpawned", egg = serialize(egg) })
-	return egg
+-- Rolls every zone's lineup for a new day. Lineup eggs leave the chute LINEUP_LAUNCH_GAP seconds apart.
+function RunwaySim._rollLineup(self: RunwaySim, now: number)
+	local lineup: { Slot } = {}
+	local rolled = {}
+	local count = math.max(1, math.round(Tuning.EGGS_PER_ZONE * self.spawnRateMultiplier))
+	for zoneId = 1, #Zones.List do
+		local startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET
+		for index = 1, count do
+			local rarity = EggSpec.rollRarity(zoneId, self.random())
+			local kind = EggSpec.pickEgg(zoneId, rarity, self.random())
+			local spec = EggSpec.get(zoneId, rarity)
+			if kind and spec then
+				table.insert(lineup, {
+					zone = zoneId,
+					rarity = rarity,
+					kind = kind,
+					nextLaunch = now + (index - 1) * Tuning.LINEUP_LAUNCH_GAP / self.spawnRateMultiplier,
+					lapTime = (Runway.fadeZ(zoneId) - startZ) / spec.rollSpeed,
+				})
+				table.insert(rolled, { zone = zoneId, rarity = rarity, kind = kind })
+			end
+		end
+	end
+	self.lineup = lineup
+	self:_emit({ type = "LineupRolled", eggs = rolled })
+end
+
+-- The zone's mid-cycle eggs still on the runway.
+function RunwaySim._countWild(self: RunwaySim, zoneId: number): number
+	local count = 0
+	for _, egg in self.eggs do
+		if egg.zone == zoneId and egg.wild then
+			count += 1
+		end
+	end
+	return count
 end
 
 -- Called whenever an egg is left without a rider (and was not claimed): it hops and loses a bounce.
@@ -252,6 +374,13 @@ function RunwaySim._leaveEgg(self: RunwaySim, egg: Egg, now: number)
 		self:_removeEgg(egg, "Closure")
 		return
 	end
+	local z = self:_eggZ(egg, now)
+	if z >= egg.fadeZ then
+		-- Ridden past its fade line: with nobody on it, it fades like any other.
+		self:_removeEgg(egg, "Faded")
+		return
+	end
+	self:_setPath(egg, egg.lateral, z)
 	egg.bouncesLeft -= 1
 	egg.bounceTime = now
 	if egg.bouncesLeft <= 0 then
@@ -351,7 +480,7 @@ function RunwaySim._endRide(self: RunwaySim, rider: Rider, now: number, reason: 
 	rider.ride = nil
 	self:_setStamina(rider, stamina, now, self:_regenRate(rider))
 
-	if reason == "ThrownOff" then
+	if reason == "ThrownOff" or reason == "KnockedOff" then
 		rider.stunnedUntil = now + Tuning.STUN_TIME
 	end
 	rider.lastLeaveTime = now
@@ -439,11 +568,13 @@ function RunwaySim.requestMount(
 		claimAt = now + spec.claimTime,
 		emptyAt = now + StaminaMath.timeUntilEmpty(stamina, spec.drain),
 		lateralTime = now,
+		hits = {},
 	}
+	-- From here the rider steers, starting from wherever the egg's path had taken it.
+	egg.lateral = self:eggLateral(egg, now)
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
-	egg.everRidden = true
 
 	self:_setStamina(rider, stamina, now, -spec.drain)
 	self:_emit({ type = "EggMounted", id = eggId, rider = riderId, time = now })
@@ -514,6 +645,85 @@ function RunwaySim.setLateral(self: RunwaySim, riderId: number, x: number, now: 
 end
 
 ----------------------------------------------------------------------------------------------------------------
+-- Obstacles
+
+-- A ridden egg ran into an obstacle: it is knocked clear of the obstacle's row, and the rider pays for it.
+function RunwaySim._hitObstacle(self: RunwaySim, rider: Rider, egg: Egg, obstacle: Obstacles.Obstacle, now: number)
+	local ride = rider.ride
+	if ride == nil then
+		return
+	end
+	ride.hits[obstacle.id] = true
+	egg.lateral = self.obstacles.clearLane(obstacle.row, egg.lateral, egg.spec.halfLength)
+	ride.lateralTime = now
+	self:_emit({
+		type = "ObstacleHit",
+		rider = rider.id,
+		id = egg.id,
+		obstacle = obstacle.id,
+		tier = obstacle.tier,
+		lateral = egg.lateral,
+		time = now,
+	})
+
+	if obstacle.tier == "Bump" then
+		local stamina = math.max(0, self:getStamina(rider.id, now) - egg.spec.requirement * Tuning.BUMP_STAMINA)
+		self:_setStamina(rider, stamina, now, -ride.drain)
+		-- Out of stamina now means thrown off on the next step, as usual.
+		ride.emptyAt = now + StaminaMath.timeUntilEmpty(stamina, ride.drain)
+	elseif obstacle.tier == "KnockOff" then
+		self:_endRide(rider, now, "KnockedOff")
+	else
+		self:_endRide(rider, now, "Hazard")
+	end
+end
+
+-- The rider's device says their egg hit an obstacle. It is believed if the egg was near the obstacle about then
+-- (the report has crossed the network) and the obstacle was dangerous. Returns whether the hit counted.
+function RunwaySim.reportHit(self: RunwaySim, riderId: number, obstacleId: number, now: number): boolean
+	local rider = self.riders[riderId]
+	local ride = rider and rider.ride
+	local egg = if rider and rider.eggId then self.eggs[rider.eggId] else nil
+	local obstacle = self.obstacles.get(obstacleId)
+	if rider == nil or ride == nil or egg == nil or obstacle == nil or ride.hits[obstacleId] then
+		return false
+	end
+	local slack = Tuning.HIT_REPORT_SLACK
+	local z = self:_eggZ(egg, now)
+	local reachZ = egg.spec.radius + egg.spec.rollSpeed * slack
+	local reachX = egg.spec.halfLength + rider.agility * slack + 3
+	if math.abs(z - obstacle.z) > obstacle.hz + reachZ or math.abs(egg.lateral - obstacle.x) > obstacle.hx + reachX then
+		return false
+	end
+	if not self.obstacles.activeAround(obstacle, now, slack) then
+		return false
+	end
+	self:_hitObstacle(rider, egg, obstacle, now)
+	return true
+end
+
+-- The server's own check: an egg well inside an obstacle has hit it, whatever its rider's device says.
+function RunwaySim._checkObstacles(self: RunwaySim, now: number)
+	for _, rider in self.riders do
+		local ride = rider.ride
+		local egg = if rider.eggId then self.eggs[rider.eggId] else nil
+		if ride and egg then
+			local obstacle = self.obstacles.hitAt(
+				egg.lateral,
+				self:_eggZ(egg, now),
+				egg.spec.halfLength,
+				egg.spec.radius,
+				now,
+				Tuning.HIT_BACKUP_INSET
+			)
+			if obstacle and not ride.hits[obstacle.id] then
+				self:_hitObstacle(rider, egg, obstacle, now)
+			end
+		end
+	end
+end
+
+----------------------------------------------------------------------------------------------------------------
 -- The clock
 
 -- Tells the rules which part of the runway cycle it is.
@@ -532,41 +742,56 @@ function RunwaySim.setPhase(self: RunwaySim, phase: Phase)
 			end
 		end
 	elseif wasClosed then
-		-- A new cycle: every chute starts a fresh lineup.
-		self.nextSpawnAt = {}
+		-- Sunrise: a new cycle, so every zone rolls a fresh lineup on the next step.
+		self.lineup = nil
+		self.nextWildAt = {}
 	end
 end
 
-function RunwaySim._countZone(self: RunwaySim, zoneId: number): number
-	local count = 0
-	for _, egg in self.eggs do
-		if egg.zone == zoneId then
-			count += 1
+-- Sends out lineup eggs whose turn has come, and now and then a mid-cycle egg.
+function RunwaySim._launchEggs(self: RunwaySim, now: number)
+	if self.lineup == nil then
+		self:_rollLineup(now)
+	end
+	for _, slot in self.lineup :: { Slot } do
+		if now >= slot.nextLaunch then
+			-- If the server stalled for longer than a lap, skip the laps it missed.
+			while now >= slot.nextLaunch + slot.lapTime do
+				slot.nextLaunch += slot.lapTime
+			end
+			self:_launch(slot.zone, slot.rarity, slot.kind, slot.nextLaunch, false)
+			slot.nextLaunch += slot.lapTime
 		end
 	end
-	return count
-end
 
--- Advances the rules to `now`: drops eggs, finishes claims, throws off exhausted riders, cracks and fades eggs.
-function RunwaySim.step(self: RunwaySim, now: number)
-	-- Drop new eggs.
-	if self.phase ~= "Closed" then
-		local interval = Tuning.EGG_UNRIDDEN_LIFETIME / Tuning.EGGS_PER_ZONE / self.spawnRateMultiplier
-		local cap = math.ceil(Tuning.EGGS_PER_ZONE * 1.5 * self.spawnRateMultiplier)
-		for zoneId = 1, #Zones.List do
-			local at = self.nextSpawnAt[zoneId]
-			if at == nil then
-				at = now + self.random() * interval * 0.5
-				self.nextSpawnAt[zoneId] = at
-			end
-			if now >= at then
-				if self:_countZone(zoneId) < cap then
-					self:spawnEgg(zoneId, now)
+	local interval = Tuning.WILD_DROP_INTERVAL / self.spawnRateMultiplier
+	for zoneId = 1, #Zones.List do
+		local at = self.nextWildAt[zoneId]
+		if at == nil then
+			at = now + interval * (0.5 + self.random())
+			self.nextWildAt[zoneId] = at
+		end
+		if now >= at then
+			if self:_countWild(zoneId) < Tuning.WILD_DROP_MAX then
+				local rarity = EggSpec.rollRarity(zoneId, self.random(), Tuning.WILD_RARE_ODDS, Tuning.WILD_RARE_FROM)
+				local kind = EggSpec.pickEgg(zoneId, rarity, self.random())
+				if kind then
+					self:_launch(zoneId, rarity, kind, now, true)
 				end
-				self.nextSpawnAt[zoneId] = now + interval * (0.7 + 0.6 * self.random())
 			end
+			self.nextWildAt[zoneId] = now + interval * (0.7 + 0.6 * self.random())
 		end
 	end
+end
+
+-- Advances the rules to `now`: sends out eggs, checks obstacles, finishes claims, throws off exhausted riders,
+-- cracks and fades eggs.
+function RunwaySim.step(self: RunwaySim, now: number)
+	if self.phase ~= "Closed" then
+		self:_launchEggs(now)
+	end
+
+	self:_checkObstacles(now)
 
 	-- Finish rides: a claim that completes before the stamina runs out wins.
 	for _, rider in self.riders do
@@ -590,23 +815,23 @@ function RunwaySim.step(self: RunwaySim, now: number)
 		end
 	end
 
-	-- Eggs that crack, roll off the end, or fade.
+	-- Eggs that crack, fade at the end of their lap, or roll off the end.
 	for _, egg in self.eggs do
 		if egg.crackAt ~= nil then
 			if now >= egg.crackAt then
 				self:_removeEgg(egg, "Cracked")
 			end
 		else
-			local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
-			if z >= Runway.LENGTH then
-				local rider = if egg.riderId then self.riders[egg.riderId] else nil
+			local z = self:_eggZ(egg, now)
+			local rider = if egg.riderId then self.riders[egg.riderId] else nil
+			if rider == nil and z >= egg.fadeZ then
+				self:_removeEgg(egg, "Faded")
+			elseif z >= Runway.LENGTH then
 				if rider then
 					self:_endRide(rider, now, "Cliff")
 				else
 					self:_removeEgg(egg, "Cliff")
 				end
-			elseif not egg.everRidden and now - egg.spawnTime >= Tuning.EGG_UNRIDDEN_LIFETIME then
-				self:_removeEgg(egg, "Faded")
 			end
 		end
 	end

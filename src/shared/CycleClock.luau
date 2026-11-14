@@ -5,6 +5,10 @@
 --
 -- Each cycle is CYCLE_LENGTH seconds: the runway is open, shows a warning for the last WARNING_LENGTH seconds
 -- before it closes, then is closed for the final CLOSED_LENGTH seconds.
+--
+-- Each cycle is also one day. The sun rises as a cycle begins, which is when every zone rolls out its fresh lineup
+-- of eggs; night falls DAY_FRACTION of the way through; the runway closes in the last moments before the next
+-- sunrise.
 
 export type Phase = "Open" | "Warning" | "Closed"
 
@@ -27,6 +31,12 @@ CycleClock.CLOSED_LENGTH = 10
 CycleClock.WARNING_LENGTH = 10
 -- Seconds into a cycle when the runway closes.
 CycleClock.CLOSE_AT = CycleClock.CYCLE_LENGTH - CycleClock.CLOSED_LENGTH
+
+-- The time of day (Lighting.ClockTime, in hours) at the start of a cycle and when night falls.
+CycleClock.SUNRISE = 6
+CycleClock.SUNSET = 18
+-- How much of each cycle is daytime.
+CycleClock.DAY_FRACTION = 0.7
 
 -- Events repeat every EVENT_PERIOD cycles (20 x 3 min = once an hour each, 30 min apart).
 CycleClock.EVENT_PERIOD = 20
@@ -51,6 +61,28 @@ function CycleClock.getState(serverTime: number): State
 		untilClose = math.max(0, CycleClock.CLOSE_AT - elapsed),
 		untilNextCycle = CycleClock.CYCLE_LENGTH - elapsed,
 	}
+end
+
+-- The time of day at a moment, in hours from 0 to 24, for Lighting.ClockTime: sunrise as each cycle begins, sunset
+-- DAY_FRACTION of the way through, and through the night to the next sunrise.
+function CycleClock.clockTime(serverTime: number): number
+	local u = CycleClock.getState(serverTime).elapsed / CycleClock.CYCLE_LENGTH
+	local dayHours = CycleClock.SUNSET - CycleClock.SUNRISE
+	local hours
+	if u < CycleClock.DAY_FRACTION then
+		hours = CycleClock.SUNRISE + dayHours * u / CycleClock.DAY_FRACTION
+	else
+		hours = CycleClock.SUNSET + (24 - dayHours) * (u - CycleClock.DAY_FRACTION) / (1 - CycleClock.DAY_FRACTION)
+	end
+	return hours % 24
+end
+
+-- How bright the day is, from 0 (the middle of the night) to 1 (noon), for lighting that follows the sun.
+function CycleClock.daylight(serverTime: number): number
+	local hours = CycleClock.clockTime(serverTime)
+	-- Full daylight from two hours after sunrise to two hours before sunset; darkest at midnight.
+	local fromNoon = math.abs(hours - 12)
+	return math.clamp((8 - fromNoon) / 4, 0, 1)
 end
 
 -- Which server event, if any, belongs to a cycle.

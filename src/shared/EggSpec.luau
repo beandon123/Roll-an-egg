@@ -62,19 +62,30 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 	return spec
 end
 
--- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights.
-function EggSpec.rollRarity(zoneId: number, random01: number): string
+-- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights. `rareOdds`, if given,
+-- scales the weight of every rarity from `rareFrom` up (mid-cycle drops use it to make Secret and Eternal eggs
+-- much rarer than in the lineup rolled at sunrise).
+function EggSpec.rollRarity(zoneId: number, random01: number, rareOdds: number?, rareFrom: string?): string
 	local zone = Zones.List[zoneId]
+	local fromOrder = if rareFrom and Rarities.Info[rareFrom] then Rarities.Info[rareFrom].order else math.huge
+	local function weightOf(rarity: string): number
+		local weight = zone.weights[rarity] or 0
+		if rareOdds and Rarities.Info[rarity].order >= fromOrder then
+			weight *= rareOdds
+		end
+		return weight
+	end
+
 	local total = 0
 	for _, rarity in Rarities.Order do
-		total += zone.weights[rarity] or 0
+		total += weightOf(rarity)
 	end
 
 	local target = random01 * total
 	local running = 0
 	local last = ""
 	for _, rarity in Rarities.Order do
-		local weight = zone.weights[rarity] or 0
+		local weight = weightOf(rarity)
 		if weight > 0 then
 			running += weight
 			last = rarity

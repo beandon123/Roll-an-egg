@@ -38,7 +38,8 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight runway (~3,600 studs) holding six zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
+- [ ] One straight, level runway (~3,600 studs long, 120 wide; decided: flat and wide) holding six zones in order
+      (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); ends at a cliff after the Prehistoric
       zone; more zones added later (decided)
     - [ ] Anyone can walk or ride into any zone (decided); the scenery, music, and obstacles change zone by zone
@@ -58,10 +59,17 @@ Original theme, art, and creatures.
     - [ ] Volcano: Rare, Epic, 2 Legendary, 2 Mythic, Secret, Eternal
     - [ ] Prehistoric: 2 Epic, 2 Legendary, Mythic, Secret, 2 Eternal (decided: one Mythic, one Secret, two Eternals)
     - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
-- [ ] Eggs: lineup rolled per zone at the start of each cycle; down-runway movement fixed by spawn time (decided);
-      ~8 active eggs per zone (12 during Egg Avalanche)
+- [ ] Eggs: lineup rolled per zone at the start of each cycle, at sunrise; down-runway movement fixed by spawn time
+      (decided); 8 lineup eggs per zone (12 during Egg Avalanche)
+    - [ ] Lineup eggs leave the chute a few seconds apart, roll towards the end of their zone, fade out a quarter of
+          the way into the next zone, and drop from their zone's chute again, lap after lap, until the closure
+          (decided). One that is claimed or cracks comes back on its next lap (proposed)
+    - [ ] Mid-cycle drops: now and then an extra egg drops and rolls once; Secret and rarer eggs are greatly reduced
+          compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 30 s, proposed)
+    - [ ] Rolling eggs leave a small cloud of dust in their wake (decided)
 - [ ] Egg lifecycle
-    - [ ] Never jumped on: fades out after ~60 s (decided)
+    - [ ] Never jumped on: fades out a quarter of the way into the next zone (decided); a ridden egg rolls on past
+          that line and fades once its rider leaves it
     - [ ] Jumped on: loses a bounce each time it's left with no rider; cracks and splats at 0 (see Riding)
     - [ ] An egg going over the cliff at the end splats, along with its rider
     - [ ] At each runway closure, every egg without a rider disappears; ridden eggs stay and keep rolling (decided)
@@ -98,6 +106,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 
 ### Runway Cycle (decided)
 - [ ] Every 3 min the runway closes for 10 s, then a new cycle starts with a fresh egg lineup
+- [ ] Each cycle is one day and night (decided): sunrise as the cycle and its lineup begin, night for the last ~30%,
+      the closure just before dawn; moonlit rather than dark, so the runway stays playable
 - [ ] 10 s on-screen warning before each closure (proposed)
 - [ ] At closing: every egg without a rider disappears; anyone riding stays on and keeps going; players stay on the track
     - [ ] An egg that loses its rider during the closure disappears too (proposed)
@@ -113,10 +123,16 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] Stamina drains while riding (see table) and regenerates on foot or on a pet
 - [ ] Claim meter fills while you stay on; 100% = "CLAIMED!" -> egg flies into inventory
 - [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
-    - [ ] Zone-themed obstacles (proposed): Forest: rolling logs, swinging vines; Desert: tumbleweeds, sand geysers;
-          Snow: giant snowballs, ice patches (slide sideways); Ocean: crashing waves, snapping clams;
-          Volcano: lava bursts (lethal), falling rocks; Prehistoric: stampeding dino herds, tar pits (proposed);
-          every obstacle is telegraphed before it arrives
+    - [ ] Zone-themed obstacles fitting each zone's terrain (decided), in rows across the runway, every row
+          leaving a gap for the biggest egg; eggs without a rider steer round them on their own. Built so far:
+          Forest: fallen logs, stumps, bushes, toadstools (Bump), boulders, trees (Knock-off);
+          Desert: cacti, tumbleweeds, skulls (Bump), sandstone rocks, sand geysers (Knock-off);
+          Snow: snowdrifts, snowmen (Bump), pines, ice boulders (Knock-off);
+          Ocean: coral, barrels (Bump), sea rocks, snapping giant clams (Knock-off);
+          Volcano: obsidian spikes (Bump), basalt, smoking rocks (Knock-off), lava pools, lava bursts (Lethal);
+          Prehistoric: giant ferns, dinosaur skulls (Bump), giant ribcages, mossy boulders (Knock-off), tar pits
+          (Lethal). Geysers, clams and lava vents go off now and then and warn first; still to come: rolling logs,
+          swinging vines, giant snowballs, ice patches, crashing waves, falling rocks, stampeding dino herds
 - [ ] Leaving an egg (decided)
     - [ ] Whenever an egg is left with no rider (jumped off, knocked off, out of stamina, rider died), it bounces once
           in the air and loses a bounce; at 0 bounces it cracks and splats
@@ -276,6 +292,9 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
       -> Ocean (a causeway over a shallow reef) -> Volcano -> Prehistoric (ferns, tar pits, giant bones) -> end cliff; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
+    - [ ] Built from parts in code, in the blocky style of the eggs and pets (done for the runway: checkered
+          ground, stepped cliff banks, a railed boardwalk over a reef, zone plants and rocks, distant scenery,
+          gates; the hub and plots are still placeholders)
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, nests glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = coins, stamina, inventory, shop, index, mount, Reset shortcut,
       runway-closing timer, next-event timer
@@ -300,7 +319,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - Structure:
     - ReplicatedStorage/Shared: Config (zones, rarity tuning, stamina requirements, spawn odds per zone, hatch times,
       upgrade and teleport costs, obstacles, pets, events), Types, EggMotion (down-runway position from time + bounce
-      events), ObstacleTimeline, DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
+      events), Obstacles (layout from a fixed seed, riderless paths, hits, timing), DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
     - ServerScriptService/Server/Services: Data, Cycle, Runway, Zone, Teleport, Ride, Duel, Plot, Pen, Hatch, Pet,
       Economy, Shop, Quest, Event, Leaderboard, AntiCheat
     - StarterPlayerScripts/Client/Controllers: Ride, Steering, Duel, Mount, Pen (roaming), Camera, Input, UI, VFX, Sound
@@ -314,7 +333,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   in that server; stored on the nest, so hatch math stays timestamp-based
 - Egg motion (decided): down-runway position = EggMotion(serverTime - spawnTime), fixed by time; side-to-side position is
   steered by the rider: the rider's client predicts it and sends updates ~10x/s, the server caps them at the rider's
-  Agility speed and replicates them; riderless eggs hold their last side-to-side position; bounces are recorded as timed
+  Agility speed and replicates them; riderless eggs follow a path round the obstacles from where they were left,
+  worked out the same way on the server and every client (Shared/Obstacles); bounces are recorded as timed
   events so every client plays the same hop; clients only render eggs in zones near them
 - Riders on eggs: each client attaches rider characters to its own local copy of the egg (the server publishes who rides
   which egg), so riders don't drift off eggs on other players' screens

@@ -55,6 +55,7 @@ return function(harness)
 		return {
 			EggSpec = session:require(folder.EggSpec),
 			EggMotion = session:require(folder.EggMotion),
+			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
 			Tuning = session:require(folder.Config.Tuning),
 		}
@@ -76,12 +77,24 @@ return function(harness)
 		}
 	end
 
+	-- Where an egg is now: where its rider has it, or along its path round the obstacles.
 	local function eggCenter(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
 		local startZ = modules.Runway.zoneStartZ(egg.zone) + modules.Tuning.EGG_SPAWN_OFFSET
 		local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
-		return Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z), spec
+		local x = egg.lateral
+		if egg.rider == nil then
+			local path = modules.Obstacles.planPath(
+				egg.lateral,
+				startZ,
+				modules.Runway.fadeZ(egg.zone),
+				spec.halfLength,
+				spec.radius
+			)
+			x = modules.Obstacles.lateralAt(path, z)
+		end
+		return Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z), spec
 	end
 
 	-- Puts the character in the air right on top of an egg, as if it had just jumped there.
@@ -155,7 +168,7 @@ return function(harness)
 			local common = parts.eggFolder.Egg1
 			local blocks = {}
 			for _, child in common:GetChildren() do
-				if child:IsA("BasePart") and child ~= common.Root then
+				if child:IsA("BasePart") and child ~= common.Root and child.Name ~= "Dust" then
 					table.insert(blocks, child)
 				end
 			end
@@ -202,7 +215,8 @@ return function(harness)
 			end
 			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
 			local function blockCount(model)
-				return #model:GetChildren() - 1
+				-- Everything but the root and the dust.
+				return #model:GetChildren() - 2
 			end
 			expect.equal(blockCount(parts.eggFolder.Egg1), #EggModels.get("Leafy").boxes)
 			expect.equal(blockCount(parts.eggFolder.Egg3), #EggModels.get("Cottontail").boxes)
@@ -227,7 +241,7 @@ return function(harness)
 			expect.truthy(parts.eggFolder:FindFirstChild("Egg4"))
 		end)
 
-		it("moves eggs down the runway every frame", function()
+		it("moves eggs down the runway every frame, steering round obstacles", function()
 			local session, parts = startClient()
 			local egg = eggData(session, 1, 1, "Common", 5, 3)
 			session:fromServer("EggSpawned", egg)
@@ -236,7 +250,29 @@ return function(harness)
 			local position = parts.eggFolder.Egg1.Root.CFrame.Position
 			expect.near(position.Z, expected.Z, 1e-3, "z")
 			expect.near(position.Y, expected.Y, 1e-3, "y")
-			expect.near(position.X, 3, 1e-3, "x")
+			expect.near(position.X, expected.X, 1e-3, "x")
+
+			-- Further on, it has steered round whatever was in its lane.
+			session:renderFrame(1, 20)
+			expected = eggCenter(session, egg)
+			position = parts.eggFolder.Egg1.Root.CFrame.Position
+			expect.near(position.X, expected.X, 1e-3, "x later")
+		end)
+
+		it("kicks up dust while rolling, coloured for the ground", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 2, "Common", 5, 0))
+			-- Just dropped in: still in the air, so no dust yet.
+			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 0, 0))
+			session:renderFrame(1 / 60)
+			local rolling = parts.eggFolder.Egg1.Dust
+			local emitter = rolling:FindFirstChildOfClass("ParticleEmitter")
+			expect.truthy(emitter.Enabled, "dust while rolling")
+			expect.equal(emitter.Color.Keypoints[1].Value, roblox.Color3.fromRGB(236, 208, 152), "desert sand")
+			expect.near(rolling.CFrame.Position.Y, shared(session).Runway.BASE_Y + 0.2, 1e-3)
+			expect.truthy(session.emitted[emitter] > 0, "a puff as it landed")
+			local dropping = parts.eggFolder.Egg2.Dust:FindFirstChildOfClass("ParticleEmitter")
+			expect.falsy(dropping.Enabled, "no dust in the air")
 		end)
 
 		it("removes eggs, leaving a splat when one cracks", function()
@@ -434,6 +470,72 @@ return function(harness)
 			expect.equal(parts.root.Anchored, false)
 		end)
 
+		-- The first obstacle of a tier (and timing) in a zone.
+		local function findObstacle(session, zoneId, tier, timed)
+			for _, obstacle in shared(session).Obstacles.all() do
+				if obstacle.zone == zoneId and obstacle.tier == tier and (obstacle.timing ~= nil) == timed then
+					return obstacle
+				end
+			end
+			error(`no {tier} obstacle in zone {zoneId}`)
+		end
+
+		-- Starts riding an egg lined up with an obstacle, a moment before it gets there.
+		local function rideTowards(session, obstacle, rarity)
+			local modules = shared(session)
+			local spec = modules.EggSpec.get(obstacle.zone, rarity)
+			local startZ = modules.Runway.zoneStartZ(obstacle.zone) + modules.Tuning.EGG_SPAWN_OFFSET
+			local gap = obstacle.z - obstacle.hz - spec.radius - 1 - startZ
+			local egg = eggData(session, 1, obstacle.zone, rarity, gap / spec.rollSpeed, obstacle.x)
+			egg.rider = LOCAL_USER_ID
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg, spec.claimTime)
+			return egg, spec
+		end
+
+		it("bumps into obstacles: reports the hit at once, knocks the egg clear and wobbles it", function()
+			local session, parts = startClient()
+			local bump = findObstacle(session, 1, "Bump", false)
+			local _, spec = rideTowards(session, bump, "Rare")
+			session:renderFrame(1 / 60, 20)
+			local report = session:lastSent("ReportHit", "server")
+			expect.truthy(report, "ReportHit")
+			expect.equal(report.args[1], bump.id)
+			expect.equal(#session:sent("ReportHit", "server"), 1, "once")
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Bumped into "), hud(parts).Toast.Text)
+			local x = session:service("Workspace").Eggs.Egg1.Root.CFrame.Position.X
+			expect.truthy(math.abs(x - bump.x) >= bump.hx + spec.halfLength, "knocked clear")
+			expect.equal(parts.root.Anchored, true, "still riding")
+		end)
+
+		it("is thrown off by a KnockOff obstacle", function()
+			local session, parts = startClient()
+			local rock = findObstacle(session, 1, "KnockOff", false)
+			rideTowards(session, rock, "Rare")
+			session:renderFrame(1 / 60, 20)
+			expect.equal(session:lastSent("ReportHit", "server").args[1], rock.id)
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Knocked off by "), hud(parts).Toast.Text)
+			expect.equal(parts.root.Anchored, false)
+			expect.equal(parts.humanoid.PlatformStand, true, "stunned")
+			-- The server's word arriving afterwards changes nothing.
+			session:fromServer("RideEnded", "KnockedOff", { eggId = 1, zone = 1, rarity = "Rare" })
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Knocked off by "), "no second toast")
+		end)
+
+		it("follows the server when it spots a hit first", function()
+			local session, parts = startClient()
+			local bump = findObstacle(session, 1, "Bump", false)
+			local egg = eggData(session, 1, 1, "Rare", 1, 0)
+			egg.rider = LOCAL_USER_ID
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg, 9)
+			session:fromServer("ObstacleHit", bump.id, "Bump", 21)
+			session:renderFrame(1 / 60)
+			expect.near(session:service("Workspace").Eggs.Egg1.Root.CFrame.Position.X, 21, 1e-3)
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Bumped into "), hud(parts).Toast.Text)
+			expect.equal(#session:sent("ReportHit"), 0)
+		end)
+
 		it("pins other players to their eggs", function()
 			local session = startClient()
 			local _, _, otherRoot = session:addPlayer(55, "Other")
@@ -445,6 +547,83 @@ return function(harness)
 			local center = eggCenter(session, egg)
 			expect.near(otherRoot.CFrame.Position.Z, center.Z, 1e-3)
 			expect.near(otherRoot.CFrame.Position.X, 6, 1e-3)
+		end)
+	end)
+
+	describe("Client: the world", function()
+		it("animates geysers, lava vents and clams in time with the server", function()
+			local session = startClient()
+			local Obstacles = shared(session).Obstacles
+			local Scenery = session:require(session:service("ServerScriptService").Server.Map.Scenery)
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local folder = roblox.Instance.new("Folder")
+			folder.Name = "Obstacles"
+			folder.Parent = map
+			map.Parent = session:service("Workspace")
+			local function first(kind)
+				for _, obstacle in Obstacles.all() do
+					if obstacle.kind == kind then
+						return obstacle
+					end
+				end
+			end
+			local geyser, clam = first("LavaVent"), first("GiantClam")
+			local vent = Scenery.buildObstacle(folder, geyser)
+			local shell = Scenery.buildObstacle(folder, clam)
+
+			-- A moment in the middle of a phase.
+			local function during(obstacle, activity)
+				local base = session.clock
+				for tenth = 0, 200 do
+					local t = base + tenth / 10
+					if
+						Obstacles.activity(obstacle, t - 0.15) == activity
+						and Obstacles.activity(obstacle, t + 0.15) == activity
+					then
+						return t
+					end
+				end
+				error("no " .. activity)
+			end
+
+			session.clock = during(geyser, "Active") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.truthy(vent.Burst.Transparency < 1, "lava shooting up")
+			expect.truthy(vent.Burst:FindFirstChildOfClass("PointLight").Enabled, "glowing")
+			session.clock = during(geyser, "Warning") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.equal(vent.Burst.Transparency, 1)
+			expect.truthy(vent.Vent.WarnPoint.Warn.Enabled, "smoking as a warning")
+			session.clock = during(geyser, "Idle") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.falsy(vent.Vent.WarnPoint.Warn.Enabled)
+
+			-- The clam snaps shut while active, and gapes open otherwise.
+			session.clock = during(clam, "Active") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(shell.Lid.CFrame.UpVector.Y, 1, 1e-3, "shut")
+			session.clock = during(clam, "Idle") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.truthy(shell.Lid.CFrame.UpVector.Y < 0.6, "open")
+		end)
+
+		it("turns day to night with the runway cycle", function()
+			local session = startClient()
+			local Lighting = session:service("Lighting")
+			local CycleClock = session:require(session:service("ReplicatedStorage").Shared.CycleClock)
+			local cycleStart = math.floor(session.clock / 180) * 180 + 180
+			session.clock = cycleStart - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, CycleClock.SUNRISE, 1e-3)
+			session.clock = cycleStart + 63 - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, 12, 1e-3)
+			local noonBrightness = Lighting.Brightness
+			session.clock = cycleStart + 126 + 27 - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, 0, 1e-3)
+			expect.truthy(Lighting.Brightness < noonBrightness, "darker at night")
 		end)
 	end)
 

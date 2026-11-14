@@ -103,22 +103,70 @@ local function grantEgg(player: Player, zone: number, rarity: string, kind: stri
 	Net.InventoryUpdated:FireClient(player, #data.Eggs)
 end
 
+local function eggName(rarity: string, kind: string): string
+	local about = EggModels.describe(kind)
+	return `{rarity} {if about then about.name else "egg"}`
+end
+
+local function withArticle(phrase: string): string
+	return (if string.match(phrase, "^[AEIOU]") then "an " else "a ") .. phrase
+end
+
+-- At sunrise, tells everyone about the rarest eggs in the new lineup (Legendary and up), rarest first.
+local function announceLineup(eggs: { { zone: number, rarity: string, kind: string } })
+	local seen = {}
+	local notable = {}
+	for _, entry in eggs do
+		if Rarities.Info[entry.rarity].announce and not seen[entry.kind] then
+			seen[entry.kind] = true
+			table.insert(notable, entry)
+		end
+	end
+	if #notable == 0 then
+		return
+	end
+	table.sort(notable, function(a, b)
+		local orderA, orderB = Rarities.Info[a.rarity].order, Rarities.Info[b.rarity].order
+		if orderA ~= orderB then
+			return orderA > orderB
+		end
+		return a.zone < b.zone
+	end)
+	local parts = {}
+	for index = 1, math.min(2, #notable) do
+		local entry = notable[index]
+		table.insert(parts, `{withArticle(eggName(entry.rarity, entry.kind))} in the {Zones.List[entry.zone].name}`)
+	end
+	local text = "Sunrise! Rolling today: " .. table.concat(parts, " and ")
+	if #notable > 2 then
+		text ..= ` (+{#notable - 2} more)`
+	end
+	Net.Announce:FireAllClients(text, Rarities.Info[notable[1].rarity].color)
+end
+
 -- Turns what the rules say happened into remotes and saved data.
 local function dispatch(events)
 	for _, event in events do
 		local kind = event.type
 		if kind == "EggSpawned" then
 			Net.EggSpawned:FireAllClients(event.egg)
+			-- Lineup eggs are announced once, at sunrise; a rare mid-cycle drop gets its own announcement.
 			local info = Rarities.Info[event.egg.rarity]
-			if info.announce then
+			if event.wild and info.announce then
 				local zone = Zones.List[event.egg.zone]
-				local article = if event.egg.rarity == "Eternal" then "An" else "A"
-				local about = EggModels.describe(event.egg.kind)
-				local name = if about then about.name else "egg"
+				local name = withArticle(eggName(event.egg.rarity, event.egg.kind))
 				Net.Announce:FireAllClients(
-					`{article} {event.egg.rarity} {name} just dropped in the {zone.name}!`,
+					`{string.upper(string.sub(name, 1, 1))}{string.sub(name, 2)} just dropped in the {zone.name}!`,
 					info.color
 				)
+			end
+		elseif kind == "LineupRolled" then
+			announceLineup(event.eggs)
+		elseif kind == "ObstacleHit" then
+			Net.EggLateral:FireAllClients(event.id, event.lateral)
+			local player = playersByUserId[event.rider]
+			if player then
+				Net.ObstacleHit:FireClient(player, event.obstacle, event.tier, event.lateral)
 			end
 		elseif kind == "EggRemoved" then
 			Net.EggRemoved:FireAllClients(event.id, event.reason, event.by)
@@ -146,8 +194,8 @@ local function dispatch(events)
 					rarity = event.rarity,
 					kind = event.kind,
 				})
-				if event.reason == "Cliff" then
-					-- Rode the egg over the end of the runway.
+				if event.reason == "Cliff" or event.reason == "Hazard" then
+					-- Rode the egg over the end of the runway, or into lava or tar.
 					killCharacter(player)
 				end
 			end
@@ -195,6 +243,13 @@ end
 
 local function onRequestDismount(player: Player)
 	sim:requestDismount(player.UserId, now())
+end
+
+local function onReportHit(player: Player, obstacleId: unknown)
+	if typeof(obstacleId) ~= "number" or obstacleId ~= obstacleId then
+		return
+	end
+	sim:reportHit(player.UserId, obstacleId, now())
 end
 
 local function onRideLateral(player: Player, x: unknown)
@@ -283,6 +338,12 @@ function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
 end
 
+-- Whether the player is riding an egg (their character is then on the egg, wherever the server last saw it).
+function RunwayService.IsRiding(player: Player): boolean
+	local rider = sim:getRider(player.UserId)
+	return rider ~= nil and rider.eggId ~= nil
+end
+
 function RunwayService.GetMaxStamina(player: Player): number
 	local rider = sim:getRider(player.UserId)
 	return if rider then rider.maxStamina else Tuning.BASE_MAX_STAMINA
@@ -311,6 +372,7 @@ function RunwayService.Init()
 
 	Net.RequestMount.OnServerEvent:Connect(onRequestMount)
 	Net.RequestDismount.OnServerEvent:Connect(onRequestDismount)
+	Net.ReportHit.OnServerEvent:Connect(onReportHit)
 	Net.RideLateral.OnServerEvent:Connect(onRideLateral)
 	Net.GetSnapshot.OnServerInvoke = onGetSnapshot
 

@@ -1,4 +1,5 @@
--- The local player's side of riding: asking to jump onto eggs, steering, hopping off, and being thrown off.
+-- The local player's side of riding: asking to jump onto eggs, steering, hopping off, being thrown off, and
+-- running into obstacles (spotted here at once and reported; the server has the final say and checks on its own).
 --
 -- The server decides everything that matters (whether a mount counts, stamina, claims). This controller only
 -- asks, steers, and makes the result feel immediate.
@@ -10,7 +11,10 @@ local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
 local EggModels = Load.shared("EggModels")
+local EggMotion = Load.shared("EggMotion")
 local Net = Load.shared("Net")
+local NumberFormat = Load.shared("NumberFormat")
+local Obstacles = Load.shared("Obstacles")
 local Rarities = Load.shared("Config", "Rarities")
 local Runway = Load.shared("Runway")
 local Tuning = Load.shared("Config", "Tuning")
@@ -43,6 +47,13 @@ local awaitingJumpRelease = false
 
 local lastLeftEggId: number? = nil
 local lastLeftAt = 0
+
+-- Obstacles this ride has hit, so each one counts once, and whether a hit has already ended the ride here.
+local rideHits: { [number]: boolean } = {}
+local endedByHit = false
+
+local BUMP_COLOR = Color3.fromRGB(255, 190, 90)
+local OUCH_COLOR = Color3.fromRGB(255, 110, 110)
 
 local function getCharacter(): (Humanoid?, BasePart?)
 	local character = localPlayer.Character
@@ -105,7 +116,7 @@ local function release(reason: string)
 		-- Hop forward off the egg, fast enough to reach the next one.
 		root.AssemblyLinearVelocity = Vector3.new(0, 52, eggSpeed + 4)
 		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-	elseif reason == "ThrownOff" then
+	elseif reason == "ThrownOff" or reason == "KnockedOff" then
 		-- Tumble off to one side and lie stunned for a moment.
 		stunnedUntil = os.clock() + Tuning.STUN_TIME
 		local side = if root.Position.X >= 0 then 1 else -1
@@ -149,6 +160,8 @@ local function onRideStarted(eggId: number, info)
 	}
 	rideStartedAt = os.clock()
 	awaitingJumpRelease = true
+	rideHits = {}
+	endedByHit = false
 
 	-- Hold the character still; EggController places it on top of the egg every frame.
 	root.AssemblyLinearVelocity = Vector3.zero
@@ -156,9 +169,10 @@ local function onRideStarted(eggId: number, info)
 	humanoid.PlatformStand = false
 	humanoid.Sit = true
 
+	-- From here this device steers the egg, starting from wherever it was drawn.
+	EggController.SetRider(eggId, localPlayer.UserId)
 	local egg = EggController.GetEgg(eggId)
 	if egg then
-		egg.riderUserId = localPlayer.UserId
 		local about = EggModels.describe(egg.kind)
 		UiState.rideTitle:set(if about then `{egg.rarity} {about.name}` else `{egg.rarity} egg`)
 	else
@@ -178,7 +192,9 @@ local function onRideEnded(reason: string, info)
 		local about = EggModels.describe(info.kind)
 		UiState.showToast(`CLAIMED! +1 {if about then about.name else info.rarity .. " egg"}`, color, 3)
 	elseif reason == "ThrownOff" then
-		UiState.showToast("Out of stamina!", Color3.fromRGB(255, 110, 110))
+		UiState.showToast("Out of stamina!", OUCH_COLOR)
+	elseif (reason == "KnockedOff" or reason == "Hazard") and not endedByHit then
+		UiState.showToast(if reason == "Hazard" then "Ouch!" else "Knocked off!", OUCH_COLOR)
 	elseif reason == "Cliff" then
 		UiState.showToast("Over the edge!", Color3.fromRGB(255, 110, 110))
 	end
@@ -187,6 +203,38 @@ local function onRideEnded(reason: string, info)
 	local ride = UiState.ride
 	if ride and ride.eggId == info.eggId then
 		release(reason)
+	end
+end
+
+-- The egg being ridden ran into an obstacle: spotted on this device (`lateral` nil: knock it clear here), or by
+-- the server (`lateral`: where it knocked the egg).
+local function onHit(obstacleId: number, lateral: number?)
+	local ride = UiState.ride
+	local obstacle = Obstacles.get(obstacleId)
+	if ride == nil or obstacle == nil or rideHits[obstacleId] then
+		return
+	end
+	rideHits[obstacleId] = true
+	local egg = EggController.GetEgg(ride.eggId)
+	if egg == nil then
+		return
+	end
+	egg.lateral = lateral or Obstacles.clearLane(obstacle.row, egg.lateral, egg.spec.halfLength)
+	egg.targetLateral = egg.lateral
+	EggController.Wobble(egg.id)
+
+	local kind = Obstacles.Config.Kinds[obstacle.kind]
+	if obstacle.tier == "Bump" then
+		local cost = NumberFormat.abbreviate(egg.spec.requirement * Tuning.BUMP_STAMINA)
+		UiState.showToast(`Bumped into {kind.name}! -{cost} stamina`, BUMP_COLOR)
+	elseif obstacle.tier == "KnockOff" then
+		endedByHit = true
+		UiState.showToast(`Knocked off by {kind.name}!`, OUCH_COLOR)
+		release("KnockedOff")
+	else
+		-- The server ends the ride and the character.
+		endedByHit = true
+		UiState.showToast(kind.hitText or `Into {kind.name}!`, OUCH_COLOR)
 	end
 end
 
@@ -236,6 +284,18 @@ local function steer(deltaTime: number)
 	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
 	egg.targetLateral = egg.lateral
 
+	-- Obstacles: report a hit straight away so the server can check it, and show it now.
+	local now = Workspace:GetServerTimeNow()
+	local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
+	local hit = Obstacles.hitAt(egg.lateral, z, egg.spec.halfLength, egg.spec.radius, now, Tuning.HIT_GRAZE)
+	if hit and not rideHits[hit.id] then
+		Net.ReportHit:FireServer(hit.id)
+		onHit(hit.id, nil)
+		if UiState.ride == nil then
+			return
+		end
+	end
+
 	local clock = os.clock()
 	if clock - lastLateralSentAt >= 1 / Tuning.LATERAL_SEND_RATE then
 		lastLateralSentAt = clock
@@ -268,6 +328,10 @@ end
 function RideController.Init()
 	Net.RideStarted.OnClientEvent:Connect(onRideStarted)
 	Net.RideEnded.OnClientEvent:Connect(onRideEnded)
+
+	Net.ObstacleHit.OnClientEvent:Connect(function(obstacleId: number, _tier: string, lateral: number)
+		onHit(obstacleId, lateral)
+	end)
 
 	Net.StaminaChanged.OnClientEvent:Connect(function(value: number, time: number, rate: number, max: number)
 		UiState.staminaState = { value = value, time = time, rate = rate, max = max }

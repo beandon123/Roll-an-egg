@@ -4,34 +4,39 @@
 -- Pure math (no Roblox APIs) so the test runner can load it outside Studio.
 --
 -- Coordinates: the runway starts at z = 0 and runs toward +z. x is the side-to-side ("lateral") position,
--- with 0 on the centre line. The hub sits behind the start, at negative z.
+-- with 0 on the centre line. The hub sits behind the start, at negative z. The runway is level all the way: eggs
+-- roll at the speed their rarity sets, not because of a slope.
 
 local Runway = {}
 
 Runway.ZONE_COUNT = 6
 Runway.ZONE_LENGTH = 600
 Runway.LENGTH = Runway.ZONE_COUNT * Runway.ZONE_LENGTH
-Runway.WIDTH = 64
+Runway.WIDTH = 120
 
--- Height of the walking surface at the hub and the start of the runway.
+-- Height of the walking surface, at the hub and all the way down the runway.
 Runway.BASE_Y = 10
--- Studs of drop per stud travelled; the runway is a gentle downhill.
-Runway.SLOPE = 0.04
+
+-- An egg rolls on past the end of its own zone and fades out this far into the next one (a fraction of a zone).
+Runway.FADE_INTO_NEXT = 0.25
 
 Runway.HUB_LENGTH = 220
 Runway.HUB_WIDTH = 240
 
 -- Height of the walking surface at a given distance down the runway.
-function Runway.surfaceY(z: number): number
-	if z <= 0 then
-		return Runway.BASE_Y
-	end
-	return Runway.BASE_Y - Runway.SLOPE * math.min(z, Runway.LENGTH)
+function Runway.surfaceY(_z: number): number
+	return Runway.BASE_Y
 end
 
 -- Distance down the runway where a zone begins.
 function Runway.zoneStartZ(zoneId: number): number
 	return (zoneId - 1) * Runway.ZONE_LENGTH
+end
+
+-- Where a riderless egg from this zone fades out: a quarter of the way into the next zone, or at the end cliff
+-- for the last zone.
+function Runway.fadeZ(zoneId: number): number
+	return math.min(Runway.zoneStartZ(zoneId + 1) + Runway.FADE_INTO_NEXT * Runway.ZONE_LENGTH, Runway.LENGTH)
 end
 
 -- Which zone a distance down the runway falls in, or nil if it is off either end.

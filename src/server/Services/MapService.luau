@@ -1,8 +1,10 @@
--- Builds the placeholder map out of plain parts: the hub, the five zone slabs, and the zone signs.
--- Final art will replace this; gameplay does not depend on any of these parts (it reads positions from
--- Shared/Runway), so swapping the map never breaks the rules.
+-- Builds the map: the hub with its plots, then each zone's stretch of runway with its banks, backdrop and gate
+-- (Map/Scenery), and the obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels).
+-- Gameplay does not depend on any of these parts (it reads positions from Shared/Runway and Shared/Obstacles),
+-- so changing how the map looks never breaks the rules.
 --
--- Also handles falling: a character well below the runway surface has fallen off and dies.
+-- Also handles dying on the map: a character well below the runway has gone over the end cliff, and one standing
+-- in lava or tar (a Lethal obstacle that is going off) is burned up.
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -10,21 +12,20 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
-local NumberFormat = require(Shared.NumberFormat)
-local Rarities = require(Shared.Config.Rarities)
+local Obstacles = require(Shared.Obstacles)
 local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
+local Scenery = require(script.Parent.Parent.Map.Scenery)
+local RunwayService = require(script.Parent.RunwayService)
+
 local SLAB_THICKNESS = 4
-local SIGN_HEIGHT = 26
 local PLOT_COUNT = 8
+-- A player on foot counts as standing in a Lethal obstacle when their root part is this close to the ground.
+local HAZARD_HEIGHT = 5
 
 local MapService = {}
-
-local function rgb(color: { number }): Color3
-	return Color3.fromRGB(color[1], color[2], color[3])
-end
 
 local function newPart(name: string, parent: Instance): Part
 	local part = Instance.new("Part")
@@ -35,47 +36,6 @@ local function newPart(name: string, parent: Instance): Part
 	part.Material = Enum.Material.SmoothPlastic
 	part.Parent = parent
 	return part
-end
-
-local function addSignText(part: Part, face: Enum.NormalId, title: string, subtitle: string, color: Color3)
-	local gui = Instance.new("SurfaceGui")
-	gui.Face = face
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 20
-	gui.LightInfluence = 0
-	gui.Parent = part
-
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.Size = UDim2.fromScale(1, 0.62)
-	titleLabel.Font = Enum.Font.FredokaOne
-	titleLabel.Text = title
-	titleLabel.TextColor3 = color
-	titleLabel.TextScaled = true
-	titleLabel.Parent = gui
-
-	local subtitleLabel = Instance.new("TextLabel")
-	subtitleLabel.BackgroundTransparency = 1
-	subtitleLabel.Position = UDim2.fromScale(0, 0.62)
-	subtitleLabel.Size = UDim2.fromScale(1, 0.34)
-	subtitleLabel.Font = Enum.Font.GothamBold
-	subtitleLabel.Text = subtitle
-	subtitleLabel.TextColor3 = Color3.new(1, 1, 1)
-	subtitleLabel.TextScaled = true
-	subtitleLabel.Parent = gui
-end
-
--- The lowest and highest stamina requirement of a zone's eggs.
-local function staminaRange(zone): (number, number)
-	local low, high = math.huge, 0
-	for rarity in Rarities.Info do
-		local requirement = zone.stamina[rarity]
-		if requirement then
-			low = math.min(low, requirement)
-			high = math.max(high, requirement)
-		end
-	end
-	return low, high
 end
 
 local function buildHub(map: Instance)
@@ -116,69 +76,46 @@ local function buildHub(map: Instance)
 	end
 end
 
-local function buildRunway(map: Instance)
-	local angle = math.atan(Runway.SLOPE)
-	-- Unit vectors along the slope (downhill) and straight out of its surface.
-	local along = Vector3.new(0, -math.sin(angle), math.cos(angle))
-	local normal = Vector3.new(0, math.cos(angle), math.sin(angle))
-
-	for _, zone in Zones.List do
-		local folder = Instance.new("Folder")
-		folder.Name = zone.key
-		folder.Parent = map
-
-		local startZ = Runway.zoneStartZ(zone.id)
-		local middleZ = startZ + Runway.ZONE_LENGTH / 2
-
-		local slab = newPart("Ground", folder)
-		slab.Size = Vector3.new(Runway.WIDTH, SLAB_THICKNESS, Runway.ZONE_LENGTH / math.cos(angle))
-		local surfaceMiddle = Vector3.new(0, Runway.surfaceY(middleZ), middleZ)
-		local center = surfaceMiddle - normal * (SLAB_THICKNESS / 2)
-		slab.CFrame = CFrame.lookAt(center, center + along, normal)
-		slab.Color = rgb(zone.ground)
-
-		-- A sign over the start of the zone: its name and the stamina its eggs need.
-		local surfaceStart = Runway.surfaceY(startZ)
-		for _, side in { -1, 1 } do
-			local post = newPart("SignPost", folder)
-			post.Size = Vector3.new(3, SIGN_HEIGHT + 8, 3)
-			post.Position = Vector3.new(side * (Runway.WIDTH / 2 + 3), surfaceStart + (SIGN_HEIGHT + 8) / 2 - 4, startZ)
-			post.Color = rgb(zone.accent)
-		end
-
-		local sign = newPart("Sign", folder)
-		sign.Size = Vector3.new(Runway.WIDTH + 9, 9, 1.5)
-		sign.Position = Vector3.new(0, surfaceStart + SIGN_HEIGHT, startZ)
-		sign.Color = rgb(zone.accent)
-		local low, high = staminaRange(zone)
-		local subtitle = `Eggs need {NumberFormat.abbreviate(low)} - {NumberFormat.abbreviate(high)} stamina`
-		local textColor = Color3.new(1, 1, 1)
-		-- Front faces players coming from the hub; Back faces players walking home.
-		addSignText(sign, Enum.NormalId.Front, string.upper(zone.name), subtitle, textColor)
-		addSignText(sign, Enum.NormalId.Back, string.upper(zone.name), subtitle, textColor)
+local function buildObstacles(map: Instance)
+	local folder = Instance.new("Folder")
+	folder.Name = "Obstacles"
+	folder.Parent = map
+	for _, obstacle in Obstacles.all() do
+		Scenery.buildObstacle(folder, obstacle)
 	end
-
-	-- A warning stripe before the cliff at the end of the runway.
-	local warningZ = Runway.LENGTH - 60
-	local stripe = newPart("EdgeWarning", map)
-	stripe.Size = Vector3.new(Runway.WIDTH, 0.3, 6)
-	local stripeCenter = Vector3.new(0, Runway.surfaceY(warningZ) + 0.1, warningZ)
-	stripe.CFrame = CFrame.lookAt(stripeCenter, stripeCenter + along, normal)
-	stripe.Color = Color3.fromRGB(255, 60, 60)
-	stripe.Material = Enum.Material.Neon
-	stripe.CanCollide = false
 end
 
--- Kills characters that have fallen off the runway or the hub.
-local function watchForFalls()
+-- A soft haze in the distance, as in a big outdoor world. The time of day is set by each client from the cycle
+-- (see the client's DayNightController).
+local function setUpSky()
+	Lighting.ClockTime = 14
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
+	atmosphere.Density = 0.32
+	atmosphere.Offset = 0.15
+	atmosphere.Haze = 1.4
+	atmosphere.Glare = 0.4
+	atmosphere.Color = Color3.fromRGB(199, 220, 236)
+	atmosphere.Decay = Color3.fromRGB(106, 132, 160)
+	atmosphere.Parent = Lighting
+end
+
+-- Kills characters that have fallen off the end of the runway, or are standing in lava or tar.
+local function watchForDangers()
 	while true do
+		local now = Workspace:GetServerTimeNow()
 		for _, player in Players:GetPlayers() do
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 			if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 then
 				local position = root.Position
-				if position.Y < Runway.surfaceY(position.Z) - Tuning.FALL_KILL_DEPTH then
+				local ground = Runway.surfaceY(position.Z)
+				local fell = position.Y < ground - Tuning.FALL_KILL_DEPTH
+				-- A rider's character is on their egg, wherever the server last saw it on foot.
+				local burned = not RunwayService.IsRiding(player)
+					and position.Y < ground + HAZARD_HEIGHT
+					and Obstacles.lethalAt(position.X, position.Z, now) ~= nil
+				if fell or burned then
 					humanoid.Health = 0
 				end
 			end
@@ -192,16 +129,20 @@ function MapService.Init()
 	map.Name = "Map"
 
 	buildHub(map)
-	buildRunway(map)
+	for zoneId = 1, #Zones.List do
+		Scenery.buildZone(map, zoneId)
+	end
+	buildObstacles(map)
+	Scenery.buildEnd(map)
 
 	map.Parent = Workspace
 
 	Players.RespawnTime = Tuning.RESPAWN_TIME
-	Lighting.ClockTime = 14
+	setUpSky()
 end
 
 function MapService.Start()
-	watchForFalls()
+	watchForDangers()
 end
 
 return MapService

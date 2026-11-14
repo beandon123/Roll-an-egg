@@ -224,6 +224,11 @@ roblox.implementMethod("Humanoid", "ChangeState", function(self, state)
 	current.humanoidStates[self] = state
 end)
 
+-- Particles are not simulated here; a burst of them is just counted.
+roblox.implementMethod("ParticleEmitter", "Emit", function(self, count)
+	current.emitted[self] = (current.emitted[self] or 0) + (count or 1)
+end)
+
 roblox.implementMethod("HttpService", "GenerateGUID", function()
 	current.guid += 1
 	return "test-guid-" .. current.guid
@@ -278,7 +283,9 @@ function Session:environment(scriptInstance)
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
 		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
 		ColorSequence = roblox.ColorSequence,
+		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }
@@ -602,6 +609,7 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		modules = {},
 		overrides = {},
 		humanoidStates = {},
+		emitted = {},
 		invokeHandlers = {},
 		kicks = {},
 		warnings = {},

@@ -30,6 +30,7 @@ return function(harness)
 		return {
 			EggSpec = session:require(folder.EggSpec),
 			EggMotion = session:require(folder.EggMotion),
+			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
 			Tuning = session:require(folder.Config.Tuning),
 		}
@@ -39,13 +40,40 @@ return function(harness)
 		return session:require(session:service("ServerScriptService").Server.Services.RunwayService)
 	end
 
-	-- Where an egg (as described in an EggSpawned message) is right now.
-	local function eggPosition(session, egg)
+	-- The path a riderless egg (as described in an EggSpawned message) follows round the obstacles, and its spec.
+	local function eggPath(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
 		local startZ = modules.Runway.zoneStartZ(egg.zone) + modules.Tuning.EGG_SPAWN_OFFSET
+		local path = modules.Obstacles.planPath(
+			egg.lateral,
+			startZ,
+			modules.Runway.fadeZ(egg.zone),
+			spec.halfLength,
+			spec.radius
+		)
+		return path, spec, startZ
+	end
+
+	-- Where an egg (as described in an EggSpawned message) is right now, if nobody has steered it.
+	local function eggPosition(session, egg)
+		local modules = shared(session)
+		local path, spec, startZ = eggPath(session, egg)
 		local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
-		return roblox.Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z)
+		local x = modules.Obstacles.lateralAt(path, z)
+		return roblox.Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z)
+	end
+
+	-- Rides an egg for a while, steering it along the path it would have taken on its own (which misses every
+	-- obstacle), the way a careful rider would.
+	local function rideAlongPath(session, player, egg, seconds)
+		local modules = shared(session)
+		local path, spec, startZ = eggPath(session, egg)
+		for _ = 1, math.ceil(seconds * 30) do
+			session:heartbeat(1 / 30)
+			local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
+			session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, z))
+		end
 	end
 
 	-- Drops an egg of a chosen rarity and returns its EggSpawned message.
@@ -72,27 +100,61 @@ return function(harness)
 	end
 
 	describe("Server: starting up", function()
-		it("builds the placeholder map", function()
+		it("builds the map: zones with banks and gates, and every obstacle", function()
 			local session = startServer()
 			local map = session:service("Workspace"):FindFirstChild("Map")
 			expect.truthy(map, "Workspace.Map")
 			expect.truthy(map.Hub:IsA("Part"))
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
+			local runway = shared(session).Runway
 			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
-				expect.truthy(zone.Ground:IsA("Part"))
+				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height.
+				local tiles = 0
+				for _, tile in zone.Ground:GetChildren() do
+					if tile.Size.X == 20 and tile.Size.Z == 20 then
+						tiles += 1
+						expect.near(tile.CFrame.Position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
+					end
+				end
+				expect.equal(tiles, (runway.WIDTH / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
+				expect.truthy(#zone.Banks:GetChildren() > 50, zoneName .. " banks")
+				expect.truthy(#zone.Backdrop:GetChildren() > 0, zoneName .. " backdrop")
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
 			end
-			-- The Forest slab starts level with the hub and ends 24 studs lower (600 studs at a 4% slope).
-			local runway = shared(session).Runway
-			expect.near(map.Hub.Position.Y, runway.BASE_Y - 2)
-			expect.near(map.Forest.Ground.Size.X, runway.WIDTH)
-			expect.near(map.Forest.Ground.Size.Z, 600 / math.cos(math.atan(0.04)), 1e-3)
 			expect.equal(map.Desert.Sign.SurfaceGui.TextLabel.Text, "DESERT")
+			expect.near(map.Hub.Position.Y, runway.BASE_Y - 2)
+
+			-- One model per obstacle, tagged for the client; the ones that go off carry the parts it animates.
+			local Obstacles = shared(session).Obstacles
+			expect.equal(#map.Obstacles:GetChildren(), #Obstacles.all())
+			for _, model in map.Obstacles:GetChildren() do
+				local obstacle = Obstacles.get(model:GetAttribute("ObstacleId"))
+				expect.equal(model:GetAttribute("Kind"), obstacle.kind)
+				expect.truthy(#model:GetChildren() > 0, obstacle.kind .. " has parts")
+				if obstacle.kind == "SandGeyser" or obstacle.kind == "LavaVent" then
+					expect.truthy(model:FindFirstChild("Burst"), obstacle.kind .. " burst")
+					expect.truthy(model.Vent.WarnPoint.Warn:IsA("ParticleEmitter"), obstacle.kind .. " warning")
+				elseif obstacle.kind == "GiantClam" then
+					expect.truthy(model:FindFirstChild("Lid") and model:FindFirstChild("Shell"), "clam")
+				end
+			end
+			expect.truthy(session:service("Lighting"):FindFirstChildOfClass("Atmosphere"), "haze")
 			expect.equal(session:service("Players").RespawnTime, 2)
 			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
+		end)
+
+		it("rolls a lineup at sunrise and tells everyone about its rarest eggs", function()
+			local session = startServer()
+			session:heartbeat(1 / 60)
+			local spawned = session:sent("EggSpawned", "all")
+			expect.equal(#spawned, 6, "the first egg of each zone's lineup")
+			-- The Prehistoric zone only has Epic eggs and up, so its lineup always has something to announce.
+			local announced = session:lastSent("Announce", "all")
+			expect.truthy(announced, "announcement")
+			expect.truthy(string.find(announced.args[1], "^Sunrise! Rolling today: "), announced.args[1])
 		end)
 
 		it("creates every remote", function()
@@ -265,15 +327,89 @@ return function(harness)
 			local egg = mount(session, player, root, 1, "Common")
 
 			session:heartbeat(0.5)
-			session:fromClient("RideLateral", player, egg.lateral + 4)
-			local relayed = session:lastSent("EggLateral", "all")
-			expect.truthy(relayed, "EggLateral")
-			expect.equal(relayed.args[1], egg.id)
-			expect.near(relayed.args[2], egg.lateral + 4, 1e-6)
+			session:fromClient("RideLateral", player, egg.lateral * 0.9)
+			local first = session:lastSent("EggLateral", "all")
+			expect.truthy(first, "EggLateral")
+			expect.equal(first.args[1], egg.id)
+
+			-- A move towards the middle, well within the rider's Agility, is relayed exactly.
+			session:heartbeat(0.5)
+			local target = first.args[2] - 3 * (if first.args[2] >= 0 then 1 else -1)
+			session:fromClient("RideLateral", player, target)
+			expect.near(session:lastSent("EggLateral", "all").args[2], target, 1e-6)
 
 			-- Reports arriving faster than 30 a second are dropped.
-			session:fromClient("RideLateral", player, egg.lateral + 5)
-			expect.equal(#session:sent("EggLateral", "all"), 1)
+			session:fromClient("RideLateral", player, target + 1)
+			expect.equal(#session:sent("EggLateral", "all"), 2)
+		end)
+
+		it("checks the obstacle hits a rider reports, and kills riders who hit lava", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			runwayService(session).SetMaxStamina(player, 1e9)
+			local modules = shared(session)
+			local lava
+			for _, obstacle in modules.Obstacles.all() do
+				if obstacle.kind == "LavaPool" then
+					lava = obstacle
+					break
+				end
+			end
+
+			-- Get on a Volcano egg a few seconds before it reaches the lava pool.
+			local egg = dropEgg(session, 5, "Rare")
+			local path, spec, startZ = eggPath(session, egg)
+			local arrive = egg.spawnTime + (lava.z - startZ) / spec.rollSpeed
+			while session.clock < arrive - 3 do
+				session:heartbeat(1 / 10)
+			end
+			root.Position = eggPosition(session, egg) + roblox.Vector3.new(0, 2, 0)
+			session:fromClient("RequestMount", player, egg.id)
+			session:heartbeat(1 / 60)
+			expect.truthy(session:lastSent("RideStarted", player), "riding")
+
+			-- A report from far away, or of nonsense, is ignored.
+			session:fromClient("ReportHit", player, lava.id)
+			session:fromClient("ReportHit", player, "nonsense")
+			session:heartbeat(1 / 60)
+			expect.equal(#session:sent("ObstacleHit", player), 0)
+
+			-- Steer into the pool once past the row before it (the server only lets the egg move as fast as the
+			-- rider's Agility allows), and report the hit as soon as the egg touches it.
+			while session.clock < arrive - 0.6 do
+				session:heartbeat(1 / 30)
+				local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
+				local steer = if session.clock > arrive - 2.2 then lava.x else modules.Obstacles.lateralAt(path, z)
+				session:fromClient("RideLateral", player, steer)
+			end
+			session:fromClient("ReportHit", player, lava.id)
+			session:heartbeat(1 / 60)
+			local hit = session:lastSent("ObstacleHit", player)
+			expect.truthy(hit, "ObstacleHit")
+			expect.equal(hit.args[1], lava.id)
+			expect.equal(hit.args[2], "Lethal")
+			expect.equal(session:lastSent("RideEnded", player).args[1], "Hazard")
+			expect.equal(humanoid.Health, 0)
+		end)
+
+		it("burns players who walk into lava", function()
+			local session = startServer()
+			local _, humanoid, root = session:addPlayer(1, "Tester")
+			local modules = shared(session)
+			local lava
+			for _, obstacle in modules.Obstacles.all() do
+				if obstacle.kind == "LavaPool" then
+					lava = obstacle
+					break
+				end
+			end
+			root.Position = roblox.Vector3.new(lava.x + lava.hx + 4, modules.Runway.BASE_Y + 3, lava.z)
+			task.wait(0.4)
+			expect.equal(humanoid.Health, 100, "safe beside it")
+			root.Position = roblox.Vector3.new(lava.x, modules.Runway.BASE_Y + 3, lava.z)
+			task.wait(0.4)
+			expect.equal(humanoid.Health, 0)
 		end)
 
 		it("frees the egg when its rider dies or hops off", function()
@@ -303,11 +439,11 @@ return function(harness)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = dropEgg(session, 6, "Eternal")
 
-			-- Wait until the egg is too close to the end to be claimed, then get on.
+			-- Wait until the egg is too close to the end to be claimed, then get on, and steer clear of everything.
 			session:heartbeat(0.5, 20)
 			root.Position = eggPosition(session, egg)
 			session:fromClient("RequestMount", player, egg.id)
-			session:heartbeat(0.5, 40)
+			rideAlongPath(session, player, egg, 20)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "Cliff")
 			expect.equal(humanoid.Health, 0)
 		end)

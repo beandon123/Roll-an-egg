@@ -17,10 +17,18 @@ Tuning.DRAIN_FRACTION = 0.8
 Tuning.EGG_BASE_RADIUS = 3
 -- How much longer the egg is (side to side) than its rolling diameter.
 Tuning.EGG_LENGTH_RATIO = 1.3
--- Seconds before an egg nobody has jumped on fades out.
-Tuning.EGG_UNRIDDEN_LIFETIME = 60
--- Target number of eggs alive per zone; sets the drop rate.
+-- How many eggs each zone rolls for its lineup at sunrise (the start of each cycle). Each lineup egg rolls from
+-- its zone's chute to a quarter of the way into the next zone (Runway.fadeZ), fades out, and drops from the chute
+-- again, over and over until the runway closes. One that is claimed or cracks comes back on its next lap.
 Tuning.EGGS_PER_ZONE = 8
+-- Seconds between lineup eggs leaving the chute at sunrise.
+Tuning.LINEUP_LAUNCH_GAP = 5
+-- Mid-cycle drops: now and then a zone drops an extra egg that rolls once and fades. It is rolled like a lineup egg,
+-- except that every rarity from WILD_RARE_FROM up is WILD_RARE_ODDS times as likely.
+Tuning.WILD_DROP_INTERVAL = 30
+Tuning.WILD_DROP_MAX = 3
+Tuning.WILD_RARE_ODDS = 0.1
+Tuning.WILD_RARE_FROM = "Secret"
 -- Studs past the start of its zone where an egg lands.
 Tuning.EGG_SPAWN_OFFSET = 12
 -- Eggs drop in from above when they spawn.
@@ -48,6 +56,18 @@ Tuning.HOP_COMBO_WINDOW = 1.0
 Tuning.HOP_COMBO_REFUND = 0.10
 -- How often the rider's client reports its sideways position (per second).
 Tuning.LATERAL_SEND_RATE = 10
+
+-- Obstacles (see Config/Obstacles)
+-- Stamina a Bump costs, as a fraction of the egg's stamina requirement.
+Tuning.BUMP_STAMINA = 0.1
+-- The rider's device spots hits; the server accepts its report if the egg was near the obstacle within this many
+-- seconds of when the report arrived.
+Tuning.HIT_REPORT_SLACK = 0.75
+-- The server also checks on its own, but it only knows where the rider steered a moment ago, so it counts a hit
+-- only when the egg is this many studs into the obstacle (a near miss on the rider's screen is not a hit).
+Tuning.HIT_BACKUP_INSET = 4
+-- How much the rider's device forgives a graze, in studs.
+Tuning.HIT_GRAZE = 0.6
 
 -- Characters
 Tuning.RESPAWN_TIME = 2

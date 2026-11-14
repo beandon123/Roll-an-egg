@@ -18,10 +18,12 @@ local EVENTS = {
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
 	"RideEnded", -- (reason, { eggId, zone, rarity, kind })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
+	"ObstacleHit", -- (obstacleId, tier, lateral): the rider's egg hit an obstacle (Shared/Obstacles)
 	"InventoryUpdated", -- (eggCount)
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
+	"ReportHit", -- (obstacleId): the rider's device saw their egg hit an obstacle
 	"DevCommand", -- (command) Studio only
 }
 

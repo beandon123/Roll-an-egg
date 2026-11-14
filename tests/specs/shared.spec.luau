@@ -34,6 +34,22 @@ return function(harness)
 			expect.equal(CycleClock.getState(180 * 8).phase, "Open")
 		end)
 
+		it("makes each cycle one day: sunrise as it begins, night before it ends", function()
+			local start = 180 * 12
+			expect.equal(CycleClock.clockTime(start), CycleClock.SUNRISE)
+			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION / 2), 12)
+			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION), CycleClock.SUNSET)
+			-- Midnight comes halfway through the night, and the runway closes before dawn.
+			local nightLength = 180 * (1 - CycleClock.DAY_FRACTION)
+			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
+			expect.truthy(CycleClock.clockTime(start + CycleClock.CLOSE_AT) < CycleClock.SUNRISE)
+			expect.near(CycleClock.clockTime(start + 179.999), CycleClock.SUNRISE, 1e-3)
+
+			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION / 2), 1)
+			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
+			expect.near(CycleClock.daylight(start), 0.5)
+		end)
+
 		it("schedules each event once an hour, 30 minutes apart", function()
 			local titans, avalanches = 0, 0
 			for index = 0, 39 do
@@ -54,11 +70,12 @@ return function(harness)
 	end)
 
 	describe("Runway", function()
-		it("is flat at the hub and slopes down along the runway", function()
+		it("is level and wide all the way from the hub to the end", function()
 			expect.equal(Runway.surfaceY(-50), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(0), Runway.BASE_Y)
-			expect.near(Runway.surfaceY(100), Runway.BASE_Y - 4)
-			expect.near(Runway.surfaceY(Runway.LENGTH + 500), Runway.BASE_Y - Runway.SLOPE * Runway.LENGTH)
+			expect.equal(Runway.surfaceY(1800), Runway.BASE_Y)
+			expect.equal(Runway.surfaceY(Runway.LENGTH), Runway.BASE_Y)
+			expect.equal(Runway.WIDTH, 120)
 		end)
 
 		it("knows which zone a position is in", function()

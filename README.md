@@ -7,20 +7,28 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway and riding**.
 
-- A placeholder map: the hub, six zone slabs (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) and their signs.
-- Eggs drop in every zone and roll down the runway. Rarity sets their size, speed and stamina requirement.
+- The map: the hub, then a level, 120-stud-wide runway through six zones (Forest, Desert, Snow, Ocean, Volcano,
+  Prehistoric), each with its own checkered ground, stepped cliffs (a boardwalk over a reef in the Ocean), plants
+  and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)).
+- Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that roll down the
+  runway lap after lap; now and then an extra egg drops mid-cycle. Rarity sets their size, speed and stamina
+  requirement. Rolling eggs kick up dust.
+- Zone-themed obstacles on the runway. Eggs nobody is riding steer round them; riders have to steer clear
+  themselves, or get bumped, thrown off, or burned.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated
   (see below). Pets do not hatch or roam yet.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
-- The 3-minute runway cycle: a warning, then a 10-second closure that clears every egg without a rider.
+- The 3-minute runway cycle: a warning, then a 10-second closure before dawn that clears every egg without a
+  rider.
 - Claimed eggs are saved to the player's data (ProfileStore).
 - A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
 
-The eggs have their real look; everything else visual is still a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
-pets and mounts, coins and upgrades, teleport pads, server events, the tutorial, and all final art and sound.
+The eggs, pets and runway have their real look; the hub and plots are still placeholders made of plain parts. Not
+built yet: duels, plots and pens, hatching, pets and mounts, coins and upgrades, teleport pads, server events, the
+tutorial, and all sound.
 
 ## Try it in Roblox Studio
 
@@ -59,6 +67,56 @@ In Studio a small panel appears on the right of the screen. Its buttons only wor
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
 - **Drop each egg here**: drops each of the zone's 8 eggs in turn.
 - **Show this zone's pets**: stands the pets of the zone you are in (those with models so far) in front of you.
+
+## The runway
+
+The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`).
+
+**Eggs.** Each runway cycle (3 minutes) is one day (`src/shared/CycleClock.luau`): the sun rises as a cycle
+begins, night falls 70% of the way through, and the runway closes for the last 10 seconds before dawn. At sunrise
+every zone rolls a lineup of 8 eggs with its usual odds. They leave the zone's chute 5 seconds apart, roll to a
+quarter of the way into the next zone (the last zone's roll to the end cliff), fade out, and drop from the chute
+again, lap after lap, until the runway closes. A lineup egg that is claimed or cracks comes back on its next lap.
+About every 30 seconds a zone also drops an extra, mid-cycle egg that rolls once; Secret and Eternal eggs are 10
+times rarer mid-cycle than at sunrise. A ridden egg rolls on past its fade line until its rider leaves it. The
+numbers are in `src/shared/Config/Tuning.luau`; the rules are in `src/server/Logic/RunwaySim.luau`.
+
+**Obstacles.** Each zone has its own obstacles in rows across the runway, laid out from a fixed seed so every
+server and player gets the same runway (`src/shared/Obstacles.luau`; kinds, sizes and mixes in
+`src/shared/Config/Obstacles.luau`). Every row leaves a gap wide enough for the biggest egg. What happens to the
+rider of an egg that hits one:
+
+| Zone | Bump (stamina lost, egg knocked aside) | Knock-off (thrown off, egg loses a bounce) | Lethal (rider dies) |
+| --- | --- | --- | --- |
+| Forest | fallen logs, stumps, bushes, toadstools | boulders, trees | |
+| Desert | cacti, tumbleweeds, skulls | sandstone rocks, sand geysers* | |
+| Snow | snowdrifts, snowmen | pines, ice boulders | |
+| Ocean | coral, barrels | sea rocks, giant clams* | |
+| Volcano | obsidian spikes | basalt columns, smoking rocks | lava pools, lava vents* |
+| Prehistoric | giant ferns, dinosaur skulls | giant ribcages, mossy boulders | tar pits |
+
+\* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell), then a burst
+or a snap. They are harmless in between. A Bump costs 10% of the egg's stamina requirement. Players on foot walk
+round the solid ones and die in lava and tar.
+
+An egg nobody is riding steers round every obstacle on its own, along a path worked out the same way on the server
+and on every device. A ridden egg goes where its rider steers. The rider's device spots a hit at once and reports
+it; the server checks the report, and also catches hits on its own when an egg is well inside an obstacle.
+
+**The look** (`src/server/Map/`): `Scenery` builds each zone's checkered ground (blending into the next zone's
+colours), stepped cliffs that players cannot climb (in the Ocean, a railed boardwalk over a reef with islets and a
+lighthouse), the zone's plants and rocks on the banks, distant hills, mesas, mountains or volcanoes, and the gate.
+`ObstacleModels` builds each obstacle, in the same blocky style as the eggs and pets, sized to the footprint the
+rules use. The client adds the dust behind rolling eggs (`EggController`), animates the obstacles that go off
+(`ObstacleController`), and runs the day and night (`DayNightController`).
+
+To look at the map without opening Studio:
+
+```bash
+lune run tools/map-preview
+```
+
+Then open `tools/out/map-preview.html` in a browser: buttons along the top jump to each zone, drag to look round.
 
 ## Egg models
 
@@ -151,12 +209,14 @@ src/shared/            ReplicatedStorage.Shared: config and math used by both se
   Config/                Zones, rarities, tuning numbers. Change game balance here.
 src/server/            ServerScriptService.Server
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
+  Map/                   Builds the look of the runway: zone scenery and obstacle models
   Services/              Connect the rules to players, saved data, the map, and remotes
 src/client/            StarterPlayerScripts.Client
   Controllers/           Egg drawing, riding, HUD updates
   Ui/                    The Fusion HUD
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
+                       map-preview.luau: a web page that shows the map in 3D;
                        export-models.luau: every pet and egg as Studio model files (.rbxm)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```
