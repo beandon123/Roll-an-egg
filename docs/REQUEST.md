@@ -231,8 +231,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
       (Titan/Robux eggs set per egg)
     - [ ] Hatching continues offline at normal speed; 30x during each runway closure while you're in a server (decided);
           that works out to ~2.6x faster while online (e.g., Legendary ~17 min)
-- [ ] Hatching is manual (decided): when an egg's timer finishes, it waits, ready, in the pen; nothing hatches on its own (not built yet: today eggs hatch
-      by themselves when the timer ends)
+- [ ] Hatching is manual (decided): when an egg's timer finishes, it waits, ready, in the pen; nothing hatches on its
+      own (not built yet: today eggs hatch by themselves when the timer ends)
     - [ ] Open it in the pen (walk up to it and press Open), or from anywhere in the Growing Eggs menu (see UI/UX)
     - [ ] Hatch animation + rarity reveal when you open it
 - [ ] Skipping growth with Robux (decided): Skip on one growing egg (at the egg, or on its row in the Growing Eggs
