@@ -75,17 +75,17 @@ return function(harness)
 		end)
 
 		it("multiplies Max Stamina by the equipped trail", function()
-			local data = newData(100000)
+			local data = newData(1000000)
 			expect.equal(Stats.maxStamina(data), 100)
 			expect.equal(Stats.trailMultiplier(data), 1)
 			Stalls.buyTrail(data, "Leaf")
-			expect.near(Stats.maxStamina(data), 120)
+			expect.near(Stats.maxStamina(data), 150)
 			Stalls.buyTrail(data, "Frost")
-			expect.near(Stats.maxStamina(data), 300)
+			expect.near(Stats.maxStamina(data), 600)
 			-- On top of Max Stamina bought in the shop and its doublings.
 			data.MaxStaminaBonus = 400
 			data.StaminaMultiplier = 2
-			expect.near(Stats.maxStamina(data), 3000)
+			expect.near(Stats.maxStamina(data), 6000)
 			-- Old saves from before trails existed have no trail data at all.
 			expect.equal(Stats.maxStamina({ Dollars = 0 }), 100)
 		end)
@@ -95,8 +95,40 @@ return function(harness)
 			local function canClaim(trailId, requirement)
 				return 100 * Trails.ById[trailId].stamina >= requirement * 0.8
 			end
-			expect.truthy(canClaim("Frost", 350), "Frost holds a Forest Legendary")
+			expect.truthy(canClaim("Sandstorm", 350), "Sandstorm holds a Forest Legendary")
 			expect.truthy(canClaim("Bubble", 500), "Bubble holds a Desert Common")
+		end)
+
+		it("has nine trails, each dearer, stronger and fancier than the one before", function()
+			local Rarities = harness.load("src/shared/Config/Rarities")
+			expect.equal(#Trails.List, 9)
+			-- How much a trail has going on: a halo, particles (the more the fancier), a light, and its glow.
+			local function fanciness(trail)
+				return (if trail.halo then 1 else 0)
+					+ (if trail.particles then 1 + trail.particles.rate / 100 else 0)
+					+ (if trail.light then 1 else 0)
+					+ trail.glow
+					+ trail.width / 10
+			end
+			local previous
+			for index, trail in Trails.List do
+				expect.equal(trail.level, index, trail.id)
+				expect.equal(Trails.ById[trail.id], trail)
+				expect.truthy(Rarities.Info[trail.rarity], trail.id .. " rarity")
+				expect.truthy(#trail.colors >= 2, trail.id .. " colours")
+				expect.truthy(trail.glow >= 0 and trail.glow <= 1, trail.id .. " glow")
+				if previous then
+					expect.truthy(trail.price > previous.price, trail.id .. " costs more")
+					expect.truthy(trail.stamina > previous.stamina, trail.id .. " boosts more")
+					expect.truthy(fanciness(trail) > fanciness(previous), trail.id .. " looks fancier")
+					local order, previousOrder = Rarities.Info[trail.rarity].order, Rarities.Info[previous.rarity].order
+					expect.truthy(order >= previousOrder, trail.id .. " is as rare or rarer")
+				end
+				previous = trail
+			end
+			expect.equal(Trails.List[1].halo, nil, "the first trail is a plain ribbon")
+			expect.equal(Trails.List[1].particles, nil)
+			expect.truthy(Trails.List[9].stamina >= 25, "the best trail boosts a lot")
 		end)
 	end)
 

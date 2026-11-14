@@ -800,6 +800,10 @@ local Scenery = {}
 
 Scenery.PALETTES = PALETTES
 
+-- Builds one scenery prop (a tree, bush, rock, flowers...) standing at `base`, about `size` studs across. Any kind
+-- from the zones' palettes, or any runway obstacle.
+Scenery.buildProp = buildProp
+
 function Scenery.buildZone(map: Instance, zoneId: number)
 	local zone = Zones.List[zoneId]
 	local palette = PALETTES[zoneId]

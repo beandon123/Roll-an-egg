@@ -79,10 +79,11 @@ local function addSignGui(sign: BasePart, face: Enum.NormalId)
 	textLabel(gui, "Text", "Free plot", UDim2.fromScale(1, 1), UDim2.new())
 end
 
--- A world CFrame on the ground at a point of a plot.
+-- A world CFrame on the ground at a point of a plot, turned with the plot: its X axis points inward (from the gate
+-- into the pen) and its Z axis runs along the fence, so part sizes can be given as (inward, height, along).
 local function ground(index: number, inward: number, along: number, height: number?): CFrame
 	local x, z = Plots.point(index, inward, along)
-	return CFrame.new(x, Runway.BASE_Y + 0.4 + (height or 0), z)
+	return CFrame.new(x, Runway.BASE_Y + 0.4 + (height or 0), z) * CFrame.Angles(0, Plots.yaw(index), 0)
 end
 
 ----------------------------------------------------------------------------------------------------------------

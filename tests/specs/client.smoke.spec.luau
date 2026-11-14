@@ -468,7 +468,7 @@ return function(harness)
 			local toast = hud(parts).Toast
 			expect.equal(toast.Text, "CLAIMED! +1 Leafy Egg")
 			expect.equal(toast.Visible, true)
-			expect.equal(hud(parts).Wallet.Eggs.Value.Text, "3")
+			expect.equal(hud(parts).Wallet.Eggs.Content.Value.Text, "3")
 		end)
 
 		it("stuns a rider who is thrown off", function()
@@ -1053,16 +1053,18 @@ return function(harness)
 		it("builds the HUD with Fusion", function()
 			local session, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Luck", "Tabs", "Wallet", "Toast", "Meters" } do
+			for _, name in { "Cycle", "Zone", "Luck", "Tabs", "Wallet", "DayNight", "Toast", "Meters" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
 			expect.truthy(root.Tabs.Shop and root.Tabs.Settings, "tabs")
-			expect.equal(root.Wallet.Eggs.Value.Text, "2")
-			expect.equal(root.Wallet.Dollars.Value.Text, "0")
-			expect.equal(root.Wallet.Stamina.Value.Text, "100")
+			expect.equal(root.Wallet.Eggs.Content.Value.Text, "2")
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$0")
+			expect.equal(root.Wallet.Dollars.Under.Text, "", "no income yet")
+			expect.equal(root.Wallet.Stamina.Content.Value.Text, "100")
 			session:fromServer("DollarsChanged", 1520, 12)
-			expect.equal(root.Wallet.Dollars.Value.Text, "1.52K  +12/s")
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$1.52K")
+			expect.equal(root.Wallet.Dollars.Under.Text, "+$12/s")
 			-- Nothing open, and no luck boost running.
 			expect.equal(root.ShopPanel.Visible, false)
 			expect.equal(root.SettingsPanel.Visible, false)
@@ -1117,6 +1119,23 @@ return function(harness)
 			expect.equal(claim.Visible, true)
 			expect.near(claim.Fill.Size.X.Scale, 0.25, 1e-3)
 			expect.equal(labelOf(claim).Text, "Epic Bear Egg  25%  - not enough stamina!")
+		end)
+
+		it("counts down to nightfall by day, and to sunrise by night, at the bottom right", function()
+			local session, parts = startClient()
+			local dayNight = hud(parts).DayNight
+			-- The stand-in clock starts 5 s into a cycle; night falls 126 s in.
+			session:renderFrame(1 / 60)
+			expect.equal(dayNight.Icon.Text, "🌙")
+			expect.equal(dayNight.Label.Text, "in 2m 1s")
+			session:renderFrame(1, 61)
+			expect.equal(dayNight.Label.Text, "in 1m")
+			session:renderFrame(1, 59)
+			expect.equal(dayNight.Label.Text, "in 1s")
+			-- Night: a sun and the time until the next sunrise, 54 s away.
+			session:renderFrame(1, 1)
+			expect.equal(dayNight.Icon.Text, "☀️")
+			expect.equal(dayNight.Label.Text, "in 54s")
 		end)
 
 		it("shows a running event and follows the runway cycle when admins move it on", function()
@@ -1447,9 +1466,22 @@ return function(harness)
 			local list = rows(panel)
 			local leaf = list.Leaf.Action
 			expect.equal(list.Leaf.TrailName.Text, "Leaf Trail")
-			expect.equal(list.Leaf.Boost.Text, "Max Stamina x1.2")
+			expect.truthy(string.find(list.Leaf.Boost.Text, "x1.5</font> Stamina", 1, true), list.Leaf.Boost.Text)
+			expect.truthy(string.find(list.Leaf.Level.Text, "^Lvl 1 .*Common"), list.Leaf.Level.Text)
+			expect.truthy(string.find(list.Rainbow.Level.Text, "^Lvl 9 .*Eternal"), list.Rainbow.Level.Text)
+			-- Nine cards, each with a picture of its trail; the plain first trail has no particles in it.
+			local cards = 0
+			for _, child in list:GetChildren() do
+				if child:IsA("Frame") and child:FindFirstChild("Picture") then
+					cards += 1
+				end
+			end
+			expect.equal(cards, 9)
+			expect.truthy(list.Leaf.Picture:FindFirstChild("Ribbon"), "the ribbon")
+			expect.falsy(list.Leaf.Picture:FindFirstChild("Speck1"), "no particles")
+			expect.truthy(list.Rainbow.Picture:FindFirstChild("Halo") and list.Rainbow.Picture.Speck1, "the works")
 			expect.equal(buttonText(leaf), "$100")
-			expect.equal(buttonText(list.Rainbow.Action), "$2.5M")
+			expect.equal(buttonText(list.Rainbow.Action), "$750M")
 			local tooExpensive = leaf.Face.BackgroundColor3
 
 			session:fromServer("DollarsChanged", 600, 0)
@@ -1459,8 +1491,8 @@ return function(harness)
 			session:fromServer("TrailsUpdated", { "Leaf" }, "Leaf")
 			session:renderFrame(1 / 60)
 			expect.equal(buttonText(leaf), "Equipped")
-			expect.equal(buttonText(list.Sunbeam.Action), "$500")
-			expect.equal(list.Footer.Text, "You have $600.  Trail boost: Max Stamina x1.2")
+			expect.equal(buttonText(list.Sunbeam.Action), "$1K")
+			expect.equal(panel.Footer.Text, "You have $600.  Trail boost: Max Stamina x1.5")
 
 			session:fromServer("TrailsUpdated", { "Leaf", "Sunbeam" }, "Sunbeam")
 			session:renderFrame(1 / 60)
@@ -1484,7 +1516,7 @@ return function(harness)
 
 			click(session, list.Sunbeam.Action)
 			expect.equal(session:lastSent("BuyTrail", "server").args[1], "Sunbeam")
-			expect.equal(hud(parts).Toast.Text, "Sunbeam Trail equipped! Stamina x1.5")
+			expect.equal(hud(parts).Toast.Text, "Sunbeam Trail equipped! Stamina x2")
 
 			click(session, list.Rainbow.Action)
 			expect.equal(hud(parts).Toast.Text, "Not enough dollars")
@@ -1592,12 +1624,12 @@ return function(harness)
 			local root = hud(parts)
 			local chips = root.ShopPanel.Body.Sections
 			local featuredColor = chips.Featured.Face.BackgroundColor3
-			session:fire(root.Wallet.Dollars.Add, "Activated")
+			session:fire(root.Wallet.Dollars.Content.Add, "Activated")
 			expect.equal(root.ShopPanel.Visible, true)
 			task.wait(0.1)
 			expect.truthy(chips.Dollars.Face.BackgroundColor3 ~= chips.Luck.Face.BackgroundColor3, "Dollars chip lit")
 			expect.truthy(chips.Featured.Face.BackgroundColor3 ~= featuredColor, "Featured chip no longer lit")
-			expect.falsy(root.Wallet.Eggs:FindFirstChild("Add"), "eggs cannot be bought")
+			expect.falsy(root.Wallet.Eggs.Content:FindFirstChild("Add"), "eggs cannot be bought")
 		end)
 
 		it("lists every item with its price, and asks the server to buy it", function()
@@ -1635,12 +1667,12 @@ return function(harness)
 				startClient(nil, { shop = { dollars = 12500, penLevel = 3, passes = {}, luck = {} } })
 			local root = hud(parts)
 			local pen = shopBody(parts).Featured.PenUpgrade
-			expect.equal(root.Wallet.Dollars.Value.Text, "12.5K")
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$12.5K")
 			expect.equal(pen.Current.Level.Text, "LEVEL 3")
 			expect.equal(buttonText(pen.Buttons.BuyDollars), "30K")
 
 			session:fromServer("PlayerStateUpdated", { dollars = 0, penLevel = 9, passes = { "DoubleDollars" } })
-			expect.equal(root.Wallet.Dollars.Value.Text, "0")
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$0")
 			expect.equal(pen.Headline.Text, "YOUR PEN IS MAXED!")
 			expect.equal(pen.Buttons.Visible, false)
 			expect.equal(pen.Next.Visible, false)

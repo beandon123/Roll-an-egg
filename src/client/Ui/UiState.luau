@@ -31,6 +31,10 @@ local UiState = {
 	cyclePhase = scope:Value("Open"),
 	cycleSeconds = scope:Value(0),
 
+	-- Day or night (each runway cycle is one day), and whole seconds until that changes.
+	isDay = scope:Value(true),
+	dayNightSeconds = scope:Value(0),
+
 	zoneName = scope:Value("Hub"),
 	-- The server event running now ("Avalanche"), or nil.
 	serverEvent = scope:Value(nil :: string?),

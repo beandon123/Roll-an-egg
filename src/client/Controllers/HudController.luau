@@ -35,6 +35,9 @@ local function update()
 	UiState.serverEvent:set(if typeof(event) == "string" then event else nil)
 	UiState.cyclePhase:set(cycle.phase)
 	UiState.cycleSeconds:set(math.ceil(if cycle.phase == "Closed" then cycle.untilNextCycle else cycle.untilClose))
+	local isDay, untilChange = CycleClock.dayNight(now)
+	UiState.isDay:set(isDay)
+	UiState.dayNightSeconds:set(math.ceil(untilChange))
 
 	-- Server luck: the strongest running boost and the time it has left.
 	local luck, luckEndsAt = LuckBoost.current(UiState.luckBoosts, now)

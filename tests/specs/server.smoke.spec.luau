@@ -2052,26 +2052,27 @@ return function(harness)
 			expect.near(gap, shared(session).Runway.WIDTH, 1e-6)
 		end)
 
-		it("rings the hub with low-poly mountains that nothing collides with", function()
+		it("rings the hub with terraced cliffs, a column of solid steps at a time", function()
 			local session = startServer()
 			local layout = layoutOf(session)
 			local scenery = session:service("Workspace").Map.Scenery
-			local models = scenery.Mountains:GetChildren()
-			expect.equal(#models, #layout.MOUNTAINS)
-			local wedges, triangles = 0, 0
+			local models = scenery.Cliffs:GetChildren()
+			expect.equal(#models, #layout.TERRACES / layout.TERRACE_TIERS)
+			local stones, grass = 0, 0
 			for _, model in models do
+				expect.equal(model.ModelStreamingMode, roblox.Enum.ModelStreamingMode.Atomic)
 				for _, part in model:GetChildren() do
-					expect.truthy(part:IsA("WedgePart"), part.ClassName)
-					expect.equal(part.CanCollide, false)
-					expect.equal(part.Anchored, true)
-					wedges += 1
+					if part.Name == "Stone" then
+						stones += 1
+						expect.equal(part.CanCollide, true, "players cannot walk into the cliffs")
+						expect.equal(part.Anchored, true)
+					elseif part.Name == "Grass" then
+						grass += 1
+					end
 				end
 			end
-			for _, mountain in layout.MOUNTAINS do
-				triangles += #layout.mountainTriangles(mountain)
-			end
-			-- Two wedges a face (a sliver is occasionally skipped).
-			expect.truthy(wedges <= triangles * 2 and wedges >= triangles * 1.9, `{wedges} wedges, {triangles} faces`)
+			expect.equal(stones, #layout.TERRACES, "a stone block a step")
+			expect.equal(grass, #layout.TERRACES, "grass on every step")
 			-- The outer ground sits just below the hub, so the two never flicker.
 			local outer = scenery.OuterGround
 			local top = outer.CFrame.Position.Y + outer.Size.Y / 2
@@ -2180,14 +2181,14 @@ return function(harness)
 			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local data = session.profiles.Player_1.Data
-			data.Dollars = 1000
+			data.Dollars = 2000
 
 			local ok, result = invoke(session, "BuyTrail", player, "Leaf")
 			expect.equal(ok, true)
 			expect.equal(result, "BoughtAndEquipped")
-			expect.equal(data.Dollars, 900)
-			expect.equal(session:lastSent("DollarsChanged", player).args[1], 900)
-			expect.near(session:lastSent("StaminaChanged", player).args[4], 120)
+			expect.equal(data.Dollars, 1900)
+			expect.equal(session:lastSent("DollarsChanged", player).args[1], 1900)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 150)
 			local trails = session:lastSent("TrailsUpdated", player)
 			expect.equal(trails.args[1][1], "Leaf")
 			expect.equal(trails.args[2], "Leaf")
@@ -2203,7 +2204,7 @@ return function(harness)
 			session:heartbeat(0.3)
 			ok = invoke(session, "BuyTrail", player, "Sunbeam")
 			expect.equal(ok, true)
-			expect.near(session:lastSent("StaminaChanged", player).args[4], 150)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 200)
 			local trailCount = 0
 			for _, child in root:GetChildren() do
 				if child.Name == "StaminaTrailTop" then
@@ -2216,14 +2217,53 @@ return function(harness)
 			ok, result = invoke(session, "EquipTrail", player, "Leaf")
 			expect.equal(ok, true)
 			expect.equal(result, "Equipped")
-			expect.near(session:lastSent("StaminaChanged", player).args[4], 120)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 150)
 
 			session:heartbeat(0.3)
 			expect.equal(select(2, invoke(session, "EquipTrail", player, "Frost")), "NotOwned")
 			session:heartbeat(0.3)
 			expect.equal(select(2, invoke(session, "BuyTrail", player, "Rainbow")), "NotEnoughDollars")
 			expect.equal(select(2, invoke(session, "BuyTrail", player, 42)), "Invalid")
-			expect.equal(data.Dollars, 400)
+			expect.equal(data.Dollars, 900)
+		end)
+
+		it("draws the fancier trails with a halo, particles and a light, and clears them for a plain one", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			data.Dollars = 3000000
+
+			-- The Leaf Trail is a plain ribbon.
+			invoke(session, "BuyTrail", player, "Leaf")
+			expect.truthy(root.StaminaTrailTop.Trail, "ribbon")
+			expect.falsy(root:FindFirstChild("StaminaTrailHaloTop"), "no halo")
+			expect.falsy(root:FindFirstChild("StaminaTrailFx"), "no particles or light")
+
+			-- The Ember Trail has the lot.
+			session:heartbeat(0.3)
+			expect.equal(select(2, invoke(session, "BuyTrail", player, "Ember")), "BoughtAndEquipped")
+			local ember = session:require(session:service("ReplicatedStorage").Shared.Config.Trails).ById.Ember
+			local top, bottom = root.StaminaTrailTop, root.StaminaTrailBottom
+			expect.near(top.Position.Y - bottom.Position.Y, ember.width, 1e-6, "ribbon as tall as the trail says")
+			expect.near(top.Trail.Lifetime, ember.lifetime, 1e-6)
+			expect.near(top.Trail.LightEmission, ember.glow, 1e-6)
+			local halo = root.StaminaTrailHaloTop.Halo
+			expect.equal(halo.Attachment1, root.StaminaTrailHaloBottom)
+			expect.truthy(root.StaminaTrailHaloTop.Position.Y > top.Position.Y, "the halo is wider")
+			local particles = root.StaminaTrailFx.Particles
+			expect.truthy(particles:IsA("ParticleEmitter"))
+			expect.equal(particles.Rate, ember.particles.rate)
+			expect.equal(particles.Texture, "rbxasset://textures/particles/fire_main.dds")
+			expect.truthy(root.StaminaTrailFx.Glow:IsA("PointLight"))
+
+			-- Back to the Leaf Trail: the extras go.
+			session:heartbeat(0.3)
+			invoke(session, "EquipTrail", player, "Leaf")
+			expect.falsy(root:FindFirstChild("StaminaTrailHaloTop"), "halo removed")
+			expect.falsy(root:FindFirstChild("StaminaTrailHaloBottom"), "halo removed")
+			expect.falsy(root:FindFirstChild("StaminaTrailFx"), "particles removed")
+			expect.equal(#root.StaminaTrailTop:GetChildren(), 1, "one ribbon")
 		end)
 
 		it("stacks a trail's boost on Max Stamina bought in the shop", function()
@@ -2235,7 +2275,7 @@ return function(harness)
 			invoke(session, "BuyTrail", player, "Leaf")
 			session:fromClient("RequestPurchase", player, "Stamina1")
 			session:heartbeat(1 / 60)
-			expect.near(session:lastSent("StaminaChanged", player).args[4], 600 * 1.2)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 600 * 1.5)
 		end)
 
 		it("keeps the trail's boost after respawning and rejoining", function()
@@ -2261,7 +2301,7 @@ return function(harness)
 			player.Parent = nil
 			local again = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
-			expect.near(session:lastSent("StaminaChanged", again).args[4], 120)
+			expect.near(session:lastSent("StaminaChanged", again).args[4], 150)
 			expect.equal(session:lastSent("TrailsUpdated", again).args[2], "Leaf")
 		end)
 	end)

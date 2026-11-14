@@ -25,17 +25,25 @@ return function(harness)
 	local OPEN = 180 * 500 + 30
 
 	describe("Plots", function()
-		it("fits eight plots in the hub, either side of the plaza, clear of each other", function()
+		it("fits eight plots in the hub, four across the back and two down each side, clear of each other", function()
 			local boxes = {}
+			local rows = { Back = 0, Left = 0, Right = 0 }
 			for index = 1, Plots.COUNT do
-				local x, z = Plots.center(index)
-				local box = {
-					x - Plots.WIDTH / 2,
-					x + Plots.WIDTH / 2,
-					z - Plots.DEPTH / 2,
-					z + Plots.DEPTH / 2,
-				}
-				expect.truthy(math.abs(x) - Plots.WIDTH / 2 >= Plots.PLAZA_HALF_WIDTH - 1e-6, "beside the plaza")
+				local x, z, sizeX, sizeZ = Plots.rect(index)
+				local box = { x - sizeX / 2, x + sizeX / 2, z - sizeZ / 2, z + sizeZ / 2 }
+				local row = Plots.rowOf(index)
+				rows[row] += 1
+				if row == "Back" then
+					-- Gates facing the runway, across the back of the hub.
+					expect.near(box[4], Plots.BACK_GATE_Z, 1e-6, "gate side faces the plaza")
+					expect.near(sizeX, Plots.DEPTH)
+					expect.near(sizeZ, Plots.WIDTH)
+				else
+					-- Gates facing across the plaza, in front of the back row's gates.
+					expect.truthy(math.abs(x) - sizeX / 2 >= Plots.PLAZA_HALF_WIDTH - 1e-6, "beside the plaza")
+					expect.truthy(box[3] >= Plots.BACK_GATE_Z + 40, "clear of the back row's gates")
+					expect.equal(row, if x < 0 then "Left" else "Right")
+				end
 				expect.truthy(box[1] >= -Runway.HUB_WIDTH / 2 and box[2] <= Runway.HUB_WIDTH / 2, "in the hub")
 				expect.truthy(box[3] >= -Runway.HUB_LENGTH and box[4] <= 0, "behind the runway")
 				for _, other in boxes do
@@ -43,6 +51,13 @@ return function(harness)
 					expect.truthy(apart, "plots overlap")
 				end
 				table.insert(boxes, box)
+			end
+			expect.equal(rows.Back, 4)
+			expect.equal(rows.Left, 2)
+			expect.equal(rows.Right, 2)
+			-- The back row comes first, so the first players to join face the runway.
+			for index = 1, 4 do
+				expect.equal(Plots.rowOf(index), "Back")
 			end
 		end)
 
@@ -62,13 +77,22 @@ return function(harness)
 			expect.falsy(Plots.inPen(1, -2, 0, 0), "in the plaza")
 		end)
 
-		it("turns points of a plot to the world and back, the same on both sides of the plaza", function()
-			for _, index in { 1, 6 } do
+		it("turns points of a plot to the world and back, whichever way the plot faces", function()
+			for index = 1, Plots.COUNT do
 				local x, z = Plots.point(index, 25, -10)
 				local inward, along = Plots.toLocal(index, x, z)
 				expect.near(inward, 25)
 				expect.near(along, -10)
-				expect.truthy(math.abs(x) > Plots.PLAZA_HALF_WIDTH, "in from the plaza")
+				local frame = Plots.frame(index)
+				if Plots.rowOf(index) == "Back" then
+					expect.truthy(z < Plots.BACK_GATE_Z, "in from the plaza, away from the runway")
+				else
+					expect.truthy(math.abs(x) > Plots.PLAZA_HALF_WIDTH, "in from the plaza")
+				end
+				-- The yaw turns +X to point inward.
+				local yaw = Plots.yaw(index)
+				expect.near(math.cos(yaw), frame.inX, 1e-9)
+				expect.near(-math.sin(yaw), frame.inZ, 1e-9)
 			end
 		end)
 
@@ -77,13 +101,21 @@ return function(harness)
 				for _, level in { 1, Plots.MAX_LEVEL } do
 					local x0, x1, z0, z1 = Plots.roamArea(index, level, 5)
 					expect.truthy(x0 < x1 and z0 < z1)
-					for _, x in { x0, x1 } do
-						local inward = Plots.toLocal(index, x, z0)
+					for _, corner in { { x0, z0 }, { x1, z0 }, { x0, z1 }, { x1, z1 } } do
+						local inward, along = Plots.toLocal(index, corner[1], corner[2])
 						expect.truthy(inward >= 5 - 1e-6 and inward <= Plots.penWidth(level) - 5 + 1e-6, "inside")
+						expect.truthy(math.abs(along) <= Plots.DEPTH / 2 - 5 + 1e-6, "inside along")
 					end
 				end
-				local sx = Plots.spawnPoint(index)
-				expect.truthy(math.abs(sx) < Plots.PLAZA_HALF_WIDTH, "spawn in the plaza")
+				-- The spawn is just outside the gate, and nobody's plot.
+				local sx, sz = Plots.spawnPoint(index)
+				local inward = Plots.toLocal(index, sx, sz)
+				expect.truthy(inward < 0, "spawn outside the gate")
+				for other = 1, Plots.COUNT do
+					local x, z, sizeX, sizeZ = Plots.rect(other)
+					local inside = math.abs(sx - x) < sizeX / 2 and math.abs(sz - z) < sizeZ / 2
+					expect.falsy(inside, `plot {index}'s spawn is in plot {other}`)
+				end
 				expect.truthy(Plots.BUTTON_SPOT[1] < 0, "button in front of the fence")
 				expect.truthy(math.abs(Plots.BUTTON_SPOT[2]) > Plots.GATE_HALF_WIDTH + 3, "beside the gate")
 			end

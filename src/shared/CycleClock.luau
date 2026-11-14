@@ -96,6 +96,17 @@ function CycleClock.clockTime(serverTime: number): number
 	return hours % 24
 end
 
+-- Whether it is daytime at a moment, and the seconds until that changes: until sunset during the day, until the
+-- next sunrise (the next cycle) at night. The HUD shows this as a moon or a sun and "in 1m 20s".
+function CycleClock.dayNight(serverTime: number): (boolean, number)
+	local state = CycleClock.getState(serverTime)
+	local sunset = CycleClock.CYCLE_LENGTH * CycleClock.DAY_FRACTION
+	if state.elapsed < sunset then
+		return true, sunset - state.elapsed
+	end
+	return false, state.untilNextCycle
+end
+
 -- How bright the day is, from 0 (the middle of the night) to 1 (noon), for lighting that follows the sun.
 function CycleClock.daylight(serverTime: number): number
 	local hours = CycleClock.clockTime(serverTime)

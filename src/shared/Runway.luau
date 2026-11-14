@@ -21,8 +21,9 @@ Runway.BASE_Y = 10
 -- An egg rolls on past the end of its own zone and fades out this far into the next one (a fraction of a zone).
 Runway.FADE_INTO_NEXT = 0.25
 
--- The hub behind the start of the runway: a plaza with the players' plots down both sides (see Shared/Plots).
-Runway.HUB_LENGTH = 400
+-- The hub behind the start of the runway: a plaza with the players' plots across its back and down its sides (see
+-- Shared/Plots).
+Runway.HUB_LENGTH = 440
 Runway.HUB_WIDTH = 440
 
 -- Gaps in the banks down the sides: a player on foot who wanders through one falls off the runway. Eggs never do,

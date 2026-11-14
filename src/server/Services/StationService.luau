@@ -26,9 +26,74 @@ local REQUEST_COOLDOWN = 0.2
 local MAX_SELL_COUNT = 10000
 local MAX_KIND_LENGTH = 64
 
--- Names of what is added to a character's HumanoidRootPart to draw its trail.
+-- Names of what is added to a character's HumanoidRootPart to draw its trail: the ribbon's two edges, the halo
+-- ribbon's two edges, and the point the particles and light come from.
 local TRAIL_TOP = "StaminaTrailTop"
 local TRAIL_BOTTOM = "StaminaTrailBottom"
+local HALO_TOP = "StaminaTrailHaloTop"
+local HALO_BOTTOM = "StaminaTrailHaloBottom"
+local TRAIL_FX = "StaminaTrailFx"
+local TRAIL_PARTS = { TRAIL_TOP, TRAIL_BOTTOM, HALO_TOP, HALO_BOTTOM, TRAIL_FX }
+-- The ribbon is centred a little below the middle of the root part, between the shoulders and the knees.
+local TRAIL_CENTER_Y = -0.3
+
+-- How each kind of trail particle looks and moves: Roblox's own textures, so nothing has to be uploaded.
+local PARTICLE_STYLES = {
+	Dust = {
+		texture = "rbxasset://textures/particles/smoke_main.dds",
+		life = { 0.8, 1.4 },
+		speed = { 1, 2.5 },
+		grow = 2.5,
+		glow = 0,
+		lift = 0.5,
+		fade = 0.45,
+	},
+	Bubble = {
+		texture = "rbxasset://textures/particles/smoke_main.dds",
+		life = { 1.2, 2 },
+		speed = { 0.5, 1.5 },
+		grow = 1.4,
+		glow = 0.6,
+		lift = 3,
+		fade = 0.3,
+	},
+	Sparkle = {
+		texture = "rbxasset://textures/particles/sparkles_main.dds",
+		life = { 0.8, 1.4 },
+		speed = { 0.5, 2 },
+		grow = 0,
+		glow = 1,
+		lift = -0.5,
+		fade = 0.1,
+	},
+	Ember = {
+		texture = "rbxasset://textures/particles/fire_main.dds",
+		life = { 0.5, 1 },
+		speed = { 1, 3 },
+		grow = 0,
+		glow = 1,
+		lift = 5,
+		fade = 0.15,
+	},
+	Spark = {
+		texture = "rbxasset://textures/particles/sparkles_main.dds",
+		life = { 0.25, 0.5 },
+		speed = { 6, 11 },
+		grow = 0,
+		glow = 1,
+		lift = 0,
+		fade = 0,
+	},
+	Star = {
+		texture = "rbxasset://textures/particles/sparkles_main.dds",
+		life = { 1, 1.8 },
+		speed = { 0.3, 1.2 },
+		grow = 0,
+		glow = 1,
+		lift = 0.3,
+		fade = 0,
+	},
+}
 
 local StationService = {}
 
@@ -72,7 +137,95 @@ local function colorSequence(colors: { { number } }): ColorSequence
 	return ColorSequence.new(keypoints)
 end
 
--- Draws the player's equipped trail behind their character (or removes it if none is equipped).
+local function addAttachment(root: BasePart, name: string, y: number): Attachment
+	local attachment = Instance.new("Attachment")
+	attachment.Name = name
+	attachment.Position = Vector3.new(0, y, 0)
+	attachment.Parent = root
+	return attachment
+end
+
+local function rgb(color: { number }): Color3
+	return Color3.fromRGB(color[1], color[2], color[3])
+end
+
+-- A ribbon left behind between two attachments.
+local function ribbon(top: Attachment, bottom: Attachment, info: Trails.TrailInfo, halo: boolean): Trail
+	local trail = Instance.new("Trail")
+	trail.Name = if halo then "Halo" else "Trail"
+	trail.Attachment0 = top
+	trail.Attachment1 = bottom
+	trail.MinLength = 0.1
+	if halo then
+		-- Wider, fainter and shorter, glowing round the ribbon.
+		trail.Color = ColorSequence.new(rgb(info.halo :: { number }))
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		trail.Lifetime = info.lifetime * 0.75
+		trail.LightEmission = 1
+	else
+		trail.Color = colorSequence(info.colors)
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.7, 0.45),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		trail.Lifetime = info.lifetime
+		trail.LightEmission = info.glow
+	end
+	trail.WidthScale = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0.25),
+	})
+	trail.Parent = top
+	return trail
+end
+
+local function particles(fx: Attachment, info: Trails.TrailInfo)
+	local spec = info.particles
+	if spec == nil then
+		return
+	end
+	local style = PARTICLE_STYLES[spec.kind]
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Particles"
+	emitter.Texture = style.texture
+	emitter.Color = colorSequence(spec.colors)
+	emitter.LightEmission = style.glow
+	emitter.Rate = spec.rate
+	emitter.Lifetime = NumberRange.new(style.life[1], style.life[2])
+	emitter.Speed = NumberRange.new(style.speed[1], style.speed[2])
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.Acceleration = Vector3.new(0, style.lift, 0)
+	emitter.Drag = 2
+	emitter.RotSpeed = NumberRange.new(-90, 90)
+	emitter.Rotation = NumberRange.new(0, 360)
+	if style.grow > 0 then
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, spec.size),
+			NumberSequenceKeypoint.new(1, spec.size * style.grow),
+		})
+	else
+		-- Twinkling: grows in, then shrinks away.
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.25, spec.size),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	end
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, style.fade),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	-- Particles stay where they were shed, so they trail behind a moving character.
+	emitter.LockedToPart = false
+	emitter.Parent = fx
+end
+
+-- Draws the player's equipped trail behind their character (or removes it if none is equipped): its ribbon, and
+-- for the fancier trails a halo ribbon, particles and a light.
 local function applyTrail(player: Player)
 	local data = DataService.GetData(player)
 	local character = player.Character
@@ -81,7 +234,7 @@ local function applyTrail(player: Player)
 		return
 	end
 
-	for _, name in { TRAIL_TOP, TRAIL_BOTTOM } do
+	for _, name in TRAIL_PARTS do
 		local old = root:FindFirstChild(name)
 		if old then
 			old:Destroy()
@@ -93,33 +246,28 @@ local function applyTrail(player: Player)
 		return
 	end
 
-	-- A ribbon between the shoulders and the knees, left behind as the character moves.
-	local top = Instance.new("Attachment")
-	top.Name = TRAIL_TOP
-	top.Position = Vector3.new(0, 1, 0)
-	top.Parent = root
-	local bottom = Instance.new("Attachment")
-	bottom.Name = TRAIL_BOTTOM
-	bottom.Position = Vector3.new(0, -1.6, 0)
-	bottom.Parent = root
-
-	local trail = Instance.new("Trail")
-	trail.Name = "Trail"
-	trail.Attachment0 = top
-	trail.Attachment1 = bottom
-	trail.Color = colorSequence(info.colors)
-	trail.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.15),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	trail.WidthScale = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(1, 0.3),
-	})
-	trail.Lifetime = 0.6
-	trail.MinLength = 0.1
-	trail.LightEmission = 0.5
-	trail.Parent = top
+	local half = info.width / 2
+	local top = addAttachment(root, TRAIL_TOP, TRAIL_CENTER_Y + half)
+	local bottom = addAttachment(root, TRAIL_BOTTOM, TRAIL_CENTER_Y - half)
+	ribbon(top, bottom, info, false)
+	if info.halo then
+		local haloTop = addAttachment(root, HALO_TOP, TRAIL_CENTER_Y + half * 1.45)
+		local haloBottom = addAttachment(root, HALO_BOTTOM, TRAIL_CENTER_Y - half * 1.45)
+		ribbon(haloTop, haloBottom, info, true)
+	end
+	if info.particles or info.light then
+		local fx = addAttachment(root, TRAIL_FX, TRAIL_CENTER_Y)
+		particles(fx, info)
+		if info.light then
+			local glow = Instance.new("PointLight")
+			glow.Name = "Glow"
+			glow.Color = rgb(info.light)
+			glow.Range = 10
+			glow.Brightness = 1.2
+			glow.Shadows = false
+			glow.Parent = fx
+		end
+	end
 end
 
 ----------------------------------------------------------------------------------------------------------------

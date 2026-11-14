@@ -1,7 +1,7 @@
 --!nocheck
 -- Checks the hub layout (Shared/HubLayout): the stations fit in the plaza without overlapping each other, the
--- spawn, the start zone or the players' plots (Shared/Plots), and the mountains ring the hub without spilling onto
--- it or the runway.
+-- spawn, the start zone or the players' plots (Shared/Plots), and the terraced cliffs ring the hub without spilling
+-- onto the plots, the stations or the runway.
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
@@ -18,8 +18,8 @@ return function(harness)
 	local function plotRects()
 		local rects = {}
 		for index = 1, Plots.COUNT do
-			local x, z = Plots.center(index)
-			table.insert(rects, { x = x, z = z, sizeX = Plots.WIDTH, sizeZ = Plots.DEPTH })
+			local x, z, sizeX, sizeZ = Plots.rect(index)
+			table.insert(rects, { x = x, z = z, sizeX = sizeX, sizeZ = sizeZ })
 		end
 		return rects
 	end
@@ -103,93 +103,158 @@ return function(harness)
 		end)
 	end)
 
-	describe("Hub mountains", function()
-		local mountains = HubLayout.MOUNTAINS
+	describe("Hub cliffs", function()
+		local terraces = HubLayout.TERRACES
+		local tiers = HubLayout.TERRACE_TIERS
 
-		it("builds the same ring every time", function()
-			local again = HubLayout.generateMountains()
-			expect.equal(#again, #mountains)
-			for index, mountain in mountains do
-				expect.equal(again[index].x, mountain.x)
-				expect.equal(again[index].seed, mountain.seed)
-			end
-			local first = HubLayout.mountainTriangles(mountains[1])
-			local second = HubLayout.mountainTriangles(mountains[1])
-			expect.equal(first[5].a[1], second[5].a[1])
-		end)
+		local function corners(rect)
+			local minX, maxX, minZ, maxZ = HubLayout.bounds(rect)
+			return { { x = minX, z = minZ }, { x = maxX, z = minZ }, { x = maxX, z = maxZ }, { x = minX, z = maxZ } }
+		end
 
-		it("has big mountains with smaller hills in front of them", function()
-			local big, small = 0, 0
-			for _, mountain in mountains do
-				if mountain.big then
-					big += 1
-					expect.truthy(mountain.height >= 140, "big mountain height")
-				else
-					small += 1
+		-- Whether two convex outlines overlap (more than `slack` studs), by looking for a line that separates them.
+		local function overlap(a, b, slack)
+			for _, shape in { a, b } do
+				for index = 1, #shape do
+					local p, q = shape[index], shape[index % #shape + 1]
+					local nx, nz = q.z - p.z, p.x - q.x
+					local length = math.sqrt(nx * nx + nz * nz)
+					nx, nz = nx / length, nz / length
+					local function span(points)
+						local low, high = math.huge, -math.huge
+						for _, point in points do
+							local d = point.x * nx + point.z * nz
+							low, high = math.min(low, d), math.max(high, d)
+						end
+						return low, high
+					end
+					local aLow, aHigh = span(a)
+					local bLow, bHigh = span(b)
+					if aHigh <= bLow + slack or bHigh <= aLow + slack then
+						return false
+					end
 				end
 			end
-			expect.truthy(big >= 12, "big mountains: " .. big)
-			expect.truthy(small >= 10, "hills: " .. small)
+			return true
+		end
+
+		-- How far a point is from a convex outline (0 inside it: on the same side of every edge).
+		local function distanceTo(point, shape)
+			local left, right = false, false
+			local nearest = math.huge
+			for index = 1, #shape do
+				local p, q = shape[index], shape[index % #shape + 1]
+				local ex, ez = q.x - p.x, q.z - p.z
+				local cross = ex * (point.z - p.z) - ez * (point.x - p.x)
+				if cross > 0 then
+					left = true
+				elseif cross < 0 then
+					right = true
+				end
+				local t = math.clamp(((point.x - p.x) * ex + (point.z - p.z) * ez) / (ex * ex + ez * ez), 0, 1)
+				local dx, dz = point.x - (p.x + ex * t), point.z - (p.z + ez * t)
+				nearest = math.min(nearest, math.sqrt(dx * dx + dz * dz))
+			end
+			return if left and right then nearest else 0
+		end
+
+		it("builds the same cliffs every time", function()
+			local again = HubLayout.generateTerraces()
+			expect.equal(#again, #terraces)
+			for index, terrace in terraces do
+				expect.equal(again[index].x, terrace.x)
+				expect.equal(again[index].height, terrace.height)
+				expect.equal(again[index].seed, terrace.seed)
+			end
 		end)
 
-		it("never spills onto the hub or the runway", function()
-			for index, mountain in mountains do
-				local widest = mountain.groundRadius * (1 + HubLayout.MOUNTAIN_ROUGHNESS)
-				for _, rect in HubLayout.MOUNTAIN_KEEP_OUT do
-					local room = HubLayout.distanceToRect(mountain.x, mountain.z, rect)
-					expect.truthy(room >= widest + HubLayout.MOUNTAIN_CLEARANCE - 1e-6, "mountain " .. index)
+		it("climbs in tiers, each step further out and higher than the one below it", function()
+			expect.equal(#terraces % tiers, 0)
+			expect.truthy(#terraces / tiers >= 60, "columns of steps all round: " .. #terraces / tiers)
+			local highest = 0
+			for start = 1, #terraces, tiers do
+				local offset, height = 0, 0
+				for tier = 1, tiers do
+					local terrace = terraces[start + tier - 1]
+					expect.equal(terrace.tier, tier)
+					expect.near(terrace.offset, offset, 1e-6, "steps sit side by side")
+					expect.truthy(terrace.height >= height + 12, "each step at least 12 studs higher")
+					expect.truthy(terrace.depth >= 14 and terrace.length > 0, "a step deep enough to see")
+					offset += terrace.depth
+					height = terrace.height
+				end
+				highest = math.max(highest, height)
+				expect.truthy(height >= 100, "a high crest")
+			end
+			expect.truthy(highest >= 130, "the crest rises to " .. highest)
+		end)
+
+		it("never spills onto the plots, the stations, the spawn, the start zone or the runway", function()
+			local keepOut = {}
+			for index, rect in plotRects() do
+				table.insert(keepOut, { name = "plot " .. index, outline = corners(rect) })
+			end
+			for _, thing in plazaThings() do
+				table.insert(keepOut, { name = thing.name, outline = corners(thing.rect) })
+			end
+			for index, rect in HubLayout.CLIFF_KEEP_OUT do
+				table.insert(keepOut, { name = "runway " .. index, outline = corners(rect) })
+			end
+			for index, terrace in terraces do
+				local outline = HubLayout.terraceCorners(terrace)
+				for _, thing in keepOut do
+					expect.falsy(
+						overlap(outline, thing.outline, 0),
+						`cliff {index} (tier {terrace.tier}) on {thing.name}`
+					)
 				end
 			end
 		end)
 
-		it("surrounds the hub on both sides and at the back", function()
-			-- Walk round the hub's sides and back and make sure a mountain rises close by everywhere. (At the front,
-			-- beside the runway, the first zone's banks and backdrop rise instead.)
+		it("rings the hub on both sides and at the back, with no gaps", function()
+			-- The foot of the cliffs is unbroken: each block of the lowest step touches the next.
+			local feet = {}
+			for _, terrace in terraces do
+				if terrace.tier == 1 then
+					table.insert(feet, HubLayout.terraceCorners(terrace))
+				end
+			end
+			for index = 2, #feet do
+				expect.truthy(overlap(feet[index - 1], feet[index], -0.5), "gap in the foot of the cliffs at " .. index)
+			end
+
+			-- Walk round the hub's sides and back: the cliffs are right there everywhere, except in the back corners,
+			-- which they round off. (At the front, beside the runway, the first zone's banks and backdrop rise instead.)
 			local half, length = HubLayout.HALF_WIDTH, HubLayout.LENGTH
+			local radius = HubLayout.CLIFF_CORNER_RADIUS
 			local edge = {}
 			for z = 0, -length, -10 do
-				table.insert(edge, { -half, z })
-				table.insert(edge, { half, z })
+				table.insert(edge, { x = -half - 1, z = z })
+				table.insert(edge, { x = half + 1, z = z })
 			end
 			for x = -half, half, 10 do
-				table.insert(edge, { x, -length })
+				table.insert(edge, { x = x, z = -length - 1 })
 			end
 			for _, point in edge do
 				local nearest = math.huge
-				for _, mountain in mountains do
-					local dx, dz = mountain.x - point[1], mountain.z - point[2]
-					nearest = math.min(nearest, math.sqrt(dx * dx + dz * dz) - mountain.groundRadius)
+				for _, outline in feet do
+					nearest = math.min(nearest, distanceTo(point, outline))
 				end
-				expect.truthy(nearest < 40, `gap in the mountains near ({point[1]}, {point[2]}): {nearest}`)
+				local inCorner = point.z < -length + radius and math.abs(point.x) > half - radius
+				local allowed = if inCorner then radius * (math.sqrt(2) - 1) + 2 else 2
+				expect.truthy(nearest < allowed, `gap in the cliffs near ({point.x}, {point.z}): {nearest}`)
 			end
 		end)
 
-		it("shapes each mountain from its base up to its peak", function()
-			local snowy = 0
-			for index, mountain in mountains do
-				local triangles = HubLayout.mountainTriangles(mountain)
-				local rings = if mountain.big then 5 else 3
-				expect.equal(#triangles, rings * mountain.sides, "faces of mountain " .. index)
-				local lowest, highest = math.huge, -math.huge
-				for _, triangle in triangles do
-					for _, point in { triangle.a, triangle.b, triangle.c } do
-						for axis = 1, 3 do
-							expect.truthy(point[axis] == point[axis] and math.abs(point[axis]) < 1e5, "finite point")
-						end
-						lowest = math.min(lowest, point[2])
-						highest = math.max(highest, point[2])
-					end
-					expect.truthy(triangle.shade > 0.85 and triangle.shade < 1.1, "shade")
-					if triangle.band == "Snow" then
-						snowy += 1
-						expect.truthy(mountain.big and mountain.height >= 170, "snow only on tall mountains")
-					end
+		it("runs the scenery ground under all of the cliffs", function()
+			local minX, maxX, minZ, maxZ = HubLayout.bounds(HubLayout.OUTER_GROUND)
+			for _, terrace in terraces do
+				for _, corner in HubLayout.terraceCorners(terrace) do
+					local slack = 0.5
+					expect.truthy(corner.x >= minX - slack and corner.x <= maxX + slack, "x " .. corner.x)
+					expect.truthy(corner.z >= minZ - slack and corner.z <= maxZ + slack, "z " .. corner.z)
 				end
-				-- The base is buried below the hub's ground, and the peak is the top.
-				expect.near(lowest, Runway.BASE_Y - mountain.sink, 1e-6)
-				expect.near(highest, Runway.BASE_Y + mountain.height, 1e-6)
 			end
-			expect.truthy(snowy > 0, "some snowy peaks")
 		end)
 	end)
 end

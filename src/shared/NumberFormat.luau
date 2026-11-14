@@ -56,4 +56,15 @@ function NumberFormat.duration(seconds: number): string
 	return `{whole}s`
 end
 
+-- A short countdown, as on the day and night timer: "45s", "1m 20s", "2m".
+function NumberFormat.countdown(seconds: number): string
+	local whole = math.max(0, math.ceil(seconds))
+	if whole < 60 then
+		return `{whole}s`
+	elseif whole % 60 == 0 then
+		return `{whole // 60}m`
+	end
+	return `{whole // 60}m {whole % 60}s`
+end
+
 return NumberFormat

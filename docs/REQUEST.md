@@ -113,29 +113,41 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
     - [ ] Trails stall on the left and Sell stall on the right (seen from the start zone), facing each other across
           the path near the start zone (built; the reference's "Auras" stall became the Trails stall, "Sell Dinos"
           became just "Sell")
-    - [ ] Fuse machine in the middle, between and behind the two stalls (a golden "?" egg on a pedestal) (built)
-    - [ ] The 8 plots down both sides of the plaza, 4 a side, gates facing the plaza (built; an earlier layout had
-          3 a side and 2 at the back)
-    - [ ] Large low-poly mountains surround the hub on both sides and at the back; the way out is the runway (built)
+    - [ ] Fuse machine in the middle, behind the two stalls, in front of the back row of pens (a golden "?" egg in a
+          glass chamber) (built)
+    - [ ] The 8 plots (decided, built): 4 across the back of the plaza, gates facing the runway, and 2 down each
+          side, gates facing across the plaza (earlier layouts had 4 a side, and 3 a side with 2 at the back)
+    - [ ] Terraced cliffs surround the hub on both sides and at the back, like the owner's reference: five rounded
+          tiers of pale stone, each topped with thick grass hanging over its edge, with bushes, rocks and trees on
+          the ledges; the way out is the runway (decided, built; they replaced sharp low-poly mountains)
 - [ ] Each station opens its panel from a prompt (tap on mobile, E on keyboard, X on gamepad); walking away closes it
       (built)
-- [ ] Final art for the stalls, fuse machine and mountains (placeholder parts for now)
+- [ ] Final art for the stalls and fuse machine (built from parts: market booths with decks, carved posts, striped
+      awnings with pennants, framed signs, lanterns and themed displays; a glass-chamber fuse machine on gold-trimmed
+      steps with gears, lamp pillars and glowing pads)
 
 ### Hub Stations
 - [ ] Trails stall (decided; built): buy trails with dollars; the equipped trail streams behind your character and
       multiplies your Max Stamina while equipped
     - [ ] Bought once, kept for good; one equipped at a time; a newly bought trail is equipped unless the current one
           boosts more (proposed)
-    - [ ] First-pass trails (proposed; tune with the economy):
+    - [ ] Nine trails (decided), from simple to spectacular, each boosting more; prices are first-pass (tune with
+          the economy):
 
-          Trail       Price    Max Stamina
-          Leaf        $100     x1.2
-          Sunbeam     $500     x1.5
-          Sandstorm   $2.5K    x2
-          Frost       $15K     x3
-          Bubble      $75K     x4.5
-          Ember       $400K    x6
-          Rainbow     $2.5M    x8
+          Lvl  Trail       Rarity      Price    Max Stamina  Looks
+          1    Leaf        Common      $100     x1.5         a plain ribbon
+          2    Sunbeam     Common      $1K      x2           a glowing ribbon
+          3    Sandstorm   Uncommon    $7.5K    x3           + dust
+          4    Bubble      Uncommon    $50K     x4           + bubbles
+          5    Frost       Rare        $300K    x6           + a halo and snowflake sparkles
+          6    Ember       Epic        $2M      x9           + embers and a light
+          7    Thunder     Legendary   $15M     x13          + sparks
+          8    Galaxy      Mythic      $100M    x18          + stars
+          9    Rainbow     Eternal     $750M    x25          a wide rainbow, white halo, rainbow stars, light
+
+    - [ ] The stall's panel follows the owner's reference (the "Auras" panel, decided, built): a lavender header with
+          the title, a dark body, and a card per trail in a row that scrolls sideways, each in the trail's colours
+          with its name, "Lvl N" and rarity, a picture, "xN Stamina" on a dark strip, and a big green button
 
     - [ ] Trails stack with Max Stamina bought in the shop and its doublings (built: (base + bought) x doublings x
           trail)
@@ -421,16 +433,21 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
               Pteranodon and the Lava and Lunar Dragons)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
-- [ ] Map: hub (plaza with the start zone, Trails stall, Sell stall, fuse machine, the 8 plots down its sides,
-      ringed by mountains; see Hub) and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
+- [ ] Map: hub (plaza with the start zone, Trails stall, Sell stall, fuse machine, the 8 plots across its back and
+      down its sides, ringed by terraced cliffs; see Hub) and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
       -> Ocean (a causeway over a shallow reef) -> Volcano -> Prehistoric (ferns, tar pits, giant bones) -> end cliff; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
     - [ ] Built from parts in code, in the blocky style of the eggs and pets (done for the runway: checkered
           ground, stepped cliff banks, a railed boardwalk over a reef, zone plants and rocks, distant scenery,
-          gates; the hub and plots are still placeholders)
+          gates; and the hub: its stations and the terraced cliffs round it)
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, eggs in pens glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = dollars, stamina, inventory, growing eggs, shop, index, mount,
       Reset shortcut, runway-closing timer, next-event timer
+    - [ ] Wallet at the bottom left, like the owner's reference (decided, built): eggs, Max Stamina and dollars as big
+          outlined numbers on dark bands that fade out across the screen, green "+" buttons that open the shop, and
+          what the pen earns a second under the dollars
+    - [ ] Day and night clock at the bottom right, like the owner's reference (decided, built): by day a moon and the
+          time until night ("in 1m 20s"), by night a sun and the time until sunrise
     - [ ] Growing Eggs menu (decided): a scrolling list of every egg in your pen, each with its egg icon and either a
           progress bar with the time left or, once ready, an Open button; opens from a HUD button (today the Pets tab
           lists the eggs hatching, and they hatch on their own when the timer ends)
@@ -458,7 +475,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - Structure:
     - ReplicatedStorage/Shared: Config (zones, rarity tuning, stamina requirements, spawn odds per zone, hatch times,
       upgrade and teleport costs, trails, sell prices, obstacles, pets, events), HubLayout (where every station and
-      mountain is), Types, EggMotion (down-runway position from time + bounce
+      cliff is), Types, EggMotion (down-runway position from time + bounce
       events), Obstacles (layout from a fixed seed, riderless paths, hits, timing), DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
     - ServerScriptService/Server/Services: Data, Cycle, Runway, Zone, Teleport, Ride, Duel, Plot, Pen, Hatch, Pet,
       Fuse, Economy, Shop, Stations (trails + selling eggs), Quest, Event, Leaderboard, AntiCheat

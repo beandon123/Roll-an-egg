@@ -12,9 +12,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
   [The runway](#the-runway)). The banks down both sides are broken by gaps (marked with red strips) where a player
   on foot can fall off.
-- The hub's stations, in the plaza between the plots: the **Trails** stall (trails that stream behind you and
+- The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
   multiply your Max Stamina), the **Sell** stall (sell eggs you don't want), and the **fuse machine** (its panel
-  explains fusing; fusing itself is not switched on yet). Low-poly mountains ring the hub. See
+  explains fusing; fusing itself is not switched on yet). Terraced cliffs of pale stone and grass ring the hub. See
   [Hub stations](#hub-stations).
 - A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
   back to the players in the server when the store cannot be reached).
@@ -38,9 +38,11 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
   saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
-- The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge with Max Stamina, dollars (and what
-  your pen earns a second) and eggs under them (the "+" buttons open the shop at that section), the Eggs, Pets and
-  Ride tabs on the right edge, a timer while a server luck boost runs, and the stamina and claim meters (bottom).
+- The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with
+  what your pen earns a second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop
+  at that section), the Eggs, Pets and Ride tabs on the right edge, the day and night clock at the bottom right (a
+  moon and "in 1m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck
+  boost runs, and the stamina and claim meters (bottom centre).
 - **Shop** ("Coop Shop"): the next pen level for Robux or dollars (the same upgrade as the green button), x2 / x4
   server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
   Max Stamina, from x2 up to x1024), dollar packs, and the x2 Dollars pass (every pet in your pen earns double).
@@ -51,8 +53,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - An admin panel for testing (see below), and a Model Showroom far from the hub where every pet and egg stands on
   display.
 
-The eggs, pets, runway and plots have their real look; the hub's plaza is still plain and the UI uses emoji for
-icons. Not built yet: duels, other upgrades, offline earnings, teleport pads, the Titan Egg event, the tutorial, and
+The eggs, pets, runway, plots, hub stations and the cliffs round the hub have their real look; the UI uses emoji
+for icons. Not built yet: duels, other upgrades, offline earnings, teleport pads, the Titan Egg event, the tutorial, and
 all sound. The pet and comfort settings are saved for the systems that will read them.
 
 ## Try it in Roblox Studio
@@ -149,8 +151,8 @@ require(game.ServerScriptService.Server.Services.ShowroomService).MoveImportedMo
 Every egg you claim on the runway goes into your inventory. Open the **Eggs** tab on the right of the screen to see
 them, each with its rarity and how long it takes to hatch, and a 3D preview of the one you pick.
 
-**Your pen.** Your plot is one of 8 fenced pens at the hub, four down each side of the plaza, with your name over
-the gate (`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds
+**Your pen.** Your plot is one of 8 fenced pens at the hub, four across the back facing the runway and two down
+each side of the plaza, with your name over the gate (`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds
 them). It is open grass: walk in, stand anywhere and press **Place**, and the egg goes down just in front of you
 (not too close to another one), on a little straw bed with a countdown above it. A new pen hatches 2 eggs at once
 and holds 10 pets.
@@ -185,11 +187,33 @@ The rules are in `src/server/Logic/Hatchery.luau` and `src/shared/PetWorth.luau`
 
 Walk up to a station in the plaza and use its prompt (tap it, or press E): its panel opens in the middle of the
 screen, and closes again when you walk away. Where they stand is in `src/shared/HubLayout.luau`, along with the
-mountains round the hub; `src/server/Map/Stations.luau` and `src/server/Map/Mountains.luau` build them.
+terraced cliffs round the hub; `src/server/Map/Stations.luau` and `src/server/Map/Cliffs.luau` build them.
+
+The Trails and Sell stalls are market booths: a plank deck on a stone base, carved posts, a counter, a striped
+awning with pennants, a framed signboard and lanterns that light up at night. The Trails stall has a sample of every
+trail hanging on its back wall, glass cases with glowing orbs, and ribbons of light arching over its sign; the Sell
+stall has coin stacks, a balance, a money bag and crates of eggs. The fuse machine is a glass chamber on gold-trimmed
+steps with the golden "?" egg floating inside, gears, four lamp pillars and three glowing pads in front.
 
 - **Trails**: trails cost dollars, are kept for good, and one is equipped at a time. The equipped trail streams
-  behind your character and multiplies your Max Stamina (x1.2 for the $100 Leaf Trail up to x8 for the $2.5M Rainbow
-  Trail), on top of Max Stamina bought in the shop and its doublings. The list is in `src/shared/Config/Trails.luau`.
+  behind your character and multiplies your Max Stamina, on top of Max Stamina bought in the shop and its
+  doublings. There are nine, each dearer, stronger and fancier than the one before:
+
+  | Lvl | Trail | Rarity | Price | Max Stamina | Looks |
+  | --- | --- | --- | --- | --- | --- |
+  | 1 | Leaf | Common | $100 | x1.5 | a plain green ribbon |
+  | 2 | Sunbeam | Common | $1K | x2 | a glowing golden ribbon |
+  | 3 | Sandstorm | Uncommon | $7.5K | x3 | sand, kicking up dust |
+  | 4 | Bubble | Uncommon | $50K | x4 | aqua, trailing bubbles |
+  | 5 | Frost | Rare | $300K | x6 | ice, with a halo and snowflake sparkles |
+  | 6 | Ember | Epic | $2M | x9 | fire, with embers and a warm light |
+  | 7 | Thunder | Legendary | $15M | x13 | crackling blue-white, throwing sparks |
+  | 8 | Galaxy | Mythic | $100M | x18 | deep space, full of stars |
+  | 9 | Rainbow | Eternal | $750M | x25 | a wide rainbow with a white halo, rainbow stars and a light |
+
+  The stall's panel shows a card for each in a row that scrolls sideways: its name, level and rarity, a picture of
+  it streaming behind a runner, its boost, and a big button (its price, Equip, or Equipped). The list is in
+  `src/shared/Config/Trails.luau`; `StationService` draws them on characters.
 - **Sell**: sell 1 or all of a kind of egg from your inventory, for half its stamina requirement in dollars (a
   Forest Common egg sells for $25). Eggs already hatching in your pen are not for sale; pets sell from the Pets tab.
 - **Fuse machine**: three of the same pet go in, and an egg of that pet comes out, usually hatching a size bigger.
@@ -248,6 +272,16 @@ lune run tools/map-preview
 ```
 
 Then open `tools/out/map-preview.html` in a browser: buttons along the top jump to each zone, drag to look round.
+
+To look at the on-screen UI without opening Studio:
+
+```bash
+lune run tools/ui-preview trails
+```
+
+Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
+trails), `sell` and `shop`. It runs the game's own client scripts and draws their GUI objects in HTML: a close sketch,
+not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models
 
@@ -345,7 +379,7 @@ src/server/            ServerScriptService.Server
   Config/                Server-only settings: who the admins are
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
   Map/                   Builds the look of the map: zone scenery, obstacle models, the players' plots, the hub's
-                         stations and mountains
+                         stations and the cliffs round it
   Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
                          the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
@@ -356,6 +390,7 @@ src/client/            StarterPlayerScripts.Client
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        map-preview.luau: a web page that shows the map in 3D;
+                       ui-preview.luau: a web page that sketches the HUD and its panels;
                        export-models.luau: every pet and egg as Studio model files (.rbxm)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```

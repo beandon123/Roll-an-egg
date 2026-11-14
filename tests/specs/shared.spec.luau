@@ -52,6 +52,20 @@ return function(harness)
 			expect.near(CycleClock.daylight(start), 0.5)
 		end)
 
+		it("tells the HUD whether it is day, and how long until that changes", function()
+			local start = 180 * 12
+			local sunset = 180 * CycleClock.DAY_FRACTION
+			local isDay, untilChange = CycleClock.dayNight(start + 5)
+			expect.equal(isDay, true)
+			expect.near(untilChange, sunset - 5)
+			isDay, untilChange = CycleClock.dayNight(start + sunset)
+			expect.equal(isDay, false, "night falls at sunset")
+			expect.near(untilChange, 180 - sunset, 1e-9, "until the next sunrise")
+			isDay, untilChange = CycleClock.dayNight(start + CycleClock.CLOSE_AT + 2)
+			expect.equal(isDay, false, "still night while the runway is closed")
+			expect.near(untilChange, CycleClock.CLOSED_LENGTH - 2)
+		end)
+
 		it("schedules each event once an hour, 30 minutes apart", function()
 			local titans, avalanches = 0, 0
 			for index = 0, 39 do
@@ -192,6 +206,11 @@ return function(harness)
 			expect.equal(NumberFormat.clock(0), "0:00")
 			expect.equal(NumberFormat.clock(9.2), "0:10")
 			expect.equal(NumberFormat.clock(133), "2:13")
+			expect.equal(NumberFormat.countdown(0), "0s")
+			expect.equal(NumberFormat.countdown(44.2), "45s")
+			expect.equal(NumberFormat.countdown(60), "1m")
+			expect.equal(NumberFormat.countdown(80), "1m 20s")
+			expect.equal(NumberFormat.countdown(121), "2m 1s")
 		end)
 	end)
 

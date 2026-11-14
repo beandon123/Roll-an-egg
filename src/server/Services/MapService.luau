@@ -1,6 +1,6 @@
 -- Builds the map: the hub (PlotService adds the players' plots) with the painted START ZONE where the runway begins,
--- its stations (the Trails and Sell stalls and the fuse machine, Map/Stations) and the mountains round it
--- (Map/Mountains), then each zone's stretch of runway with its banks, backdrop and gate (Map/Scenery), and the
+-- its stations (the Trails and Sell stalls and the fuse machine, Map/Stations) and the terraced cliffs round it
+-- (Map/Cliffs), then each zone's stretch of runway with its banks, backdrop and gate (Map/Scenery), and the
 -- obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts
 -- (it reads positions from Shared/Runway and Shared/Obstacles), so changing how the map looks never breaks the rules.
 --
@@ -20,7 +20,7 @@ local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
-local Mountains = require(script.Parent.Parent.Map.Mountains)
+local Cliffs = require(script.Parent.Parent.Map.Cliffs)
 local Scenery = require(script.Parent.Parent.Map.Scenery)
 local Stations = require(script.Parent.Parent.Map.Stations)
 local RunwayService = require(script.Parent.RunwayService)
@@ -47,7 +47,7 @@ local function newPart(name: string, parent: Instance): Part
 end
 
 -- The hub: a stone plaza behind the start of the runway, with the spawn in the middle. PlotService adds the
--- players' plots down both sides.
+-- players' plots across its back and down its sides.
 local function buildHub(map: Instance)
 	local hub = newPart("Hub", map)
 	hub.Size = Vector3.new(Runway.HUB_WIDTH, SLAB_THICKNESS, Runway.HUB_LENGTH)
@@ -71,9 +71,16 @@ local function buildHub(map: Instance)
 	spawnPad.Size = Vector3.new(14, 1, 14)
 	spawnPad.CFrame = CFrame.new(0, Runway.BASE_Y + 0.5, -Runway.HUB_LENGTH / 2)
 	spawnPad.TopSurface = Enum.SurfaceType.Smooth
-	spawnPad.Material = Enum.Material.SmoothPlastic
-	spawnPad.Color = Color3.fromRGB(245, 245, 245)
+	spawnPad.Material = Enum.Material.Slate
+	spawnPad.Color = Color3.fromRGB(236, 222, 186)
 	spawnPad.Parent = map
+	-- A gold rim round it.
+	local rim = newPart("SpawnRim", map)
+	rim.Size = Vector3.new(15.6, 0.9, 15.6)
+	rim.CFrame = CFrame.new(0, Runway.BASE_Y + 0.45, -Runway.HUB_LENGTH / 2)
+	rim.Color = Color3.fromRGB(246, 196, 60)
+	rim.CanCollide = false
+	rim.CanQuery = false
 
 	-- Invisible walls round the edge, open only where the runway leaves.
 	local walls = Instance.new("Folder")
@@ -214,7 +221,7 @@ function MapService.Init()
 	buildHub(map)
 	buildStartZone(map)
 	Stations.build(map)
-	Mountains.build(map)
+	Cliffs.build(map)
 	for zoneId = 1, #Zones.List do
 		Scenery.buildZone(map, zoneId)
 	end

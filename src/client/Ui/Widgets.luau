@@ -75,6 +75,7 @@ function Widgets.text(scope, props)
 		AnchorPoint = props.AnchorPoint,
 		Position = props.Position,
 		Size = props.Size or UDim2.fromScale(1, 1),
+		AutomaticSize = props.AutomaticSize,
 		LayoutOrder = props.LayoutOrder,
 		Visible = props.Visible,
 		ZIndex = props.ZIndex,

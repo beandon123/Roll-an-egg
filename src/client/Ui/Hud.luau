@@ -1,8 +1,8 @@
 -- The on-screen HUD, built with Fusion. It only reads UiState; controllers change UiState and the HUD follows.
 --
 -- Layout (phones first): runway timer and zone top centre; luck boost top left; Shop and Settings tabs on the
--- left edge with the wallet under them; Eggs, Pets and Ride tabs on the right edge (Ui/Panels); stamina and claim
--- meters bottom centre. The Shop and Settings panels open in the middle over a dimmed backdrop.
+-- left edge; the wallet (Max Stamina, dollars, eggs) bottom left; Eggs, Pets and Ride tabs on the right edge
+-- (Ui/Panels); stamina and claim meters bottom centre; the day and night clock bottom right. The Shop and Settings panels open in the middle over a dimmed backdrop.
 
 local Workspace = game:GetService("Workspace")
 
@@ -143,61 +143,126 @@ local function tab(scope, props)
 	})
 end
 
--- One line of the wallet: an icon, a number, and (optionally) a "+" that opens the shop at `ShopSection`.
+-- A dark band that fades out across the screen, behind the wallet's rows and the day and night timer. `fromRight`
+-- makes it darkest at its right-hand end.
+local function fadeBand(scope, props)
+	return scope:New("Frame")({
+		Name = props.Name or "Band",
+		AnchorPoint = props.AnchorPoint,
+		Position = props.Position,
+		Size = props.Size,
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BorderSizePixel = 0,
+		ZIndex = 0,
+		[Children] = {
+			scope:New("UIGradient")({
+				Rotation = if props.fromRight then 180 else 0,
+				Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.3),
+					NumberSequenceKeypoint.new(0.55, 0.55),
+					NumberSequenceKeypoint.new(1, 1),
+				}),
+			}),
+			-- A fine light line along its top edge, fading the same way.
+			scope:New("Frame")({
+				Name = "Line",
+				Size = UDim2.new(1, 0, 0, 2),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				BorderSizePixel = 0,
+				[Children] = {
+					scope:New("UIGradient")({
+						Rotation = if props.fromRight then 180 else 0,
+						Transparency = NumberSequence.new({
+							NumberSequenceKeypoint.new(0, 0.35),
+							NumberSequenceKeypoint.new(1, 1),
+						}),
+					}),
+				},
+			}),
+		},
+	})
+end
+
+-- One row of the wallet at the bottom left: a big outlined number on a dark band, with an icon before it and (for
+-- stamina and dollars) a green "+" after it that opens the shop at `ShopSection`. `Under` is a small line of text
+-- below the number.
 local function walletRow(scope, props)
+	local height = props.Height or 52
 	return scope:New("Frame")({
 		Name = props.Name,
 		LayoutOrder = props.LayoutOrder,
-		Size = UDim2.fromOffset(250, 46),
-		BackgroundColor3 = Theme.CREAM,
+		Size = UDim2.fromOffset(300, height + (if props.Under then 16 else 0)),
+		BackgroundTransparency = 1,
 		[Children] = {
-			Widgets.round(scope),
-			Widgets.stroke(scope, 3),
-			props.Icon,
-			Widgets.text(scope, {
-				Name = "Value",
-				Position = UDim2.fromOffset(48, 0),
-				Size = UDim2.new(1, -96, 1, 0),
-				Text = props.Value,
-				TextScaled = true,
-				MaxTextSize = 26,
-				TextXAlignment = Enum.TextXAlignment.Left,
+			fadeBand(scope, { Size = UDim2.new(1, 0, 0, height) }),
+			scope:New("Frame")({
+				Name = "Content",
+				Size = UDim2.new(1, 0, 0, height),
+				BackgroundTransparency = 1,
+				[Children] = {
+					Widgets.padding(scope, 0, 14),
+					Widgets.list(scope, {
+						FillDirection = Enum.FillDirection.Horizontal,
+						Padding = 8,
+						VerticalAlignment = Enum.VerticalAlignment.Center,
+					}),
+					props.Icon,
+					Widgets.text(scope, {
+						Name = "Value",
+						LayoutOrder = 2,
+						Size = UDim2.fromOffset(0, height),
+						AutomaticSize = Enum.AutomaticSize.X,
+						Font = Theme.FONT,
+						Text = props.Value,
+						TextColor3 = Theme.WHITE,
+						TextSize = props.TextSize or 40,
+						Stroke = 3,
+						TextXAlignment = Enum.TextXAlignment.Left,
+					}),
+					if props.ShopSection
+						then Widgets.button(scope, {
+							Name = "Add",
+							LayoutOrder = 3,
+							Size = UDim2.fromOffset(44, 44),
+							Color = Theme.GREEN,
+							Deep = Theme.GREEN_DEEP,
+							Radius = UDim.new(0, 9),
+							Text = "+",
+							TextColor3 = Theme.WHITE,
+							TextSize = 36,
+							Stroke = 2.5,
+							OnActivated = function()
+								UiState.openShop(props.ShopSection)
+							end,
+						})
+						else nil,
+				},
 			}),
-			if props.ShopSection
-				then Widgets.button(scope, {
-					Name = "Add",
-					AnchorPoint = Vector2.new(1, 0.5),
-					Position = UDim2.new(1, 8, 0.5, 0),
-					Size = UDim2.fromOffset(44, 44),
-					Color = Theme.GREEN,
-					Deep = Theme.GREEN_DEEP,
-					Radius = UDim.new(0.5, 0),
-					Text = "+",
-					TextColor3 = Theme.WHITE,
-					TextSize = 32,
-					Stroke = 2.5,
-					OnActivated = function()
-						UiState.openShop(props.ShopSection)
-					end,
+			if props.Under
+				then Widgets.text(scope, {
+					Name = "Under",
+					Position = UDim2.fromOffset(20, height - 4),
+					Size = UDim2.new(1, -20, 0, 20),
+					Font = Theme.FONT,
+					Text = props.Under,
+					TextColor3 = props.UnderColor or Theme.WHITE,
+					TextSize = 18,
+					Stroke = 2,
+					TextXAlignment = Enum.TextXAlignment.Left,
 				})
 				else nil,
 		},
 	})
 end
 
--- An emoji in a white circle, for the left end of a wallet row.
-local function emojiIcon(scope, emoji: string)
-	return scope:New("Frame")({
+-- An emoji for the left end of a wallet row.
+local function emojiIcon(scope, emoji: string, size: number?)
+	return Widgets.text(scope, {
 		Name = "Icon",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, -6, 0.5, 0),
-		Size = UDim2.fromOffset(46, 46),
-		BackgroundColor3 = Theme.WHITE,
-		[Children] = {
-			Widgets.round(scope),
-			Widgets.stroke(scope, 3),
-			Widgets.text(scope, { Text = emoji, TextSize = 26 }),
-		},
+		LayoutOrder = 1,
+		Size = UDim2.fromOffset(size or 38, size or 38),
+		Text = emoji,
+		TextSize = (size or 38) - 6,
 	})
 end
 
@@ -336,7 +401,7 @@ function Hud.mount(playerGui: Instance)
 						Name = "Tabs",
 						AnchorPoint = Vector2.new(0, 0.5),
 						-- Pushed off the left edge so each tab's rounded end is hidden.
-						Position = UDim2.new(0, -26, 0.4, 0),
+						Position = UDim2.new(0, -26, 0.42, 0),
 						Size = UDim2.fromOffset(186, 140),
 						BackgroundTransparency = 1,
 						[Children] = {
@@ -360,18 +425,32 @@ function Hud.mount(playerGui: Instance)
 						},
 					}),
 
-					-- Under the tabs: Max Stamina, dollars (and what the pen earns a second), and eggs held. "+" opens
-					-- the shop at that section.
+					-- Bottom left: Max Stamina and dollars (with what the pen earns a second under them), and the eggs held,
+					-- each a big number on a dark band. "+" opens the shop at that section.
 					scope:New("Frame")({
 						Name = "Wallet",
-						Position = UDim2.new(0, 18, 0.4, 92),
-						Size = UDim2.fromOffset(250, 160),
+						AnchorPoint = Vector2.new(0, 1),
+						Position = UDim2.new(0, 0, 1, -12),
+						Size = UDim2.fromOffset(300, 200),
 						BackgroundTransparency = 1,
 						[Children] = {
-							Widgets.list(scope, { Padding = 9 }),
+							Widgets.list(scope, {
+								Padding = 8,
+								VerticalAlignment = Enum.VerticalAlignment.Bottom,
+							}),
+							walletRow(scope, {
+								Name = "Eggs",
+								LayoutOrder = 1,
+								Height = 40,
+								TextSize = 28,
+								Icon = emojiIcon(scope, "🥚", 32),
+								Value = scope:Computed(function(use)
+									return tostring(use(UiState.eggCount))
+								end),
+							}),
 							walletRow(scope, {
 								Name = "Stamina",
-								LayoutOrder = 1,
+								LayoutOrder = 2,
 								Icon = emojiIcon(scope, "⚡"),
 								Value = scope:Computed(function(use)
 									return NumberFormat.abbreviate(use(UiState.maxStamina))
@@ -380,30 +459,53 @@ function Hud.mount(playerGui: Instance)
 							}),
 							walletRow(scope, {
 								Name = "Dollars",
-								LayoutOrder = 2,
-								Icon = Widgets.dollar(scope, {
-									Name = "Icon",
-									AnchorPoint = Vector2.new(0, 0.5),
-									Position = UDim2.new(0, -6, 0.5, 0),
-									Size = 46,
-								}),
+								LayoutOrder = 3,
 								Value = scope:Computed(function(use)
-									local text = NumberFormat.abbreviate(math.floor(use(UiState.dollars)))
-									local income = use(UiState.income)
-									if income > 0 then
-										text ..= `  +{NumberFormat.abbreviate(income)}/s`
-									end
-									return text
+									return "$" .. NumberFormat.abbreviate(math.floor(use(UiState.dollars)))
 								end),
 								ShopSection = "Dollars",
-							}),
-							walletRow(scope, {
-								Name = "Eggs",
-								LayoutOrder = 3,
-								Icon = emojiIcon(scope, "🥚"),
-								Value = scope:Computed(function(use)
-									return tostring(use(UiState.eggCount))
+								Under = scope:Computed(function(use)
+									local income = use(UiState.income)
+									return if income > 0 then `+${NumberFormat.abbreviate(income)}/s` else ""
 								end),
+								UnderColor = Color3.fromRGB(140, 255, 120),
+							}),
+						},
+					}),
+
+					-- Bottom right: the day and night clock. By day a moon and the time until night; by night a sun
+					-- and the time until sunrise.
+					scope:New("Frame")({
+						Name = "DayNight",
+						AnchorPoint = Vector2.new(1, 1),
+						Position = UDim2.new(1, 0, 1, -12),
+						Size = UDim2.fromOffset(260, 56),
+						BackgroundTransparency = 1,
+						[Children] = {
+							fadeBand(scope, { Size = UDim2.fromScale(1, 1), fromRight = true }),
+							Widgets.text(scope, {
+								Name = "Icon",
+								AnchorPoint = Vector2.new(0, 0.5),
+								Position = UDim2.new(0, 34, 0.5, 0),
+								Size = UDim2.fromOffset(46, 46),
+								Text = scope:Computed(function(use)
+									return if use(UiState.isDay) then "🌙" else "☀️"
+								end),
+								TextSize = 38,
+							}),
+							Widgets.text(scope, {
+								Name = "Label",
+								AnchorPoint = Vector2.new(1, 0.5),
+								Position = UDim2.new(1, -16, 0.5, 0),
+								Size = UDim2.new(1, -110, 1, 0),
+								Font = Theme.FONT,
+								Text = scope:Computed(function(use)
+									return `in {NumberFormat.countdown(use(UiState.dayNightSeconds))}`
+								end),
+								TextColor3 = Theme.WHITE,
+								TextSize = 34,
+								Stroke = 3,
+								TextXAlignment = Enum.TextXAlignment.Left,
 							}),
 						},
 					}),
