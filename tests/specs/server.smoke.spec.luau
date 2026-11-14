@@ -1982,6 +1982,290 @@ return function(harness)
 		end)
 	end)
 
+	describe("Server: hub stations", function()
+		local Vector3 = roblox.Vector3
+
+		local function layoutOf(session)
+			return session:require(session:service("ReplicatedStorage").Shared.HubLayout)
+		end
+
+		local function findDescendant(root, name)
+			for _, descendant in root:GetDescendants() do
+				if descendant.Name == name then
+					return descendant
+				end
+			end
+			return nil
+		end
+
+		-- Calls a server function as the player, then lets one frame pass so stamina changes are sent.
+		local function invoke(session, name, player, ...)
+			local results = table.pack(session:remote(name).OnServerInvoke(player, ...))
+			session:heartbeat(1 / 60)
+			return table.unpack(results, 1, results.n)
+		end
+
+		local function addEggs(data, zone, rarity, kind, count)
+			for index = 1, count do
+				table.insert(
+					data.Eggs,
+					{ uid = `{kind}{index}`, zone = zone, rarity = rarity, kind = kind, claimedAt = 0 }
+				)
+			end
+		end
+
+		it("builds the Trails stall, the Sell stall and the fuse machine, each with a prompt", function()
+			local session = startServer()
+			local layout = layoutOf(session)
+			local stations = session:service("Workspace").Map.Stations
+			for key, station in layout.STATIONS do
+				local model = stations:FindFirstChild(key)
+				expect.truthy(model, key)
+				local prompt = findDescendant(model, "Prompt")
+				expect.truthy(prompt and prompt:IsA("ProximityPrompt"), key .. " prompt")
+				expect.equal(prompt:GetAttribute("Station"), key)
+				expect.equal(prompt.ObjectText, station.name)
+				expect.equal(prompt.MaxActivationDistance, layout.STATION_REACH)
+				expect.equal(prompt.HoldDuration, 0)
+				local at = prompt.Parent.CFrame.Position
+				local dx, dz = at.X - station.x, at.Z - station.z
+				expect.truthy(math.sqrt(dx * dx + dz * dz) < layout.STATION_RADIUS, key .. " prompt position")
+			end
+			expect.equal(findDescendant(stations.Trails, "NameTag").Frame.TextLabel.Text, "TRAILS")
+			expect.equal(findDescendant(stations.Sell, "NameTag").Frame.TextLabel.Text, "SELL")
+			expect.equal(findDescendant(stations.Fuse, "NameTag").Frame.TextLabel.Text, "FUSE")
+			-- The stalls face the middle of the plaza.
+			expect.truthy(stations.Trails.Counter.CFrame.LookVector.X > 0.99, "Trails faces the middle")
+			expect.truthy(stations.Sell.Counter.CFrame.LookVector.X < -0.99, "Sell faces the middle")
+		end)
+
+		it("walls in the hub, leaving only the runway open", function()
+			local session = startServer()
+			local walls = session:service("Workspace").Map.HubWalls
+			expect.equal(#walls:GetChildren(), 5)
+			for _, wall in walls:GetChildren() do
+				expect.equal(wall.Transparency, 1, wall.Name)
+				expect.equal(wall.CanCollide, true, wall.Name)
+			end
+			local left, right = walls.FrontLeft.CFrame.Position, walls.FrontRight.CFrame.Position
+			local gap = (right.X - walls.FrontRight.Size.X / 2) - (left.X + walls.FrontLeft.Size.X / 2)
+			expect.near(gap, shared(session).Runway.WIDTH, 1e-6)
+		end)
+
+		it("rings the hub with low-poly mountains that nothing collides with", function()
+			local session = startServer()
+			local layout = layoutOf(session)
+			local scenery = session:service("Workspace").Map.Scenery
+			local models = scenery.Mountains:GetChildren()
+			expect.equal(#models, #layout.MOUNTAINS)
+			local wedges, triangles = 0, 0
+			for _, model in models do
+				for _, part in model:GetChildren() do
+					expect.truthy(part:IsA("WedgePart"), part.ClassName)
+					expect.equal(part.CanCollide, false)
+					expect.equal(part.Anchored, true)
+					wedges += 1
+				end
+			end
+			for _, mountain in layout.MOUNTAINS do
+				triangles += #layout.mountainTriangles(mountain)
+			end
+			-- Two wedges a face (a sliver is occasionally skipped).
+			expect.truthy(wedges <= triangles * 2 and wedges >= triangles * 1.9, `{wedges} wedges, {triangles} faces`)
+			-- The outer ground sits just below the hub, so the two never flicker.
+			local outer = scenery.OuterGround
+			local top = outer.CFrame.Position.Y + outer.Size.Y / 2
+			local base = shared(session).Runway.BASE_Y
+			expect.truthy(top < base and top > base - 1, "outer ground")
+		end)
+
+		it("draws each mountain face exactly with two wedges", function()
+			local session = startServer()
+			local Parts = session:require(session:service("ServerScriptService").Server.Map.Parts)
+			local cases = {
+				{ Vector3.new(0, 0, 0), Vector3.new(10, 0, 0), Vector3.new(3, 8, 0) },
+				{ Vector3.new(0, 0, 0), Vector3.new(4, 0, 0), Vector3.new(0, 3, 0) },
+				{ Vector3.new(5, 2, -3), Vector3.new(-40, 60, 12), Vector3.new(30, 15, 44) },
+				{ Vector3.new(-200, -30, 80), Vector3.new(-150, 120, 60), Vector3.new(-120, -30, 150) },
+			}
+			for index, case in cases do
+				local a, b, c = case[1], case[2], case[3]
+				local folder = roblox.Instance.new("Folder")
+				Parts.triangle(folder, a, b, c, roblox.Color3.new(1, 1, 1))
+				local wedges = folder:GetChildren()
+				expect.equal(#wedges, 2, "wedges for case " .. index)
+				local corners = {}
+				local area = 0
+				for _, wedge in wedges do
+					local h, l = wedge.Size.Y / 2, wedge.Size.Z / 2
+					for _, offset in { Vector3.new(0, -h, -l), Vector3.new(0, -h, l), Vector3.new(0, h, l) } do
+						table.insert(corners, wedge.CFrame * offset)
+					end
+					area += 2 * h * l
+				end
+				local expected = (b - a):Cross(c - a).Magnitude / 2
+				expect.near(area, expected, expected * 1e-5, "area of case " .. index)
+				for _, point in { a, b, c } do
+					local found = false
+					for _, corner in corners do
+						if (corner - point).Magnitude < 0.01 then
+							found = true
+						end
+					end
+					expect.truthy(found, "a corner of case " .. index .. " is drawn")
+				end
+			end
+		end)
+
+		it("tells a joining player their trails", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local trails = session:lastSent("TrailsUpdated", player)
+			expect.equal(#trails.args[1], 0)
+			expect.equal(trails.args[2], "")
+			local state = session:remote("GetTrails").OnServerInvoke(player)
+			expect.equal(#state.owned, 0)
+			expect.equal(state.equipped, "")
+		end)
+
+		it("sells eggs for dollars", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			addEggs(data, 1, "Common", "Leafy", 3)
+			addEggs(data, 1, "Rare", "Toadstool", 1)
+			session:clearSent()
+
+			local sold, dollars = invoke(session, "SellEggs", player, "Leafy", 2)
+			expect.equal(sold, 2)
+			expect.equal(dollars, 50)
+			expect.equal(data.Dollars, 50)
+			expect.equal(#data.Eggs, 2)
+			expect.equal(data.Stats.EggsSold, 2)
+			expect.equal(session:lastSent("DollarsChanged", player).args[1], 50)
+			local eggs = session:lastSent("InventoryChanged", player).args[1].eggs
+			expect.equal(#eggs, 2)
+		end)
+
+		it("ignores nonsense sell requests", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			addEggs(data, 1, "Common", "Leafy", 3)
+			local nonsense = {
+				{ 1, 1 },
+				{ "Leafy", 1.5 },
+				{ "Leafy", -3 },
+				{ "Leafy", 0 / 0 },
+				{ "Leafy", math.huge },
+				{ "Leafy", nil },
+				{ string.rep("x", 500), 1 },
+				{ {}, {} },
+			}
+			for _, args in nonsense do
+				session:heartbeat(0.3)
+				local sold, dollars = invoke(session, "SellEggs", player, args[1], args[2])
+				expect.equal(sold, 0)
+				expect.equal(dollars, 0)
+			end
+			expect.equal(#data.Eggs, 3)
+			expect.equal(data.Dollars, 0)
+		end)
+
+		it("buys and equips trails, which boost Max Stamina and stream behind the character", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			data.Dollars = 1000
+
+			local ok, result = invoke(session, "BuyTrail", player, "Leaf")
+			expect.equal(ok, true)
+			expect.equal(result, "BoughtAndEquipped")
+			expect.equal(data.Dollars, 900)
+			expect.equal(session:lastSent("DollarsChanged", player).args[1], 900)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 120)
+			local trails = session:lastSent("TrailsUpdated", player)
+			expect.equal(trails.args[1][1], "Leaf")
+			expect.equal(trails.args[2], "Leaf")
+			local top = root:FindFirstChild("StaminaTrailTop")
+			expect.truthy(top and top.Trail, "trail on the character")
+			expect.equal(top.Trail.Attachment1, root.StaminaTrailBottom)
+
+			-- Requests closer together than 0.2 s are refused.
+			ok, result = invoke(session, "BuyTrail", player, "Sunbeam")
+			expect.equal(ok, false)
+			expect.equal(result, "TooFast")
+
+			session:heartbeat(0.3)
+			ok = invoke(session, "BuyTrail", player, "Sunbeam")
+			expect.equal(ok, true)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 150)
+			local trailCount = 0
+			for _, child in root:GetChildren() do
+				if child.Name == "StaminaTrailTop" then
+					trailCount += 1
+				end
+			end
+			expect.equal(trailCount, 1, "the old trail is replaced")
+
+			session:heartbeat(0.3)
+			ok, result = invoke(session, "EquipTrail", player, "Leaf")
+			expect.equal(ok, true)
+			expect.equal(result, "Equipped")
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 120)
+
+			session:heartbeat(0.3)
+			expect.equal(select(2, invoke(session, "EquipTrail", player, "Frost")), "NotOwned")
+			session:heartbeat(0.3)
+			expect.equal(select(2, invoke(session, "BuyTrail", player, "Rainbow")), "NotEnoughDollars")
+			expect.equal(select(2, invoke(session, "BuyTrail", player, 42)), "Invalid")
+			expect.equal(data.Dollars, 400)
+		end)
+
+		it("stacks a trail's boost on Max Stamina bought in the shop", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			data.Dollars = 100
+			invoke(session, "BuyTrail", player, "Leaf")
+			session:fromClient("RequestPurchase", player, "Stamina1")
+			session:heartbeat(1 / 60)
+			expect.near(session:lastSent("StaminaChanged", player).args[4], 600 * 1.2)
+		end)
+
+		it("keeps the trail's boost after respawning and rejoining", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session.profiles.Player_1.Data.Dollars = 100
+			invoke(session, "BuyTrail", player, "Leaf")
+
+			-- A new character gets the trail too.
+			local character = roblox.Instance.new("Model")
+			roblox.Instance.new("Humanoid").Parent = character
+			local root = roblox.Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Parent = character
+			character.Parent = session:service("Workspace")
+			player.Character = character
+			session:fire(player, "CharacterAdded", character)
+			expect.truthy(root:FindFirstChild("StaminaTrailTop"), "trail on the new character")
+
+			-- Leave and come back: the boost is there from the start.
+			session:fire(session:service("Players"), "PlayerRemoving", player)
+			player.Parent = nil
+			local again = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			expect.near(session:lastSent("StaminaChanged", again).args[4], 120)
+			expect.equal(session:lastSent("TrailsUpdated", again).args[2], "Leaf")
+		end)
+	end)
+
 	describe("Server: settings", function()
 		it("saves only valid settings and hands them back with defaults", function()
 			local session = startServer()

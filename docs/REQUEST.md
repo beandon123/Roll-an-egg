@@ -19,8 +19,8 @@ Core loop:
 5. Claimed eggs go straight to inventory. Players put them down anywhere in their pen; eggs grow over real time,
    including while offline, and players open them by hand once they're ready.
 6. Hatched pets roam the pen, earn dollars, and double as rideable mounts. Rarer pets earn more and run faster.
-7. Dollars buy upgrades (above all Max Stamina) and zone teleports -> hold on to bigger, rarer eggs deeper down the
-   runway -> better pets.
+7. Dollars (from pets, and from selling unwanted eggs and pets) buy upgrades (above all Max Stamina),
+   stamina-boosting trails, and zone teleports -> hold on to bigger, rarer eggs deeper down the runway -> better pets.
 
 Session length: 15-30 min target. First claimed egg in under 60 s, first hatch in about 2 min.
 
@@ -46,7 +46,7 @@ Original theme, art, and creatures.
     - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
           (proposed, from the owner's reference screenshots)
     - [ ] Gaps in the walls where players on foot can fall off (decided); each gap is marked by a red strip
-    - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot
+    - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot (see Hub below)
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with dollars (decided)
     - [ ] Bought in order (Desert, then Snow, then Ocean, then Volcano, then Prehistoric); prices rise steeply so
@@ -106,6 +106,67 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 
     Riding drains 80% of the egg's requirement over its claim time; bumps cost extra.
     Meeting the requirement leaves a 20% buffer for mistakes; below it, you fall off before the claim finishes.
+
+### Hub (decided; based on the owner's reference screenshot)
+- [ ] One plaza behind the start of the runway, walled in (built):
+    - [ ] START ZONE pad where the runway leaves the hub (built)
+    - [ ] Trails stall on the left and Sell stall on the right (seen from the start zone), facing each other across
+          the path near the start zone (built; the reference's "Auras" stall became the Trails stall, "Sell Dinos"
+          became just "Sell")
+    - [ ] Fuse machine in the middle, between and behind the two stalls (a golden "?" egg on a pedestal) (built)
+    - [ ] The 8 plots down both sides of the plaza, 4 a side, gates facing the plaza (built; an earlier layout had
+          3 a side and 2 at the back)
+    - [ ] Large low-poly mountains surround the hub on both sides and at the back; the way out is the runway (built)
+- [ ] Each station opens its panel from a prompt (tap on mobile, E on keyboard, X on gamepad); walking away closes it
+      (built)
+- [ ] Final art for the stalls, fuse machine and mountains (placeholder parts for now)
+
+### Hub Stations
+- [ ] Trails stall (decided; built): buy trails with dollars; the equipped trail streams behind your character and
+      multiplies your Max Stamina while equipped
+    - [ ] Bought once, kept for good; one equipped at a time; a newly bought trail is equipped unless the current one
+          boosts more (proposed)
+    - [ ] First-pass trails (proposed; tune with the economy):
+
+          Trail       Price    Max Stamina
+          Leaf        $100     x1.2
+          Sunbeam     $500     x1.5
+          Sandstorm   $2.5K    x2
+          Frost       $15K     x3
+          Bubble      $75K     x4.5
+          Ember       $400K    x6
+          Rainbow     $2.5M    x8
+
+    - [ ] Trails stack with Max Stamina bought in the shop and its doublings (built: (base + bought) x doublings x
+          trail)
+- [ ] Sell stall (decided): sell eggs you don't want, for dollars (built); pets sell from the Pets tab (built)
+    - [ ] Eggs: sell 1 or all of a kind; an egg is worth half its stamina requirement (proposed: Forest Common $25,
+          Desert Mythic $900, Volcano Eternal $75K)
+- [ ] Fuse machine (decided): put in 3 of the same pet -> get an egg of that pet, which usually hatches one size
+      bigger; it consolidates small pets into bigger ones and clears spare pets out of inventories
+    - [ ] Exactly 3 pets of the same species (decided): 3 Woolly Mammoths, never a Mammoth and a Dolphin
+    - [ ] Variants and sizes can be mixed (decided)
+    - [ ] Variant (decided): each pet put in passes on its variant with a 1 in 3 chance
+          (1 Gold + 2 Normal -> 33% Gold; 3 Gold -> 100% Gold)
+    - [ ] Size (decided): each pet put in has a 1 in 3 chance to set the size; the result then grows one size from
+          it, for sure up to Big and less often after that; if it does not grow it keeps that size:
+
+          Three of      Come out
+          Tiny          Small 100%
+          Small         Normal 100%
+          Normal        Big 100%
+          Big           Huge 90%, else Big
+          Huge          Giant 80%, else Huge
+          Giant         Colossal 70%, else Giant
+          Colossal      Titanic 60%, else Colossal
+          Titanic       Titanic (the biggest)
+
+          Mixed sizes: 1 Tiny + 2 Normal -> Small 33% or Big 67%; 1 Big + 2 Normal -> Huge 30% or Big 70%
+    - [ ] The variant and size rolls are independent (proposed)
+    - [ ] The egg always hatches that species (decided), with the rolled variant and size; it takes that rarity's
+          hatch time and its result stays hidden ("?") until it hatches (proposed)
+    - [ ] Not switched on yet: the rules are in `Logic/Fuse` (tested) and the machine's panel explains them; fusing
+          needs pet sizes first (below)
 
 ### Runway Cycle (decided)
 - [ ] Every 3 min the runway closes for 10 s, then a new cycle starts with a fresh egg lineup
@@ -170,7 +231,23 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 
 ### Pets
 - [ ] Each pet: species, zone, rarity, variant (Normal / Silver / Gold / Rainbow chance on hatch, decided; built),
-      Income/sec, Mount Speed
+      size, Income/sec, Mount Speed
+    - [ ] Sizes, smallest first (decided): Tiny, Small, Normal, Big, Huge, Giant, Colossal, Titanic
+    - [ ] Every hatch rolls a size; the bigger the size, the lower its chance (decided); first-pass odds (proposed;
+          in `Config/PetTraits`, not rolled on hatch yet):
+
+          Size       Runway egg   Titan Egg
+          Tiny       40%          30%
+          Small      28%          25%
+          Normal     18%          20%
+          Big        8%           12%
+          Huge       4%           7%
+          Giant      1.5%         3.5%
+          Colossal   0.5%         1.5%
+          Titanic    -            1%
+
+    - [ ] Titanic pets come only from Titan Eggs and the fuse machine (decided)
+    - [ ] Bigger pets are drawn bigger and earn more (proposed; multipliers set during economy tuning)
     - [ ] Each zone's pets out-earn the zone before it (a new zone's Commons roughly match the previous zone's best)
 - [ ] Mounts: equip one pet as your active mount; summon/unsummon from the HUD (built: Ride on a pet's card, then a
       RIDE / GET OFF button under the tabs)
@@ -278,6 +355,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Riders' stamina drains at that zone's Common rate (decided)
     - [ ] Everyone still on at 100% gets a Titan egg that can only hatch pets from that zone,
           with odds tilted toward the zone's rarer pets (decided)
+    - [ ] Titan eggs are the only eggs that can hatch Titanic-size pets (decided; see Pets)
 - [ ] Egg Avalanche: once an hour, one full cycle with 2x eggs in every zone (decided)
 
 ### Social
@@ -343,7 +421,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
               Pteranodon and the Lava and Lunar Dragons)
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
-- [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
+- [ ] Map: hub (plaza with the start zone, Trails stall, Sell stall, fuse machine, the 8 plots down its sides,
+      ringed by mountains; see Hub) and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
       -> Ocean (a causeway over a shallow reef) -> Volcano -> Prehistoric (ferns, tar pits, giant bones) -> end cliff; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
     - [ ] Built from parts in code, in the blocky style of the eggs and pets (done for the runway: checkered
@@ -378,17 +457,20 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   (see `vendor/README.md`)
 - Structure:
     - ReplicatedStorage/Shared: Config (zones, rarity tuning, stamina requirements, spawn odds per zone, hatch times,
-      upgrade and teleport costs, obstacles, pets, events), Types, EggMotion (down-runway position from time + bounce
+      upgrade and teleport costs, trails, sell prices, obstacles, pets, events), HubLayout (where every station and
+      mountain is), Types, EggMotion (down-runway position from time + bounce
       events), Obstacles (layout from a fixed seed, riderless paths, hits, timing), DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
     - ServerScriptService/Server/Services: Data, Cycle, Runway, Zone, Teleport, Ride, Duel, Plot, Pen, Hatch, Pet,
-      Economy, Shop, Quest, Event, Leaderboard, AntiCheat
+      Fuse, Economy, Shop, Stations (trails + selling eggs), Quest, Event, Leaderboard, AntiCheat
     - StarterPlayerScripts/Client/Controllers: Ride, Steering, Duel, Mount, Pen (roaming), Camera, Input, UI, VFX, Sound
     - UI: Fusion
 - Persistence (decided): ProfileStore with session locking; versioned schema + migrations; store timestamps
-  (placedAt, lastCollect), never running timers; pets stored with unique IDs; teleport pads owned
+  (placedAt, lastCollect), never running timers; pets stored with unique IDs; teleport pads and trails owned
 - Runway cycle: CycleService derives the cycle number and phase (open / warning / closed) from the server clock, so every
   client and late joiner agrees; at each cycle start the server rolls each zone's egg lineup and sends it to clients;
   at closure it removes every egg without a rider
+- Hub stations: buying, equipping, selling and fusing are decided on the server; clients ask with the item's id and
+  are told the result; never prices, dollars or stamina; per-player rate limit
 - Closure hatch boost: at each closure the server adds 290 s of bonus progress (29 x 10 s) to every hatching egg of players
   in that server; stored on the egg, so hatch math stays timestamp-based
 - Egg motion (decided): down-runway position = EggMotion(serverTime - spawnTime), fixed by time; side-to-side position is

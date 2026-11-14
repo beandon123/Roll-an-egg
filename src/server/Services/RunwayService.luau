@@ -15,7 +15,6 @@ local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
-local Shop = require(Shared.Config.Shop)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -23,6 +22,7 @@ local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local MountService = require(script.Parent.MountService)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
+local Stats = require(script.Parent.Parent.Logic.Stats)
 
 -- Fastest a client may report steering; extra reports are dropped.
 local MIN_LATERAL_INTERVAL = 1 / 30
@@ -83,13 +83,13 @@ local function updateFocusParts(time: number)
 	end
 end
 
--- Max Stamina from what the player owns: the base plus Max Stamina bought in the shop, times their doublings.
+-- Max Stamina from what the player owns (Logic/Stats): Max Stamina bought, doublings, and their trail's boost.
 local function maxStaminaOf(player: Player): number
 	local data = DataService.GetData(player)
 	if data == nil then
 		return Tuning.BASE_MAX_STAMINA
 	end
-	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, data.MaxStaminaBonus, data.StaminaMultiplier)
+	return Stats.maxStamina(data)
 end
 
 local function killCharacter(player: Player)

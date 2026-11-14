@@ -3,7 +3,9 @@
 -- Pure data (no Roblox APIs) so the test runner can load it outside Studio.
 --
 -- The currency is dollars. Pets in a player's pen earn dollars every second; a pet can also be sold for a lump
--- sum. Dollars buy a bigger pen (the green button at its front).
+-- sum. Dollars buy a bigger pen (the green button at its front). Unwanted eggs sell at the Sell stall in the hub.
+
+local Zones = require(script.Parent.Zones)
 
 local Economy = {}
 
@@ -61,5 +63,23 @@ Economy.PEN_UPGRADE_COST = {
 	[8] = 75_000_000,
 	[9] = 500_000_000,
 }
+
+-- An egg sells at the Sell stall for this fraction of its stamina requirement, so eggs that are harder to hold on
+-- to are worth more: a Forest Common sells for $25, a Volcano Eternal for $75K. Far less than the egg's pet earns,
+-- so selling is for eggs a player has no room or use for.
+Economy.EGG_SELL_FRACTION = 0.5
+
+-- Dollars for selling one egg, or nil if that rarity cannot drop in that zone.
+function Economy.eggSellValue(zoneId: number, rarity: string): number?
+	local zone = Zones.List[zoneId]
+	if zone == nil then
+		return nil
+	end
+	local requirement = zone.stamina[rarity]
+	if requirement == nil then
+		return nil
+	end
+	return math.floor(requirement * Economy.EGG_SELL_FRACTION)
+end
 
 return Economy

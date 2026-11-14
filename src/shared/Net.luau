@@ -1,7 +1,7 @@
 -- Every remote in the game, in one place. The server creates them; clients wait for them.
 --
 -- Rule for server handlers: never trust what a client sends. Check the type and range of every argument, and
--- never accept coins, rarities, or times from a client.
+-- never accept dollars, rarities, or times from a client.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -27,6 +27,7 @@ local EVENTS = {
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
 	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
 	"PurchaseResult", -- (itemId, ok, message)
+	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
@@ -52,6 +53,10 @@ local FUNCTIONS = {
 	"GetShopState", -- player -> server: () -> { dollars, penLevel, passes, luck }
 	"GetSettings", -- player -> server: () -> { [key]: value }
 	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
+	"GetTrails", -- player -> server: () -> { owned, equipped }
+	"BuyTrail", -- player -> server: (trailId) -> (ok, result): see Logic/Stalls' TrailResult
+	"EquipTrail", -- player -> server: (trailId) -> (ok, result)
+	"SellEggs", -- player -> server: (eggKind, count) -> (sold, dollars)
 }
 
 local Net = {}

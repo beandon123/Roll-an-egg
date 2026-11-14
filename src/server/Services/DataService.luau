@@ -42,8 +42,14 @@ local TEMPLATE = {
 	-- pet the player rides (its uid, or "").
 	PenLevel = 1,
 	Mount = "",
+	-- Trails from the Trails stall. Owned: trailId -> true. Equipped: a trailId, or "" for none.
+	Trails = {
+		Owned = {},
+		Equipped = "",
+	},
 	Stats = {
 		EggsClaimed = 0,
+		EggsSold = 0,
 	},
 }
 

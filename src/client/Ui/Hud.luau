@@ -13,6 +13,7 @@ local NumberFormat = Load.shared("NumberFormat")
 local Panels = require(script.Parent.Panels)
 local SettingsPanel = require(script.Parent.SettingsPanel)
 local ShopPanel = require(script.Parent.ShopPanel)
+local StationPanels = require(script.Parent.StationPanels)
 local Theme = require(script.Parent.Theme)
 local UiState = require(script.Parent.UiState)
 local Widgets = require(script.Parent.Widgets)
@@ -487,6 +488,8 @@ function Hud.mount(playerGui: Instance)
 					}),
 					ShopPanel.build(scope),
 					SettingsPanel.build(scope),
+					-- The Trails stall, Sell stall and fuse machine panels (hidden until a station is used).
+					StationPanels.build(scope),
 
 					-- Right edge: the Eggs, Pets and Ride tabs, and the panel they open.
 					Panels.build(scope),

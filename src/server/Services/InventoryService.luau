@@ -120,6 +120,14 @@ function InventoryService.AddDollars(player: Player, amount: number, cap: number
 	end
 end
 
+-- Tells the player's device their dollars again, after something outside this service changed them.
+function InventoryService.RefreshDollars(player: Player)
+	local data = DataService.GetData(player)
+	if data then
+		sendDollars(player, data)
+	end
+end
+
 -- Takes all of a player's dollars away (the admin panel).
 function InventoryService.ResetDollars(player: Player)
 	local data = DataService.GetData(player)

@@ -1,6 +1,7 @@
 -- Builds the map: the hub (PlotService adds the players' plots) with the painted START ZONE where the runway begins,
--- then each zone's stretch of runway with its banks, backdrop and gate (Map/Scenery), and the obstacles on the
--- runway (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts
+-- its stations (the Trails and Sell stalls and the fuse machine, Map/Stations) and the mountains round it
+-- (Map/Mountains), then each zone's stretch of runway with its banks, backdrop and gate (Map/Scenery), and the
+-- obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts
 -- (it reads positions from Shared/Runway and Shared/Obstacles), so changing how the map looks never breaks the rules.
 --
 -- Also handles dying on the map: a character well below the runway has fallen through a gap in the banks or gone
@@ -19,7 +20,9 @@ local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
+local Mountains = require(script.Parent.Parent.Map.Mountains)
 local Scenery = require(script.Parent.Parent.Map.Scenery)
+local Stations = require(script.Parent.Parent.Map.Stations)
 local RunwayService = require(script.Parent.RunwayService)
 
 local SLAB_THICKNESS = 4
@@ -27,6 +30,8 @@ local SLAB_THICKNESS = 4
 local HAZARD_HEIGHT = 5
 -- The painted strip just before the runway where players line up.
 local START_ZONE_DEPTH = 26
+-- The invisible walls round the hub.
+local WALL_HEIGHT = 80
 
 local MapService = {}
 
@@ -69,6 +74,28 @@ local function buildHub(map: Instance)
 	spawnPad.Material = Enum.Material.SmoothPlastic
 	spawnPad.Color = Color3.fromRGB(245, 245, 245)
 	spawnPad.Parent = map
+
+	-- Invisible walls round the edge, open only where the runway leaves.
+	local walls = Instance.new("Folder")
+	walls.Name = "HubWalls"
+	walls.Parent = map
+	local half, length = Runway.HUB_WIDTH / 2, Runway.HUB_LENGTH
+	local gap = Runway.WIDTH / 2
+	local wallY = Runway.BASE_Y + WALL_HEIGHT / 2
+	local pieces = {
+		Left = { Vector3.new(2, WALL_HEIGHT, length), Vector3.new(-half - 1, wallY, -length / 2) },
+		Right = { Vector3.new(2, WALL_HEIGHT, length), Vector3.new(half + 1, wallY, -length / 2) },
+		Back = { Vector3.new(half * 2 + 4, WALL_HEIGHT, 2), Vector3.new(0, wallY, -length - 1) },
+		FrontLeft = { Vector3.new(half - gap, WALL_HEIGHT, 2), Vector3.new(-(half + gap) / 2, wallY, 1) },
+		FrontRight = { Vector3.new(half - gap, WALL_HEIGHT, 2), Vector3.new((half + gap) / 2, wallY, 1) },
+	}
+	for name, piece in pieces do
+		local wall = newPart(name, walls)
+		wall.Size = piece[1]
+		wall.CFrame = CFrame.new(piece[2])
+		wall.Transparency = 1
+		wall.CastShadow = false
+	end
 end
 
 -- Text painted flat on top of a part, readable by someone standing at the hub looking down the runway.
@@ -186,6 +213,8 @@ function MapService.Init()
 
 	buildHub(map)
 	buildStartZone(map)
+	Stations.build(map)
+	Mountains.build(map)
 	for zoneId = 1, #Zones.List do
 		Scenery.buildZone(map, zoneId)
 	end

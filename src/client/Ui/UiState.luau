@@ -61,7 +61,8 @@ local UiState = {
 	-- The shared clock, refreshed a few times a second, for countdowns.
 	clock = scope:Value(0),
 
-	-- Which panel is open on the left: "Shop", "Settings", or nil. Opening it closes the right one, and back.
+	-- Which panel is open in the middle: "Shop" or "Settings" (the tabs on the left), a hub station's ("Trails",
+	-- "Sell", "Fuse"), or nil. Opening one closes the Eggs or Pets panel on the right, and back.
 	openPanel = scope:Value(nil :: string?),
 	-- A shop section to scroll to when the shop opens (the "+" buttons next to dollars and stamina set this).
 	shopSection = scope:Value(nil :: string?),
@@ -78,6 +79,10 @@ local UiState = {
 	luck = scope:Value(1),
 	luckSeconds = scope:Value(0),
 
+	-- Trails from the Trails stall: owned is a set of trail ids; equipped is a trail id or "".
+	trailsOwned = scope:Value({} :: { [string]: boolean }),
+	trailEquipped = scope:Value(""),
+
 	-- settingKey -> Value. See Config/Settings.
 	settings = settings,
 
@@ -91,8 +96,11 @@ local UiState = {
 	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain }
 	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number }?,
 
-	-- What the panels' buttons do, set by InventoryController.
+	-- What the panels' buttons do, set by InventoryController and StationController.
 	actions = {
+		buyTrail = function(_trailId: string) end,
+		equipTrail = function(_trailId: string) end,
+		sellEggs = function(_kind: string, _count: number) end,
 		placeEgg = function(_uid: string) end,
 		openPanel = function(_panel: string) end,
 		setInPen = function(_uid: string, _inPen: boolean) end,
@@ -121,6 +129,20 @@ function UiState.openShop(section: string?)
 	-- Cleared first, so asking for the same section twice still scrolls to it.
 	UiState.shopSection:set(nil)
 	UiState.shopSection:set(section)
+end
+
+-- The player's trails, as the server sends them: a list of owned ids and the equipped id ("" for none).
+function UiState.setTrails(owned: unknown, equipped: unknown)
+	local set = {}
+	if typeof(owned) == "table" then
+		for _, id in owned :: { any } do
+			if typeof(id) == "string" then
+				set[id] = true
+			end
+		end
+	end
+	UiState.trailsOwned:set(set)
+	UiState.trailEquipped:set(if typeof(equipped) == "string" then equipped else "")
 end
 
 local toastToken = 0

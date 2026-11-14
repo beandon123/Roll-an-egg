@@ -12,6 +12,10 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
   [The runway](#the-runway)). The banks down both sides are broken by gaps (marked with red strips) where a player
   on foot can fall off.
+- The hub's stations, in the plaza between the plots: the **Trails** stall (trails that stream behind you and
+  multiply your Max Stamina), the **Sell** stall (sell eggs you don't want), and the **fuse machine** (its panel
+  explains fusing; fusing itself is not switched on yet). Low-poly mountains ring the hub. See
+  [Hub stations](#hub-stations).
 - A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
   back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that roll down the
@@ -164,6 +168,24 @@ the pet goes away while you ride the egg and comes back 3 seconds after you leav
 The rules are in `src/server/Logic/Hatchery.luau` and `src/shared/PetWorth.luau`, run by
 `src/server/Services/InventoryService.luau`.
 
+## Hub stations
+
+Walk up to a station in the plaza and use its prompt (tap it, or press E): its panel opens in the middle of the
+screen, and closes again when you walk away. Where they stand is in `src/shared/HubLayout.luau`, along with the
+mountains round the hub; `src/server/Map/Stations.luau` and `src/server/Map/Mountains.luau` build them.
+
+- **Trails**: trails cost dollars, are kept for good, and one is equipped at a time. The equipped trail streams
+  behind your character and multiplies your Max Stamina (x1.2 for the $100 Leaf Trail up to x8 for the $2.5M Rainbow
+  Trail), on top of Max Stamina bought in the shop and its doublings. The list is in `src/shared/Config/Trails.luau`.
+- **Sell**: sell 1 or all of a kind of egg from your inventory, for half its stamina requirement in dollars (a
+  Forest Common egg sells for $25). Eggs already hatching in your pen are not for sale; pets sell from the Pets tab.
+- **Fuse machine**: three of the same pet go in, and an egg of that pet comes out, usually hatching a size bigger.
+  The rules are written and tested (`src/server/Logic/Fuse.luau`, sizes in `src/shared/Config/PetTraits.luau`), but
+  pets do not have sizes yet, so for now the machine's panel only explains how it will work.
+
+The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max Stamina), run by
+`src/server/Services/StationService.luau`; the panels are `src/client/Ui/StationPanels.luau`.
+
 ## The runway
 
 The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`).
@@ -309,14 +331,15 @@ src/shared/            ReplicatedStorage.Shared: config and math used by both se
 src/server/            ServerScriptService.Server
   Config/                Server-only settings: who the admins are
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
-  Map/                   Builds the look of the map: zone scenery, obstacle models, the players' plots
+  Map/                   Builds the look of the map: zone scenery, obstacle models, the players' plots, the hub's
+                         stations and mountains
   Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
                          the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
   Controllers/           Egg drawing, riding, HUD updates, the shop and settings, pet animation, admin flight,
                          the admin panel
-  Ui/                    The Fusion HUD, Shop and Settings panels (Theme and Widgets hold the shared look), and
-                         the admin panel
+  Ui/                    The Fusion HUD; the Eggs and Pets panels; the Shop, Settings and hub station panels
+                         (Theme and Widgets hold the shared look); and the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        map-preview.luau: a web page that shows the map in 3D;
