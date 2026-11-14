@@ -6,8 +6,9 @@
 --
 -- Riders are pinned to this device's copy of the egg, so nobody appears to slide off because of lag.
 --
--- Each egg's look comes from Shared/EggModels: a blocky model made of parts, different for every zone and rarity.
--- The parts are welded to one invisible, anchored root part, so moving an egg each frame is a single CFrame write.
+-- Each egg's look comes from Shared/EggModels (a blocky model, different for every zone and rarity), built into parts
+-- by Shared/EggRig. The parts are welded to one invisible, anchored root part, so moving an egg each frame is a
+-- single CFrame write.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -15,8 +16,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
-local EggModels = Load.shared("EggModels")
-local ModelEffects = Load.shared("ModelEffects")
+local EggRig = Load.shared("EggRig")
 local EggMotion = Load.shared("EggMotion")
 local EggSpec = Load.shared("EggSpec")
 local Net = Load.shared("Net")
@@ -118,58 +118,11 @@ local function newLabel(parent: Instance, text: string, color: Color3, position:
 	return label
 end
 
--- Builds the model for one kind of egg from its boxes, lying on its side with the pointed top towards +X.
-local function buildTemplate(spec, kind: string): Model
-	local design = EggModels.get(kind)
-	assert(design, `no egg model called {kind}`)
-	-- Studs per voxel: the egg's widest layer is EggModels.RADIUS voxels from the middle.
-	local voxel = spec.radius / EggModels.RADIUS
-
-	local model = Instance.new("Model")
-	model.Name = "Egg"
-
-	-- Invisible, anchored, and the size of the egg: what the label sits on and the particles come from.
-	local root = newEggPart("Root", model)
-	root.Size = Vector3.new(spec.halfLength * 2, spec.radius * 2, spec.radius * 2)
-	root.Transparency = 1
-	root.CFrame = CFrame.identity
-	model.PrimaryPart = root
-
-	for index, box in design.boxes do
-		local part = Instance.new("Part")
-		part.Name = "Block" .. index
-		part.Anchored = false
-		part.Massless = true
-		part.CanCollide = false
-		part.CanQuery = false
-		part.CanTouch = false
-		part.TopSurface = Enum.SurfaceType.Smooth
-		part.BottomSurface = Enum.SurfaceType.Smooth
-		part.Material = (Enum.Material :: any)[box.material]
-		part.Color = rgb(box.color)
-		part.Transparency = box.transparency
-		-- The designs stand the egg up (y along the egg); on the runway it lies on its side, so the egg's
-		-- y becomes X, and its x becomes -Y.
-		part.Size = Vector3.new(box.sy, box.sx, box.sz) * voxel
-		part.CFrame = CFrame.new(box.y * voxel, -box.x * voxel, box.z * voxel)
-		part.Parent = model
-
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = root
-		weld.Part1 = part
-		weld.Parent = part
-	end
-
-	ModelEffects.add(root, design.light, design.particles, voxel)
-
-	return model
-end
-
 -- Every egg of a kind has the same zone and rarity (see Config/Zones), so the spec, and so the size, is the same.
 local function getTemplate(spec, kind: string): Model
 	local template = templates[kind]
 	if template == nil then
-		template = buildTemplate(spec, kind)
+		template = EggRig.build(kind, spec)
 		templates[kind] = template
 	end
 	return template

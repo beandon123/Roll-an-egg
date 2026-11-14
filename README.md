@@ -131,6 +131,17 @@ fly and walks (or swims, or crawls) on the spot if not.
 In Studio, **Show this zone's pets** on the test panel stands the zone's pets in front of you. They move as they would in
 the game; set a pet's `Move` attribute in the Properties window (for example to `Fly`) to see its other moves.
 
+To work on the models by hand in Studio, export them as model files:
+
+```bash
+lune run tools/export-models
+```
+
+This writes `tools/out/RollAnEgg-Pets.rbxm` and `tools/out/RollAnEgg-Eggs.rbxm`: every pet and every egg, built by
+the game's own code (`PetRig`, `EggRig`), in a folder per zone, standing in rows on the ground (swimmers float). In
+Studio, right-click Workspace in the Explorer, choose **Insert from File...**, and pick a file (or drag the file
+into the viewport). The pets come rigged, with a `Motor6D` per limb; they move when the game plays their animations.
+
 ## Project layout
 
 ```
@@ -145,7 +156,8 @@ src/client/            StarterPlayerScripts.Client
   Controllers/           Egg drawing, riding, HUD updates
   Ui/                    The Fusion HUD
 tests/                 Automated tests (see below)
-tools/                 egg-gallery.luau: builds a web page that shows every egg and pet model in 3D
+tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
+                       export-models.luau: every pet and egg as Studio model files (.rbxm)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```
 
