@@ -190,6 +190,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
           that works out to ~2.6x faster while online (e.g., Legendary ~17 min)
 - [ ] Hatching is manual (decided): when an egg's timer finishes, it waits, ready, in its nest; nothing hatches on its own
     - [ ] Open it at the nest (walk up to it and press Open), or from anywhere in the Growing Eggs menu (see UI/UX)
+- [ ] Skipping growth with Robux (decided): Skip on one growing egg (at its nest, or on its row in the Growing Eggs
+      menu), or Grow All for every growing egg at once; skipped eggs become ready to open (see Monetization)
     - [ ] Hatch animation + rarity reveal when you open it
 - [ ] Getting home (decided): ride back up, or reset/die to respawn at your plot (~2 s)
     - [ ] Optional on-screen Reset shortcut, because Roblox's built-in reset is buried in the menu on mobile
@@ -243,8 +245,25 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
     - [ ] Odds shown before purchase; hidden where PolicyService reports paid random items are restricted
 - [ ] Game passes: VIP (tag + x1.5 coins), x2 Coins, +2 Nests, Auto-Collect, Faster Hatch, Lucky (better Golden/Rainbow
       chance on hatches)
-- [ ] Developer products: Next Pen Level (decided), Instant Hatch, Server Luck boost (helps everyone), Call the Titan
-      (an extra Titan Egg for the server, limited frequency), coin packs
+- [ ] Developer products: Next Pen Level (decided), Skip Growth (below), Server Luck boost (helps everyone),
+      Call the Titan (an extra Titan Egg for the server, limited frequency), coin packs
+- [ ] Skip Growth (decided): Grow All finishes every growing egg; Skip finishes one egg
+    - [ ] Priced in tiers by time left, picked automatically (decided): Grow All adds up the time left on every
+          growing egg, Skip uses that one egg's time left; the button always shows the current price
+    - [ ] Prices are examples from the owner, to be tuned: about 29 Robux for up to 1 hour, about 329 Robux for
+          24 hours or more; the steps between, and Skip sharing Grow All's tiers, are proposed:
+
+          Time left       Price
+          up to 1 h       29
+          up to 3 h       59
+          up to 6 h       99
+          up to 12 h      179
+          up to 24 h      249
+          over 24 h       329
+
+    - [ ] Time left is counted at normal speed; the 30x closure boost isn't predicted (proposed)
+    - [ ] At 100 pets, the purchase prompt warns first that the eggs will be ready but can't be opened (proposed)
+    - [ ] Grow All is hidden when no egg is growing (proposed)
 - [ ] Premium player perk + Premium payouts
 - [ ] Nothing sold affects duels; they're decided by timing alone
 
@@ -267,6 +286,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
       Reset shortcut, runway-closing timer, next-event timer
     - [ ] Growing Eggs menu (decided): a scrolling list of every egg in your nests, each with its egg icon and either a
           progress bar with the time left or, once ready, an Open button; opens from a HUD button
+        - [ ] A Grow All button in the header and a Skip button on each growing egg's row, each showing its
+              Robux price (decided)
         - [ ] The HUD button shows how many eggs are ready to open (proposed)
     - [ ] Riding HUD (only while riding): stamina bar, claim meter, bounces-left pips, obstacle warning markers
     - [ ] Marker above every egg: its stamina requirement, green if you have enough and red if not;
@@ -322,7 +343,11 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   anything faster than the current mount/egg speed + tolerance (lag-aware to avoid false positives)
 - Remotes: one Net module; type and range checks; per-player rate limits; client never sends currency, rarity, or time values
 - Purchases: ProcessReceipt records each handled purchase ID in the player's profile, so every Robux purchase is granted
-  exactly once even if a server crashes mid-purchase; one developer product per pen level (developer product prices are fixed)
+  exactly once even if a server crashes mid-purchase; one developer product per pen level and one per Skip Growth tier
+  (developer product prices are fixed)
+- Skip Growth: when the player presses Skip or Grow All, the server works out the tier from the eggs' time left and
+  saves which eggs that purchase covers in the player's data; when the receipt arrives it finishes exactly those
+  eggs, so eggs placed while the prompt was open aren't included for free
 - Hatching & income: calculated from timestamps (plus closure bonus) on demand; opening an egg is a request the server
   checks (timer finished, player owns fewer than 100 pets) before it creates the pet; offline earnings capped at 1 hour of income
 - Pens: roaming is cosmetic and runs only on each player's device (the server only stores which pets are in the pen);
