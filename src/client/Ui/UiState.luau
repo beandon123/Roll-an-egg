@@ -21,6 +21,8 @@ local UiState = {
 	cycleSeconds = scope:Value(0),
 
 	zoneName = scope:Value("Hub"),
+	-- The server event running now ("Avalanche"), or nil.
+	serverEvent = scope:Value(nil :: string?),
 
 	riding = scope:Value(false),
 	rideTitle = scope:Value(""),

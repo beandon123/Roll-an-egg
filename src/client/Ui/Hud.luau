@@ -2,18 +2,16 @@
 --
 -- Placeholder look: clear and readable, sized for phones first. Final UI art comes later.
 
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
-local Net = Load.shared("Net")
+local CycleClock = Load.shared("CycleClock")
 local NumberFormat = Load.shared("NumberFormat")
 
 local UiState = require(script.Parent.UiState)
 
 local Fusion = UiState.Fusion
 local Children = Fusion.Children
-local OnEvent = Fusion.OnEvent
 
 local WHITE = Color3.new(1, 1, 1)
 local PANEL = Color3.fromRGB(26, 28, 36)
@@ -21,6 +19,7 @@ local STAMINA_COLOR = Color3.fromRGB(90, 200, 255)
 local CLAIM_COLOR = Color3.fromRGB(120, 230, 120)
 local DANGER_COLOR = Color3.fromRGB(255, 95, 95)
 local WARNING_COLOR = Color3.fromRGB(255, 160, 50)
+local EVENT_COLOR = Color3.fromRGB(130, 80, 200)
 
 -- The design is laid out for a 720-pixel-tall screen and scaled to fit others.
 local REFERENCE_HEIGHT = 720
@@ -94,62 +93,6 @@ local function bar(scope, props)
 	})
 end
 
-local function devButton(scope, text: string, command: string, order: number)
-	return scope:New("TextButton")({
-		Name = command,
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, 34),
-		BackgroundColor3 = Color3.fromRGB(60, 64, 84),
-		Font = Enum.Font.GothamBold,
-		Text = text,
-		TextColor3 = WHITE,
-		TextSize = 14,
-		[OnEvent("Activated")] = function()
-			Net.DevCommand:FireServer(command)
-		end,
-		[Children] = { corner(scope, 8) },
-	})
-end
-
--- Buttons that only appear (and only work) inside Roblox Studio, for testing.
-local function devPanel(scope)
-	return scope:New("Frame")({
-		Name = "StudioTestPanel",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.4, 0),
-		Size = UDim2.fromOffset(170, 228),
-		BackgroundColor3 = PANEL,
-		BackgroundTransparency = 0.2,
-		[Children] = {
-			corner(scope, 10),
-			scope:New("UIPadding")({
-				PaddingTop = UDim.new(0, 6),
-				PaddingBottom = UDim.new(0, 6),
-				PaddingLeft = UDim.new(0, 6),
-				PaddingRight = UDim.new(0, 6),
-			}),
-			scope:New("UIListLayout")({
-				Padding = UDim.new(0, 5),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}),
-			scope:New("TextLabel")({
-				LayoutOrder = 0,
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 16),
-				Font = Enum.Font.GothamBold,
-				Text = "Studio test tools",
-				TextColor3 = WHITE,
-				TextSize = 12,
-			}),
-			devButton(scope, "Max stamina x5", "StaminaUp", 1),
-			devButton(scope, "Reset stamina", "StaminaReset", 2),
-			devButton(scope, "Drop best egg here", "DropBestEgg", 3),
-			devButton(scope, "Drop each egg here", "DropEachEgg", 4),
-			devButton(scope, "Show this zone's pets", "ShowPets", 5),
-		},
-	})
-end
-
 function Hud.mount(playerGui: Instance)
 	local scope = UiState.scope
 
@@ -173,6 +116,10 @@ function Hud.mount(playerGui: Instance)
 		elseif phase == "Warning" then
 			return `Runway closing in {clock}!`
 		end
+		local event = use(UiState.serverEvent)
+		if event then
+			return `{CycleClock.EVENT_NAMES[event] or event}!  Runway closes in {clock}`
+		end
 		return `Runway closes in {clock}`
 	end)
 
@@ -182,6 +129,8 @@ function Hud.mount(playerGui: Instance)
 			return DANGER_COLOR
 		elseif phase == "Warning" then
 			return WARNING_COLOR
+		elseif use(UiState.serverEvent) then
+			return EVENT_COLOR
 		end
 		return PANEL
 	end)
@@ -339,8 +288,6 @@ function Hud.mount(playerGui: Instance)
 							}),
 						},
 					}),
-
-					if RunService:IsStudio() then devPanel(scope) else nil,
 				},
 			}),
 		},

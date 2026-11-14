@@ -187,7 +187,10 @@ local function addEgg(data)
 		kind = kind,
 		spec = spec,
 		spawnTime = data.spawnTime,
-		startZ = Runway.zoneStartZ(data.zone) + Tuning.EGG_SPAWN_OFFSET,
+		-- Eggs land at their zone's chute unless an admin dropped one somewhere else.
+		startZ = if typeof(data.startZ) == "number"
+			then data.startZ
+			else Runway.zoneStartZ(data.zone) + Tuning.EGG_SPAWN_OFFSET,
 		lateral = data.lateral,
 		targetLateral = data.lateral,
 		riderUserId = data.rider,

@@ -24,7 +24,9 @@ local TEMPLATE = {
 	-- `kind` is the egg's design name (e.g. "MossStag"). Eggs claimed before kinds existed have none; treat those
 	-- as the zone's first egg of that rarity.
 	Eggs = {},
-	-- Hatched pets (filled in once hatching is built)
+	-- Hatched pets: { uid = string, kind = string, zone = number, rarity = string, variant = string,
+	-- hatchedAt = number }. `kind` is the pet's design name (e.g. "MossStag"); `variant` is "Normal" for now
+	-- (Golden and Rainbow come with hatching). Only the admin panel adds pets until hatching is built.
 	Pets = {},
 	Stats = {
 		EggsClaimed = 0,

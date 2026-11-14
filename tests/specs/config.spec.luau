@@ -201,4 +201,19 @@ return function(harness)
 			end
 		end)
 	end)
+
+	describe("AdminTools", function()
+		local AdminTools = harness.load("src/shared/Config/AdminTools")
+
+		it("offers its default speeds, and sensible limits", function()
+			expect.truthy(table.find(AdminTools.FLY_SPEEDS, AdminTools.DEFAULT_FLY_SPEED), "default fly speed offered")
+			expect.truthy(
+				table.find(AdminTools.WALK_SPEEDS, AdminTools.DEFAULT_WALK_SPEED),
+				"default walk speed offered"
+			)
+			expect.equal(AdminTools.DEFAULT_WALK_SPEED, 16, "Roblox's own walk speed")
+			expect.truthy(AdminTools.MAX_GIVE <= AdminTools.MAX_INVENTORY)
+			expect.truthy(AdminTools.MAX_STAMINA >= 500000, "enough for the hungriest egg")
+		end)
+	end)
 end

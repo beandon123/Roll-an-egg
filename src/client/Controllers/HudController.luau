@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local Load = require(script.Parent.Parent.Load)
 local CycleClock = Load.shared("CycleClock")
 local Runway = Load.shared("Runway")
+local Showroom = Load.shared("Showroom")
 local StaminaMath = Load.shared("StaminaMath")
 local Zones = Load.shared("Config", "Zones")
 
@@ -25,8 +26,12 @@ local function update()
 	local stamina = StaminaMath.current(state.value, state.time, state.rate, state.max, now)
 	UiState.stamina:set(math.floor(stamina))
 
-	-- The runway cycle comes straight from the shared clock.
+	-- The runway cycle comes straight from the shared clock, plus however far admins have moved it on.
+	local offset = Workspace:GetAttribute(CycleClock.OFFSET_ATTRIBUTE)
+	CycleClock.setOffset(if typeof(offset) == "number" then offset else 0)
 	local cycle = CycleClock.getState(now)
+	local event = Workspace:GetAttribute(CycleClock.EVENT_ATTRIBUTE)
+	UiState.serverEvent:set(if typeof(event) == "string" then event else nil)
 	UiState.cyclePhase:set(cycle.phase)
 	UiState.cycleSeconds:set(math.ceil(if cycle.phase == "Closed" then cycle.untilNextCycle else cycle.untilClose))
 
@@ -45,8 +50,13 @@ local function update()
 	local character = localPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
-		local zoneId = Runway.zoneAt(root.Position.Z)
-		UiState.zoneName:set(if zoneId then Zones.List[zoneId].name else "Hub")
+		local position = root.Position
+		local zoneId = Runway.zoneAt(position.Z)
+		if Showroom.contains(position.X, position.Z) then
+			UiState.zoneName:set("Model Showroom")
+		else
+			UiState.zoneName:set(if zoneId then Zones.List[zoneId].name else "Hub")
+		end
 	end
 end
 

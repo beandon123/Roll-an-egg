@@ -78,6 +78,8 @@ export type SerializedEgg = {
 	rarity: string,
 	kind: string,
 	spawnTime: number,
+	-- Where it landed, down the runway: its zone's chute, unless an admin dropped it somewhere else.
+	startZ: number,
 	lateral: number,
 	rider: number?,
 	bounces: number,
@@ -165,6 +167,7 @@ local function serialize(egg: Egg): SerializedEgg
 		rarity = egg.rarity,
 		kind = egg.kind,
 		spawnTime = egg.spawnTime,
+		startZ = egg.startZ,
 		lateral = egg.lateral,
 		rider = egg.riderId,
 		bounces = egg.bouncesLeft,
@@ -197,14 +200,20 @@ function RunwaySim._removeEgg(self: RunwaySim, egg: Egg, reason: EggRemoveReason
 	self:_emit({ type = "EggRemoved", id = egg.id, reason = reason, by = by })
 end
 
+-- Where an egg should land instead of its zone's chute: `z` down the runway and `lateral` across it. Either can be
+-- left out. Used by the admin panel to drop an egg in front of a player.
+export type Placement = { z: number?, lateral: number? }
+
 -- Drops a new egg at the start of a zone: a random rarity for the zone, then one of the zone's eggs of that
 -- rarity. `forcedRarity` and `forcedKind` skip the random rolls; a forced egg must belong to the zone.
+-- `placement` drops it somewhere else on the runway; it keeps its zone's rarity, size and stamina wherever it lands.
 function RunwaySim.spawnEgg(
 	self: RunwaySim,
 	zoneId: number,
 	now: number,
 	forcedRarity: string?,
-	forcedKind: string?
+	forcedKind: string?,
+	placement: Placement?
 ): Egg?
 	local rarity: string
 	local kind: string?
@@ -223,8 +232,20 @@ function RunwaySim.spawnEgg(
 		return nil
 	end
 
+	local startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET
+	local lateral = (self.random() * 2 - 1) * Runway.maxLateral(spec.halfLength)
+	if placement then
+		local z, x = placement.z, placement.lateral
+		-- On the runway, and far enough from the end cliff to be worth riding.
+		if z and z == z then
+			startZ = math.clamp(z, 0, Runway.LENGTH - spec.radius * 4)
+		end
+		if x and x == x then
+			lateral = Runway.clampLateral(x, spec.halfLength)
+		end
+	end
+
 	self.nextEggId += 1
-	local limit = Runway.maxLateral(spec.halfLength)
 	local egg: Egg = {
 		id = self.nextEggId,
 		zone = zoneId,
@@ -232,8 +253,8 @@ function RunwaySim.spawnEgg(
 		kind = kind,
 		spec = spec,
 		spawnTime = now,
-		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_OFFSET,
-		lateral = (self.random() * 2 - 1) * limit,
+		startZ = startZ,
+		lateral = lateral,
 		bouncesLeft = spec.bounces,
 		riderId = nil,
 		everRidden = false,
@@ -334,6 +355,19 @@ function RunwaySim.setMaxStamina(self: RunwaySim, riderId: number, maxStamina: n
 	rider.maxStamina = maxStamina
 	local rate = if rider.ride then -rider.ride.drain else self:_regenRate(rider)
 	self:_setStamina(rider, current, now, rate)
+	if rider.ride then
+		rider.ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, rider.ride.drain)
+	end
+end
+
+-- Fills a player's stamina to their Max Stamina. A ride in progress keeps draining from the new value.
+function RunwaySim.refillStamina(self: RunwaySim, riderId: number, now: number)
+	local rider = self.riders[riderId]
+	if rider == nil then
+		return
+	end
+	local rate = if rider.ride then -rider.ride.drain else self:_regenRate(rider)
+	self:_setStamina(rider, rider.maxStamina, now, rate)
 	if rider.ride then
 		rider.ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, rider.ride.drain)
 	end
@@ -535,6 +569,18 @@ function RunwaySim.setPhase(self: RunwaySim, phase: Phase)
 		-- A new cycle: every chute starts a fresh lineup.
 		self.nextSpawnAt = {}
 	end
+end
+
+-- Removes every egg without a rider, as a closure does, and returns how many went. Ridden eggs are left alone.
+function RunwaySim.clearUnridden(self: RunwaySim): number
+	local count = 0
+	for _, egg in self.eggs do
+		if egg.riderId == nil then
+			self:_removeEgg(egg, "Closure")
+			count += 1
+		end
+	end
+	return count
 end
 
 function RunwaySim._countZone(self: RunwaySim, zoneId: number): number

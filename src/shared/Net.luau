@@ -22,7 +22,6 @@ local EVENTS = {
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
-	"DevCommand", -- (command) Studio only
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.
@@ -33,6 +32,7 @@ local UNRELIABLE_EVENTS = {
 
 local FUNCTIONS = {
 	"GetSnapshot", -- player -> server: () -> { eggs }
+	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
 }
 
 local Net = {}

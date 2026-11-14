@@ -2,7 +2,8 @@
 -- Final art will replace this; gameplay does not depend on any of these parts (it reads positions from
 -- Shared/Runway), so swapping the map never breaks the rules.
 --
--- Also handles falling: a character well below the runway surface has fallen off and dies.
+-- Also handles falling: a character well below the runway surface has fallen off and dies (unless an admin is
+-- flying it).
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -10,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
+local AdminTools = require(Shared.Config.AdminTools)
 local NumberFormat = require(Shared.NumberFormat)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
@@ -176,7 +178,8 @@ local function watchForFalls()
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 then
+			local flying = player:GetAttribute(AdminTools.FLYING) == true
+			if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 and not flying then
 				local position = root.Position
 				if position.Y < Runway.surfaceY(position.Z) - Tuning.FALL_KILL_DEPTH then
 					humanoid.Health = 0

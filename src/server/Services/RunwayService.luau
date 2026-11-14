@@ -278,7 +278,7 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other services
 
--- Changes a player's Max Stamina (upgrades will call this; for now only the Studio test panel does).
+-- Changes a player's Max Stamina (upgrades will call this; for now only the admin panel does).
 function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
 end
@@ -289,9 +289,30 @@ function RunwayService.GetMaxStamina(player: Player): number
 end
 
 -- Drops an egg of a chosen rarity in a zone, if that rarity can drop there. Returns whether it did.
--- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup).
-function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?): boolean
-	return sim:spawnEgg(zoneId, now(), rarity, kind) ~= nil
+-- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup). `placement`
+-- ({ z, lateral }) drops it somewhere on the runway other than the zone's chute.
+function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?, placement: RunwaySim.Placement?): boolean
+	return sim:spawnEgg(zoneId, now(), rarity, kind, placement) ~= nil
+end
+
+-- Removes every egg nobody is riding, as a closure does. Returns how many went.
+function RunwayService.ClearEggs(): number
+	return sim:clearUnridden()
+end
+
+-- Fills a player's stamina to their Max Stamina.
+function RunwayService.RefillStamina(player: Player)
+	sim:refillStamina(player.UserId, now())
+end
+
+-- Takes a player off the egg they are riding, as if they had hopped off. Does nothing if they are not riding.
+function RunwayService.Dismount(player: Player)
+	sim:requestDismount(player.UserId, now())
+end
+
+-- How many eggs drop, as a multiple of the usual rate (2 during an Egg Avalanche).
+function RunwayService.SetEggRate(multiplier: number)
+	sim.spawnRateMultiplier = multiplier
 end
 
 -- The zone a player's character is standing in (1 when they are at the hub).

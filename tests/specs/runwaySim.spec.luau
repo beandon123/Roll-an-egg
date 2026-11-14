@@ -90,6 +90,56 @@ return function(harness)
 			expect.falsy(sim:spawnEgg(5, 0, nil, "MagmaDragon"), "shelved")
 			expect.falsy(sim:spawnEgg(1, 0, nil, "NoSuchEgg"))
 		end)
+
+		it("drops an egg somewhere else when told to, keeping its own zone's numbers", function()
+			local sim = newSim()
+			-- A Volcano egg dropped in the Forest, off to one side.
+			local egg = sim:spawnEgg(5, 10, nil, "LavaGolem", { z = 300, lateral = 12 })
+			expect.equal(egg.zone, 5)
+			expect.equal(egg.spec.requirement, 100000)
+			local x, _, z = sim:eggCenter(egg, 10)
+			expect.equal(z, 300)
+			expect.equal(x, 12)
+			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
+			expect.equal(spawned.egg.startZ, 300, "players' devices are told where it landed")
+			expect.equal(spawned.egg.lateral, 12)
+
+			-- Kept on the runway: not past its sides or beyond the end.
+			local wide = sim:spawnEgg(1, 0, "Common", nil, { z = 1e6, lateral = -500 })
+			expect.truthy(wide.startZ < Runway.LENGTH, "before the end cliff")
+			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength))
+			expect.equal(sim:spawnEgg(1, 0, "Common", nil, { z = 0 / 0 }).startZ, 12, "nonsense is ignored")
+			-- Without a placement, eggs land at their chute, and say so.
+			expect.equal(sim:spawnEgg(2, 0, "Common").startZ, Runway.zoneStartZ(2) + Tuning.EGG_SPAWN_OFFSET)
+		end)
+
+		it("drops twice as many eggs at twice the rate (an Egg Avalanche)", function()
+			local function dropsInAMinute(multiplier)
+				local sim = newSim()
+				sim.spawnRateMultiplier = multiplier
+				for tick = 0, 600 do
+					sim:step(tick / 10)
+				end
+				return #eventsOfType(sim:takeEvents(), "EggSpawned")
+			end
+			local normal, avalanche = dropsInAMinute(1), dropsInAMinute(2)
+			expect.truthy(avalanche >= normal * 1.8, `{avalanche} in an Avalanche, {normal} normally`)
+		end)
+
+		it("clears every egg nobody is riding", function()
+			local sim = newSim()
+			sim:addRider(ALICE, 1000, 14, 0)
+			local ridden = sim:spawnEgg(1, 0, "Common")
+			sim:spawnEgg(1, 0, "Common")
+			sim:spawnEgg(2, 0, "Common")
+			sim:requestMount(ALICE, ridden.id, 0, true)
+			sim:takeEvents()
+			expect.equal(sim:clearUnridden(), 2)
+			local removed = eventsOfType(sim:takeEvents(), "EggRemoved")
+			expect.equal(#removed, 2)
+			expect.equal(removed[1].reason, "Closure")
+			expect.truthy(sim:getEgg(ridden.id), "the ridden egg rolls on")
+		end)
 	end)
 
 	describe("RunwaySim: riding and claiming", function()
@@ -396,6 +446,25 @@ return function(harness)
 			expect.equal(firstOfType(events, "RideEnded").reason, "Cliff")
 			expect.equal(firstOfType(events, "EggRemoved").reason, "Cliff")
 			expect.equal(#eventsOfType(events, "Claimed"), 0)
+		end)
+	end)
+
+	describe("RunwaySim: refilling stamina", function()
+		it("fills stamina to the max, and a ride keeps draining from there", function()
+			local sim = newSim()
+			sim:addRider(ALICE, 100, 14, 0)
+			local egg = sim:spawnEgg(1, 0, "Epic") -- drains 160 over 12 s: more than 100 stamina lasts
+			sim:requestMount(ALICE, egg.id, 0, true)
+			sim:step(5)
+			expect.truthy(sim:getStamina(ALICE, 5) < 50, "drained")
+			sim:refillStamina(ALICE, 5)
+			expect.near(sim:getStamina(ALICE, 5), 100)
+			local changed = firstOfType(sim:takeEvents(), "StaminaChanged")
+			expect.truthy(changed, "StaminaChanged")
+			-- With the refill, 100 stamina at 13.3 a second lasts the 7 s left of the claim.
+			sim:step(12.5)
+			expect.truthy(sim:getRider(ALICE).eggId == nil, "the ride is over")
+			expect.equal(#eventsOfType(sim:takeEvents(), "Claimed"), 1, "and claimed")
 		end)
 	end)
 

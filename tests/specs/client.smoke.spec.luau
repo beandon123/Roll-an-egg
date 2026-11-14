@@ -453,16 +453,17 @@ return function(harness)
 			local session = startClient()
 			local workspace = session:service("Workspace")
 			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			-- Pets spawned from the admin panel.
 			local folder = roblox.Instance.new("Folder")
-			folder.Name = "StudioPets"
+			folder.Name = "AdminPets"
 			folder.Parent = workspace
 			session:fire(workspace, "ChildAdded", folder)
 			local phoenix = PetRig.build("LavaDragon")
 			phoenix.Parent = folder
-			session:fire(folder, "ChildAdded", phoenix)
+			session:fire(folder, "DescendantAdded", phoenix)
 			local fox = PetRig.build("Fox")
 			fox.Parent = folder
-			session:fire(folder, "ChildAdded", fox)
+			session:fire(folder, "DescendantAdded", fox)
 
 			session:renderFrame(0.1, 3)
 			local lift = phoenix.Root.Body.Transform.Position.Y
@@ -485,10 +486,44 @@ return function(harness)
 			expect.truthy(forward < 0.99, "and tipped forward")
 		end)
 
+		it("animates the pets in the Model Showroom, but not ones too far away to see", function()
+			local session = startClient()
+			local workspace = session:service("Workspace")
+			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			-- The showroom keeps its pets a few folders deep, next to eggs (which are not pets).
+			local showroom = roblox.Instance.new("Folder")
+			showroom.Name = "Showroom"
+			local imported = roblox.Instance.new("Folder")
+			imported.Name = "Roll an Egg Pets"
+			imported.Parent = showroom
+			local forest = roblox.Instance.new("Folder")
+			forest.Name = "Forest"
+			forest.Parent = imported
+			local near = PetRig.build("Fox")
+			near.Parent = forest
+			local far = PetRig.build("Bear")
+			far:PivotTo(roblox.CFrame.new(0, 0, 2000))
+			far.Parent = forest
+			local egg = roblox.Instance.new("Model")
+			egg.Name = "Leafy Egg"
+			egg.Parent = forest
+			showroom.Parent = workspace
+			session:fire(workspace, "ChildAdded", showroom)
+
+			session:renderFrame(0.1, 3)
+			local leg = near.Body.FrontLeftLeg.Transform
+			session:renderFrame(0.1)
+			expect.truthy(near.Body.FrontLeftLeg.Transform ~= leg, "the Fox walks on the spot")
+			local ok = pcall(function()
+				return far.Body.FrontLeftLeg.Transform
+			end)
+			expect.falsy(ok, "the Bear, 2,000 studs away, was never moved")
+		end)
+
 		it("builds the HUD with Fusion", function()
 			local _, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters", "StudioTestPanel" } do
+			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Meters" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
@@ -545,11 +580,24 @@ return function(harness)
 			expect.equal(labelOf(claim).Text, "Epic Bear Egg  25%  - not enough stamina!")
 		end)
 
-		it("sends Studio test commands from the test panel", function()
+		it("shows a running event and follows the runway cycle when admins move it on", function()
 			local session, parts = startClient()
-			local button = hud(parts).StudioTestPanel.StaminaUp
-			session:fire(button, "Activated")
-			expect.equal(session:lastSent("DevCommand", "server").args[1], "StaminaUp")
+			local workspace = session:service("Workspace")
+			local cycle = hud(parts).Cycle
+			workspace:SetAttribute("ServerEvent", "Avalanche")
+			session:renderFrame(1 / 60)
+			expect.truthy(labelOf(cycle).Text:match("^Egg Avalanche!  Runway closes in"), labelOf(cycle).Text)
+			-- The stand-in clock starts 5 s into a cycle: 165 s on, the runway has closed.
+			workspace:SetAttribute("CycleOffset", 165.5)
+			session:renderFrame(1 / 60)
+			expect.truthy(labelOf(cycle).Text:match("^Runway closed"), labelOf(cycle).Text)
+		end)
+
+		it("names the Model Showroom as the place the player is in", function()
+			local session, parts = startClient()
+			parts.root.Position = Vector3.new(-3000, 13, 0)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Zone.Text, "Model Showroom")
 		end)
 
 		it("shows server announcements", function()
@@ -558,6 +606,223 @@ return function(harness)
 			session:renderFrame(1 / 60)
 			expect.equal(hud(parts).Toast.Text, "A Legendary egg just dropped in the Forest!")
 			expect.equal(hud(parts).Toast.Visible, true)
+		end)
+	end)
+
+	describe("Client: admin panel", function()
+		-- A client whose player is an admin, with the server's answers to admin commands faked: every command is
+		-- recorded in `sent`, and answered with `answer` (ok, message, data) if set.
+		local function startAdmin()
+			local session, parts = startClient()
+			local sent = {}
+			local answer = { true, "Done." }
+			session.invokeHandlers.AdminCommand = function(command, args)
+				table.insert(sent, { command = command, args = args })
+				return table.unpack(answer)
+			end
+			parts.player:SetAttribute("IsAdmin", true)
+			session:renderFrame(1 / 60)
+			return session, parts, sent, answer
+		end
+
+		local function panel(parts)
+			return parts.playerGui.AdminPanel.Root
+		end
+
+		local function click(session, button)
+			session:fire(button, "Activated")
+			session:renderFrame(1 / 60)
+		end
+
+		local function body(parts)
+			return panel(parts).Window.Body
+		end
+
+		it("shows only to admins, behind an ADMIN button", function()
+			local session, parts = startClient()
+			session:renderFrame(1 / 60)
+			local gui = parts.playerGui:FindFirstChild("AdminPanel")
+			expect.truthy(gui, "the panel is built")
+			expect.equal(gui.Enabled, false, "but hidden from players who are not admins")
+
+			parts.player:SetAttribute("IsAdmin", true)
+			session:renderFrame(1 / 60)
+			expect.equal(gui.Enabled, true)
+			expect.equal(gui.Root.Window.Visible, false, "closed until the button is pressed")
+			click(session, gui.Root.Toggle)
+			expect.equal(gui.Root.Window.Visible, true)
+			click(session, gui.Root.Window.Close)
+			expect.equal(gui.Root.Window.Visible, false)
+		end)
+
+		it("drops and gives eggs from any zone, and shows the server's answer", function()
+			local session, parts, sent, answer = startAdmin()
+			click(session, panel(parts).Toggle)
+			local list = body(parts).EggList
+			expect.truthy(list:FindFirstChild("MossStag"), "the Forest's eggs are listed")
+			expect.equal(list.MossStag.Title.Text, "Moss Stag Egg")
+			expect.equal(list.MossStag.Rarity.Text, "Legendary")
+
+			click(session, list.MossStag.Drop)
+			expect.equal(sent[#sent].command, "DropEgg")
+			expect.equal(sent[#sent].args.egg, "MossStag")
+			expect.equal(sent[#sent].args.where, "Here")
+			expect.equal(panel(parts).Window.StatusLine.Text, "Done.")
+
+			-- Pick the Desert, and drop at the chute.
+			click(session, body(parts).Zone.Zones.Desert)
+			expect.equal(body(parts).EggList:FindFirstChild("MossStag"), nil, "the Forest's eggs are gone")
+			click(session, body(parts).Where.DropWhere.Chute)
+			click(session, body(parts).EggList.Sphinx.Drop)
+			expect.equal(sent[#sent].args.egg, "Sphinx")
+			expect.equal(sent[#sent].args.where, "Chute")
+
+			answer[1], answer[2] = false, "Your data has not loaded yet."
+			click(session, body(parts).EggList.Sphinx.Give)
+			expect.equal(sent[#sent].command, "GiveEgg")
+			expect.equal(panel(parts).Window.StatusLine.Text, "Your data has not loaded yet.")
+
+			click(session, body(parts).WholeZone.Buttons.DropAll)
+			expect.equal(sent[#sent].command, "DropZoneEggs")
+			expect.equal(sent[#sent].args.zone, 2)
+			click(session, body(parts).WholeZone.Buttons.ClearRunway)
+			expect.equal(sent[#sent].command, "ClearRunway")
+		end)
+
+		it("spawns and gives pets", function()
+			local session, parts, sent = startAdmin()
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Pets)
+			click(session, body(parts).Zone.Zones.Volcano)
+			local row = body(parts).PetList.LavaDragon
+			expect.equal(row.Title.Text, "Lava Dragon")
+			click(session, row.Spawn)
+			expect.equal(sent[#sent].command, "SpawnPet")
+			expect.equal(sent[#sent].args.pet, "LavaDragon")
+			click(session, row.Give)
+			expect.equal(sent[#sent].command, "GivePet")
+			click(session, body(parts).PetActions.Buttons.ShowZone)
+			expect.equal(sent[#sent].command, "ShowZonePets")
+			expect.equal(sent[#sent].args.zone, 5)
+		end)
+
+		it("flies, sets speeds and stamina, and lists the inventory", function()
+			local session, parts, sent, answer = startAdmin()
+			answer[3] = {
+				eggs = { { kind = "MossStag", name = "Moss Stag Egg", zone = 1, rarity = "Legendary", count = 3 } },
+				pets = { { kind = "Fox", name = "Fox", zone = 1, rarity = "Uncommon", count = 1 } },
+				eggCount = 3,
+				petCount = 1,
+			}
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Me)
+			expect.equal(sent[#sent].command, "GetInventory", "opening the tab loads the inventory")
+			local lines = body(parts).Inventory.Lines
+			expect.equal(lines.Summary.Text, "3 eggs, 1 pet")
+			expect.equal(lines.Line1.Text, "Moss Stag Egg  x3")
+			expect.equal(lines.Line2.Text, "Fox  x1")
+
+			local toggle = body(parts).Flight.FlyToggle
+			expect.equal(toggle.Text, "Fly")
+			click(session, toggle)
+			expect.equal(sent[#sent].command, "SetFlying")
+			expect.equal(sent[#sent].args.on, true)
+			-- The server answers by setting the attribute; the button follows it.
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.equal(body(parts).Flight.FlyToggle.Text, "Flying: tap to land")
+
+			click(session, body(parts).Flight.FlySpeed["160"])
+			expect.equal(sent[#sent].command, "SetFlySpeed")
+			expect.equal(sent[#sent].args.speed, 160)
+			click(session, body(parts).Walking.WalkSpeed["64"])
+			expect.equal(sent[#sent].args.speed, 64)
+			click(session, body(parts).Stamina.Buttons.Max)
+			expect.equal(sent[#sent].command, "Stamina")
+			expect.equal(sent[#sent].args.action, "Max")
+			click(session, body(parts).Inventory.Buttons.ClearEggs)
+			expect.equal(sent[#sent].command, "ClearInventory")
+			expect.equal(sent[#sent].args.what, "Eggs")
+		end)
+
+		it("starts events, moves the runway cycle on, and teleports", function()
+			local session, parts, sent = startAdmin()
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Events)
+			expect.equal(body(parts).Events.Status.Text, "No event running.")
+			click(session, body(parts).Events.Buttons.StartAvalanche)
+			expect.equal(sent[#sent].command, "StartEvent")
+			expect.equal(sent[#sent].args.event, "Avalanche")
+			session:service("Workspace"):SetAttribute("ServerEvent", "Avalanche")
+			session:renderFrame(1 / 60)
+			expect.equal(body(parts).Events.Status.Text, "Running: Egg Avalanche, until the runway closes")
+			click(session, body(parts).Runway.Buttons.CloseRunway)
+			expect.equal(sent[#sent].command, "CloseRunway")
+
+			click(session, panel(parts).Window.Tabs.Teleport)
+			click(session, body(parts).Places.Buttons.Showroom)
+			expect.equal(sent[#sent].command, "Teleport")
+			expect.equal(sent[#sent].args.to, "Showroom")
+			click(session, body(parts).Zones.Buttons.Ocean)
+			expect.equal(sent[#sent].args.to, "Zone")
+			expect.equal(sent[#sent].args.zone, 4)
+			expect.truthy(body(parts).Players:FindFirstChild("Nobody"), "nobody else to go to yet")
+
+			local friend = roblox.Instance.new("Player")
+			friend.Name = "Friend"
+			friend.UserId = 99
+			friend.Parent = session:service("Players")
+			session:fire(session:service("Players"), "PlayerAdded", friend)
+			session:renderFrame(1 / 60)
+			click(session, body(parts).Players.Friend.GoTo)
+			expect.equal(sent[#sent].command, "TeleportToPlayer")
+			expect.equal(sent[#sent].args.userId, 99)
+		end)
+	end)
+
+	describe("Client: flight", function()
+		local function flyVelocity(parts)
+			return parts.root:FindFirstChild("FlyVelocity")
+		end
+
+		it("flies where the camera looks while the Flying attribute is set, and lands when it is cleared", function()
+			local session, parts = startClient()
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "walking to start with")
+
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.truthy(flyVelocity(parts), "a LinearVelocity carries the character")
+			expect.truthy(parts.root:FindFirstChild("FlyGyro"), "an AlignOrientation keeps it upright")
+			expect.equal(parts.humanoid.PlatformStand, true)
+
+			-- The camera looks down the runway (+Z); pushing forward flies that way.
+			session.moveVector = Vector3.new(0, 0, -1)
+			session:renderFrame(0.1, 20)
+			local velocity = flyVelocity(parts).VectorVelocity
+			expect.truthy(velocity.Z > 70, "flying forward at about the default 80: " .. tostring(velocity))
+			session.moveVector = Vector3.zero
+			session.keysDown[Enum.KeyCode.Space] = true
+			session:renderFrame(0.1, 20)
+			expect.truthy(flyVelocity(parts).VectorVelocity.Y > 70, "rising")
+			session.keysDown[Enum.KeyCode.Space] = nil
+
+			parts.player:SetAttribute("Flying", false)
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "landed")
+			expect.equal(parts.humanoid.PlatformStand, false)
+		end)
+
+		it("lets go of the character while it rides an egg", function()
+			local session, parts = startClient()
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.truthy(flyVelocity(parts))
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "the ride holds the character, not flight")
 		end)
 	end)
 end
