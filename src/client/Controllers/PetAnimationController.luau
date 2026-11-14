@@ -2,8 +2,9 @@
 -- current move puts them (Shared/PetAnimations), by setting each Motor6D's Transform.
 --
 -- A pet plays the move named by its "Move" attribute, or, without one, its default: winged pets hover, the rest
--- walk (or swim, or crawl) on the spot. For now that means the pets ShowPets stands in Workspace.StudioPets; set
--- "Move" on one in Studio's Properties window to see its other moves (its moves are listed in PetAnimations).
+-- walk (or swim, or crawl) on the spot. That means the pets roaming the pens at the hub (Workspace.PenPets, from
+-- PenController, which sets "Move" as they walk and rest) and the ones ShowPets stands in Workspace.StudioPets;
+-- set "Move" on one of those in Studio's Properties window to see its other moves (listed in PetAnimations).
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -92,13 +93,18 @@ local function watchFolder(folder: Instance)
 	end)
 end
 
+-- The folders of pets to animate.
+local FOLDERS = { StudioPets = true, PenPets = true }
+
 function PetAnimationController.Init()
-	local existing = Workspace:FindFirstChild("StudioPets")
-	if existing then
-		watchFolder(existing)
+	for name in FOLDERS do
+		local existing = Workspace:FindFirstChild(name)
+		if existing then
+			watchFolder(existing)
+		end
 	end
 	Workspace.ChildAdded:Connect(function(child)
-		if child.Name == "StudioPets" then
+		if FOLDERS[child.Name] then
 			watchFolder(child)
 		end
 	end)

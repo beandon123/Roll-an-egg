@@ -34,7 +34,15 @@ return function(harness)
 				eggs = eggs or {},
 				stamina = { value = 100, time = session.clock, rate = 12, max = 100 },
 				agility = 14,
-				eggCount = 2,
+				inventory = {
+					eggs = {
+						{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+						{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+					},
+					nests = {},
+					pets = {},
+					nestCount = 2,
+				},
 				coins = 0,
 			}
 		end
@@ -424,7 +432,16 @@ return function(harness)
 
 			session:fromServer("RideEnded", "Claimed", { eggId = 1, zone = 1, rarity = "Common", kind = "Leafy" })
 			session:fromServer("EggRemoved", 1, "Claimed", LOCAL_USER_ID)
-			session:fromServer("InventoryUpdated", 3)
+			session:fromServer("InventoryChanged", {
+				eggs = {
+					{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+					{ uid = "c", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 1 },
+				},
+				nests = {},
+				pets = {},
+				nestCount = 2,
+			})
 			session:renderFrame(1 / 60)
 
 			expect.equal(parts.root.Anchored, false)
@@ -547,6 +564,227 @@ return function(harness)
 			local center = eggCenter(session, egg)
 			expect.near(otherRoot.CFrame.Position.Z, center.Z, 1e-3)
 			expect.near(otherRoot.CFrame.Position.X, 6, 1e-3)
+		end)
+	end)
+
+	describe("Client: eggs and pets", function()
+		local function panel(parts)
+			return hud(parts).Inventory
+		end
+
+		local function state(_session, extra)
+			local base = {
+				eggs = {
+					{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+				},
+				nests = {},
+				pets = {},
+				nestCount = 2,
+			}
+			for key, value in extra or {} do
+				base[key] = value
+			end
+			return base
+		end
+
+		it("opens the Eggs tab on the right and places an egg in a nest", function()
+			local session, parts = startClient()
+			local tabs = hud(parts).SideTabs
+			expect.equal(tabs.EggsTab.Badge.Text, "2")
+			expect.equal(panel(parts).Visible, false)
+
+			session:fire(tabs.EggsTab, "Activated")
+			expect.equal(panel(parts).Visible, true)
+			expect.equal(panel(parts).Title.Text, "Your eggs (2)")
+			local cards = panel(parts).List.EggsPage.Eggs
+			expect.truthy(cards:FindFirstChild("Egg_a") and cards:FindFirstChild("Egg_b"), "a card per egg")
+			expect.equal(cards.Egg_a.Title.Text, "Leafy Egg")
+
+			-- The first egg turns in the preview.
+			session:renderFrame(1 / 60)
+			local preview = panel(parts).Preview
+			expect.truthy(preview:FindFirstChildOfClass("Model"), "egg in the preview")
+			expect.truthy(preview:FindFirstChildOfClass("Camera"), "preview camera")
+			expect.truthy(string.find(preview.Caption.Text, "Leafy Egg"), preview.Caption.Text)
+
+			session:fire(cards.Egg_b.Place, "Activated")
+			expect.equal(session:lastSent("PlaceEgg", "server").args[1], "b")
+			-- The server's answer: it went into nest 1.
+			session:fromServer(
+				"InventoryChanged",
+				state(session, {
+					eggs = { { uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 } },
+					nests = {
+						{
+							slot = 1,
+							uid = "b",
+							zone = 1,
+							rarity = "Rare",
+							kind = "Toadstool",
+							placedAt = session.clock,
+							bonus = 0,
+						},
+					},
+				})
+			)
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Placed in nest 1"), hud(parts).Toast.Text)
+			expect.equal(tabs.EggsTab.Badge.Text, "1")
+		end)
+
+		it("does not ask to place an egg when the nests are full", function()
+			local session, parts = startClient()
+			session:fromServer(
+				"InventoryChanged",
+				state(session, {
+					nests = {
+						{ slot = 1, uid = "x", zone = 1, rarity = "Common", kind = "Leafy", placedAt = 0, bonus = 0 },
+						{ slot = 2, uid = "y", zone = 1, rarity = "Common", kind = "Leafy", placedAt = 0, bonus = 0 },
+					},
+				})
+			)
+			session:fire(hud(parts).SideTabs.EggsTab, "Activated")
+			session:fire(panel(parts).List.EggsPage.Eggs.Egg_a.Place, "Activated")
+			expect.equal(#session:sent("PlaceEgg"), 0)
+			expect.truthy(string.find(hud(parts).Toast.Text, "nests are full"), hud(parts).Toast.Text)
+		end)
+
+		it("shows the nests counting down and the hatched pets in the Pets tab", function()
+			local session, parts = startClient()
+			session:fromServer(
+				"InventoryChanged",
+				state(session, {
+					nests = {
+						{
+							slot = 1,
+							uid = "n",
+							zone = 1,
+							rarity = "Common",
+							kind = "Leafy",
+							placedAt = session.clock - 10,
+							bonus = 0,
+						},
+					},
+					pets = {
+						{ uid = "p", kind = "Bear", egg = "Bear", zone = 1, rarity = "Epic", hatchedAt = 0 },
+					},
+				})
+			)
+			session:fromServer(
+				"PetHatched",
+				{ uid = "q", kind = "Owl", egg = "Toadstool", zone = 1, rarity = "Rare", hatchedAt = 0 }
+			)
+			expect.equal(hud(parts).Toast.Text, "Your Owl hatched! (Rare)")
+			expect.equal(hud(parts).SideTabs.PetsTab.Badge.Text, "1")
+
+			session:fire(hud(parts).SideTabs.PetsTab, "Activated")
+			expect.equal(hud(parts).SideTabs.PetsTab.Badge.Visible, false, "seen")
+			session:renderFrame(1 / 60)
+			local page = panel(parts).List.PetsPage
+			expect.equal(page.Nests.Nest1.Title.Text, "Nest 1: Leafy Egg")
+			expect.equal(page.Nests.Nest1.Bar.Time.Text, "20s left")
+			expect.equal(page.Nests.Nest2:FindFirstChildOfClass("TextLabel").Text, "Nest 2: empty")
+			expect.truthy(page.Pets:FindFirstChild("Pet_p"), "pet card")
+			expect.equal(page.Pets.Pet_p.Title.Text, "Bear")
+			expect.equal(page.Pets.Pet_p.Where.Text, "In your pen")
+			expect.truthy(panel(parts).Preview:FindFirstChildOfClass("Model"), "pet in the preview")
+
+			-- An empty nest's button jumps to the eggs.
+			session:fire(page.Nests.Nest2.Fill, "Activated")
+			expect.equal(panel(parts).Title.Text, "Your eggs (2)")
+		end)
+
+		it("counts down on the nest boards at the hub and bursts eggs open when they hatch", function()
+			local session = startClient()
+			local PlotModels = session:require(session:service("ServerScriptService").Server.Map.PlotModels)
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local plots = roblox.Instance.new("Folder")
+			plots.Name = "Plots"
+			plots.Parent = map
+			map.Parent = session:service("Workspace")
+			local plot = PlotModels.buildPlot(plots, 1)
+			plot:SetAttribute("Owner", LOCAL_USER_ID)
+			local nest = plot.Nests.Nest1
+			nest:SetAttribute("EggKind", "Leafy")
+			nest:SetAttribute("EggName", "Leafy Egg")
+			nest:SetAttribute("Rarity", "Common")
+			nest:SetAttribute("PlacedAt", session.clock - 15)
+			nest:SetAttribute("Bonus", 0)
+
+			session:renderFrame(1 / 60)
+			local board = nest.Board.Countdown
+			expect.equal(board.Title.Text, "Leafy Egg")
+			expect.equal(board.Bar.Time.Text, "15s")
+			expect.near(board.Bar.Fill.Size.X.Scale, 0.5, 0.01)
+			expect.equal(plot.Nests.Nest2.Board.Countdown.Title.Text, "Empty nest")
+
+			nest:SetAttribute("EggKind", "")
+			nest:SetAttribute("HatchedAt", session.clock)
+			task.wait(0.25)
+			session:renderFrame(1 / 60)
+			local burst = nest:FindFirstChild("HatchBurst")
+			expect.truthy(burst, "burst")
+			local total = 0
+			for _, emitter in burst:GetChildren() do
+				total += session.emitted[emitter] or 0
+			end
+			expect.truthy(total > 0, "shells and sparkles")
+		end)
+
+		it("walks the pets round the pens", function()
+			local session = startClient()
+			local PlotModels = session:require(session:service("ServerScriptService").Server.Map.PlotModels)
+			local Plots = session:require(session:service("ReplicatedStorage").Shared.Plots)
+			local workspace = session:service("Workspace")
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local plots = roblox.Instance.new("Folder")
+			plots.Name = "Plots"
+			plots.Parent = map
+			map.Parent = workspace
+			local plot = PlotModels.buildPlot(plots, 1)
+			plot:SetAttribute("Pets", "Squirrel,Bear")
+			local camera = roblox.Instance.new("Camera")
+			local x, z = Plots.center(1)
+			camera.CFrame = roblox.CFrame.new(x, 40, z + 60)
+			camera.Parent = workspace
+			workspace.CurrentCamera = camera
+
+			session:renderFrame(1 / 60)
+			local pets = workspace.PenPets:GetChildren()
+			expect.equal(#pets, 2)
+			local function inside(model)
+				local position = model.PrimaryPart.CFrame.Position
+				local x0, x1, z0, z1 = Plots.roamArea(1, 0)
+				return position.X >= x0 - 1e-6
+					and position.X <= x1 + 1e-6
+					and position.Z >= z0 - 1e-6
+					and position.Z <= z1 + 1e-6
+			end
+			local before = {}
+			for _, pet in pets do
+				expect.truthy(inside(pet), pet.Name .. " in the pen")
+				before[pet] = pet.PrimaryPart.CFrame.Position
+			end
+			session:renderFrame(1 / 10, 80)
+			local moved = 0
+			for _, pet in pets do
+				expect.truthy(inside(pet), pet.Name .. " still in the pen")
+				if (pet.PrimaryPart.CFrame.Position - before[pet]).Magnitude > 1 then
+					moved += 1
+				end
+				expect.truthy(pet:GetAttribute("Move"), "animated")
+			end
+			expect.truthy(moved > 0, "they wander")
+
+			-- A change of pets rebuilds the pen; an empty list empties it.
+			plot:SetAttribute("Pets", "Owl")
+			session:renderFrame(1 / 60)
+			expect.equal(#workspace.PenPets:GetChildren(), 1)
+			plot:SetAttribute("Pets", "")
+			session:renderFrame(1 / 60)
+			expect.equal(#workspace.PenPets:GetChildren(), 0)
 		end)
 	end)
 

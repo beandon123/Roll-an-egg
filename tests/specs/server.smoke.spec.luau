@@ -125,7 +125,7 @@ return function(harness)
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
 			end
 			expect.equal(map.Desert.Sign.SurfaceGui.TextLabel.Text, "DESERT")
-			expect.near(map.Hub.Position.Y, runway.BASE_Y - 2)
+			expect.near(map.Hub.CFrame.Position.Y, runway.BASE_Y - 2)
 
 			-- One model per obstacle, tagged for the client; the ones that go off carry the parts it animates.
 			local Obstacles = shared(session).Obstacles
@@ -210,7 +210,8 @@ return function(harness)
 			local snapshot = session:remote("GetSnapshot").OnServerInvoke(player)
 			expect.equal(type(snapshot.eggs), "table")
 			expect.equal(snapshot.stamina.max, 100)
-			expect.equal(snapshot.eggCount, 0)
+			expect.equal(#snapshot.inventory.eggs, 0)
+			expect.equal(snapshot.inventory.nestCount, 2)
 			expect.equal(#session.kicks, 0)
 		end)
 
@@ -268,7 +269,9 @@ return function(harness)
 			end
 			expect.equal(removed.args[2], "Claimed")
 			expect.equal(removed.args[3], 1, "claimed by")
-			expect.equal(session:lastSent("InventoryUpdated", player).args[1], 1)
+			local inventory = session:lastSent("InventoryChanged", player).args[1]
+			expect.equal(#inventory.eggs, 1)
+			expect.equal(inventory.eggs[1].kind, egg.kind)
 
 			local data = session.profiles.Player_1.Data
 			expect.equal(#data.Eggs, 1)
@@ -446,6 +449,173 @@ return function(harness)
 			rideAlongPath(session, player, egg, 20)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "Cliff")
 			expect.equal(humanoid.Health, 0)
+		end)
+	end)
+
+	describe("Server: plots and hatching", function()
+		local function services(session)
+			local folder = session:service("ServerScriptService").Server.Services
+			return session:require(folder.InventoryService), session:require(folder.PlotService)
+		end
+
+		local function plotModel(session, index)
+			return session:service("Workspace").Map.Plots["Plot" .. index]
+		end
+
+		local function signText(plot)
+			return plot.Sign:FindFirstChildOfClass("SurfaceGui").TextLabel.Text
+		end
+
+		it("gives each player a plot with two nests, and frees it when they leave", function()
+			local session = startServer()
+			local first = session:addPlayer(1, "Tester")
+			local second = session:addPlayer(2, "Other")
+			session:heartbeat(1 / 60)
+			local _, PlotService = services(session)
+			expect.equal(PlotService.GetPlot(first), 1)
+			expect.equal(PlotService.GetPlot(second), 2)
+			local plot = plotModel(session, 1)
+			expect.equal(plot:GetAttribute("Owner"), 1)
+			expect.equal(signText(plot), "Tester's Pen")
+			expect.equal(#plot.Nests:GetChildren(), 2)
+			expect.equal(signText(plotModel(session, 3)), "Free plot")
+
+			session:fire(session:service("Players"), "PlayerRemoving", first)
+			expect.equal(plot:GetAttribute("Owner"), 0)
+			expect.equal(signText(plot), "Free plot")
+		end)
+
+		it("sends players to their plot when they respawn", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local character = roblox.Instance.new("Model")
+			local humanoid = roblox.Instance.new("Humanoid")
+			humanoid.Parent = character
+			local root = roblox.Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Parent = character
+			character.Parent = session:service("Workspace")
+			session:fire(player, "CharacterAdded", character)
+			task.wait()
+			local Plots = session:require(session:service("ReplicatedStorage").Shared.Plots)
+			local x, z = Plots.spawnPoint(1)
+			expect.near(root.CFrame.Position.X, x, 1e-3)
+			expect.near(root.CFrame.Position.Z, z, 1e-3)
+		end)
+
+		it("places an egg in a nest, where it hatches on a timer into a pet in the pen", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local InventoryService = services(session)
+			InventoryService.AddEgg(player, 1, "Common", "Leafy")
+			local data = session.profiles.Player_1.Data
+			local uid = data.Eggs[1].uid
+
+			session:fromClient("PlaceEgg", player, uid)
+			expect.equal(#data.Eggs, 0)
+			expect.equal(data.Nests[1].slot, 1)
+			local inventory = session:lastSent("InventoryChanged", player).args[1]
+			expect.equal(#inventory.nests, 1)
+			local nest = plotModel(session, 1).Nests.Nest1
+			expect.equal(nest:GetAttribute("EggKind"), "Leafy")
+			expect.equal(nest:GetAttribute("EggName"), "Leafy Egg")
+			expect.truthy(nest:FindFirstChild("Egg"), "the egg sits in the nest")
+
+			-- A Common egg takes 30 seconds.
+			session:heartbeat(1, 29)
+			task.wait(0.6)
+			expect.equal(#data.Pets, 0)
+			session:heartbeat(1, 2)
+			task.wait(0.6)
+			expect.equal(#data.Pets, 1)
+			expect.equal(data.Pets[1].kind, "Squirrel")
+			expect.equal(#data.Nests, 0)
+			local hatched = session:lastSent("PetHatched", player)
+			expect.equal(hatched.args[1].kind, "Squirrel")
+			expect.equal(nest:GetAttribute("EggKind"), "")
+			expect.falsy(nest:FindFirstChild("Egg"))
+			expect.truthy(nest:GetAttribute("HatchedAt"), "marked for the burst")
+			expect.equal(plotModel(session, 1):GetAttribute("Pets"), "Squirrel")
+			expect.equal(#session:lastSent("InventoryChanged", player).args[1].pets, 1)
+		end)
+
+		it("ignores eggs the player does not have, and keeps eggs when the nests are full", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local InventoryService = services(session)
+			for _ = 1, 3 do
+				InventoryService.AddEgg(player, 1, "Rare", "Toadstool")
+			end
+			local data = session.profiles.Player_1.Data
+			session:fromClient("PlaceEgg", player, "not-an-egg")
+			session:fromClient("PlaceEgg", player, 42)
+			expect.equal(#data.Nests, 0)
+			for index = 1, 3 do
+				session:heartbeat(0.3)
+				session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
+				expect.equal(#data.Nests, math.min(index, 2))
+			end
+			expect.equal(#data.Eggs, 1, "the third egg waits in the inventory")
+		end)
+
+		it("hatches eggs that finished while the player was away", function()
+			local session = startServer()
+			local now = session.clock
+			session.saved.Player_1 = {
+				Eggs = {},
+				Nests = {
+					{
+						slot = 1,
+						uid = "x",
+						zone = 1,
+						rarity = "Epic",
+						kind = "Bear",
+						placedAt = now - 3600,
+						bonus = 0,
+					},
+				},
+				Pets = {},
+			}
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = session.profiles.Player_1.Data
+			expect.equal(#data.Pets, 1)
+			expect.equal(data.Pets[1].kind, "Bear")
+			expect.equal(data.NestCount, 2, "filled in for an old save")
+			expect.equal(session:lastSent("PetHatched", player).args[1].kind, "Bear")
+		end)
+
+		it("banks the closure's 30x hatching when the next cycle starts", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			task.wait(0.1)
+			local InventoryService = services(session)
+			InventoryService.AddEgg(player, 1, "Epic", "Bear")
+			local data = session.profiles.Player_1.Data
+			-- Placed shortly before the runway closes, then through to the next cycle.
+			local cycleStart = (math.floor(session.clock / 180) + 1) * 180
+			session.clock = cycleStart - 25
+			session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
+			session.clock = cycleStart + 1
+			task.wait(0.6)
+			expect.near(data.Nests[1].bonus, 29 * 10)
+		end)
+
+		it("can give eggs and finish hatching from the Studio test panel", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("DevCommand", player, "GiveEggs")
+			local data = session.profiles.Player_1.Data
+			expect.equal(#data.Eggs, 8, "one of each Forest egg")
+			session:fromClient("PlaceEgg", player, data.Eggs[8].uid)
+			session:fromClient("DevCommand", player, "HatchNow")
+			expect.equal(#data.Pets, 1)
+			expect.equal(data.Pets[1].kind, "Treant")
 		end)
 	end)
 

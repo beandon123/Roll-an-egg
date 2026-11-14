@@ -34,6 +34,8 @@ local Runway = session:require(Shared.Runway)
 local Zones = session:require(Shared.Config.Zones)
 
 MapService.Init()
+local PlotService = session:require(Server.Services.PlotService)
+PlotService.Init()
 local workspace = session:service("Workspace")
 
 -- A few eggs on the runway, each where its path round the obstacles has taken it.
@@ -65,6 +67,52 @@ for zoneId, zone in Zones.List do
 			end
 		end
 		egg.Parent = eggFolder
+	end
+end
+
+-- Two plots dressed as if their owners were playing: an egg in each nest and pets in the pen.
+local PlotModels = session:require(Server.Map.PlotModels)
+local PetRig = session:require(Shared.PetRig)
+local Plots = session:require(Shared.Plots)
+local function moveModel(model, target)
+	local move = target * model.PrimaryPart.CFrame:Inverse()
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.CFrame = move * part.CFrame
+		end
+	end
+end
+local showcase = {
+	{ plot = 2, eggs = { "Toadstool", "MossStag" }, pets = { "Bear", "Fox", "Owl", "MossStag", "Bunny" } },
+	{ plot = 6, eggs = { "Sphinx", "Yeti" }, pets = { "Camel", "SabertoothCat", "WoollyMammoth", "Meerkat" } },
+}
+for _, entry in showcase do
+	local plot = workspace.Map.Plots["Plot" .. entry.plot]
+	PlotModels.signText(plot.Sign, "Player's Pen")
+	for slot, kind in entry.eggs do
+		local spec = PlotModels.NEST_EGG
+		local egg = EggRig.build(kind, spec)
+		local bed = plot.Nests["Nest" .. slot].Bed
+		moveModel(
+			egg,
+			bed.CFrame * roblox.CFrame.new(0, 0.4 + spec.halfLength, 0) * roblox.CFrame.Angles(0, 0, math.pi / 2)
+		)
+		egg.Parent = eggFolder
+	end
+	for index, kind in entry.pets do
+		local pet = PetRig.build(kind)
+		local root = pet.PrimaryPart
+		local reach = math.max(root.Size.X, root.Size.Z) / 2 + 1
+		local x0, x1, z0, z1 = Plots.roamArea(entry.plot, reach)
+		local t = (index - 0.5) / #entry.pets
+		local x = x0 + (x1 - x0) * (if index % 2 == 0 then 0.25 else 0.75)
+		local z = z0 + (z1 - z0) * t
+		moveModel(
+			pet,
+			roblox.CFrame.new(x, Runway.BASE_Y + 0.4 + pet:GetAttribute("GroundOffset"), z)
+				* roblox.CFrame.Angles(0, random() * 6, 0)
+		)
+		pet.Parent = eggFolder
 	end
 end
 

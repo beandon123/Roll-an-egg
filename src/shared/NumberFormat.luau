@@ -45,4 +45,15 @@ function NumberFormat.clock(seconds: number): string
 	return string.format("%d:%02d", whole // 60, whole % 60)
 end
 
+-- A longer stretch of time, to the two largest units: "45s", "2m 05s", "5h 59m".
+function NumberFormat.duration(seconds: number): string
+	local whole = math.max(0, math.ceil(seconds))
+	if whole >= 3600 then
+		return string.format("%dh %02dm", whole // 3600, (whole % 3600) // 60)
+	elseif whole >= 60 then
+		return string.format("%dm %02ds", whole // 60, whole % 60)
+	end
+	return `{whole}s`
+end
+
 return NumberFormat

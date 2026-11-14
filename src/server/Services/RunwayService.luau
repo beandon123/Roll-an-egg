@@ -4,7 +4,6 @@
 -- Eggs are not parts on the server. Each client draws them itself from the shared clock (see the client's
 -- EggController), so the server only ever sends "an egg appeared / was mounted / was left / is gone".
 
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -20,6 +19,7 @@ local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
 local DataService = require(script.Parent.DataService)
+local InventoryService = require(script.Parent.InventoryService)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
 
 -- Fastest a client may report steering; extra reports are dropped.
@@ -85,22 +85,6 @@ local function killCharacter(player: Player)
 	if humanoid then
 		humanoid.Health = 0
 	end
-end
-
-local function grantEgg(player: Player, zone: number, rarity: string, kind: string)
-	local data = DataService.GetData(player)
-	if data == nil then
-		return
-	end
-	table.insert(data.Eggs, {
-		uid = HttpService:GenerateGUID(false),
-		zone = zone,
-		rarity = rarity,
-		kind = kind,
-		claimedAt = os.time(),
-	})
-	data.Stats.EggsClaimed += 1
-	Net.InventoryUpdated:FireClient(player, #data.Eggs)
 end
 
 local function eggName(rarity: string, kind: string): string
@@ -207,7 +191,7 @@ local function dispatch(events)
 		elseif kind == "Claimed" then
 			local player = playersByUserId[event.rider]
 			if player then
-				grantEgg(player, event.zone, event.rarity, event.kind)
+				InventoryService.AddEgg(player, event.zone, event.rarity, event.kind)
 			end
 		end
 	end
@@ -285,7 +269,7 @@ local function onGetSnapshot(player: Player)
 			}
 			else nil,
 		agility = if rider then rider.agility else Tuning.BASE_AGILITY,
-		eggCount = if data then #data.Eggs else 0,
+		inventory = InventoryService.GetState(player),
 		coins = if data then data.Coins else 0,
 		serverTime = time,
 	}

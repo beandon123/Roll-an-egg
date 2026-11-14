@@ -8,11 +8,14 @@ local Controllers = script.Controllers
 
 local ORDER = {
 	"EggController",
+	"InventoryController",
 	"RideController",
 	"HudController",
 	"PetAnimationController",
 	"ObstacleController",
 	"DayNightController",
+	"NestController",
+	"PenController",
 }
 
 local loaded = {}

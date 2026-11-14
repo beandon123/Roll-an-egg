@@ -9,6 +9,7 @@ local Load = require(script.Parent.Parent.Load)
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
 
+local Panels = require(script.Parent.Panels)
 local UiState = require(script.Parent.UiState)
 
 local Fusion = UiState.Fusion
@@ -111,13 +112,13 @@ local function devButton(scope, text: string, command: string, order: number)
 	})
 end
 
--- Buttons that only appear (and only work) inside Roblox Studio, for testing.
+-- Buttons that only appear (and only work) inside Roblox Studio, for testing. On the left, below the wallet,
+-- out of the way of the Eggs and Pets tabs on the right.
 local function devPanel(scope)
 	return scope:New("Frame")({
 		Name = "StudioTestPanel",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.4, 0),
-		Size = UDim2.fromOffset(170, 228),
+		Position = UDim2.fromOffset(10, 100),
+		Size = UDim2.fromOffset(170, 306),
 		BackgroundColor3 = PANEL,
 		BackgroundTransparency = 0.2,
 		[Children] = {
@@ -146,6 +147,8 @@ local function devPanel(scope)
 			devButton(scope, "Drop best egg here", "DropBestEgg", 3),
 			devButton(scope, "Drop each egg here", "DropEachEgg", 4),
 			devButton(scope, "Show this zone's pets", "ShowPets", 5),
+			devButton(scope, "Get this zone's eggs", "GiveEggs", 6),
+			devButton(scope, "Hatch my nests now", "HatchNow", 7),
 		},
 	})
 end
@@ -339,6 +342,9 @@ function Hud.mount(playerGui: Instance)
 							}),
 						},
 					}),
+
+					-- Right edge: the Eggs and Pets tabs, and the panel they open.
+					Panels.build(scope),
 
 					if RunService:IsStudio() then devPanel(scope) else nil,
 				},

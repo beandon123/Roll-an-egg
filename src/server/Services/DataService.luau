@@ -20,11 +20,15 @@ local TEMPLATE = {
 	Coins = 0,
 	-- upgradeId -> level bought
 	Upgrades = {},
-	-- Unhatched eggs: { uid = string, zone = number, rarity = string, kind = string, claimedAt = number }
-	-- `kind` is the egg's design name (e.g. "MossStag"). Eggs claimed before kinds existed have none; treat those
-	-- as the zone's first egg of that rarity.
+	-- The shapes of these three are in Logic/Hatchery.
+	-- Eggs in the inventory: { uid, zone, rarity, kind, claimedAt }. `kind` is the egg's design name (e.g.
+	-- "MossStag"). Eggs claimed before kinds existed have none; they count as the zone's first egg of that rarity.
 	Eggs = {},
-	-- Hatched pets (filled in once hatching is built)
+	-- Eggs hatching in the nests on the player's plot: { slot, uid, zone, rarity, kind, placedAt, bonus }.
+	Nests = {},
+	-- How many nests the player has (more can be bought later).
+	NestCount = 2,
+	-- Hatched pets: { uid, kind, egg, zone, rarity, hatchedAt }.
 	Pets = {},
 	Stats = {
 		EggsClaimed = 0,

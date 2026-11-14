@@ -69,6 +69,10 @@ Tuning.HIT_BACKUP_INSET = 4
 -- How much the rider's device forgives a graze, in studs.
 Tuning.HIT_GRAZE = 0.6
 
+-- Hatching (times are per rarity, in Config/Rarities)
+-- How many times as fast nests hatch while the runway is closed.
+Tuning.HATCH_BOOST = 30
+
 -- Characters
 Tuning.RESPAWN_TIME = 2
 -- A character this many studs below the runway surface has fallen off and dies.

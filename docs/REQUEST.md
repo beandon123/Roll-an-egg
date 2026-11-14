@@ -201,13 +201,18 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     King Crab egg (replaced by the Great Shark), and the Eternal Phoenix egg and pet (replaced by the Lava Dragon).
 
 ### Plot & Pen
-- [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided
+- [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided (built: four fenced pens
+      down each side of a plaza in front of the runway, the owner's name over the gate; players respawn at theirs)
+- [ ] Inventory (decided): claimed eggs appear in an Eggs tab on the right of the screen; placing one puts it in a
+      free nest on the player's own plot (built)
+- [ ] Pets tab on the right (decided): each nest's hatch countdown, and every hatched pet (built)
 - [ ] One pet pen per plot (decided)
     - [ ] Capacity: 10 pets at Pen Level 1, +1 per level, up to 18 for now (decided)
     - [ ] Each level bought with coins, or buy the next level with Robux (decided)
     - [ ] Every pet in the pen roams freely
-    - [ ] Nests inside the pen: place eggs here to hatch; start with 2, buy up to 10
-    - [ ] Hatched pets pop out of the nest and start roaming
+    - [ ] Nests inside the pen: place eggs here to hatch; start with 2, buy up to 10 (2 built; buying more later)
+    - [ ] Hatched pets pop out of the nest and start roaming (built: the egg bursts open; the 10 rarest pets roam,
+          walked round by each player's device)
     - [ ] Coins pile up at the pen's collect pad; walk over it to collect
 - [ ] Hatch times: Common 30 s, Uncommon 2 m, Rare 5 m, Epic 15 m, Legendary 45 m, Mythic 2 h, Secret 4 h, Eternal 6 h
       (Titan/Robux eggs set per egg)

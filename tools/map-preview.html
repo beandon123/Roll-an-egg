@@ -101,6 +101,12 @@
   // Camera: from the address, or looking down a zone from just behind its gate.
   const target = new THREE.Vector3();
   function zoneView(id) {
+    if (id === 0) {
+      // The hub: the plaza with the plots down both sides.
+      camera.position.set(0, DATA.baseY + 130, -470);
+      target.set(0, DATA.baseY, -190);
+      return;
+    }
     const zone = DATA.zones[id - 1];
     camera.position.set(0, DATA.baseY + 28, zone.startZ + 6);
     target.set(0, DATA.baseY, zone.startZ + 190);
@@ -112,7 +118,7 @@
       camera.position.set(c[0], c[1], c[2]);
       target.set(c[3], c[4], c[5]);
     } else {
-      zoneView(Number(hash.get("zone") || 1));
+      zoneView(Number(hash.has("zone") ? hash.get("zone") : 1));
     }
     if (hash.get("fov")) camera.fov = Number(hash.get("fov"));
     camera.updateProjectionMatrix();
@@ -121,6 +127,12 @@
   window.addEventListener("hashchange", () => { fromHash(); draw(); });
 
   const buttons = document.getElementById("zones");
+  {
+    const b = document.createElement("button");
+    b.textContent = "Hub";
+    b.onclick = () => { location.hash = "zone=0"; };
+    buttons.appendChild(b);
+  }
   for (const zone of DATA.zones) {
     const b = document.createElement("button");
     b.textContent = zone.name;

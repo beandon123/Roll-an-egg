@@ -19,11 +19,13 @@ local EVENTS = {
 	"RideEnded", -- (reason, { eggId, zone, rarity, kind })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"ObstacleHit", -- (obstacleId, tier, lateral): the rider's egg hit an obstacle (Shared/Obstacles)
-	"InventoryUpdated", -- (eggCount)
+	"InventoryChanged", -- ({ eggs, nests, pets, nestCount }): see Logic/Hatchery's state()
+	"PetHatched", -- (pet): one of the player's eggs has hatched
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
 	"ReportHit", -- (obstacleId): the rider's device saw their egg hit an obstacle
+	"PlaceEgg", -- (eggUid): put an egg from the inventory into a free nest on the player's plot
 	"DevCommand", -- (command) Studio only
 }
 
@@ -34,7 +36,7 @@ local UNRELIABLE_EVENTS = {
 }
 
 local FUNCTIONS = {
-	"GetSnapshot", -- player -> server: () -> { eggs }
+	"GetSnapshot", -- player -> server: () -> { eggs, inventory, ... }
 }
 
 local Net = {}

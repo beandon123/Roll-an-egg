@@ -1,4 +1,4 @@
--- Builds the map: the hub with its plots, then each zone's stretch of runway with its banks, backdrop and gate
+-- Builds the map: the hub (PlotService adds the players' plots), then each zone's stretch of runway with its banks, backdrop and gate
 -- (Map/Scenery), and the obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels).
 -- Gameplay does not depend on any of these parts (it reads positions from Shared/Runway and Shared/Obstacles),
 -- so changing how the map looks never breaks the rules.
@@ -21,7 +21,6 @@ local Scenery = require(script.Parent.Parent.Map.Scenery)
 local RunwayService = require(script.Parent.RunwayService)
 
 local SLAB_THICKNESS = 4
-local PLOT_COUNT = 8
 -- A player on foot counts as standing in a Lethal obstacle when their root part is this close to the ground.
 local HAZARD_HEIGHT = 5
 
@@ -38,11 +37,22 @@ local function newPart(name: string, parent: Instance): Part
 	return part
 end
 
+-- The hub: a stone plaza behind the start of the runway, with the spawn in the middle. PlotService adds the
+-- players' plots down both sides.
 local function buildHub(map: Instance)
 	local hub = newPart("Hub", map)
 	hub.Size = Vector3.new(Runway.HUB_WIDTH, SLAB_THICKNESS, Runway.HUB_LENGTH)
-	hub.Position = Vector3.new(0, Runway.BASE_Y - SLAB_THICKNESS / 2, -Runway.HUB_LENGTH / 2)
-	hub.Color = Color3.fromRGB(120, 124, 132)
+	hub.CFrame = CFrame.new(0, Runway.BASE_Y - SLAB_THICKNESS / 2, -Runway.HUB_LENGTH / 2)
+	hub.Color = Color3.fromRGB(150, 152, 158)
+	hub.Material = Enum.Material.Cobblestone
+
+	-- A paved path up the middle of the plaza to the runway.
+	local path = newPart("Path", map)
+	path.Size = Vector3.new(Runway.WIDTH * 0.6, 0.2, Runway.HUB_LENGTH)
+	path.CFrame = CFrame.new(0, Runway.BASE_Y + 0.1, -Runway.HUB_LENGTH / 2)
+	path.Color = Color3.fromRGB(196, 178, 140)
+	path.Material = Enum.Material.Brick
+	path.CanCollide = false
 
 	local spawnPad = Instance.new("SpawnLocation")
 	spawnPad.Name = "Spawn"
@@ -50,30 +60,11 @@ local function buildHub(map: Instance)
 	spawnPad.Neutral = true
 	spawnPad.Duration = 0
 	spawnPad.Size = Vector3.new(14, 1, 14)
-	spawnPad.Position = Vector3.new(0, Runway.BASE_Y + 0.5, -Runway.HUB_LENGTH / 2)
+	spawnPad.CFrame = CFrame.new(0, Runway.BASE_Y + 0.5, -Runway.HUB_LENGTH / 2)
 	spawnPad.TopSurface = Enum.SurfaceType.Smooth
 	spawnPad.Material = Enum.Material.SmoothPlastic
 	spawnPad.Color = Color3.fromRGB(245, 245, 245)
 	spawnPad.Parent = map
-
-	-- Plot pads down both sides of the hub. They do nothing yet; pens and nests will be built on them.
-	local plots = Instance.new("Folder")
-	plots.Name = "Plots"
-	plots.Parent = map
-	local perSide = PLOT_COUNT / 2
-	local spacing = (Runway.HUB_LENGTH - 40) / perSide
-	for index = 1, PLOT_COUNT do
-		local side = if index <= perSide then -1 else 1
-		local row = (index - 1) % perSide
-		local pad = newPart("Plot" .. index, plots)
-		pad.Size = Vector3.new(40, 0.4, spacing - 8)
-		pad.Position = Vector3.new(
-			side * (Runway.HUB_WIDTH / 2 - 30),
-			Runway.BASE_Y + 0.2,
-			-Runway.HUB_LENGTH + 20 + spacing * (row + 0.5)
-		)
-		pad.Color = Color3.fromRGB(196, 172, 124)
-	end
 end
 
 local function buildObstacles(map: Instance)

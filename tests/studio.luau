@@ -375,6 +375,7 @@ function Session:addPlayer(userId: number, name: string)
 	local players = self:service("Players")
 	local player = Instance.new("Player")
 	player.Name = name
+	player.DisplayName = name
 	player.UserId = userId
 	player.Parent = players
 

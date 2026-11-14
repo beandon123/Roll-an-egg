@@ -20,6 +20,7 @@ local Runway = Load.shared("Runway")
 local Tuning = Load.shared("Config", "Tuning")
 
 local EggController = require(script.Parent.EggController)
+local InventoryController = require(script.Parent.InventoryController)
 local UiState = require(script.Parent.Parent.Ui.UiState)
 
 local localPlayer = Players.LocalPlayer
@@ -339,10 +340,6 @@ function RideController.Init()
 		EggController.SetLocalMaxStamina(max)
 	end)
 
-	Net.InventoryUpdated.OnClientEvent:Connect(function(eggCount: number)
-		UiState.eggCount:set(eggCount)
-	end)
-
 	Net.Announce.OnClientEvent:Connect(function(text: string, color: { number }?)
 		UiState.showToast(text, if color then rgb(color) else nil, 4)
 	end)
@@ -396,7 +393,7 @@ function RideController.Start()
 			EggController.SetLocalMaxStamina(snapshot.stamina.max)
 		end
 		agility = snapshot.agility or agility
-		UiState.eggCount:set(snapshot.eggCount or 0)
+		InventoryController.Apply(snapshot.inventory)
 		UiState.coins:set(snapshot.coins or 0)
 	else
 		warn(`[RideController] could not load the runway snapshot: {snapshot}`)

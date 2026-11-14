@@ -14,6 +14,7 @@ local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
+local InventoryService = require(script.Parent.InventoryService)
 local RunwayService = require(script.Parent.RunwayService)
 
 local MAX_TEST_STAMINA = 1e7
@@ -75,6 +76,17 @@ local commands: { [string]: (Player) -> () } = {
 				pet.Parent = folder
 			end
 		end
+	end,
+	-- Puts one of each of the zone's eggs straight into the inventory, to try placing and hatching.
+	GiveEggs = function(player)
+		local zone = Zones.List[RunwayService.GetZoneOf(player)]
+		for _, entry in zone.eggs do
+			InventoryService.AddEgg(player, zone.id, entry.rarity, entry.egg)
+		end
+	end,
+	-- Finishes hatching every egg in the player's nests.
+	HatchNow = function(player)
+		InventoryService.FinishHatching(player)
 	end,
 	-- Drops each of the zone's eggs in turn, a moment apart, so all of them can be looked at on the runway.
 	DropEachEgg = function(player)

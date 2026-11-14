@@ -5,7 +5,7 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 ## What works so far
 
-The first playable slice: **the runway and riding**.
+The first playable slice: **the runway, riding, and hatching**.
 
 - The map: the hub, then a level, 120-stud-wide runway through six zones (Forest, Desert, Snow, Ocean, Volcano,
   Prehistoric), each with its own checkered ground, stepped cliffs (a boardwalk over a reef in the Ocean), plants
@@ -16,18 +16,21 @@ The first playable slice: **the runway and riding**.
 - Zone-themed obstacles on the runway. Eggs nobody is riding steer round them; riders have to steer clear
   themselves, or get bumped, thrown off, or burned.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated
-  (see below). Pets do not hatch or roam yet.
+- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated (see below).
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
 - Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
 - The 3-minute runway cycle: a warning, then a 10-second closure before dawn that clears every egg without a
   rider.
-- Claimed eggs are saved to the player's data (ProfileStore).
+- Claimed eggs go into your inventory (the **Eggs** tab on the right). **Place** one and it goes into a nest on
+  your plot at the hub, where it hatches on a timer, faster while the runway is closed. The **Pets** tab shows
+  each nest's countdown and every pet you have hatched. Hatched pets roam your pen (see
+  [Eggs, nests and pets](#eggs-nests-and-pets)). Everything is saved (ProfileStore).
+- Each player gets one of 8 plots when they join, with their name over the gate, and respawns there.
 - A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
 
-The eggs, pets and runway have their real look; the hub and plots are still placeholders made of plain parts. Not
-built yet: duels, plots and pens, hatching, pets and mounts, coins and upgrades, teleport pads, server events, the
+The eggs, pets, runway and plots have their real look; the hub's plaza is still plain. Not built yet: riding your
+pets, duels, coins and upgrades (more nests, a bigger pen), selling pets, teleport pads, server events, the
 tutorial, and all sound.
 
 ## Try it in Roblox Studio
@@ -57,16 +60,37 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Get on an egg | Jump (Space) next to it | Jump button | A |
 | Steer | A / D | Thumbstick | Left stick |
 | Hop off | Jump again | Jump button | A |
+| Eggs and pets | Click the **Eggs** / **Pets** tabs on the right | Tap them | Select them |
 
 ### Studio test tools
 
-In Studio a small panel appears on the right of the screen. Its buttons only work in Studio, never in a live game:
+In Studio a small panel appears on the left of the screen. Its buttons only work in Studio, never in a live game:
 
 - **Max stamina x5**: lets you ride eggs in deeper zones before upgrades exist.
 - **Reset stamina**: back to 100.
 - **Drop best egg here**: drops the rarest egg of the zone you are standing in.
 - **Drop each egg here**: drops each of the zone's 8 eggs in turn.
 - **Show this zone's pets**: stands the pets of the zone you are in (those with models so far) in front of you.
+- **Get this zone's eggs**: puts one of each of the zone's 8 eggs straight into your inventory.
+- **Hatch my nests now**: finishes hatching every egg in your nests.
+
+## Eggs, nests and pets
+
+Every egg you claim on the runway goes into your inventory. Open the **Eggs** tab on the right of the screen to see
+them, each with its rarity and how long it takes to hatch, and a 3D preview of the one you pick. **Place** puts an
+egg into the first empty nest on your plot; you start with 2 nests.
+
+Your plot is one of 8 fenced pens at the hub, four down each side of the plaza, with your name over the gate
+(`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds them). The
+egg sits in its nest with a countdown above it. Hatch times go by rarity, from 30 seconds for a Common egg to 6 hours
+for an Eternal one (`src/shared/Config/Rarities.luau`). They are worked out from timestamps
+(`src/shared/HatchMath.luau`), so eggs keep hatching while you are offline. While the runway is closed every nest in
+the server hatches 30 times as fast, and that extra time is kept when the next cycle starts.
+
+When an egg hatches it bursts open, and the pet joins your pets: the **Pets** tab lists them, with each nest's
+countdown above. The 10 rarest walk round your pen, wandering from spot to spot (each player's device moves them,
+`PenController`). The rules are in `src/server/Logic/Hatchery.luau`, run by
+`src/server/Services/InventoryService.luau`.
 
 ## The runway
 
@@ -209,7 +233,7 @@ src/shared/            ReplicatedStorage.Shared: config and math used by both se
   Config/                Zones, rarities, tuning numbers. Change game balance here.
 src/server/            ServerScriptService.Server
   Logic/                 The rules of the game, with no Roblox objects, so they can be tested outside Studio
-  Map/                   Builds the look of the runway: zone scenery and obstacle models
+  Map/                   Builds the look of the map: zone scenery, obstacle models, the players' plots
   Services/              Connect the rules to players, saved data, the map, and remotes
 src/client/            StarterPlayerScripts.Client
   Controllers/           Egg drawing, riding, HUD updates

@@ -20,8 +20,9 @@ Runway.BASE_Y = 10
 -- An egg rolls on past the end of its own zone and fades out this far into the next one (a fraction of a zone).
 Runway.FADE_INTO_NEXT = 0.25
 
-Runway.HUB_LENGTH = 220
-Runway.HUB_WIDTH = 240
+-- The hub behind the start of the runway: a plaza with the players' plots down both sides (see Shared/Plots).
+Runway.HUB_LENGTH = 400
+Runway.HUB_WIDTH = 360
 
 -- Height of the walking surface at a given distance down the runway.
 function Runway.surfaceY(_z: number): number
