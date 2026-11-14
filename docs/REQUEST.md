@@ -190,9 +190,9 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
           that works out to ~2.6x faster while online (e.g., Legendary ~17 min)
 - [ ] Hatching is manual (decided): when an egg's timer finishes, it waits, ready, in its nest; nothing hatches on its own
     - [ ] Open it at the nest (walk up to it and press Open), or from anywhere in the Growing Eggs menu (see UI/UX)
+    - [ ] Hatch animation + rarity reveal when you open it
 - [ ] Skipping growth with Robux (decided): Skip on one growing egg (at its nest, or on its row in the Growing Eggs
       menu), or Grow All for every growing egg at once; skipped eggs become ready to open (see Monetization)
-    - [ ] Hatch animation + rarity reveal when you open it
 - [ ] Getting home (decided): ride back up, or reset/die to respawn at your plot (~2 s)
     - [ ] Optional on-screen Reset shortcut, because Roblox's built-in reset is buried in the menu on mobile
 
