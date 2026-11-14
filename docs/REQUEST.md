@@ -132,12 +132,19 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] Sell stall (decided): sell eggs or pets you don't want, for coins
     - [ ] Eggs: sell 1 or all of a kind; an egg is worth half its stamina requirement (proposed: Forest Common 25,
           Desert Mythic 900, Volcano Eternal 75K)
-    - [ ] Pets: once hatching exists (price by zone, rarity and variant; set during economy tuning)
-- [ ] Fuse machine (decided): put in 3 of the same pet -> get that pet's egg
-    - [ ] Proposed details: the 3 pets must be the same species and variant; the egg is that pet's zone + rarity egg,
-          goes to inventory, and hatches normally (a fresh roll of that tier's pets and of Golden/Rainbow), so spare
-          duplicates become another try at the pets you are missing
-    - [ ] Built together with pets and hatching (until then its panel only explains it)
+    - [ ] Pets: once hatching exists (price by zone, rarity, variant and size; set during economy tuning)
+- [ ] Fuse machine (decided): put in 3 of the same pet -> get an egg of that pet, which hatches one size bigger;
+      it consolidates small pets into bigger ones and clears spare pets out of inventories
+    - [ ] Exactly 3 pets of the same species (decided): 3 Woolly Mammoths, never a Mammoth and a Dolphin
+    - [ ] Variants and sizes can be mixed (decided)
+    - [ ] Variant (decided): each pet put in passes on its variant with a 1 in 3 chance
+          (1 Golden + 2 Normal -> 33% Golden; 3 Golden -> 100% Golden)
+    - [ ] Size (decided): each pet put in has a 1 in 3 chance to set the size, and the result is one size up from it
+          (1 Tiny + 2 Normal -> Normal 33% or Big 67%; 3 Tiny -> Normal; 3 Normal -> Big); the variant and size
+          rolls are independent (proposed); Colossal stays Colossal (proposed)
+    - [ ] The egg always hatches that species (decided), with the rolled variant and size; it takes that rarity's
+          hatch time and its result stays hidden ("?") until it hatches (proposed)
+    - [ ] Built together with pets and hatching; the rules are in `Logic/Fuse` and its panel explains them until then
 
 ### Riding & Claiming
 - [ ] Mount: anyone can jump onto any egg (decided) -> riding pose; one rider per egg (Titan Egg excepted);
@@ -184,7 +191,12 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] Server announcements: "Alex stole a Legendary egg from Sam!"
 
 ### Pets
-- [ ] Each pet: species, zone, rarity, variant (Normal / Golden / Rainbow mutation chance on hatch), Income/sec, Mount Speed
+- [ ] Each pet: species, zone, rarity, variant (Normal / Golden / Rainbow mutation chance on hatch), size, Income/sec,
+      Mount Speed
+    - [ ] Sizes, smallest first (proposed; the reference screenshot shows Big / Giant / Huge / Colossal tags):
+          Tiny, Normal, Big, Huge, Giant, Colossal
+    - [ ] Hatched pets come out Tiny or Normal; bigger sizes come only from the fuse machine (proposed)
+    - [ ] Bigger pets are drawn bigger and earn more (proposed; multipliers set during economy tuning)
     - [ ] Each zone's pets out-earn the zone before it (a new zone's Commons roughly match the previous zone's best)
 - [ ] Mounts: equip one pet as your active mount; summon/unsummon from the HUD
     - [ ] Riding a pet sets your run speed to its Mount Speed

@@ -12,6 +12,7 @@ local specs = {
 	"./specs/runwaySim.spec",
 	"./specs/hubLayout.spec",
 	"./specs/shop.spec",
+	"./specs/fuse.spec",
 	"./specs/server.smoke.spec",
 	"./specs/client.smoke.spec",
 }

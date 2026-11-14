@@ -536,6 +536,7 @@ return function(harness)
 			local panel = hud(parts).Fuse
 			expect.equal(panel.Visible, true)
 			expect.truthy(panel.List.HowItWorks.Text:find("3 of the same pet"), panel.List.HowItWorks.Text)
+			expect.truthy(panel.List.Odds.Text:find("1 in 3"), panel.List.Odds.Text)
 		end)
 	end)
 
