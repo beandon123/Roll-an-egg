@@ -139,8 +139,8 @@ lune run tools/export-models
 
 This writes `tools/out/RollAnEgg-Pets.rbxm` and `tools/out/RollAnEgg-Eggs.rbxm`: every pet and every egg, built by
 the game's own code (`PetRig`, `EggRig`), in a folder per zone, standing in rows on the ground (swimmers float). In
-Studio, right-click Workspace in the Explorer, choose **Insert from File...**, and pick a file (or drag the file
-into the viewport). The pets come rigged, with a `Motor6D` per limb; they move when the game plays their animations.
+Studio, right-click Workspace in the Explorer, choose **Insert > Import Roblox Model**, and pick a file (older
+Studios call it **Insert from File...**; or drag the file into the viewport). The pets come rigged, with a `Motor6D` per limb; they move when the game plays their animations.
 
 ## Project layout
 

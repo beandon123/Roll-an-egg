@@ -10,8 +10,8 @@
 -- they are laid out in rows, a zone to a row, standing on the ground at y = 0 (floating pets float above it, as they
 -- do in the game).
 --
--- In Studio: right-click Workspace (or ServerStorage) in the Explorer > Insert from File..., and pick a file. Or drag
--- the file into the viewport.
+-- In Studio: right-click Workspace (or ServerStorage) in the Explorer > Insert > Import Roblox Model, and pick a file
+-- (older Studios call it Insert from File...). Or drag the file into the viewport.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
