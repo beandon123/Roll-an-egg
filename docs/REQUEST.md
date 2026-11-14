@@ -156,7 +156,10 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] 1 Robux egg with 5 unique pets on top of the core set (decided) -> 45 pets at launch; event pets later
 - [ ] All pets rideable, built on ~7 shared skeletons (four-legged, two-legged, winged, low-slung, many-legged,
       floating/swimming for Ocean pets, special) so animations are reused
-- [ ] Sell pets for coins; pet inventory cap (upgradeable)
+- [ ] Sell pets for coins
+- [ ] Pet limit (decided): a player can own at most 100 pets in total, pen and inventory together
+    - [ ] A nest that finishes hatching while you own 100 pets keeps the pet waiting in the nest until you sell one
+          to make room (proposed)
 
 Draft roster (edit freely; Robux-egg pets designed during the art phase):
 
@@ -191,7 +194,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 ### Progression
 - [ ] Single soft currency: Coins
 - [ ] Upgrades: Max Stamina (main progression stat: lets you hold on to bigger eggs deeper down), Stamina Regen,
-      Agility, Run Speed, Jump, Nests, Pen Level, Hatch Speed, Inventory Size
+      Agility, Run Speed, Jump, Nests, Pen Level, Hatch Speed
+    - [ ] Max Stamina has no cap (decided): it can be upgraded forever, at rising cost, so future zones can ask for more
     - [ ] Costs rise steeply; big numbers shown abbreviated (1.2K, 30K, 4.5M)
 - [ ] Zone teleport pads bought with coins, in order (decided)
 - [ ] Collection book (index) with per-rarity, per-zone, and full-completion rewards
@@ -209,7 +213,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - [ ] Daily login streak rewards
 - [ ] Playtime gifts (5 / 10 / 20 / 30 min)
 - [ ] Daily quests (e.g., claim 5 eggs, win 2 duels, claim a Desert egg, hatch 2 Rares, get 3 Perfects in one duel)
-- [ ] Offline earnings (capped) + "Welcome back" summary
+- [ ] Offline earnings (decided): you get the coins your pets would have earned in your first hour offline, and no coins
+      at all beyond that hour; a "Welcome back" summary shows what you got (eggs still hatch the whole time you're away)
 - [ ] Global leaderboards: eggs claimed, eggs stolen, total coins, rarest hatch
 - [ ] Community-join reward; opt-in Roblox experience notifications ("Your Mythic egg hatched!")
 
@@ -312,7 +317,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - Remotes: one Net module; type and range checks; per-player rate limits; client never sends currency, rarity, or time values
 - Purchases: ProcessReceipt records each handled purchase ID in the player's profile, so every Robux purchase is granted
   exactly once even if a server crashes mid-purchase; one developer product per pen level (developer product prices are fixed)
-- Hatching & income: calculated from timestamps (plus closure bonus) on demand; offline earnings capped
+- Hatching & income: calculated from timestamps (plus closure bonus) on demand; offline earnings capped at 1 hour of income
 - Pens: roaming is cosmetic and runs only on each player's device (the server only stores which pets are in the pen);
   up to 18 pets x 8 pens; only nearby pens animate; distant pets freeze or switch to low-detail models
 - StreamingEnabled on: client code tolerates parts that haven't loaded yet; hub, plots, teleport pads, and zone signposts
