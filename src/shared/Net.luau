@@ -1,7 +1,7 @@
 -- Every remote in the game, in one place. The server creates them; clients wait for them.
 --
 -- Rule for server handlers: never trust what a client sends. Check the type and range of every argument, and
--- never accept coins, rarities, or times from a client.
+-- never accept dollars, rarities, or times from a client.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -9,21 +9,39 @@ local RunService = game:GetService("RunService")
 -- Reliable, ordered messages.
 local EVENTS = {
 	-- Server -> everyone
-	"EggSpawned", -- (egg)
+	"EggSpawned", -- (egg, announce): with announce, show the message for a Secret or rarer egg
 	"EggRemoved", -- (eggId, reason, byUserId?)
 	"EggMounted", -- (eggId, userId, time)
-	"EggLeft", -- (eggId, lateral, bounceTime?): rider gone; with bounceTime, the egg bounces then cracks
-	"EggClaimed", -- (eggId, userId, rarity): in that player's inventory now; they may still be riding it
+	"EggLeft", -- (eggId, time, lateral, cracking): rider gone; if cracking, the egg bounces once then cracks
+	"EggClaimed", -- (eggId, userId, rarity, kind): in that player's inventory now; they may still be riding it
 	"Announce", -- (text, colorRgb?)
+	"LuckChanged", -- (boosts): see LuckBoost
 	-- Server -> one player
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
-	"RideEnded", -- (reason, { eggId, zone, rarity }): Dismount, ThrownOff, HitWall, FellOff, Died, Left
+	"RideEnded", -- (reason, { eggId, zone, rarity, kind }): Dismount, ThrownOff, KnockedOff, Hazard, HitWall,
+	-- FellOff, Died, Left
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
-	"InventoryUpdated", -- (eggCount)
+	"ObstacleHit", -- (obstacleId, tier, lateral): the rider's egg hit an obstacle (Shared/Obstacles)
+	"InventoryChanged", -- ({ eggs, hatching, pets, penLevel, ... }): see Logic/Hatchery's state()
+	"PetHatched", -- (pet): one of the player's eggs has hatched
+	"DollarsChanged", -- (dollars, incomePerSecond)
+	"Notice", -- (text, colorRgb?): a message for this player alone
+	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
+	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
+	"PurchaseResult", -- (itemId, ok, message)
+	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
-	"DevCommand", -- (command) Studio only
+	"ReportHit", -- (obstacleId): the rider's device saw their egg hit an obstacle
+	"PlaceEgg", -- (eggUid): put an egg from the inventory down where the player stands in their pen
+	"SetInPen", -- (petUid, inPen): put a pet in the pen or take it out
+	"EquipBest", -- (): fill the pen with the player's best pets
+	"SellPet", -- (petUid)
+	"RidePet", -- (petUid or ""): ride a pet, or get off
+	"RequestPurchase", -- (itemId) a Robux item from Config/Shop; the server shows Roblox's purchase prompt
+	"BuyWithDollars", -- (itemId) an item with a dollar price
+	"SaveSettings", -- ({ [key]: value }) see Config/Settings
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.
@@ -33,7 +51,14 @@ local UNRELIABLE_EVENTS = {
 }
 
 local FUNCTIONS = {
-	"GetSnapshot", -- player -> server: () -> { eggs }
+	"GetSnapshot", -- player -> server: () -> { eggs, inventory, ... }
+	"GetShopState", -- player -> server: () -> { dollars, penLevel, passes, luck }
+	"GetSettings", -- player -> server: () -> { [key]: value }
+	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
+	"GetTrails", -- player -> server: () -> { owned, equipped }
+	"BuyTrail", -- player -> server: (trailId) -> (ok, result): see Logic/Stalls' TrailResult
+	"EquipTrail", -- player -> server: (trailId) -> (ok, result)
+	"SellEggs", -- player -> server: (eggKind, count) -> (sold, dollars)
 }
 
 local Net = {}

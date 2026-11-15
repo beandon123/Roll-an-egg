@@ -1,12 +1,13 @@
--- The local player's side of riding: leaping, asking to land on eggs, steering, hopping off, and being thrown off.
+-- The local player's side of riding: asking to jump onto eggs, steering, hopping off, being thrown off, and
+-- running into obstacles (spotted here at once and reported; the server has the final say and checks on its own).
 --
 -- The server decides everything that matters (whether a mount counts, stamina, claims). This controller only
 -- asks, steers, and makes the result feel immediate.
 --
--- Players never walk on the runway. Stepping onto it from the hub launches them into a long, floaty leap, and so
--- does jumping off an egg; they have Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first, or
--- running out of time, kills them, and they start again at the hub. (The server kills them too if this device
--- does not; see RunwayService.)
+-- Players never walk on the runway. Stepping onto it past the start zone launches them into a long, floaty leap,
+-- and so does jumping off an egg; they have Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first,
+-- or running out of time, kills them, and they start again at the hub. (Riding a pet, or flying as an admin, is not
+-- walking. The server kills them too if this device does not; see RunwayService.)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -14,13 +15,18 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
+local AdminTools = Load.shared("Config", "AdminTools")
+local EggModels = Load.shared("EggModels")
+local EggMotion = Load.shared("EggMotion")
 local Net = Load.shared("Net")
+local NumberFormat = Load.shared("NumberFormat")
+local Obstacles = Load.shared("Obstacles")
 local Rarities = Load.shared("Config", "Rarities")
 local Runway = Load.shared("Runway")
 local Tuning = Load.shared("Config", "Tuning")
-local Zones = Load.shared("Config", "Zones")
 
 local EggController = require(script.Parent.EggController)
+local InventoryController = require(script.Parent.InventoryController)
 local UiState = require(script.Parent.Parent.Ui.UiState)
 
 local localPlayer = Players.LocalPlayer
@@ -32,6 +38,8 @@ local SAME_EGG_IGNORE_TIME = 1
 -- A jump press only counts as "hop off" once the jump input that got the player onto the egg has been released.
 local JUMP_RELEASE_GAP = 0.15
 local MIN_RIDE_BEFORE_HOP = 0.3
+-- How much higher above an egg a player riding a pet may be when they jump onto it (as on the server).
+local MOUNTED_REACH = 40
 
 local RideController = {}
 
@@ -49,12 +57,22 @@ local awaitingJumpRelease = false
 local lastLeftEggId: number? = nil
 local lastLeftAt = 0
 
+-- Obstacles this ride has hit, so each one counts once, and whether a hit has already ended the ride here.
+local rideHits: { [number]: boolean } = {}
+local endedByHit = false
+-- Where the egg was last frame, to notice it being carried back one loop (its obstacles can then be hit again).
+local rideLastZ: number? = nil
+
+local BUMP_COLOR = Color3.fromRGB(255, 190, 90)
+local OUCH_COLOR = Color3.fromRGB(255, 110, 110)
+
 -- While leaping: when the time to land on an egg runs out (os.clock()), and the force that makes the leap floaty.
 local leapEndsAt: number? = nil
 local leapForce: VectorForce? = nil
 -- A mount request is on its way: touching the runway does not count until the server has had time to answer.
 local mountPendingUntil = 0
--- This character is about to die (it hit a wall or went off the side); nothing more to do for it.
+local MOUNT_PENDING_GRACE = 0.5
+-- This character is about to die (it hit a bank, went over the edge, or missed its leap); nothing more to do.
 local doomed = false
 
 local function getCharacter(): (Humanoid?, BasePart?)
@@ -92,10 +110,6 @@ local function readSteer(): number
 	local world = camera.CFrame:VectorToWorldSpace(Vector3.new(move.X, 0, move.Z))
 	return math.clamp(world.X, -1, 1)
 end
-
-local MISSED_COLOR = Color3.fromRGB(255, 110, 110)
--- How long a mount request may take to be answered before touching the runway counts.
-local MOUNT_PENDING_GRACE = 0.5
 
 -- Lighter gravity for the character while leaping.
 local function setFloaty(root: BasePart, on: boolean)
@@ -144,7 +158,7 @@ end
 local function missedLeap(humanoid: Humanoid, root: BasePart)
 	endLeap(root)
 	doomed = true
-	UiState.showToast("Missed the egg!", MISSED_COLOR)
+	UiState.showToast("Missed the egg!", OUCH_COLOR)
 	humanoid.Health = 0
 end
 
@@ -155,8 +169,13 @@ local function isOnRunway(position: Vector3): boolean
 		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
 end
 
--- Every frame while not riding: start a leap when the player steps onto the runway, carry a leaping player back
--- one loop at the end of the endless last zone, and kill them if they touch the runway or run out of time.
+-- Whether the player is getting about some other way than on foot: riding a pet, or flying as an admin.
+local function isCarried(): boolean
+	return UiState.Fusion.peek(UiState.riddenPet) ~= "" or localPlayer:GetAttribute(AdminTools.FLYING) == true
+end
+
+-- Every frame while not riding an egg: start a leap when the player steps onto the runway, carry a leaping player
+-- back one loop at the end of the endless last zone, and kill them if they touch the runway or run out of time.
 local function updateLeap()
 	if doomed or UiState.ride ~= nil then
 		return
@@ -167,20 +186,20 @@ local function updateLeap()
 	end
 
 	local position = root.Position
-	if position.Z < 0 then
-		-- Over the hub.
+	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isCarried() then
+		-- Back over the hub, off the side (falling), or not on foot.
 		if leapEndsAt ~= nil then
 			endLeap(root)
 		end
 		return
 	end
 	if position.Z >= Runway.LOOP_END then
-		root.CFrame += Vector3.new(0, Runway.LOOP_RISE, -Runway.LOOP_LENGTH)
+		root.CFrame += Vector3.new(0, 0, -Runway.LOOP_LENGTH)
 		position = root.Position
 	end
 
 	if leapEndsAt == nil then
-		-- Just stepped off the hub onto the runway.
+		-- Just stepped past the start zone onto the runway.
 		local velocity = root.AssemblyLinearVelocity
 		startLeap(
 			humanoid,
@@ -225,8 +244,9 @@ local function release(reason: string)
 	if reason == "Dismount" then
 		-- Leap forward off the egg, toward the next one.
 		startLeap(humanoid, root, Vector3.new(0, Tuning.LEAP_UP_SPEED, eggSpeed + 4))
-	elseif reason == "ThrownOff" then
-		-- Lost their balance: tumble off to one side, stunned. Only a lucky landing on another egg saves them.
+	elseif reason == "ThrownOff" or reason == "KnockedOff" then
+		-- Lost their balance (or knocked off): tumble off to one side, stunned. Only a lucky landing on another egg
+		-- saves them.
 		stunnedUntil = os.clock() + Tuning.STUN_TIME
 		humanoid.PlatformStand = true
 		startLeap(humanoid, root, Vector3.new(side * 16, Tuning.LEAP_UP_SPEED * 0.6, eggSpeed * 0.5))
@@ -237,7 +257,7 @@ local function release(reason: string)
 			end
 		end)
 	elseif reason == "HitWall" then
-		-- Crashed into the wall. The server ends it.
+		-- Crashed into the bank. The server ends it.
 		doomed = true
 		root.AssemblyLinearVelocity = Vector3.new(-side * 10, 15, eggSpeed * 0.3)
 		humanoid.Health = 0
@@ -246,6 +266,9 @@ local function release(reason: string)
 		doomed = true
 		root.AssemblyLinearVelocity = Vector3.new(side * 14, 5, eggSpeed)
 		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+	elseif reason == "Hazard" then
+		-- Into lava or tar; the server ends it.
+		doomed = true
 	end
 end
 
@@ -276,6 +299,9 @@ local function onRideStarted(eggId: number, info)
 	}
 	rideStartedAt = os.clock()
 	awaitingJumpRelease = true
+	rideHits = {}
+	rideLastZ = nil
+	endedByHit = false
 	mountPendingUntil = 0
 	endLeap(root)
 
@@ -285,10 +311,12 @@ local function onRideStarted(eggId: number, info)
 	humanoid.PlatformStand = false
 	humanoid.Sit = true
 
+	-- From here this device steers the egg, starting from wherever it was drawn.
+	EggController.SetRider(eggId, localPlayer.UserId)
 	local egg = EggController.GetEgg(eggId)
 	if egg then
-		egg.riderUserId = localPlayer.UserId
-		UiState.rideTitle:set(`{egg.rarity} {Zones.List[egg.zone].name} egg`)
+		local about = EggModels.describe(egg.kind)
+		UiState.rideTitle:set(if about then `{egg.rarity} {about.name}` else `{egg.rarity} egg`)
 	else
 		UiState.rideTitle:set("Egg")
 	end
@@ -303,13 +331,17 @@ end
 
 -- The local player's claim meter filled: the egg is in their inventory. They stay on it, rolling, until they jump
 -- off; the ride is just for show from now on.
-local function onEggClaimed(eggId: number, userId: number, rarity: string)
+local function onEggClaimed(eggId: number, userId: number, rarity: string, kind: string?)
 	if userId ~= localPlayer.UserId then
 		return
 	end
 	local info = Rarities.Info[rarity]
-	UiState.showToast(`CLAIMED! +1 {rarity} egg`, if info then rgb(info.color) else nil, 3)
-
+	local about = if kind then EggModels.describe(kind) else nil
+	UiState.showToast(
+		`CLAIMED! +1 {if about then about.name else rarity .. " egg"}`,
+		if info then rgb(info.color) else nil,
+		3
+	)
 	local ride = UiState.ride
 	if ride and ride.eggId == eggId then
 		ride.claimed = true
@@ -320,17 +352,51 @@ end
 
 local function onRideEnded(reason: string, info)
 	if reason == "ThrownOff" then
-		UiState.showToast("Out of stamina!", MISSED_COLOR)
+		UiState.showToast("Out of stamina!", OUCH_COLOR)
+	elseif (reason == "KnockedOff" or reason == "Hazard") and not endedByHit then
+		UiState.showToast(if reason == "Hazard" then "Ouch!" else "Knocked off!", OUCH_COLOR)
 	elseif reason == "HitWall" then
-		UiState.showToast("Hit the wall!", MISSED_COLOR)
+		UiState.showToast("Hit the wall!", OUCH_COLOR)
 	elseif reason == "FellOff" then
-		UiState.showToast("Off the edge!", MISSED_COLOR)
+		UiState.showToast("Off the edge!", OUCH_COLOR)
 	end
 
 	-- A hop off was already handled on this device when the button was pressed.
 	local ride = UiState.ride
 	if ride and ride.eggId == info.eggId then
 		release(reason)
+	end
+end
+
+-- The egg being ridden ran into an obstacle: spotted on this device (`lateral` nil: knock it clear here), or by
+-- the server (`lateral`: where it knocked the egg).
+local function onHit(obstacleId: number, lateral: number?)
+	local ride = UiState.ride
+	local obstacle = Obstacles.get(obstacleId)
+	if ride == nil or obstacle == nil or rideHits[obstacleId] then
+		return
+	end
+	rideHits[obstacleId] = true
+	local egg = EggController.GetEgg(ride.eggId)
+	if egg == nil then
+		return
+	end
+	egg.lateral = lateral or Obstacles.clearLane(obstacle.row, egg.lateral, egg.spec.halfLength)
+	egg.targetLateral = egg.lateral
+	EggController.Wobble(egg.id)
+
+	local kind = Obstacles.Config.Kinds[obstacle.kind]
+	if obstacle.tier == "Bump" then
+		local cost = NumberFormat.abbreviate(egg.spec.requirement * Tuning.BUMP_STAMINA)
+		UiState.showToast(`Bumped into {kind.name}! -{cost} stamina`, BUMP_COLOR)
+	elseif obstacle.tier == "KnockOff" then
+		endedByHit = true
+		UiState.showToast(`Knocked off by {kind.name}!`, OUCH_COLOR)
+		release("KnockedOff")
+	else
+		-- The server ends the ride and the character.
+		endedByHit = true
+		UiState.showToast(kind.hitText or `Into {kind.name}!`, OUCH_COLOR)
 	end
 end
 
@@ -353,7 +419,9 @@ local function lookForEgg()
 	end
 
 	local ignore = if clock - lastLeftAt < SAME_EGG_IGNORE_TIME then lastLeftEggId else nil
-	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore)
+	-- Riding a pet holds the player high up, so they may reach further down to an egg.
+	local reach = if UiState.Fusion.peek(UiState.riddenPet) ~= "" then MOUNTED_REACH else 0
+	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore, reach)
 	if eggId then
 		lastMountRequestAt = clock
 		mountPendingUntil = clock + MOUNT_PENDING_GRACE
@@ -380,6 +448,23 @@ local function steer(deltaTime: number)
 
 	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
 	egg.targetLateral = egg.lateral
+
+	-- Obstacles: report a hit straight away so the server can check it, and show it now.
+	local now = Workspace:GetServerTimeNow()
+	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	if rideLastZ and z < rideLastZ - Runway.LOOP_LENGTH / 2 then
+		-- Carried back one loop: the obstacles ahead can be hit again (as on the server).
+		rideHits = {}
+	end
+	rideLastZ = z
+	local hit = Obstacles.hitAt(egg.lateral, z, egg.spec.halfLength, egg.spec.radius, now, Tuning.HIT_GRAZE)
+	if hit and not rideHits[hit.id] then
+		Net.ReportHit:FireServer(hit.id)
+		onHit(hit.id, nil)
+		if UiState.ride == nil then
+			return
+		end
+	end
 
 	local clock = os.clock()
 	if clock - lastLateralSentAt >= 1 / Tuning.LATERAL_SEND_RATE then
@@ -423,14 +508,14 @@ function RideController.Init()
 	Net.RideEnded.OnClientEvent:Connect(onRideEnded)
 	Net.EggClaimed.OnClientEvent:Connect(onEggClaimed)
 
+	Net.ObstacleHit.OnClientEvent:Connect(function(obstacleId: number, _tier: string, lateral: number)
+		onHit(obstacleId, lateral)
+	end)
+
 	Net.StaminaChanged.OnClientEvent:Connect(function(value: number, time: number, rate: number, max: number)
 		UiState.staminaState = { value = value, time = time, rate = rate, max = max }
 		UiState.maxStamina:set(max)
 		EggController.SetLocalMaxStamina(max)
-	end)
-
-	Net.InventoryUpdated.OnClientEvent:Connect(function(eggCount: number)
-		UiState.eggCount:set(eggCount)
 	end)
 
 	Net.Announce.OnClientEvent:Connect(function(text: string, color: { number }?)
@@ -487,8 +572,8 @@ function RideController.Start()
 			EggController.SetLocalMaxStamina(snapshot.stamina.max)
 		end
 		agility = snapshot.agility or agility
-		UiState.eggCount:set(snapshot.eggCount or 0)
-		UiState.coins:set(snapshot.coins or 0)
+		InventoryController.Apply(snapshot.inventory)
+		UiState.dollars:set(snapshot.dollars or 0)
 	else
 		warn(`[RideController] could not load the runway snapshot: {snapshot}`)
 	end

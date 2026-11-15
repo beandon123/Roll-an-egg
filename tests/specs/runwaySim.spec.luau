@@ -1,21 +1,60 @@
 --!nocheck
--- Tests for the runway rules: eggs, riding, stamina, claiming, cracking, the side walls, the endless runway,
--- closures.
+-- Tests for the runway rules: the egg lineup, riding, stamina, claiming, obstacles, cracking, the banks, the endless
+-- last zone, closures.
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
 
 	local RunwaySim = harness.load("src/server/Logic/RunwaySim")
+	local EggSpec = harness.load("src/shared/EggSpec")
+	local Obstacles = harness.load("src/shared/Obstacles")
 	local Runway = harness.load("src/shared/Runway")
 	local Tuning = harness.load("src/shared/Config/Tuning")
 
 	local ALICE, BOB = 101, 202
 
-	-- A sim whose random numbers are always 0.5: eggs land on the centre line and drops are predictable.
+	-- A runway with no obstacles, for tests about everything else.
+	local CLEAR_RUNWAY = {
+		planPath = function(lane, fromZ)
+			return { lane = lane, fromZ = fromZ, moves = {} }
+		end,
+		lateralAt = function(path)
+			return path.lane
+		end,
+		clearLane = function(_, x)
+			return x
+		end,
+		get = function()
+			return nil
+		end,
+		activeAround = function()
+			return true
+		end,
+		hitAt = function()
+			return nil
+		end,
+	}
+
+	local function half()
+		return 0.5
+	end
+
+	-- A sim whose random numbers are always 0.5, on a runway without obstacles: eggs land on the centre line and
+	-- drops are predictable.
 	local function newSim()
-		return RunwaySim.new(function()
-			return 0.5
-		end)
+		return RunwaySim.new(half, CLEAR_RUNWAY)
+	end
+
+	-- The same, with the real obstacles.
+	local function newSimWithObstacles()
+		return RunwaySim.new(half)
+	end
+
+	-- Stops the sunrise lineup and mid-cycle drops, for tests that place their own eggs.
+	local function quiet(sim)
+		sim.lineup = {}
+		sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+		return sim
 	end
 
 	local function eventsOfType(events, eventType)
@@ -32,46 +71,241 @@ return function(harness)
 		return eventsOfType(events, eventType)[1]
 	end
 
-	describe("RunwaySim: dropping eggs", function()
-		it("drops eggs in every zone while the runway is open", function()
+	describe("RunwaySim: the egg lineup", function()
+		it("rolls a lineup for every zone at sunrise and sends it out a few seconds apart", function()
 			local sim = newSim()
-			for second = 0, 30 do
+			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim:step(0)
+			local events = sim:takeEvents()
+			local rolled = firstOfType(events, "LineupRolled")
+			expect.equal(#rolled.eggs, Tuning.EGGS_PER_ZONE * Runway.ZONE_COUNT)
+			-- The first egg of every zone leaves straight away.
+			expect.equal(#eventsOfType(events, "EggSpawned"), Runway.ZONE_COUNT)
+
+			for second = 1, Tuning.LINEUP_LAUNCH_GAP * Tuning.EGGS_PER_ZONE do
 				sim:step(second)
 			end
-			local spawned = eventsOfType(sim:takeEvents(), "EggSpawned")
-			local zonesSeen = {}
-			for _, event in spawned do
-				zonesSeen[event.egg.zone] = true
+			local perZone = {}
+			for _, egg in sim.eggs do
+				perZone[egg.zone] = (perZone[egg.zone] or 0) + 1
+				expect.falsy(egg.wild)
 			end
 			for zoneId = 1, Runway.ZONE_COUNT do
-				expect.truthy(zonesSeen[zoneId], "zone " .. zoneId)
+				expect.equal(perZone[zoneId], Tuning.EGGS_PER_ZONE, "zone " .. zoneId)
 			end
 		end)
 
-		it("keeps roughly the target number of eggs alive per zone", function()
-			local sim = newSim()
-			for tick = 0, 590 do
-				sim:step(tick / 10)
+		it(
+			"fades a riderless egg a quarter of the way into the next zone and starts it at the zone's start again",
+			function()
+				local sim = newSim()
+				sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+				sim:step(0)
+				local first
+				for _, egg in sim.eggs do
+					if egg.zone == 1 then
+						first = egg
+					end
+				end
+				-- Random numbers of 0.5 roll Forest Common eggs: 12 studs/s from the start of the zone to 750 (600 + 150).
+				expect.equal(first.rarity, "Common")
+				expect.equal(first.fadeZ, 750)
+				local lapTime = (750 - first.startZ) / 12
+				sim:takeEvents()
+
+				sim:step(lapTime - 0.01)
+				expect.truthy(sim:getEgg(first.id))
+				sim:step(lapTime)
+				local events = sim:takeEvents()
+				local faded
+				for _, event in eventsOfType(events, "EggRemoved") do
+					if event.id == first.id then
+						faded = event
+					end
+				end
+				expect.truthy(faded, "faded")
+				expect.equal(faded.reason, "Faded")
+				local again
+				for _, event in eventsOfType(events, "EggSpawned") do
+					if event.egg.zone == 1 then
+						again = event.egg
+					end
+				end
+				expect.truthy(again, "back at the start of the zone")
+				expect.equal(again.kind, first.kind)
+				expect.near(again.spawnTime, lapTime)
+				local _, _, z = sim:eggCenter(sim:getEgg(again.id), lapTime)
+				expect.equal(z, first.spec.startZ)
 			end
-			-- Forest eggs never reach the end in 59 s, and none have faded yet.
-			local forest = 0
+		)
+
+		it("fades the last zone's eggs a quarter of the way into its first copy (the runway has no end)", function()
+			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.ZONE_LENGTH / 4)
+			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.ZONE_LENGTH / 4)
+		end)
+
+		it("brings a claimed lineup egg back on its next lap", function()
+			local sim = newSim()
+			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim:addRider(ALICE, 1000, 14, 0)
+			sim:step(0)
+			local first
 			for _, egg in sim.eggs do
 				if egg.zone == 1 then
-					forest += 1
+					first = egg
 				end
 			end
-			expect.truthy(forest >= Tuning.EGGS_PER_ZONE - 2 and forest <= Tuning.EGGS_PER_ZONE + 2, "got " .. forest)
+			sim:requestMount(ALICE, first.id, 1, true)
+			sim:step(6)
+			expect.equal(firstOfType(sim:takeEvents(), "Claimed").kind, first.kind)
+			-- Alice rolls on for a while on her claimed egg, then gets off, and it disappears.
+			sim:requestDismount(ALICE, 20)
+			expect.falsy(sim:getEgg(first.id))
+
+			local lapTime = (750 - first.startZ) / 12
+			sim:step(lapTime - 0.01)
+			local before = 0
+			for _, egg in sim.eggs do
+				if egg.zone == 1 then
+					before += 1
+				end
+			end
+			sim:step(lapTime)
+			local after = 0
+			for _, egg in sim.eggs do
+				if egg.zone == 1 then
+					after += 1
+				end
+			end
+			expect.equal(before, Tuning.EGGS_PER_ZONE - 1)
+			expect.equal(after, Tuning.EGGS_PER_ZONE, "the claimed egg's slot is back")
+		end)
+
+		it("drops mid-cycle eggs that roll once", function()
+			local sim = newSim()
+			sim.lineup = {}
+			sim:step(0)
+			-- With random numbers of 0.5, the first mid-cycle drop comes 30 s in.
+			sim:step(Tuning.WILD_DROP_INTERVAL)
+			local wild = {}
+			for _, egg in sim.eggs do
+				expect.truthy(egg.wild)
+				wild[egg.zone] = egg
+			end
+			for zoneId = 1, Runway.ZONE_COUNT do
+				expect.truthy(wild[zoneId], "zone " .. zoneId)
+			end
+
+			-- It fades at the end of its lap and does not come back.
+			local forest = wild[1]
+			local fadeAt = Tuning.WILD_DROP_INTERVAL + (forest.fadeZ - forest.startZ) / forest.spec.rollSpeed
+			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim:takeEvents()
+			sim:step(fadeAt)
+			expect.falsy(sim:getEgg(forest.id))
+			for _, event in eventsOfType(sim:takeEvents(), "EggSpawned") do
+				expect.truthy(event.egg.zone ~= 1, "no Forest egg replaces it")
+			end
+		end)
+
+		it("makes Secret and Eternal eggs far rarer mid-cycle than at sunrise", function()
+			local function shareOfRare(rareOdds)
+				local rare, total = 0, 2000
+				for index = 0, total - 1 do
+					local rarity = EggSpec.rollRarity(6, (index + 0.5) / total, nil, rareOdds, "Secret")
+					if rarity == "Secret" or rarity == "Eternal" then
+						rare += 1
+					end
+				end
+				return rare / total
+			end
+			local sunrise = shareOfRare(nil)
+			local midCycle = shareOfRare(Tuning.WILD_RARE_ODDS)
+			expect.truthy(sunrise > 0, "Prehistoric lineups can hold Secret and Eternal eggs")
+			expect.truthy(midCycle > 0, "they can still drop mid-cycle")
+			expect.truthy(midCycle < sunrise / 5, `mid-cycle {midCycle} vs sunrise {sunrise}`)
 		end)
 
 		it("places a new egg on the ground at the start of its zone", function()
-			local sim = newSim()
-			local egg = sim:spawnEgg(3, 50, "Common")
+			local sim = quiet(newSim())
+			local egg = sim:spawnEgg(3, 50, "Uncommon")
 			local x, y, z = sim:eggCenter(egg, 50)
 			expect.equal(x, 0)
 			-- The back of the egg sits just past the zone's start line.
 			expect.near(z - egg.spec.radius, Runway.zoneStartZ(3) + Tuning.EGG_SPAWN_GAP)
 			expect.near(y, Runway.surfaceY(z) + egg.spec.radius)
 			expect.falsy(sim:spawnEgg(1, 50, "Eternal"), "Eternal cannot drop in the Forest")
+			expect.falsy(sim:spawnEgg(3, 50, "Common"), "Snow has no Common eggs")
+		end)
+
+		it("drops one of the zone's eggs of the rolled rarity", function()
+			local sim = newSim()
+			-- Random numbers are 0.5, which picks the second of two eggs.
+			local egg = sim:spawnEgg(1, 0, "Common")
+			expect.equal(egg.kind, "Cottontail")
+			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
+			expect.equal(spawned.egg.kind, "Cottontail")
+			expect.equal(sim:spawnEgg(4, 0, "Secret").kind, "Abyss")
+
+			-- A particular egg can be dropped by name, in its own zone only.
+			local yeti = sim:spawnEgg(3, 0, nil, "Yeti")
+			expect.equal(yeti.rarity, "Secret")
+			expect.equal(yeti.spec.requirement, 7500)
+			expect.falsy(sim:spawnEgg(1, 0, nil, "Yeti"), "Yeti is a Snow egg")
+			expect.falsy(sim:spawnEgg(5, 0, nil, "MagmaDragon"), "shelved")
+			expect.falsy(sim:spawnEgg(1, 0, nil, "NoSuchEgg"))
+		end)
+
+		it("drops an egg somewhere else when told to, keeping its own zone's numbers", function()
+			local sim = newSim()
+			-- A Volcano egg dropped in the Forest, off to one side.
+			local egg = sim:spawnEgg(5, 10, nil, "LavaGolem", { z = 300, lateral = 12 })
+			expect.equal(egg.zone, 5)
+			expect.equal(egg.spec.requirement, 100000)
+			local x, _, z = sim:eggCenter(egg, 10)
+			expect.equal(z, 300)
+			expect.equal(x, 12)
+			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
+			expect.equal(spawned.egg.startZ, 300, "players' devices are told where it landed")
+			expect.equal(spawned.egg.lateral, 12)
+
+			-- Kept on the runway: not past its sides or beyond the end.
+			local wide = sim:spawnEgg(1, 0, "Common", nil, { z = 1e6, lateral = -500 })
+			expect.truthy(wide.startZ < Runway.LOOP_END, "before the end of the loop")
+			expect.truthy(wide.fadeZ < Runway.LOOP_END, "and fades before it")
+			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength))
+			local common = EggSpec.get(1, "Common")
+			expect.equal(sim:spawnEgg(1, 0, "Common", nil, { z = 0 / 0 }).startZ, common.startZ, "nonsense is ignored")
+			-- Without a placement, eggs appear at the start of their zone, and say so.
+			expect.equal(sim:spawnEgg(2, 0, "Common").startZ, EggSpec.get(2, "Common").startZ)
+		end)
+
+		it("drops twice as many eggs at twice the rate (an Egg Avalanche)", function()
+			local function dropsInAMinute(multiplier)
+				local sim = newSim()
+				sim.spawnRateMultiplier = multiplier
+				for tick = 0, 600 do
+					sim:step(tick / 10)
+				end
+				return #eventsOfType(sim:takeEvents(), "EggSpawned")
+			end
+			local normal, avalanche = dropsInAMinute(1), dropsInAMinute(2)
+			expect.truthy(avalanche >= normal * 1.8, `{avalanche} in an Avalanche, {normal} normally`)
+		end)
+
+		it("clears every egg nobody is riding", function()
+			local sim = newSim()
+			sim:addRider(ALICE, 1000, 14, 0)
+			local ridden = sim:spawnEgg(1, 0, "Common")
+			sim:spawnEgg(1, 0, "Common")
+			sim:spawnEgg(2, 0, "Common")
+			sim:requestMount(ALICE, ridden.id, 0, true)
+			sim:takeEvents()
+			expect.equal(sim:clearUnridden(), 2)
+			local removed = eventsOfType(sim:takeEvents(), "EggRemoved")
+			expect.equal(#removed, 2)
+			expect.equal(removed[1].reason, "Closure")
+			expect.truthy(sim:getEgg(ridden.id), "the ridden egg rolls on")
 		end)
 	end)
 
@@ -100,9 +334,10 @@ return function(harness)
 			local finished = sim:takeEvents()
 			local claimed = firstOfType(finished, "Claimed")
 			expect.equal(claimed.rider, ALICE)
-			expect.equal(claimed.id, egg.id)
 			expect.equal(claimed.zone, 1)
 			expect.equal(claimed.rarity, "Common")
+			expect.equal(claimed.kind, egg.kind)
+			expect.equal(claimed.id, egg.id)
 			-- The rider stays on, and the egg stays on the runway.
 			expect.equal(#eventsOfType(finished, "RideEnded"), 0)
 			expect.equal(#eventsOfType(finished, "EggRemoved"), 0)
@@ -129,49 +364,16 @@ return function(harness)
 			local events = sim:takeEvents()
 			expect.equal(firstOfType(events, "RideEnded").reason, "ThrownOff")
 			expect.equal(#eventsOfType(events, "Claimed"), 0)
+			-- She lost her balance: the egg bounces, about to crack.
+			local left = firstOfType(events, "EggLeft")
+			expect.equal(left.cracking, true)
+			expect.truthy(sim:getEgg(egg.id))
 
 			-- Stunned for 1.5 s.
 			local ok, reason = sim:requestMount(ALICE, spare.id, 9, true)
 			expect.falsy(ok)
 			expect.equal(reason, "Stunned")
 			expect.truthy(sim:requestMount(ALICE, spare.id, 10.2, true))
-		end)
-
-		it("bounces the egg slightly and cracks it when its rider runs out of stamina, then brings it back", function()
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			sim:addRider(ALICE, 100, 14, 0)
-			sim:addRider(BOB, 100, 14, 0)
-			local egg = sim:spawnEgg(1, 0, "Epic")
-			sim:requestMount(ALICE, egg.id, 1, true)
-			sim:takeEvents()
-
-			sim:step(8.6) -- out of stamina at 8.5 s
-			local left = firstOfType(sim:takeEvents(), "EggLeft")
-			expect.equal(left.id, egg.id)
-			expect.equal(left.bounceTime, 8.6, "bouncing")
-			expect.equal(sim:snapshot()[1].bounceTime, 8.6)
-
-			-- Mid-bounce: still there, but nobody can get on.
-			local ok, reason = sim:requestMount(BOB, egg.id, 8.8, true)
-			expect.falsy(ok)
-			expect.equal(reason, "Cracking")
-
-			sim:step(8.6 + Tuning.CRACK_BOUNCE_TIME)
-			expect.equal(firstOfType(sim:takeEvents(), "EggRemoved").reason, "Cracked")
-			expect.falsy(sim:getEgg(egg.id))
-
-			-- The same egg comes back at the start of its zone a few seconds later.
-			local crackedAt = 8.6 + Tuning.CRACK_BOUNCE_TIME
-			sim:step(crackedAt + Tuning.EGG_RESPAWN_DELAY - 0.1)
-			expect.equal(#eventsOfType(sim:takeEvents(), "EggSpawned"), 0)
-			sim:step(crackedAt + Tuning.EGG_RESPAWN_DELAY)
-			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
-			expect.truthy(spawned, "respawned")
-			expect.equal(spawned.egg.zone, 1)
-			expect.equal(spawned.egg.rarity, "Epic")
-			local _, _, z = sim:eggCenter(sim:getEgg(spawned.egg.id), crackedAt + Tuning.EGG_RESPAWN_DELAY)
-			expect.near(z, egg.startZ)
 		end)
 
 		it("lets a player who exactly meets the requirement claim with a 20% buffer", function()
@@ -214,9 +416,9 @@ return function(harness)
 		end)
 	end)
 
-	describe("RunwaySim: leaving an egg", function()
+	describe("RunwaySim: leaving and cracking", function()
 		it("leaves the egg rolling on the ground, free for anyone, when its rider jumps off", function()
-			local sim = newSim()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 500, 14, 0)
 			sim:addRider(BOB, 500, 14, 0)
 			local egg = sim:spawnEgg(1, 0, "Rare") -- 9 s to claim
@@ -228,8 +430,8 @@ return function(harness)
 			expect.equal(firstOfType(events, "RideEnded").reason, "Dismount")
 			local left = firstOfType(events, "EggLeft")
 			expect.equal(left.id, egg.id)
-			expect.equal(left.bounceTime, nil, "no bounce")
-			expect.equal(#eventsOfType(events, "EggRemoved"), 0, "no crack")
+			expect.equal(left.cracking, false, "no bounce, no crack")
+			expect.equal(#eventsOfType(events, "EggRemoved"), 0)
 
 			-- Bob's claim starts from zero: 9 s from when he got on.
 			sim:step(8)
@@ -240,8 +442,8 @@ return function(harness)
 			expect.equal(firstOfType(sim:takeEvents(), "Claimed").rider, BOB)
 		end)
 
-		it("leaves the egg rolling when its rider dies or leaves the game", function()
-			local sim = newSim()
+		it("leaves the egg rolling when its rider dies, leaves the game, or is knocked off", function()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 100, 14, 0)
 			sim:addRider(BOB, 100, 14, 0)
 			local first = sim:spawnEgg(1, 0, "Common")
@@ -257,13 +459,71 @@ return function(harness)
 			expect.equal(#eventsOfType(events, "RideEnded"), 2)
 			expect.equal(#eventsOfType(events, "EggLeft"), 2)
 			expect.equal(#eventsOfType(events, "EggRemoved"), 0)
-			expect.falsy(sim:getRider(BOB))
-			expect.truthy(sim:getRider(ALICE))
 			expect.truthy(sim:getEgg(first.id) and sim:getEgg(second.id))
 		end)
 
-		it("refunds stamina for hopping straight onto another egg", function()
+		it("bounces the egg slightly and cracks it when its rider runs out of stamina, then brings it back", function()
+			local sim = quiet(newSim())
+			sim:addRider(ALICE, 100, 14, 0)
+			sim:addRider(BOB, 100, 14, 0)
+			local egg = sim:spawnEgg(1, 0, "Epic") -- a mid-cycle egg
+			sim:requestMount(ALICE, egg.id, 1, true)
+			sim:takeEvents()
+
+			sim:step(8.6) -- out of stamina at 8.5 s
+			local left = firstOfType(sim:takeEvents(), "EggLeft")
+			expect.equal(left.id, egg.id)
+			expect.equal(left.cracking, true)
+			expect.equal(sim:snapshot()[1].bounceTime, 8.6)
+
+			-- Mid-bounce: still there, but nobody can get on.
+			local ok, reason = sim:requestMount(BOB, egg.id, 8.8, true)
+			expect.falsy(ok)
+			expect.equal(reason, "Cracking")
+
+			sim:step(8.6 + Tuning.CRACK_BOUNCE_TIME)
+			expect.equal(firstOfType(sim:takeEvents(), "EggRemoved").reason, "Cracked")
+			expect.falsy(sim:getEgg(egg.id))
+
+			-- The same egg comes back at the start of its zone a few seconds later.
+			local crackedAt = 8.6 + Tuning.CRACK_BOUNCE_TIME
+			sim:step(crackedAt + Tuning.EGG_RESPAWN_DELAY - 0.1)
+			expect.equal(#eventsOfType(sim:takeEvents(), "EggSpawned"), 0)
+			sim:step(crackedAt + Tuning.EGG_RESPAWN_DELAY)
+			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
+			expect.truthy(spawned, "back")
+			expect.equal(spawned.egg.kind, egg.kind)
+			expect.equal(spawned.egg.startZ, egg.spec.startZ)
+		end)
+
+		it("brings a cracked lineup egg back sooner than its next lap", function()
 			local sim = newSim()
+			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			sim:addRider(ALICE, 30, 14, 0) -- not enough for a Common egg (50)
+			sim:step(0)
+			local first
+			for _, egg in sim.eggs do
+				if egg.zone == 1 then
+					first = egg
+				end
+			end
+			sim:requestMount(ALICE, first.id, 1, true)
+			sim:step(4.75) -- 30 stamina at 8 a second
+			sim:step(4.75 + Tuning.CRACK_BOUNCE_TIME)
+			sim:takeEvents()
+			local back = 4.75 + Tuning.CRACK_BOUNCE_TIME + Tuning.EGG_RESPAWN_DELAY
+			sim:step(back)
+			local found = false
+			for _, event in eventsOfType(sim:takeEvents(), "EggSpawned") do
+				if event.egg.zone == 1 and math.abs(event.egg.spawnTime - back) < 1e-6 then
+					found = true
+				end
+			end
+			expect.truthy(found, "the cracked egg's slot left the start again")
+		end)
+
+		it("refunds stamina for hopping straight onto another egg", function()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 100, 14, 0)
 			local first = sim:spawnEgg(1, 0, "Common")
 			local second = sim:spawnEgg(1, 0, "Common")
@@ -286,7 +546,7 @@ return function(harness)
 		end)
 
 		it("gives no hop bonus after being thrown off", function()
-			local sim = newSim()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 30, 14, 0)
 			local first = sim:spawnEgg(1, 0, "Common")
 			local second = sim:spawnEgg(1, 0, "Common")
@@ -301,8 +561,7 @@ return function(harness)
 	describe("RunwaySim: riding a claimed egg", function()
 		-- Alice rides a Common egg (5 s claim) from t = 1 and claims it at t = 6.
 		local function claimedEgg(maxStamina)
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, maxStamina or 100, 14, 0)
 			sim:addRider(BOB, 100, 14, 0)
 			local egg = sim:spawnEgg(1, 0, "Common")
@@ -321,7 +580,7 @@ return function(harness)
 			expect.equal(#eventsOfType(events, "RideEnded"), 0, "still riding a minute later")
 			expect.equal(#eventsOfType(events, "Claimed"), 0, "claimed once")
 			expect.equal(sim:getStamina(ALICE, 60), 50, "stamina refilled while riding")
-			expect.truthy(sim:getEgg(egg.id))
+			expect.truthy(sim:getEgg(egg.id), "carried past its fade line by its rider")
 
 			-- Steering still works, and nobody else can get on.
 			expect.truthy(sim:setLateral(ALICE, 3, 60.5))
@@ -340,17 +599,9 @@ return function(harness)
 			expect.equal(removed.by, ALICE)
 			expect.equal(#eventsOfType(events, "EggLeft"), 0)
 			expect.falsy(sim:getEgg(egg.id))
-
-			-- It is in the inventory already, so it does not come back.
+			-- It is in the inventory already, so it does not come back early.
 			sim:step(40)
 			expect.equal(#eventsOfType(sim:takeEvents(), "EggSpawned"), 0)
-		end)
-
-		it("makes the egg disappear when the owner dies on it", function()
-			local sim, egg = claimedEgg()
-			sim:killRider(ALICE, 20)
-			expect.equal(firstOfType(sim:takeEvents(), "EggRemoved").reason, "Claimed")
-			expect.falsy(sim:getEgg(egg.id))
 		end)
 
 		it("shows the owner in the snapshot, so players who join later see the egg is taken", function()
@@ -362,12 +613,11 @@ return function(harness)
 		end)
 	end)
 
-	describe("RunwaySim: walls and the endless runway", function()
+	describe("RunwaySim: the banks and the endless runway", function()
 		-- Alice gets on a Common Forest egg a second before it reaches `z` (well before she could claim it) and steers
-		-- it hard against the side (+x) there. Returns the sim, the egg, and the time it got there.
+		-- it hard against the +x side there. Returns the sim, the egg, and when it got there.
 		local function steerIntoSideAt(z)
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 1e6, 200, 0)
 			local egg = sim:spawnEgg(1, 0, "Common")
 			local at = (z - egg.startZ) / egg.spec.rollSpeed
@@ -379,24 +629,29 @@ return function(harness)
 			return sim, egg, at
 		end
 
-		it("kills a rider who steers into a wall, and knocks the egg back toward the middle", function()
-			local wall = Runway.wallsBetween(1, 20, 600)[1]
-			local sim, egg = steerIntoSideAt((wall.startZ + wall.endZ) / 2)
+		local function firstGap(side)
+			for _, gap in Runway.wallGaps(1) do
+				if gap.side == side then
+					return gap
+				end
+			end
+			error("no gap")
+		end
+
+		it("kills a rider who steers into a bank, and knocks the egg back toward the middle", function()
+			local sim, egg = steerIntoSideAt(60) -- the gate's stretch: no gaps
 			local events = sim:takeEvents()
 			expect.equal(firstOfType(events, "RideEnded").reason, "HitWall")
-			-- The egg rolls on without them, away from the wall.
 			local left = firstOfType(events, "EggLeft")
 			expect.equal(left.id, egg.id)
 			expect.near(left.lateral, Runway.maxLateral(egg.spec.halfLength) - Tuning.WALL_KNOCKBACK)
-			expect.equal(left.bounceTime, nil)
-			expect.truthy(sim:getEgg(egg.id))
-			expect.equal(#eventsOfType(events, "EggRemoved"), 0)
+			expect.equal(left.cracking, false)
+			expect.truthy(sim:getEgg(egg.id), "it rolls on without her")
 		end)
 
-		it("sends egg and rider off the side through a gap, and brings the egg back", function()
-			local first = Runway.wallsBetween(1, 20, 600)[1]
-			local second = Runway.wallsBetween(1, first.endZ, 600)[1]
-			local sim, egg, at = steerIntoSideAt((first.endZ + second.startZ) / 2)
+		it("sends egg and rider over the edge through a gap, and brings the egg back", function()
+			local gap = firstGap(1)
+			local sim, egg, at = steerIntoSideAt((gap.startZ + gap.endZ) / 2)
 			local events = sim:takeEvents()
 			expect.equal(firstOfType(events, "RideEnded").reason, "FellOff")
 			expect.equal(firstOfType(events, "EggRemoved").reason, "FellOff")
@@ -404,29 +659,25 @@ return function(harness)
 
 			sim:step(at + Tuning.EGG_RESPAWN_DELAY)
 			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
-			expect.truthy(spawned, "respawned")
-			expect.equal(spawned.egg.rarity, "Common")
-			expect.equal(spawned.egg.zone, 1)
+			expect.truthy(spawned, "back")
+			expect.equal(spawned.egg.kind, egg.kind)
 		end)
 
 		it("is safe anywhere short of the side", function()
-			local wall = Runway.wallsBetween(1, 20, 600)[1]
-			local sim = newSim()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 1e6, 200, 0)
 			local egg = sim:spawnEgg(1, 0, "Common")
-			sim:requestMount(ALICE, egg.id, 1, true)
-			local at = ((wall.startZ + wall.endZ) / 2 - egg.startZ) / egg.spec.rollSpeed
-			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength) - 0.5, at)
+			sim:requestMount(ALICE, egg.id, 2, true)
+			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength) - 0.5, 3)
 			sim:takeEvents()
-			sim:step(at)
+			sim:step(3)
 			expect.equal(#eventsOfType(sim:takeEvents(), "RideEnded"), 0)
 		end)
 
-		it("never ends: eggs roll on through the last zone forever, carried back each loop", function()
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
+		it("never ends: a ridden egg rolls on through the last zone forever, carried back each loop", function()
+			local sim = quiet(newSim())
 			sim:addRider(ALICE, 1e9, 14, 0)
-			local egg = sim:spawnEgg(5, 0, "Eternal")
+			local egg = sim:spawnEgg(6, 0, "Eternal")
 			sim:requestMount(ALICE, egg.id, 1, true)
 			sim:takeEvents()
 			for second = 2, 600, 2 do
@@ -438,8 +689,7 @@ return function(harness)
 			local events = sim:takeEvents()
 			expect.equal(#eventsOfType(events, "RideEnded"), 0, "nobody went over an end")
 			expect.equal(#eventsOfType(events, "EggRemoved"), 0)
-			-- 10 minutes at 21 studs a second: far past where the runway used to end.
-			expect.truthy(egg.startZ + egg.spec.rollSpeed * 600 > Runway.LENGTH * 4)
+			expect.truthy(egg.startZ + egg.spec.rollSpeed * 600 > Runway.LENGTH * 3, "far past where it used to end")
 		end)
 	end)
 
@@ -497,45 +747,230 @@ return function(harness)
 			expect.truthy(#eventsOfType(sim:takeEvents(), "EggSpawned") >= Runway.ZONE_COUNT)
 		end)
 
-		it("fades eggs nobody jumped on after a minute", function()
-			local sim = newSim()
-			sim:setPhase("Closed") -- stops other eggs dropping; the phase does not affect fading
-			sim.phase = "Open"
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			local egg = sim:spawnEgg(1, 0, "Common")
-			sim:takeEvents()
-			sim:step(59)
-			expect.truthy(sim:getEgg(egg.id))
-			sim:step(60)
-			expect.equal(firstOfType(sim:takeEvents(), "EggRemoved").reason, "Faded")
-		end)
-
-		it("fades an egg a minute after its rider left it", function()
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			sim:addRider(ALICE, 500, 14, 0)
-			local egg = sim:spawnEgg(1, 0, "Rare")
-			sim:requestMount(ALICE, egg.id, 1, true)
-			sim:requestDismount(ALICE, 50)
-			sim:step(100)
-			expect.truthy(sim:getEgg(egg.id), "ridden until 50 s, so not faded at 100 s")
-			sim:step(110)
-			expect.falsy(sim:getEgg(egg.id))
-		end)
-
-		it("brings nothing back once the runway closes", function()
-			local sim = newSim()
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			sim:addRider(ALICE, 100, 14, 0)
-			local egg = sim:spawnEgg(1, 0, "Epic")
-			sim:requestMount(ALICE, egg.id, 1, true)
-			sim:step(9.5) -- out of stamina, bounced, cracked
-			sim:setPhase("Closed")
-			sim:setPhase("Open")
-			sim.nextSpawnAt = { math.huge, math.huge, math.huge, math.huge, math.huge }
-			sim:takeEvents()
+		it("keeps a ridden egg going past its fade line, and fades it once nobody is on it", function()
+			local sim = quiet(newSim())
+			sim:addRider(ALICE, 1e6, 14, 0)
+			local egg = sim:spawnEgg(1, 0, "Mythic") -- 19 studs/s, 18 s to claim: at the line (750) after 38.8 s
 			sim:step(30)
-			expect.equal(#eventsOfType(sim:takeEvents(), "EggSpawned"), 0)
+			sim:requestMount(ALICE, egg.id, 30, true)
+			sim:step(40)
+			expect.truthy(sim:getEgg(egg.id), "carried past the line by its rider")
+			sim:takeEvents()
+			sim:requestDismount(ALICE, 41)
+			local events = sim:takeEvents()
+			expect.equal(firstOfType(events, "EggRemoved").reason, "Faded")
+			expect.equal(#eventsOfType(events, "EggLeft"), 0)
+		end)
+	end)
+
+	describe("RunwaySim: obstacles", function()
+		local function findObstacle(zoneId, tier, timed)
+			for _, obstacle in Obstacles.all() do
+				if obstacle.zone == zoneId and obstacle.tier == tier and (obstacle.timing ~= nil) == timed then
+					return obstacle
+				end
+			end
+			error(`no {tier} obstacle in zone {zoneId}`)
+		end
+
+		-- Alice rides an egg of the zone and steers it onto the obstacle. Returns the egg and when it gets there.
+		local function rideInto(sim, obstacle, rarity, spawnTime)
+			sim:addRider(ALICE, 1e7, 1000, 0)
+			local egg = sim:spawnEgg(obstacle.zone, spawnTime or 0, rarity)
+			local arrive = (spawnTime or 0) + (obstacle.z - egg.startZ) / egg.spec.rollSpeed
+			sim:requestMount(ALICE, egg.id, arrive - 2, true)
+			sim:setLateral(ALICE, obstacle.x, arrive - 1)
+			sim:takeEvents()
+			return egg, arrive
+		end
+
+		it("lays out zone-themed obstacles, clear of each zone's chute", function()
+			local kindsPerZone = {}
+			for id, obstacle in Obstacles.all() do
+				expect.equal(obstacle.id, id)
+				expect.equal(Runway.zoneAt(obstacle.z), obstacle.zone)
+				local fromStart = obstacle.z - Runway.zoneStartZ(obstacle.zone)
+				expect.truthy(fromStart >= Obstacles.Config.FIRST_ROW - Obstacles.Config.ROW_JITTER, `{obstacle.kind}`)
+				expect.truthy(Obstacles.Config.Zones[obstacle.zone].weights[obstacle.kind], obstacle.kind)
+				expect.truthy(math.abs(obstacle.x) + obstacle.hx <= Runway.WIDTH / 2 + 1e-6, "on the runway")
+				kindsPerZone[obstacle.zone] = kindsPerZone[obstacle.zone] or {}
+				kindsPerZone[obstacle.zone][obstacle.kind] = (kindsPerZone[obstacle.zone][obstacle.kind] or 0) + 1
+			end
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local kinds, count = 0, 0
+				for _, number in kindsPerZone[zoneId] or {} do
+					kinds += 1
+					count += number
+				end
+				expect.truthy(kinds >= 3, `zone {zoneId} has {kinds} kinds of obstacle`)
+				expect.truthy(count >= 8, `zone {zoneId} has {count} obstacles`)
+			end
+		end)
+
+		it("leaves a gap in every row for the biggest egg", function()
+			local biggest = EggSpec.get(6, "Eternal")
+			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
+				local lane = Obstacles.clearLane(row, 0, biggest.halfLength)
+				for _, obstacle in row.obstacles do
+					expect.truthy(math.abs(lane - obstacle.x) >= obstacle.hx + biggest.halfLength, "clear")
+				end
+			end
+		end)
+
+		it("steers eggs without a rider round every obstacle, staying on the runway", function()
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local sizes = {}
+				for _, rarity in { "Common", "Uncommon", "Rare", "Epic", "Eternal", "Secret", "Mythic" } do
+					local spec = EggSpec.get(zoneId, rarity)
+					if spec then
+						table.insert(sizes, spec)
+					end
+				end
+				local smallest, biggest = sizes[1], sizes[#sizes]
+				for _, spec in { smallest, biggest } do
+					local startZ = spec.startZ
+					local fadeZ = Runway.fadeZ(zoneId)
+					for _, fromZ in { startZ, startZ + 230, startZ + 470 } do
+						for lane = -60, 60, 4 do
+							local path = Obstacles.planPath(lane, fromZ, fadeZ, spec.halfLength, spec.radius)
+							local limit = Runway.maxLateral(spec.halfLength)
+							local z = fromZ
+							while z <= fadeZ do
+								local x = Obstacles.lateralAt(path, z)
+								expect.truthy(math.abs(x) <= limit + 1e-6, "stays on the runway")
+								for _, row in Obstacles.rowsBetween(z - spec.radius, z + spec.radius) do
+									for _, obstacle in row.obstacles do
+										local touching = math.abs(x - obstacle.x) < obstacle.hx + spec.halfLength
+											and math.abs(z - obstacle.z) < obstacle.hz + spec.radius
+										-- An egg that starts beside an obstacle is left to roll on past it.
+										if touching and obstacle.z - obstacle.hz > fromZ + spec.radius then
+											error(
+												`zone {zoneId} {spec.rarity} egg from lane {lane} at {fromZ} hits {obstacle.kind} {obstacle.id} at z {z}`
+											)
+										end
+									end
+								end
+								z += 0.5
+							end
+						end
+					end
+				end
+			end
+		end)
+
+		it("moves riderless eggs along their path, and lets a rider take over from where it has got to", function()
+			local sim = quiet(newSimWithObstacles())
+			sim:addRider(ALICE, 1e6, 14, 0)
+			-- Find an egg that has to swerve.
+			local egg
+			for spawnTime = 0, 200 do
+				local candidate = sim:spawnEgg(1, spawnTime, "Common")
+				if #candidate.path.moves > 0 then
+					egg = candidate
+					break
+				end
+			end
+			expect.truthy(egg, "some egg swerves")
+			local move = egg.path.moves[1]
+			local atMove = egg.spawnTime + (move.z1 - egg.startZ) / egg.spec.rollSpeed
+			expect.near(sim:eggLateral(egg, egg.spawnTime), move.from)
+			expect.near(sim:eggLateral(egg, atMove), move.to)
+			expect.truthy(sim:requestMount(ALICE, egg.id, atMove, true))
+			expect.near(egg.lateral, move.to)
+		end)
+
+		it("charges stamina for a Bump and knocks the egg clear", function()
+			local sim = quiet(newSimWithObstacles())
+			local obstacle = findObstacle(1, "Bump", false)
+			local egg, arrive = rideInto(sim, obstacle, "Rare")
+			local before = sim:getStamina(ALICE, arrive)
+
+			expect.truthy(sim:reportHit(ALICE, obstacle.id, arrive))
+			local hit = firstOfType(sim:takeEvents(), "ObstacleHit")
+			expect.equal(hit.obstacle, obstacle.id)
+			expect.equal(hit.tier, "Bump")
+			expect.equal(hit.lateral, egg.lateral)
+			expect.near(sim:getStamina(ALICE, arrive), before - egg.spec.requirement * Tuning.BUMP_STAMINA)
+			expect.truthy(math.abs(egg.lateral - obstacle.x) >= obstacle.hx + egg.spec.halfLength, "clear of it")
+			expect.equal(sim:getRider(ALICE).eggId, egg.id, "still riding")
+			expect.falsy(sim:reportHit(ALICE, obstacle.id, arrive + 0.1), "each obstacle counts once")
+		end)
+
+		it("throws the rider off at a KnockOff obstacle", function()
+			local sim = quiet(newSimWithObstacles())
+			local obstacle = findObstacle(1, "KnockOff", false)
+			local egg, arrive = rideInto(sim, obstacle, "Rare")
+			expect.truthy(sim:reportHit(ALICE, obstacle.id, arrive))
+			local events = sim:takeEvents()
+			expect.equal(firstOfType(events, "RideEnded").reason, "KnockedOff")
+			expect.equal(firstOfType(events, "EggLeft").cracking, false, "only running out of stamina cracks an egg")
+			local ok, reason = sim:requestMount(ALICE, egg.id, arrive + 0.5, true)
+			expect.falsy(ok)
+			expect.equal(reason, "Stunned")
+		end)
+
+		it("kills the rider in lava", function()
+			local sim = quiet(newSimWithObstacles())
+			local obstacle = findObstacle(5, "Lethal", false)
+			local _, arrive = rideInto(sim, obstacle, "Rare")
+			expect.truthy(sim:reportHit(ALICE, obstacle.id, arrive))
+			expect.equal(firstOfType(sim:takeEvents(), "RideEnded").reason, "Hazard")
+		end)
+
+		it("counts a hit on its own when the egg is well inside an obstacle", function()
+			local sim = quiet(newSimWithObstacles())
+			local obstacle = findObstacle(1, "KnockOff", false)
+			local _, arrive = rideInto(sim, obstacle, "Rare")
+			sim:step(arrive)
+			expect.equal(firstOfType(sim:takeEvents(), "RideEnded").reason, "KnockedOff")
+		end)
+
+		it("ignores reports of hits that could not have happened", function()
+			local sim = quiet(newSimWithObstacles())
+			local obstacle = findObstacle(1, "KnockOff", false)
+			local _, arrive = rideInto(sim, obstacle, "Rare")
+			expect.falsy(sim:reportHit(ALICE, obstacle.id, arrive - 1.5), "not there yet")
+			expect.falsy(sim:reportHit(ALICE, 99999, arrive), "no such obstacle")
+			expect.falsy(sim:reportHit(BOB, obstacle.id, arrive), "not riding")
+
+			-- A geyser only counts while it is going off.
+			local geyser = findObstacle(2, "KnockOff", true)
+			local function arrivalWhen(active)
+				for tenth = 0, 600 do
+					local spawnTime = 100 + tenth / 10
+					local egg = EggSpec.get(2, "Common")
+					local reach = spawnTime + (geyser.z - egg.startZ) / egg.rollSpeed
+					if Obstacles.activeAround(geyser, reach, Tuning.HIT_REPORT_SLACK) == active then
+						return spawnTime
+					end
+				end
+				error("no such moment")
+			end
+			local idleSim = quiet(newSimWithObstacles())
+			local _, idleArrive = rideInto(idleSim, geyser, "Common", arrivalWhen(false))
+			expect.falsy(idleSim:reportHit(ALICE, geyser.id, idleArrive))
+			local activeSim = quiet(newSimWithObstacles())
+			local _, activeArrive = rideInto(activeSim, geyser, "Common", arrivalWhen(true))
+			expect.truthy(activeSim:reportHit(ALICE, geyser.id, activeArrive))
+		end)
+	end)
+
+	describe("RunwaySim: refilling stamina", function()
+		it("fills stamina to the max, and a ride keeps draining from there", function()
+			local sim = newSim()
+			sim:addRider(ALICE, 100, 14, 0)
+			local egg = sim:spawnEgg(1, 0, "Epic") -- drains 160 over 12 s: more than 100 stamina lasts
+			sim:requestMount(ALICE, egg.id, 0, true)
+			sim:step(5)
+			expect.truthy(sim:getStamina(ALICE, 5) < 50, "drained")
+			sim:refillStamina(ALICE, 5)
+			expect.near(sim:getStamina(ALICE, 5), 100)
+			local changed = firstOfType(sim:takeEvents(), "StaminaChanged")
+			expect.truthy(changed, "StaminaChanged")
+			-- With the refill, 100 stamina at 13.3 a second lasts the 7 s left of the claim.
+			sim:step(12.5)
+			expect.equal(#eventsOfType(sim:takeEvents(), "Claimed"), 1, "claimed")
+			expect.equal(sim:getRider(ALICE).eggId, egg.id, "and still rolling on it")
 		end)
 	end)
 
@@ -594,6 +1029,26 @@ return function(harness)
 			local resting = firstOfType(sim:takeEvents(), "StaminaChanged")
 			expect.near(resting.value, 92)
 			expect.near(resting.rate, 12)
+		end)
+	end)
+
+	describe("RunwaySim: server luck", function()
+		it("rolls rarer eggs while luck is boosted", function()
+			-- With every random number at 0.5, a Forest egg is Common at normal luck and Uncommon at x4.
+			local sim = newSim()
+			expect.equal(sim:spawnEgg(1, 0).rarity, "Common")
+			sim:setLuck(4)
+			expect.equal(sim:spawnEgg(1, 0).rarity, "Uncommon")
+			sim:setLuck(1)
+			expect.equal(sim:spawnEgg(1, 0).rarity, "Common")
+		end)
+
+		it("ignores luck below 1 or not a number", function()
+			local sim = newSim()
+			sim:setLuck(0.25)
+			expect.equal(sim.luck, 1)
+			sim:setLuck(0 / 0)
+			expect.equal(sim.luck, 1)
 		end)
 	end)
 end

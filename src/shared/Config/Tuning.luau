@@ -17,10 +17,21 @@ Tuning.DRAIN_FRACTION = 0.8
 Tuning.EGG_BASE_RADIUS = 3
 -- How much longer the egg is (side to side) than its rolling diameter.
 Tuning.EGG_LENGTH_RATIO = 1.3
--- Seconds an egg rolls with nobody on it (since it appeared, or since its rider left) before it fades out.
-Tuning.EGG_UNRIDDEN_LIFETIME = 60
--- Target number of eggs alive per zone; sets the drop rate.
+-- How many eggs each zone rolls for its lineup at sunrise (the start of each cycle). Each lineup egg rolls from
+-- the start of its zone to a quarter of the way into the next zone (Runway.fadeZ), fades out, and appears at the
+-- start of its zone again, over and over until the runway closes. One that is claimed comes back on its next lap;
+-- one that cracks or goes off the side comes back EGG_RESPAWN_DELAY later.
 Tuning.EGGS_PER_ZONE = 8
+-- Seconds between lineup eggs leaving the start of their zone at sunrise.
+Tuning.LINEUP_LAUNCH_GAP = 5
+-- Mid-cycle drops: now and then a zone drops an extra egg that rolls once and fades. It is rolled like a lineup egg,
+-- except that every rarity from WILD_RARE_FROM up is WILD_RARE_ODDS times as likely.
+Tuning.WILD_DROP_INTERVAL = 30
+Tuning.WILD_DROP_MAX = 3
+Tuning.WILD_RARE_ODDS = 0.1
+Tuning.WILD_RARE_FROM = "Secret"
+-- During an Egg Avalanche, eggs drop this many times as often (and up to this many times as many per zone).
+Tuning.AVALANCHE_EGG_MULTIPLIER = 2
 -- Eggs appear on the ground at the start of their zone. This is the gap in studs between the zone's start line
 -- and the back of a new egg.
 Tuning.EGG_SPAWN_GAP = 2
@@ -68,6 +79,22 @@ Tuning.STANDING_HEIGHT = 3.4
 Tuning.LEAP_SERVER_GRACE = 1.5
 -- Seconds a rider who goes off the side through a gap falls before they die.
 Tuning.FALL_OFF_TIME = 0.8
+
+-- Obstacles (see Config/Obstacles)
+-- Stamina a Bump costs, as a fraction of the egg's stamina requirement.
+Tuning.BUMP_STAMINA = 0.1
+-- The rider's device spots hits; the server accepts its report if the egg was near the obstacle within this many
+-- seconds of when the report arrived.
+Tuning.HIT_REPORT_SLACK = 0.75
+-- The server also checks on its own, but it only knows where the rider steered a moment ago, so it counts a hit
+-- only when the egg is this many studs into the obstacle (a near miss on the rider's screen is not a hit).
+Tuning.HIT_BACKUP_INSET = 4
+-- How much the rider's device forgives a graze, in studs.
+Tuning.HIT_GRAZE = 0.6
+
+-- Hatching (times are per rarity, in Config/Rarities)
+-- How many times as fast eggs hatch while the runway is closed.
+Tuning.HATCH_BOOST = 30
 
 -- Characters
 Tuning.RESPAWN_TIME = 2

@@ -113,14 +113,26 @@ fakeEvent("BaseRemoteEvent", "OnServerEvent")
 fakeEvent("BaseRemoteEvent", "OnClientEvent")
 fakeEvent("UserInputService", "JumpRequest")
 fakeEvent("GuiButton", "Activated")
+fakeEvent("ProximityPrompt", "Triggered")
+fakeEvent("ProximityPromptService", "PromptTriggered")
+fakeEvent("GuiObject", "InputBegan")
+fakeEvent("GuiObject", "InputEnded")
+fakeEvent("UserInputService", "InputChanged")
+fakeEvent("UserInputService", "InputEnded")
+fakeEvent("MarketplaceService", "PromptGamePassPurchaseFinished")
 fakeEvent("Instance", "Destroying")
 fakeEvent("Instance", "AncestryChanged")
 fakeEvent("Instance", "ChildAdded")
 fakeEvent("Instance", "ChildRemoved")
+fakeEvent("Instance", "DescendantAdded")
 fakeEvent("Instance", "Changed")
 fakeEvent("Instance", "AttributeChanged")
 
 fakeValue("RemoteFunction", "OnServerInvoke")
+fakeValue("MarketplaceService", "ProcessReceipt")
+-- Lune has no layout engine; tests set these on the frames they press or drag.
+fakeValue("GuiObject", "AbsolutePosition")
+fakeValue("GuiObject", "AbsoluteSize")
 
 roblox.implementMethod("Instance", "WaitForChild", function(self, name)
 	local child = self:FindFirstChild(name)
@@ -166,6 +178,14 @@ roblox.implementMethod("RunService", "UnbindFromRenderStep", function(_, name)
 	end
 end)
 
+-- Keys and gamepad buttons held down: tests set `session.keysDown[Enum.KeyCode.Space] = true`.
+roblox.implementMethod("UserInputService", "IsKeyDown", function(_, keyCode)
+	return current.keysDown[keyCode] == true
+end)
+roblox.implementMethod("UserInputService", "IsGamepadButtonDown", function(_, _gamepad, keyCode)
+	return current.keysDown[keyCode] == true
+end)
+
 roblox.implementMethod("Players", "GetPlayers", function(self)
 	local list = {}
 	for _, child in self:GetChildren() do
@@ -209,12 +229,43 @@ roblox.implementMethod("RemoteFunction", "InvokeServer", function(self, ...)
 	return handler(...)
 end)
 
+-- Purchases: prompts are recorded in `session.prompts`; tests answer them by calling ProcessReceipt themselves.
+-- Game pass ownership comes from `session.ownedGamePasses[userId][gamePassId]`.
+roblox.implementMethod("MarketplaceService", "PromptProductPurchase", function(_, player, productId)
+	table.insert(current.prompts, { kind = "Product", player = player, id = productId })
+end)
+roblox.implementMethod("MarketplaceService", "PromptGamePassPurchase", function(_, player, gamePassId)
+	table.insert(current.prompts, { kind = "GamePass", player = player, id = gamePassId })
+end)
+roblox.implementMethod("MarketplaceService", "UserOwnsGamePassAsync", function(_, userId, gamePassId)
+	local owned = current.ownedGamePasses[userId]
+	return owned ~= nil and owned[gamePassId] == true
+end)
+roblox.implementMethod("MarketplaceService", "GetProductInfo", function()
+	error("GetProductInfo is not available in tests")
+end)
+
+-- A model's pivot is its PrimaryPart's CFrame here (Roblox also has Model.WorldPivot for models without one).
+roblox.implementMethod("Model", "GetPivot", function(self)
+	local primary = self.PrimaryPart
+	if primary == nil then
+		error("GetPivot: the test stand-in needs the model to have a PrimaryPart", 2)
+	end
+	return primary.CFrame
+end)
+
+-- Moves every part in the model together, as Roblox does, so it keeps its shape.
 roblox.implementMethod("Model", "PivotTo", function(self, cframe)
 	local primary = self.PrimaryPart
 	if primary == nil then
 		error("PivotTo: the test stand-in needs the model to have a PrimaryPart", 2)
 	end
-	primary.CFrame = cframe
+	local move = cframe * primary.CFrame:Inverse()
+	for _, part in self:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.CFrame = move * part.CFrame
+		end
+	end
 end)
 
 roblox.implementMethod("Humanoid", "GetState", function(self)
@@ -224,9 +275,9 @@ roblox.implementMethod("Humanoid", "ChangeState", function(self, state)
 	current.humanoidStates[self] = state
 end)
 
--- Particles are not drawn here; bursts are counted per emitter in `session.emitted`.
+-- Particles are not simulated here; a burst of them is just counted.
 roblox.implementMethod("ParticleEmitter", "Emit", function(self, count)
-	current.emitted[self] = (current.emitted[self] or 0) + (count or 16)
+	current.emitted[self] = (current.emitted[self] or 0) + (count or 1)
 end)
 
 roblox.implementMethod("HttpService", "GenerateGUID", function()
@@ -282,10 +333,11 @@ function Session:environment(scriptInstance)
 		UDim2 = roblox.UDim2,
 		Rect = roblox.Rect,
 		NumberRange = roblox.NumberRange,
-		NumberSequence = roblox.NumberSequence,
-		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
 		ColorSequence = roblox.ColorSequence,
 		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
+		NumberSequence = roblox.NumberSequence,
+		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		utf8 = utf8,
 		TweenInfo = {
 			new = function(...)
 				return { arguments = { ... } }
@@ -375,6 +427,7 @@ function Session:addPlayer(userId: number, name: string)
 	local players = self:service("Players")
 	local player = Instance.new("Player")
 	player.Name = name
+	player.DisplayName = name
 	player.UserId = userId
 	player.Parent = players
 
@@ -385,6 +438,7 @@ function Session:addPlayer(userId: number, name: string)
 	humanoid.Health = 100
 	humanoid.Sit = false
 	humanoid.PlatformStand = false
+	humanoid.Jump = false
 	humanoid.Parent = character
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
@@ -393,6 +447,7 @@ function Session:addPlayer(userId: number, name: string)
 	root.AssemblyMass = 10
 	root.AssemblyLinearVelocity = roblox.Vector3.zero
 	root.Parent = character
+	character.PrimaryPart = root
 	character.Parent = self:service("Workspace")
 	player.Character = character
 
@@ -544,13 +599,24 @@ function Session:useFakeProfileStore()
 				Data = deepCopy(session.saved[key] or template),
 				Key = key,
 				OnSessionEnd = Signal.new(),
+				OnAfterSave = Signal.new(),
 			}
+			profile.LastSavedData = deepCopy(profile.Data)
 			function profile.IsActive()
 				return active
 			end
 			function profile.AddUserId() end
 			function profile.Reconcile()
 				reconcile(profile.Data, template)
+			end
+			-- Saves straight away unless the test has paused saving (`session.savesPaused`).
+			function profile.Save()
+				if not active or session.savesPaused then
+					return
+				end
+				session.saved[key] = deepCopy(profile.Data)
+				profile.LastSavedData = deepCopy(profile.Data)
+				profile.OnAfterSave:Fire(profile.LastSavedData)
 			end
 			function profile.EndSession()
 				if active then
@@ -615,9 +681,12 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		emitted = {},
 		invokeHandlers = {},
 		kicks = {},
+		prompts = {},
+		ownedGamePasses = {},
 		warnings = {},
 		guid = 0,
 		moveVector = roblox.Vector3.new(0, 0, 0),
+		keysDown = {},
 	}, Session)
 	current = session
 	return session

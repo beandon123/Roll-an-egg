@@ -9,7 +9,7 @@ local task = require("@lune/task")
 local Studio = require("../studio")
 
 local Enum = roblox.Enum
-local CFrame = roblox.CFrame
+local Vector2 = roblox.Vector2
 local Vector3 = roblox.Vector3
 
 return function(harness)
@@ -23,8 +23,9 @@ return function(harness)
 
 	local LOCAL_USER_ID = 7
 
-	-- One player's device, with the client script running. `eggs` is what the server's snapshot contains.
-	local function startClient(eggs)
+	-- One player's device, with the client script running. `eggs` is what the server's snapshot contains;
+	-- `options.shop` and `options.settings` what the server says about the shop and the saved settings.
+	local function startClient(eggs, options)
 		local session = Studio.open(place, { isServer = false })
 		session:createRemotes()
 		local player, humanoid, root = session:addPlayer(LOCAL_USER_ID, "Me")
@@ -35,9 +36,32 @@ return function(harness)
 				eggs = eggs or {},
 				stamina = { value = 100, time = session.clock, rate = 12, max = 100 },
 				agility = 14,
-				eggCount = 2,
-				coins = 0,
+				inventory = {
+					eggs = {
+						{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+						{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+					},
+					hatching = {},
+					pets = {},
+					penLevel = 1,
+					eggCapacity = 2,
+					petCapacity = 10,
+					dollars = 0,
+					income = 0,
+					mount = "",
+				},
+				dollars = 0,
 			}
+		end
+		session.invokeHandlers.GetShopState = function()
+			return (options and options.shop) or { dollars = 0, penLevel = 1, passes = {}, luck = {} }
+		end
+		session.invokeHandlers.GetSettings = function()
+			-- `settingsDelay` holds the reply back, like a server still loading the player's data.
+			if options and options.settingsDelay then
+				task.wait(options.settingsDelay)
+			end
+			return (options and options.settings) or {}
 		end
 
 		session:run(session:service("StarterPlayer").StarterPlayerScripts.Client)
@@ -48,7 +72,6 @@ return function(harness)
 				root = root,
 				playerGui = playerGui,
 				eggFolder = session:service("Workspace"):FindFirstChild("Eggs"),
-				dustFolder = session:service("Workspace"):FindFirstChild("EggDust"),
 			}
 	end
 
@@ -57,30 +80,59 @@ return function(harness)
 		return {
 			EggSpec = session:require(folder.EggSpec),
 			EggMotion = session:require(folder.EggMotion),
+			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
 			Tuning = session:require(folder.Config.Tuning),
 		}
 	end
 
-	-- An egg as the server describes it, spawned `age` seconds ago.
+	-- An egg as the server describes it, spawned `age` seconds ago. It is the zone's first egg of that rarity.
 	local function eggData(session, id, zone, rarity, age, lateral)
 		return {
 			id = id,
 			zone = zone,
 			rarity = rarity,
+			kind = shared(session).EggSpec.pickEgg(zone, rarity, 0),
 			spawnTime = session.clock - (age or 5),
 			lateral = lateral or 0,
 			rider = nil,
 			owner = nil,
-			bounces = 1,
+			bounceTime = nil,
 		}
 	end
 
+	-- The zone's first rarity that has eggs.
+	local function firstRarity(session, zone)
+		local Rarities = session:require(session:service("ReplicatedStorage").Shared.Config.Rarities)
+		for _, rarity in Rarities.Order do
+			if shared(session).EggSpec.get(zone, rarity) then
+				return rarity
+			end
+		end
+		error("no eggs in zone " .. zone)
+	end
+
+	-- Puts the camera near a spot, as it would be near the player there.
+	local function cameraAt(session, position)
+		session:service("Workspace").CurrentCamera.CFrame = roblox.CFrame.new(position + Vector3.new(0, 10, -20))
+	end
+
+	-- Where an egg is now: where its rider has it, or along its path round the obstacles.
 	local function eggCenter(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
-		local z = modules.EggMotion.zAt(egg.spawnTime, spec.startZ, spec.rollSpeed, session.clock)
-		return Vector3.new(egg.lateral, modules.Runway.surfaceY(z) + spec.radius, z), spec
+		local startZ = spec.startZ
+		local z = modules.Runway.wrapZ(modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock))
+		local x = egg.lateral
+		if egg.rider == nil then
+			local fadeZ = math.min(
+				math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
+				modules.Runway.LOOP_END - 1
+			)
+			local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
+			x = modules.Obstacles.lateralAt(path, z)
+		end
+		return Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z), spec
 	end
 
 	-- Puts the character in the air right on top of an egg, as if it had just jumped there.
@@ -125,22 +177,88 @@ return function(harness)
 			expect.equal(#parts.eggFolder:GetChildren(), 2)
 
 			local model = parts.eggFolder.Egg1
-			expect.truthy(model.PrimaryPart == model.Shell, "PrimaryPart")
-			expect.truthy(model.Spot1 and model.Spot2 and model.Spot3, "spots")
+			expect.truthy(model.PrimaryPart == model.Root, "PrimaryPart")
 			local _, spec = eggCenter(session, first)
-			expect.near(model.Shell.Size.Y, spec.radius * 2, 1e-3)
-			expect.near(model.Shell.Size.X, spec.halfLength * 2, 1e-3)
+			expect.near(model.Root.Size.Y, spec.radius * 2, 1e-3)
+			expect.near(model.Root.Size.X, spec.halfLength * 2, 1e-3)
+			expect.equal(model.Root.Transparency, 1)
+			expect.equal(model.Root.Anchored, true)
 
 			-- Labels: rarity, then the stamina needed (green if the player has enough, red if not).
-			local labels = model.Shell.Label:GetChildren()
+			local labels = model.Root.Label:GetChildren()
 			expect.equal(labels[1].Text, "Common")
 			expect.equal(labels[2].Text, "Needs 50")
-			local mythicLabels = parts.eggFolder.Egg2.Shell.Label:GetChildren()
+			local mythicLabels = parts.eggFolder.Egg2.Root.Label:GetChildren()
 			expect.equal(mythicLabels[2].Text, "Needs 1.8K")
 			expect.truthy(
 				labels[2].TextColor3 ~= mythicLabels[2].TextColor3,
 				"affordable and not are colored differently"
 			)
+		end)
+
+		it("builds each egg from its blocky model, welded to the root", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common"))
+			session:fromServer("EggSpawned", eggData(session, 3, 1, "Common", 5, 8))
+			session:fromServer("EggSpawned", eggData(session, 2, 5, "Secret", 5, -8))
+
+			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
+			local common = parts.eggFolder.Egg1
+			local blocks = {}
+			for _, child in common:GetChildren() do
+				if child:IsA("BasePart") and child ~= common.Root and child.Name ~= "Dust" and child.Name ~= "Echo" then
+					table.insert(blocks, child)
+				end
+			end
+			expect.equal(#blocks, #EggModels.get("Leafy").boxes, "one part per box")
+			for _, block in blocks do
+				local weld = block:FindFirstChildOfClass("WeldConstraint")
+				expect.truthy(weld, block.Name .. " is welded")
+				expect.equal(block.Anchored, false)
+				expect.equal(block.CanCollide, false)
+			end
+
+			-- A second egg of the same kind is a copy of the same model.
+			expect.equal(#parts.eggFolder.Egg3:GetChildren(), #common:GetChildren())
+
+			-- Rare eggs glow and give off particles; a Common egg does neither.
+			local secret = parts.eggFolder.Egg2
+			expect.truthy(secret.Root:FindFirstChildOfClass("PointLight"), "light")
+			expect.truthy(secret.Root:FindFirstChildOfClass("ParticleEmitter"), "particles")
+			expect.falsy(common.Root:FindFirstChildOfClass("PointLight"), "no light on a Common egg")
+			local neon = 0
+			for _, child in secret:GetChildren() do
+				if child:IsA("BasePart") and child.Material == Enum.Material.Neon then
+					neon += 1
+				end
+			end
+			expect.truthy(neon > 0, "glowing lava")
+
+			-- Eggs with even ids lie the other way round.
+			session:renderFrame(1 / 60)
+			expect.truthy(common.Root.CFrame.RightVector.X > 0.99, "Egg1 points +X")
+			expect.truthy(parts.eggFolder.Egg2.Root.CFrame.RightVector.X < -0.99, "Egg2 points -X")
+		end)
+
+		it("draws each of a zone's eggs of the same rarity differently", function()
+			local session, parts = startClient()
+			local leafy = eggData(session, 1, 1, "Common")
+			local cottontail = eggData(session, 3, 1, "Common", 5, 10)
+			cottontail.kind = "Cottontail"
+			-- An egg the zone does not have at that rarity is drawn as the zone's first egg of the rarity.
+			local wrong = eggData(session, 5, 1, "Common", 5, -10)
+			wrong.kind = "Yeti"
+			for _, egg in { leafy, cottontail, wrong } do
+				session:fromServer("EggSpawned", egg)
+			end
+			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
+			local function blockCount(model)
+				-- Everything but the root and the dust (and its echo, see EggController).
+				return #model:GetChildren() - 3
+			end
+			expect.equal(blockCount(parts.eggFolder.Egg1), #EggModels.get("Leafy").boxes)
+			expect.equal(blockCount(parts.eggFolder.Egg3), #EggModels.get("Cottontail").boxes)
+			expect.equal(blockCount(parts.eggFolder.Egg5), #EggModels.get("Leafy").boxes)
 		end)
 
 		it("loads eggs from the server snapshot at startup", function()
@@ -154,22 +272,54 @@ return function(harness)
 					spawnTime = clock - 3,
 					lateral = 2,
 					bounces = 2,
+					cracking = false,
 				},
 			})
 			expect.equal(#parts.eggFolder:GetChildren(), 1)
 			expect.truthy(parts.eggFolder:FindFirstChild("Egg4"))
 		end)
 
-		it("moves eggs down the runway every frame", function()
+		it("moves eggs down the runway every frame, steering round obstacles", function()
 			local session, parts = startClient()
 			local egg = eggData(session, 1, 1, "Common", 5, 3)
 			session:fromServer("EggSpawned", egg)
 			session:renderFrame(1 / 60, 30)
 			local expected = eggCenter(session, egg)
-			local position = parts.eggFolder.Egg1.Shell.CFrame.Position
+			local position = parts.eggFolder.Egg1.Root.CFrame.Position
 			expect.near(position.Z, expected.Z, 1e-3, "z")
 			expect.near(position.Y, expected.Y, 1e-3, "y")
-			expect.near(position.X, 3, 1e-3, "x")
+			expect.near(position.X, expected.X, 1e-3, "x")
+
+			-- Further on, it has steered round whatever was in its lane.
+			session:renderFrame(1, 20)
+			expected = eggCenter(session, egg)
+			position = parts.eggFolder.Egg1.Root.CFrame.Position
+			expect.near(position.X, expected.X, 1e-3, "x later")
+		end)
+
+		it("kicks up dust while rolling, coloured for the ground", function()
+			local session, parts = startClient()
+			local desert = eggData(session, 1, 2, "Common", 5, 0)
+			cameraAt(session, eggCenter(session, desert))
+			session:fromServer("EggSpawned", desert)
+			session:renderFrame(1 / 60)
+			local rolling = parts.eggFolder.Egg1.Dust
+			local emitter = rolling:FindFirstChildOfClass("ParticleEmitter")
+			expect.truthy(emitter.Enabled, "dust while rolling")
+			expect.equal(emitter.Color.Keypoints[1].Value, roblox.Color3.fromRGB(236, 208, 152), "desert sand")
+			expect.near(rolling.CFrame.Position.Y, shared(session).Runway.BASE_Y + 0.2, 1e-3)
+			expect.equal(session.emitted[emitter], nil, "already rolling when the player joined: no puff")
+
+			-- A brand-new egg appears with a puff of dust.
+			local fresh = eggData(session, 2, 2, "Common", 0, 10)
+			session:fromServer("EggSpawned", fresh)
+			local puff = parts.eggFolder.Egg2.Dust:FindFirstChildOfClass("ParticleEmitter")
+			expect.truthy((session.emitted[puff] or 0) > 0, "a puff where it appears")
+
+			-- No dust for eggs far from the camera.
+			session:fromServer("EggSpawned", eggData(session, 3, 5, firstRarity(session, 5), 5, 0))
+			session:renderFrame(1 / 60)
+			expect.falsy(parts.eggFolder.Egg3.Dust:FindFirstChildOfClass("ParticleEmitter").Enabled, "far away")
 		end)
 
 		it("removes eggs, leaving a splat when one cracks", function()
@@ -191,7 +341,7 @@ return function(harness)
 		it("shows when an egg is taken and turns labels green as stamina grows", function()
 			local session, parts = startClient()
 			session:fromServer("EggSpawned", eggData(session, 1, 2, "Common")) -- needs 500
-			local need = parts.eggFolder.Egg1.Shell.Label:GetChildren()[2]
+			local need = parts.eggFolder.Egg1.Root.Label:GetChildren()[2]
 			local red = need.TextColor3
 
 			session:fromServer("StaminaChanged", 100, session.clock, 60, 500)
@@ -199,136 +349,8 @@ return function(harness)
 
 			session:fromServer("EggMounted", 1, 999, session.clock)
 			expect.equal(need.Text, "Taken")
-			session:fromServer("EggLeft", 1, 4)
+			session:fromServer("EggLeft", 1, session.clock, 0, 4)
 			expect.equal(need.Text, "Needs 500")
-
-			-- Claimed: by someone else, then (on another egg) by this player.
-			session:fromServer("EggClaimed", 1, 999, "Common")
-			expect.equal(need.Text, "Claimed")
-			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 5, 10))
-			session:fromServer("EggClaimed", 2, LOCAL_USER_ID, "Common")
-			expect.equal(parts.eggFolder.Egg2.Shell.Label:GetChildren()[2].Text, "Yours!")
-		end)
-	end)
-
-	describe("Client: eggs appear, roll, and kick up dust", function()
-		local function dustOf(parts, eggId)
-			return parts.dustFolder:FindFirstChild("Dust" .. eggId)
-		end
-
-		it("puts a new egg on the ground at the start of its zone and rolls it without bouncing", function()
-			local session, parts = startClient()
-			local modules = shared(session)
-			for zone, rarity in { "Common", "Rare", "Secret", "Secret", "Eternal" } do
-				local egg = eggData(session, zone, zone, rarity, 0, 0)
-				session:fromServer("EggSpawned", egg)
-				local spec = modules.EggSpec.get(zone, rarity)
-				local position = parts.eggFolder["Egg" .. zone].Shell.CFrame.Position
-				-- On the ground, its back just past the zone's start line, from the very first frame.
-				local back = modules.Runway.zoneStartZ(zone) + modules.Tuning.EGG_SPAWN_GAP
-				expect.near(position.Z - spec.radius, back, 1e-3, rarity .. " start")
-				expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, rarity .. " height")
-			end
-
-			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway.
-			local lastZ = {}
-			for _ = 1, 120 do
-				session:renderFrame(1 / 60)
-				for zone = 1, 5 do
-					local spec = modules.EggSpec.get(zone, ({ "Common", "Rare", "Secret", "Secret", "Eternal" })[zone])
-					local position = parts.eggFolder["Egg" .. zone].Shell.CFrame.Position
-					expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, "on the ground")
-					expect.truthy(lastZ[zone] == nil or position.Z > lastZ[zone], "rolls forward")
-					lastZ[zone] = position.Z
-				end
-			end
-		end)
-
-		it("fades a new egg in with a puff of dust", function()
-			local session, parts = startClient()
-			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 0))
-			local dust = dustOf(parts, 1)
-			expect.truthy(dust, "dust strip")
-			expect.truthy((session.emitted[dust.Dust] or 0) > 0, "puff where it appears")
-			-- An egg that was already rolling when the player joined just shows up.
-			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 20, 10))
-			expect.equal(session.emitted[dustOf(parts, 2).Dust], nil)
-		end)
-
-		it("leaves a dust trail behind rolling eggs near the camera", function()
-			local session, parts = startClient()
-			local modules = shared(session)
-			local egg = eggData(session, 1, 1, "Rare", 3, 5)
-			session:fromServer("EggSpawned", egg)
-			session:renderFrame(1 / 60)
-
-			local dust = dustOf(parts, 1)
-			local center, spec = eggCenter(session, egg)
-			expect.equal(dust.Transparency, 1)
-			expect.equal(dust.Dust.Enabled, true)
-			expect.equal(dust.Dust.Texture, "rbxasset://textures/particles/smoke_main.dds")
-			-- On the ground, just behind where the egg touches it, and not spinning with the egg.
-			expect.near(dust.CFrame.Position.X, 5, 1e-3)
-			expect.truthy(dust.CFrame.Position.Z < center.Z, "behind the egg")
-			expect.truthy(center.Z - dust.CFrame.Position.Z < spec.radius, "close behind the egg")
-			expect.near(dust.CFrame.Position.Y, modules.Runway.surfaceY(center.Z), 0.5)
-			expect.near(dust.CFrame.LookVector.Z, -1, 1e-6)
-
-			session:renderFrame(1 / 60, 30)
-			center = eggCenter(session, egg)
-			expect.truthy(center.Z - dust.CFrame.Position.Z < spec.radius, "follows the egg")
-			expect.near(dust.CFrame.LookVector.Z, -1, 1e-6)
-
-			-- Far down the runway from the camera: no dust.
-			session:fromServer("EggSpawned", eggData(session, 2, 4, "Common", 3))
-			session:renderFrame(1 / 60)
-			expect.equal(dustOf(parts, 2).Dust.Enabled, false)
-		end)
-
-		it("takes its dust color from the ground the egg is rolling on", function()
-			local session, parts = startClient()
-			-- A Forest egg that has rolled into the Snow.
-			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 100))
-			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 1))
-			session:renderFrame(1 / 60)
-			local snow = dustOf(parts, 1).Dust.Color.Keypoints[1].Value
-			local forest = dustOf(parts, 2).Dust.Color.Keypoints[1].Value
-			expect.truthy(snow.R > forest.R and snow.B > forest.B, "paler dust on snow than on grass")
-		end)
-
-		it("keeps an egg on the ground, and its dust going, when its rider gets off", function()
-			local session, parts = startClient()
-			local modules = shared(session)
-			local egg = eggData(session, 1, 1, "Rare", 3)
-			egg.rider = 999
-			session:fromServer("EggSpawned", egg)
-			session:renderFrame(1 / 60)
-			local emitter = dustOf(parts, 1).Dust
-			expect.equal(emitter.Enabled, true)
-
-			session:fromServer("EggLeft", 1, 0)
-			local shell = parts.eggFolder.Egg1.Shell
-			for _ = 1, 60 do
-				session:renderFrame(1 / 60)
-				local position = shell.CFrame.Position
-				local _, spec = eggCenter(session, egg)
-				expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, "on the ground")
-				expect.equal(emitter.Enabled, true)
-			end
-		end)
-
-		it("stops the dust when an egg is removed and clears it once the puffs have faded", function()
-			local session, parts = startClient()
-			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 3))
-			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 3, 10))
-			session:renderFrame(1 / 60)
-			local first, second = dustOf(parts, 1), dustOf(parts, 2)
-			session:fromServer("EggRemoved", 1, "Cracked")
-			session:fromServer("EggRemoved", 2, "Claimed", LOCAL_USER_ID)
-			expect.equal(first.Dust.Enabled, false)
-			expect.equal(second.Dust.Enabled, false)
-			task.wait(0.9)
-			expect.equal(#parts.dustFolder:GetChildren(), 0)
 		end)
 	end)
 
@@ -338,15 +360,14 @@ return function(harness)
 			local egg = eggData(session, 1, 1, "Common")
 			session:fromServer("EggSpawned", egg)
 
-			-- Standing next to it: nothing.
+			-- On foot on the hub: nothing. (Nobody stands on the runway itself; see "Client: leaping".)
 			local center = eggCenter(session, egg)
-			parts.root.Position = center
 			session:heartbeat(1 / 60)
 			expect.equal(#session:sent("RequestMount"), 0)
 
-			-- In the air but far away: nothing.
+			-- Leaping, but far away: nothing.
 			parts.humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-			parts.root.Position = center + Vector3.new(0, 0, 30)
+			parts.root.Position = center + Vector3.new(0, 20, 30)
 			session:heartbeat(1 / 60)
 			expect.equal(#session:sent("RequestMount"), 0)
 
@@ -358,22 +379,15 @@ return function(harness)
 			expect.equal(request.args[1], 1)
 		end)
 
-		it("lets a player jump on an egg the moment it appears", function()
-			local session, parts = startClient()
-			local egg = eggData(session, 1, 1, "Common", 0)
-			session:fromServer("EggSpawned", egg)
-			jumpOnto(session, parts, egg)
-			session:heartbeat(1 / 60)
-			expect.equal(session:lastSent("RequestMount", "server").args[1], 1)
-		end)
-
-		it("does not try to mount an egg that is taken or someone else claimed", function()
+		it("does not try to mount an egg that is taken, cracking, or claimed by someone else", function()
 			local session, parts = startClient()
 			local taken = eggData(session, 1, 1, "Common")
 			taken.rider = 999
-			local claimed = eggData(session, 2, 1, "Common", 5, 10)
+			local cracking = eggData(session, 2, 1, "Common", 5, 10)
+			cracking.bounceTime = session.clock
+			local claimed = eggData(session, 3, 1, "Common", 5, -10)
 			claimed.owner = 999
-			for _, egg in { taken, claimed } do
+			for _, egg in { taken, cracking, claimed } do
 				session:fromServer("EggSpawned", egg)
 				jumpOnto(session, parts, egg)
 				session:heartbeat(1 / 60)
@@ -405,7 +419,7 @@ return function(harness)
 			task.wait(0.3)
 			session:renderFrame(1 / 60)
 			local model = session:service("Workspace").Eggs.Egg1
-			expect.truthy(model.Shell.CFrame.Position.X < -5, "egg moved: " .. model.Shell.CFrame.Position.X)
+			expect.truthy(model.Root.CFrame.Position.X < -5, "egg moved: " .. model.Root.CFrame.Position.X)
 			local report = session:lastSent("RideLateral", "server")
 			expect.truthy(report, "RideLateral")
 			expect.truthy(report.args[1] < 0)
@@ -413,7 +427,7 @@ return function(harness)
 			-- It cannot be steered off the side of the runway.
 			session:renderFrame(1, 30)
 			local limit = shared(session).Runway.maxLateral(spec.halfLength)
-			expect.near(model.Shell.CFrame.Position.X, -limit, 1e-3)
+			expect.near(model.Root.CFrame.Position.X, -limit, 1e-3)
 		end)
 
 		it("hops off on a fresh jump press", function()
@@ -454,81 +468,46 @@ return function(harness)
 			local egg = eggData(session, 1, 1, "Common")
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
-			session:renderFrame(1, 2)
 
-			session:fromServer("EggClaimed", 1, LOCAL_USER_ID, "Common")
-			session:fromServer("InventoryUpdated", 3)
-			session:fromServer("StaminaChanged", 60, session.clock, 12, 100)
+			session:fromServer("EggClaimed", 1, LOCAL_USER_ID, "Common", "Leafy")
+			session:fromServer("InventoryChanged", {
+				eggs = {
+					{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+					{ uid = "c", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 1 },
+				},
+				hatching = {},
+				pets = {},
+				penLevel = 1,
+				eggCapacity = 2,
+				petCapacity = 10,
+				mount = "",
+			})
 			session:renderFrame(1 / 60)
 
 			local toast = hud(parts).Toast
-			expect.equal(toast.Text, "CLAIMED! +1 Common egg")
+			expect.equal(toast.Text, "CLAIMED! +1 Leafy Egg")
 			expect.equal(toast.Visible, true)
-			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  3")
+			expect.equal(hud(parts).Wallet.Eggs.Content.Value.Text, "3")
 
-			-- Still on the egg, with a full meter that says so.
+			-- Still on the egg, with a full meter that says so; nothing runs out.
 			expect.equal(parts.root.Anchored, true)
 			local meters = hud(parts).Meters
 			expect.equal(meters.Claim.Visible, true)
 			expect.near(meters.Claim.Fill.Size.X.Scale, 1, 1e-6)
-			expect.equal(labelOf(meters.Claim).Text, "Common Forest egg claimed!")
+			expect.truthy(string.find(labelOf(meters.Claim).Text, "claimed!$"), labelOf(meters.Claim).Text)
 			expect.equal(meters.RideHint.Text, "In your inventory  -  keep rolling, or jump to leap off")
-			expect.equal(parts.eggFolder.Egg1.Shell.Label:GetChildren()[2].Text, "Yours!")
-
-			-- Long after the claim time, still riding: nothing runs out.
 			session:renderFrame(1, 20)
-			local center, spec = eggCenter(session, egg)
-			expect.near(parts.root.CFrame.Position.Z, center.Z, 1e-2, "rider rolls with the egg")
-			expect.near(parts.root.CFrame.Position.Y, center.Y + spec.radius + 2, 1e-2)
-			expect.equal(labelOf(meters.Claim).Text, "Common Forest egg claimed!")
+			expect.truthy(string.find(labelOf(meters.Claim).Text, "claimed!$"), "still claimed")
+			expect.equal(parts.root.Anchored, true)
 
-			-- Jump off.
+			-- Jump off: a leap, and the meter goes.
 			task.wait(0.6)
 			session:heartbeat(1 / 60)
 			session:fire(session:service("UserInputService"), "JumpRequest")
 			expect.equal(#session:sent("RequestDismount", "server"), 1)
 			expect.equal(parts.root.Anchored, false)
 			expect.equal(meters.Claim.Visible, false)
-		end)
-
-		it("bounces an egg slightly before it cracks, and nobody can land on it meanwhile", function()
-			local session, parts = startClient()
-			local modules = shared(session)
-			local egg = eggData(session, 1, 1, "Rare", 3)
-			session:fromServer("EggSpawned", egg)
-			session:renderFrame(1 / 60)
-			local shell = parts.eggFolder.Egg1.Shell
-			local emitter = parts.dustFolder.Dust1.Dust
-
-			session:fromServer("EggLeft", 1, 0, session.clock)
-			session:renderFrame(modules.Tuning.CRACK_BOUNCE_TIME / 2)
-			local position = shell.CFrame.Position
-			local _, spec = eggCenter(session, egg)
-			local lift = position.Y - (modules.Runway.surfaceY(position.Z) + spec.radius)
-			expect.near(lift, modules.Tuning.CRACK_BOUNCE_HEIGHT, 1e-2)
-			expect.truthy(lift < 4, "only a slight bounce")
-			expect.equal(emitter.Enabled, false, "no dust in the air")
-
-			jumpOnto(session, parts, egg)
-			session:heartbeat(1 / 60)
-			expect.equal(#session:sent("RequestMount"), 0)
-
-			session:fromServer("EggRemoved", 1, "Cracked")
-			expect.truthy(parts.eggFolder:FindFirstChild("Splat"), "splat")
-		end)
-
-		it("drops an egg out of sight when it goes off the side", function()
-			local session, parts = startClient()
-			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 3, 20))
-			session:renderFrame(1 / 60)
-			local shell = parts.eggFolder.Egg1.Shell
-			local before = shell.CFrame.Position
-			session:fromServer("EggRemoved", 1, "FellOff")
-			local after = shell.CFrame.Position
-			expect.truthy(after.Y < before.Y - 30, "falls")
-			expect.truthy(after.X > before.X, "off the side it was on")
-			task.wait(0.9)
-			expect.falsy(parts.eggFolder:FindFirstChild("Egg1"))
 		end)
 
 		it("stuns a rider who is thrown off", function()
@@ -538,7 +517,7 @@ return function(harness)
 			startRide(session, egg, 9)
 
 			session:fromServer("RideEnded", "ThrownOff", { eggId = 1, zone = 1, rarity = "Rare" })
-			session:fromServer("EggLeft", 1, 0, session.clock)
+			session:fromServer("EggLeft", 1, session.clock, 1, 0)
 			expect.equal(parts.root.Anchored, false)
 			expect.equal(parts.humanoid.PlatformStand, true)
 
@@ -567,6 +546,72 @@ return function(harness)
 			expect.equal(parts.root.Anchored, false)
 		end)
 
+		-- The first obstacle of a tier (and timing) in a zone.
+		local function findObstacle(session, zoneId, tier, timed)
+			for _, obstacle in shared(session).Obstacles.all() do
+				if obstacle.zone == zoneId and obstacle.tier == tier and (obstacle.timing ~= nil) == timed then
+					return obstacle
+				end
+			end
+			error(`no {tier} obstacle in zone {zoneId}`)
+		end
+
+		-- Starts riding an egg lined up with an obstacle, a moment before it gets there.
+		local function rideTowards(session, obstacle, rarity)
+			local modules = shared(session)
+			local spec = modules.EggSpec.get(obstacle.zone, rarity)
+			local startZ = spec.startZ
+			local gap = obstacle.z - obstacle.hz - spec.radius - 1 - startZ
+			local egg = eggData(session, 1, obstacle.zone, rarity, gap / spec.rollSpeed, obstacle.x)
+			egg.rider = LOCAL_USER_ID
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg, spec.claimTime)
+			return egg, spec
+		end
+
+		it("bumps into obstacles: reports the hit at once, knocks the egg clear and wobbles it", function()
+			local session, parts = startClient()
+			local bump = findObstacle(session, 1, "Bump", false)
+			local _, spec = rideTowards(session, bump, "Rare")
+			session:renderFrame(1 / 60, 20)
+			local report = session:lastSent("ReportHit", "server")
+			expect.truthy(report, "ReportHit")
+			expect.equal(report.args[1], bump.id)
+			expect.equal(#session:sent("ReportHit", "server"), 1, "once")
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Bumped into "), hud(parts).Toast.Text)
+			local x = session:service("Workspace").Eggs.Egg1.Root.CFrame.Position.X
+			expect.truthy(math.abs(x - bump.x) >= bump.hx + spec.halfLength, "knocked clear")
+			expect.equal(parts.root.Anchored, true, "still riding")
+		end)
+
+		it("is thrown off by a KnockOff obstacle", function()
+			local session, parts = startClient()
+			local rock = findObstacle(session, 1, "KnockOff", false)
+			rideTowards(session, rock, "Rare")
+			session:renderFrame(1 / 60, 20)
+			expect.equal(session:lastSent("ReportHit", "server").args[1], rock.id)
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Knocked off by "), hud(parts).Toast.Text)
+			expect.equal(parts.root.Anchored, false)
+			expect.equal(parts.humanoid.PlatformStand, true, "stunned")
+			-- The server's word arriving afterwards changes nothing.
+			session:fromServer("RideEnded", "KnockedOff", { eggId = 1, zone = 1, rarity = "Rare" })
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Knocked off by "), "no second toast")
+		end)
+
+		it("follows the server when it spots a hit first", function()
+			local session, parts = startClient()
+			local bump = findObstacle(session, 1, "Bump", false)
+			local egg = eggData(session, 1, 1, "Rare", 1, 0)
+			egg.rider = LOCAL_USER_ID
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg, 9)
+			session:fromServer("ObstacleHit", bump.id, "Bump", 21)
+			session:renderFrame(1 / 60)
+			expect.near(session:service("Workspace").Eggs.Egg1.Root.CFrame.Position.X, 21, 1e-3)
+			expect.truthy(string.find(hud(parts).Toast.Text, "^Bumped into "), hud(parts).Toast.Text)
+			expect.equal(#session:sent("ReportHit"), 0)
+		end)
+
 		it("pins other players to their eggs", function()
 			local session = startClient()
 			local _, _, otherRoot = session:addPlayer(55, "Other")
@@ -581,12 +626,110 @@ return function(harness)
 		end)
 	end)
 
+	describe("Client: eggs on the ground, cracking, and going over the edge", function()
+		local function emitterOf(part)
+			return part:FindFirstChildOfClass("ParticleEmitter")
+		end
+
+		it("puts a new egg on the ground at the start of its zone and rolls it without bouncing", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			for zone = 1, 6 do
+				local rarity = firstRarity(session, zone)
+				session:fromServer("EggSpawned", eggData(session, zone, zone, rarity, 0, 0))
+				local spec = modules.EggSpec.get(zone, rarity)
+				local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
+				-- On the ground, its back just past the zone's start line, from the very first frame.
+				local back = modules.Runway.zoneStartZ(zone) + modules.Tuning.EGG_SPAWN_GAP
+				expect.near(position.Z - spec.radius, back, 1e-3, rarity .. " start")
+				expect.near(position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, rarity .. " height")
+			end
+			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway.
+			local lastZ = {}
+			for _ = 1, 120 do
+				session:renderFrame(1 / 60)
+				for zone = 1, 6 do
+					local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
+					local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
+					expect.near(position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, "on the ground")
+					expect.truthy(lastZ[zone] == nil or position.Z > lastZ[zone], "rolls forward")
+					lastZ[zone] = position.Z
+				end
+			end
+		end)
+
+		it("keeps an egg on the ground, and its dust going, when its rider gets off", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			local egg = eggData(session, 1, 1, "Rare", 3)
+			egg.rider = 999
+			cameraAt(session, eggCenter(session, egg))
+			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+			local emitter = emitterOf(parts.eggFolder.Egg1.Dust)
+			expect.equal(emitter.Enabled, true)
+
+			session:fromServer("EggLeft", 1, session.clock, 0, false)
+			local root = parts.eggFolder.Egg1.Root
+			local spec = modules.EggSpec.get(1, "Rare")
+			for _ = 1, 60 do
+				session:renderFrame(1 / 60)
+				expect.near(root.CFrame.Position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, "no hop")
+				expect.equal(emitter.Enabled, true)
+			end
+		end)
+
+		it("bounces an egg slightly before it cracks, and nobody can land on it meanwhile", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			local egg = eggData(session, 1, 1, "Rare", 3)
+			egg.rider = 999
+			cameraAt(session, eggCenter(session, egg))
+			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+			local root = parts.eggFolder.Egg1.Root
+			local emitter = emitterOf(parts.eggFolder.Egg1.Dust)
+
+			session:fromServer("EggLeft", 1, session.clock, 0, true)
+			egg.rider = nil
+			session:renderFrame(modules.Tuning.CRACK_BOUNCE_TIME / 2)
+			local spec = modules.EggSpec.get(1, "Rare")
+			local lift = root.CFrame.Position.Y - (modules.Runway.BASE_Y + spec.radius)
+			expect.near(lift, modules.Tuning.CRACK_BOUNCE_HEIGHT, 1e-2)
+			expect.truthy(lift < 4, "only a slight bounce")
+			expect.equal(emitter.Enabled, false, "no dust while it cracks")
+
+			jumpOnto(session, parts, egg)
+			session:heartbeat(1 / 60)
+			expect.equal(#session:sent("RequestMount"), 0)
+
+			session:fromServer("EggRemoved", 1, "Cracked")
+			expect.truthy(parts.eggFolder:FindFirstChild("Splat"), "splat")
+		end)
+
+		it("drops an egg out of sight when it goes off the side", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Common", 3, 20)
+			egg.rider = 999
+			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+			local root = parts.eggFolder.Egg1.Root
+			local before = root.CFrame.Position
+			session:fromServer("EggRemoved", 1, "FellOff")
+			local after = root.CFrame.Position
+			expect.truthy(after.Y < before.Y - 30, "falls")
+			expect.truthy(after.X > before.X, "off the side it was on")
+			task.wait(0.9)
+			expect.falsy(parts.eggFolder:FindFirstChild("Egg1"))
+		end)
+	end)
+
 	describe("Client: leaping", function()
 		local function leapForce(parts)
 			return parts.root:FindFirstChild("LeapForce")
 		end
 
-		it("launches a player into a floaty leap as soon as they step off the hub onto the runway", function()
+		it("launches a player into a floaty leap as soon as they step past the start zone", function()
 			local session, parts = startClient()
 			local tuning = shared(session).Tuning
 			parts.root.Position = Vector3.new(0, 13, -5)
@@ -653,6 +796,7 @@ return function(harness)
 			expect.equal(parts.humanoid.Health, 100)
 			expect.equal(parts.root.Anchored, true)
 			expect.equal(leapForce(parts).Enabled, false)
+			session:renderFrame(1 / 60)
 			expect.equal(hud(parts).Leap.Visible, false)
 		end)
 
@@ -661,23 +805,22 @@ return function(harness)
 			local tuning = shared(session).Tuning
 			local egg = eggData(session, 1, 1, "Common")
 			session:fromServer("EggSpawned", egg)
-			local userInput = session:service("UserInputService")
 			startRide(session, egg)
 			task.wait(0.4)
 			session:heartbeat(1 / 60)
-			session:fire(userInput, "JumpRequest")
+			session:fire(session:service("UserInputService"), "JumpRequest")
 			expect.equal(parts.root.AssemblyLinearVelocity.Y, tuning.LEAP_UP_SPEED)
 			expect.truthy(leapForce(parts).Enabled, "floaty")
 			session:renderFrame(1 / 60)
 			expect.equal(hud(parts).Leap.Visible, true)
 		end)
 
-		it("dies at once on hitting a wall", function()
+		it("dies at once on hitting a bank", function()
 			local session, parts = startClient()
 			local egg = eggData(session, 1, 1, "Common", 3, 20)
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
-			session:fromServer("RideEnded", "HitWall", { eggId = 1, zone = 1, rarity = "Common" })
+			session:fromServer("RideEnded", "HitWall", { eggId = 1, zone = 1, rarity = "Common", kind = egg.kind })
 			expect.equal(parts.humanoid.Health, 0)
 			session:renderFrame(1 / 60)
 			expect.equal(hud(parts).Toast.Text, "Hit the wall!")
@@ -688,9 +831,9 @@ return function(harness)
 			local egg = eggData(session, 1, 1, "Common", 3, 20)
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
-			session:fromServer("RideEnded", "FellOff", { eggId = 1, zone = 1, rarity = "Common" })
+			session:fromServer("RideEnded", "FellOff", { eggId = 1, zone = 1, rarity = "Common", kind = egg.kind })
 			expect.equal(parts.root.Anchored, false)
-			expect.truthy(parts.root.AssemblyLinearVelocity.X > 0, "off the side it was on")
+			expect.truthy(parts.root.AssemblyLinearVelocity.X ~= 0, "off the side")
 			session:heartbeat(1 / 60)
 			expect.falsy(leapForce(parts), "no leap")
 			session:renderFrame(1 / 60)
@@ -699,55 +842,50 @@ return function(harness)
 	end)
 
 	describe("Client: the endless last zone", function()
-		it("builds the repeat of the last zone past the end of the runway", function()
-			local session = startClient()
-			local runway = shared(session).Runway
-			local endless = session:service("Workspace"):FindFirstChild("EndlessRunway")
-			expect.truthy(endless, "Workspace.EndlessRunway")
-			local grounds, walls, signs = 0, 0, {}
-			for _, part in endless:GetChildren() do
-				local position = part.CFrame.Position
-				if part.Name == "Ground" then
-					grounds += 1
-					expect.truthy(part.Size.Z <= 2048, "within Roblox's part size limit")
-				elseif part.Name == "Wall" then
-					walls += 1
-					expect.truthy(position.Z >= runway.LENGTH, "past the server's walls")
-				elseif part.Name == "Sign" then
-					table.insert(signs, position.Z)
-				end
-			end
-			expect.truthy(grounds >= 2, "ground")
-			expect.truthy(walls > 20, "walls")
-			table.sort(signs)
-			expect.near(signs[1], runway.FINAL_ZONE_START + runway.LOOP_LENGTH)
-			expect.near(signs[2] - signs[1], runway.LOOP_LENGTH)
-			expect.truthy(signs[#signs] > runway.LOOP_END + runway.LOOP_VIEW, "gates well past the loop")
-		end)
-
 		it("carries a leaping player back one loop at the end", function()
 			local session, parts = startClient()
 			local runway = shared(session).Runway
 			-- (The stand-in keeps Position and CFrame apart; Roblox keeps them in step.)
 			parts.root.Position = Vector3.new(4, 30, runway.LOOP_END + 1)
-			parts.root.CFrame = CFrame.new(parts.root.Position)
+			parts.root.CFrame = roblox.CFrame.new(parts.root.Position)
 			session:heartbeat(1 / 60)
 			local position = parts.root.CFrame.Position
 			expect.near(position.Z, runway.LOOP_START + 1, 1e-3)
-			expect.near(position.Y, 30 + runway.LOOP_RISE, 1e-3)
+			expect.near(position.Y, 30, 1e-3)
 			expect.near(position.X, 4, 1e-3)
 			expect.equal(parts.humanoid.Health, 100)
 		end)
 
 		it("carries a rider and everything around them back one loop together, so nothing seems to move", function()
 			local session, parts = startClient()
-			local runway = shared(session).Runway
-			-- The rider's Eternal egg (21 studs/s) is 10 studs from the end of the loop.
-			local mineSpec = shared(session).EggSpec.get(5, "Eternal")
-			local mine = eggData(session, 1, 5, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / 21, 0)
-			-- Another egg (12 studs/s) has already been carried back, to just past the start of the loop.
-			local otherSpec = shared(session).EggSpec.get(5, "Common")
-			local other = eggData(session, 2, 5, "Common", (runway.LOOP_END + 20 - otherSpec.startZ) / 12, 10)
+			local modules = shared(session)
+			local runway = modules.Runway
+			-- The rider's Eternal egg (21 studs/s) is 10 studs from the end of the loop, in a lane clear of obstacles
+			-- there (and so, the last zone repeating, one loop back too).
+			local mineSpec = modules.EggSpec.get(6, "Eternal")
+			local lane
+			for x = -50, 50, 2 do
+				local path = modules.Obstacles.planPath(
+					x,
+					runway.LOOP_END - 15,
+					runway.LOOP_END + 15,
+					mineSpec.halfLength,
+					mineSpec.radius
+				)
+				if #path.moves == 0 then
+					lane = x
+					break
+				end
+			end
+			expect.truthy(lane, "a clear lane")
+			local mine =
+				eggData(session, 1, 6, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / mineSpec.rollSpeed, lane)
+			mine.rider = LOCAL_USER_ID
+			-- Someone else's Epic egg (16 studs/s) has already been carried back, to just past the start of the loop.
+			local otherSpec = modules.EggSpec.get(6, "Epic")
+			local other =
+				eggData(session, 2, 6, "Epic", (runway.LOOP_END + 20 - otherSpec.startZ) / otherSpec.rollSpeed, 10)
+			other.rider = 999
 			session:fromServer("EggSpawned", mine)
 			session:fromServer("EggSpawned", other)
 			startRide(session, mine)
@@ -755,25 +893,24 @@ return function(harness)
 			-- One frame to sit the rider on their egg; from then on the camera follows them, as it would in the game.
 			session:renderFrame(1 / 60)
 
-			local otherShell = parts.eggFolder.Egg2.Shell
-			local otherDust = parts.dustFolder.Dust2.Dust
-			local echo = parts.dustFolder.Echo2.Dust
-			local wrapped = false
-			local lastGap = nil
+			local otherRoot = parts.eggFolder.Egg2.Root
+			local otherDust = parts.eggFolder.Egg2.Dust:FindFirstChildOfClass("ParticleEmitter")
+			local echo = parts.eggFolder.Egg2.Echo:FindFirstChildOfClass("ParticleEmitter")
+			local closing = (mineSpec.rollSpeed - otherSpec.rollSpeed) / 60
+			local wrapped, lastGap = false, nil
 			for _ = 1, 60 do
-				camera.CFrame = CFrame.new(parts.root.CFrame.Position + Vector3.new(0, 10, -20))
+				camera.CFrame = roblox.CFrame.new(parts.root.CFrame.Position + Vector3.new(0, 10, -20))
 				session:renderFrame(1 / 60)
 				local rider = parts.root.CFrame.Position
-				local otherZ = otherShell.CFrame.Position.Z
-				-- The other egg is always drawn just ahead of the rider, closing in at 9 studs a second.
+				local otherZ = otherRoot.CFrame.Position.Z
+				-- The other egg is always drawn just ahead of the rider, closing in steadily.
 				local gap = otherZ - rider.Z
 				expect.truthy(gap > 0 and gap < 35, "gap " .. gap)
 				if lastGap then
-					expect.near(gap, lastGap - 9 / 60, 0.05)
+					expect.near(gap, lastGap - closing, 0.05)
 				end
 				lastGap = gap
-				-- Heights match too: both stay on the ground.
-				expect.near(otherShell.CFrame.Position.Y, runway.surfaceY(otherZ) + otherSpec.radius, 1e-3)
+				expect.near(otherRoot.CFrame.Position.Y, runway.BASE_Y + otherSpec.radius, 1e-3, "on the ground")
 				if rider.Z < runway.LOOP_START + 100 then
 					wrapped = true
 				elseif rider.Z > runway.LOOP_END - 60 then
@@ -787,16 +924,547 @@ return function(harness)
 		end)
 	end)
 
+	describe("Client: rare egg messages", function()
+		local function clockText(time)
+			local date = os.date("*t", math.floor(time))
+			local hour = if date.hour % 12 == 0 then 12 else date.hour % 12
+			return string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
+		end
+
+		it("says where and when a Secret or rarer egg spawned", function()
+			local session, parts = startClient()
+			local folder = session:service("ReplicatedStorage").Shared
+			local Rarities = session:require(folder.Config.Rarities)
+			local Zones = session:require(folder.Config.Zones)
+			local banner = hud(parts).Announcement
+			expect.equal(banner.Visible, false)
+
+			local secret = eggData(session, 1, 3, "Secret", 0)
+			session:fromServer("EggSpawned", secret, true)
+			session:renderFrame(1 / 60)
+			expect.equal(banner.Visible, true)
+			expect.equal(banner.Title.Text, "SECRET EGG SPAWNED!")
+			expect.equal(banner.Detail.Text, `Start of the {Zones.List[3].name} zone at {clockText(secret.spawnTime)}`)
+			local color = Rarities.Info.Secret.color
+			expect.equal(banner.BackgroundColor3, roblox.Color3.fromRGB(color[1], color[2], color[3]))
+
+			-- Other messages use the toast and do not hide it.
+			session:fromServer("Announce", "Something else", nil)
+			expect.equal(hud(parts).Toast.Text, "Something else")
+			expect.equal(banner.Visible, true)
+
+			session:fromServer("EggSpawned", eggData(session, 2, 6, "Eternal", 0), true)
+			session:renderFrame(1 / 60)
+			expect.equal(banner.Title.Text, "ETERNAL EGG SPAWNED!")
+			local prefix = `Start of the {Zones.List[6].name} zone at `
+			expect.truthy(banner.Detail.Text:find(prefix, 1, true) == 1, banner.Detail.Text)
+		end)
+
+		it("says nothing for eggs below Secret, or for a lineup egg's later laps", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Legendary", 0), true)
+			session:fromServer("EggSpawned", eggData(session, 2, 2, "Mythic", 0), true)
+			-- The server only asks for the message on a lineup egg's first lap of the day.
+			session:fromServer("EggSpawned", eggData(session, 3, 3, "Secret", 0), false)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Announcement.Visible, false)
+		end)
+
+		it("does not announce rare eggs that were already rolling when the player joined", function()
+			local probe = Studio.open(place, { isServer = false })
+			local _, parts = startClient({
+				{ id = 9, zone = 3, rarity = "Secret", kind = "Yeti", spawnTime = probe.clock - 4, lateral = 0 },
+			})
+			expect.truthy(parts.eggFolder:FindFirstChild("Egg9"))
+			expect.equal(hud(parts).Announcement.Visible, false)
+		end)
+	end)
+
+	describe("Client: eggs and pets", function()
+		local function panel(parts)
+			return hud(parts).Inventory
+		end
+
+		local function state(extra)
+			local base = {
+				eggs = {
+					{ uid = "a", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "b", zone = 1, rarity = "Rare", kind = "Toadstool", claimedAt = 0 },
+				},
+				hatching = {},
+				pets = {},
+				penLevel = 1,
+				eggCapacity = 2,
+				petCapacity = 10,
+				dollars = 0,
+				income = 0,
+				mount = "",
+			}
+			for key, value in extra or {} do
+				base[key] = value
+			end
+			return base
+		end
+
+		local function pet(uid, kind, rarity, variant, inPen)
+			return {
+				uid = uid,
+				kind = kind,
+				egg = kind,
+				zone = 1,
+				rarity = rarity,
+				variant = variant or "Normal",
+				inPen = inPen or false,
+				hatchedAt = 0,
+			}
+		end
+
+		-- Builds plot 1 on this device as the server would, owned by the local player.
+		local function ownPlot(session)
+			local PlotModels = session:require(session:service("ServerScriptService").Server.Map.PlotModels)
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local plots = roblox.Instance.new("Folder")
+			plots.Name = "Plots"
+			plots.Parent = map
+			map.Parent = session:service("Workspace")
+			local plot = PlotModels.buildPlot(plots, 1)
+			plot:SetAttribute("Owner", LOCAL_USER_ID)
+			return plot, PlotModels
+		end
+
+		it("puts an egg down from the Eggs tab, but only in the player's own pen", function()
+			local session, parts = startClient()
+			ownPlot(session)
+			local Plots = session:require(session:service("ReplicatedStorage").Shared.Plots)
+			local tabs = hud(parts).SideTabs
+			expect.equal(tabs.EggsTab.Badge.Text, "2")
+			expect.equal(panel(parts).Visible, false)
+
+			session:fire(tabs.EggsTab, "Activated")
+			expect.equal(panel(parts).Visible, true)
+			expect.equal(panel(parts).Title.Text, "Your eggs (2)")
+			local cards = panel(parts).List.EggsPage.Eggs
+			expect.equal(cards.Egg_a.Title.Text, "Leafy Egg")
+			session:renderFrame(1 / 60)
+			local preview = panel(parts).Preview
+			expect.truthy(preview:FindFirstChildOfClass("Model"), "egg in the preview")
+			expect.truthy(preview:FindFirstChildOfClass("Camera"), "preview camera")
+
+			-- Out in the plaza: not yet.
+			session:fire(cards.Egg_b.Place, "Activated")
+			expect.equal(#session:sent("PlaceEgg"), 0)
+			expect.truthy(string.find(hud(parts).Toast.Text, "Walk into your pen"), hud(parts).Toast.Text)
+			-- In the pen: asks the server.
+			local x, z = Plots.point(1, 25, 0)
+			parts.root.CFrame = roblox.CFrame.new(x, 13, z)
+			session:fire(cards.Egg_b.Place, "Activated")
+			expect.equal(session:lastSent("PlaceEgg", "server").args[1], "b")
+
+			-- Full: the device says so without asking.
+			session:fromServer(
+				"InventoryChanged",
+				state({
+					hatching = {
+						{
+							uid = "x",
+							zone = 1,
+							rarity = "Common",
+							kind = "Leafy",
+							placedAt = 0,
+							bonus = 0,
+							inward = 9,
+							along = 0,
+						},
+						{
+							uid = "y",
+							zone = 1,
+							rarity = "Common",
+							kind = "Leafy",
+							placedAt = 0,
+							bonus = 0,
+							inward = 20,
+							along = 0,
+						},
+					},
+				})
+			)
+			session:fire(cards.Egg_a.Place, "Activated")
+			expect.equal(#session:sent("PlaceEgg"), 1)
+			expect.truthy(string.find(hud(parts).Toast.Text, "only hatch 2 eggs"), hud(parts).Toast.Text)
+		end)
+
+		it("shows hatching eggs counting down, and every pet, in the Pets tab", function()
+			local session, parts = startClient()
+			session:fromServer(
+				"InventoryChanged",
+				state({
+					hatching = {
+						{
+							uid = "n",
+							zone = 1,
+							rarity = "Common",
+							kind = "Leafy",
+							placedAt = session.clock - 10,
+							bonus = 0,
+							inward = 20,
+							along = 0,
+						},
+					},
+					pets = { pet("p", "Bear", "Epic", "Gold", true), pet("q", "Fox", "Uncommon") },
+				})
+			)
+			session:fromServer("PetHatched", pet("r", "Owl", "Rare", "Rainbow"))
+			expect.equal(hud(parts).Toast.Text, "Your Rainbow Owl hatched! (Rainbow Rare)")
+			expect.equal(hud(parts).SideTabs.PetsTab.Badge.Text, "1")
+
+			session:fire(hud(parts).SideTabs.PetsTab, "Activated")
+			expect.equal(hud(parts).SideTabs.PetsTab.Badge.Visible, false, "seen")
+			session:renderFrame(1 / 60)
+			local page = panel(parts).List.PetsPage
+			expect.equal(page.Hatching.Egg_n.Title.Text, "Leafy Egg")
+			expect.equal(page.Hatching.Egg_n.Bar.Time.Text, "20s left")
+			expect.truthy(page.Hatching:FindFirstChild("Free2"), "room for another egg")
+			expect.equal(page.PetsHeader.Count.Text, "Pets (2) - in pen 1 of 10")
+			local card = page.Pets.Pet_p
+			expect.equal(card.Title.Text, "Bear")
+			expect.equal(card.Rarity.Text, "Gold Epic")
+			expect.equal(card.Income.Text, "$20/s")
+			expect.equal(card.Pen.Text, "In pen")
+			expect.equal(page.Pets.Pet_q.Pen.Text, "Put in pen")
+			expect.truthy(panel(parts).Preview:FindFirstChildOfClass("Model"), "pet in the preview")
+
+			-- The free spot's button jumps to the eggs.
+			session:fire(page.Hatching.Free2.Fill, "Activated")
+			expect.equal(panel(parts).Title.Text, "Your eggs (2)")
+		end)
+
+		it("puts pets in or out of the pen, equips the best, sells (after asking) and rides them", function()
+			local session, parts = startClient()
+			session:fromServer(
+				"InventoryChanged",
+				state({ pets = { pet("p", "Bear", "Epic", "Normal", true), pet("q", "Fox", "Uncommon") } })
+			)
+			session:fire(hud(parts).SideTabs.PetsTab, "Activated")
+			local page = panel(parts).List.PetsPage
+			session:fire(page.Pets.Pet_q.Pen, "Activated")
+			local sent = session:lastSent("SetInPen", "server")
+			expect.equal(sent.args[1], "q")
+			expect.equal(sent.args[2], true)
+			session:fire(page.Pets.Pet_p.Pen, "Activated")
+			expect.equal(session:lastSent("SetInPen", "server").args[2], false)
+			session:fire(page.PetsHeader.EquipBest, "Activated")
+			expect.equal(#session:sent("EquipBest", "server"), 1)
+
+			-- Selling takes two taps.
+			expect.equal(page.Pets.Pet_q.Sell.Text, "$240")
+			session:fire(page.Pets.Pet_q.Sell, "Activated")
+			expect.equal(#session:sent("SellPet"), 0)
+			expect.equal(page.Pets.Pet_q.Sell.Text, "Sure?")
+			session:fire(page.Pets.Pet_q.Sell, "Activated")
+			expect.equal(session:lastSent("SellPet", "server").args[1], "q")
+
+			-- Riding: the card's button chooses the pet, and a Ride button appears under the tabs.
+			local tabs = hud(parts).SideTabs
+			expect.equal(tabs.RideTab.Visible, false)
+			session:fire(page.Pets.Pet_p.Ride, "Activated")
+			expect.equal(session:lastSent("RidePet", "server").args[1], "p")
+			session:fromServer(
+				"InventoryChanged",
+				state({ pets = { pet("p", "Bear", "Epic", "Normal", true) }, mount = "p" })
+			)
+			session:fromServer("MountChanged", "p", 30)
+			expect.equal(tabs.RideTab.Visible, true)
+			expect.equal(tabs.RideTab.Text, "GET OFF")
+			session:fire(tabs.RideTab, "Activated")
+			expect.equal(session:lastSent("RidePet", "server").args[1], "")
+			session:fromServer("MountChanged", "", 0)
+			expect.equal(tabs.RideTab.Text, "RIDE")
+			session:fire(tabs.RideTab, "Activated")
+			expect.equal(session:lastSent("RidePet", "server").args[1], "p")
+
+			-- The server's messages show as toasts.
+			session:fromServer("Notice", "Sold Fox for $240", { 120, 230, 120 })
+			expect.equal(hud(parts).Toast.Text, "Sold Fox for $240")
+		end)
+
+		it("counts down over eggs in the pens and bursts them open when they hatch", function()
+			local session = startClient()
+			local plot, PlotModels = ownPlot(session)
+			local egg = PlotModels.buildEgg(plot.Eggs, 1, {
+				uid = "e",
+				kind = "Leafy",
+				rarity = "Common",
+				placedAt = session.clock - 15,
+				bonus = 0,
+				inward = 20,
+				along = 0,
+			})
+			egg:SetAttribute("EggName", "Leafy Egg")
+
+			session:renderFrame(1 / 60)
+			local board = egg.Board.Countdown
+			expect.equal(board.Title.Text, "Leafy Egg")
+			expect.equal(board.Bar.Time.Text, "15s")
+			expect.near(board.Bar.Fill.Size.X.Scale, 0.5, 0.01)
+
+			egg:SetAttribute("HatchedAt", session.clock)
+			task.wait(0.25)
+			session:renderFrame(1 / 60)
+			local burst = session:service("Workspace"):FindFirstChild("HatchBurst")
+			expect.truthy(burst, "burst")
+			local total = 0
+			for _, emitter in burst:GetChildren() do
+				total += session.emitted[emitter] or 0
+			end
+			expect.truthy(total > 0, "shells and sparkles")
+		end)
+
+		it("walks each pen's pets round it, in their variants, and shows the upgrade button to its owner", function()
+			local session = startClient()
+			local plot, PlotModels = ownPlot(session)
+			local Plots = session:require(session:service("ReplicatedStorage").Shared.Plots)
+			local workspace = session:service("Workspace")
+			local other = PlotModels.buildPlot(plot.Parent, 2)
+			other:SetAttribute("Owner", 99)
+			plot:SetAttribute("Pets", "Squirrel:Gold,Bear:Normal")
+			local camera = roblox.Instance.new("Camera")
+			local x, z = Plots.center(1)
+			camera.CFrame = roblox.CFrame.new(x, 40, z + 60)
+			camera.Parent = workspace
+			workspace.CurrentCamera = camera
+
+			session:renderFrame(1 / 60)
+			local pets = workspace.PenPets:GetChildren()
+			expect.equal(#pets, 2)
+			local gold
+			for _, model in pets do
+				if model.Name == "Squirrel" then
+					gold = model
+				end
+			end
+			expect.equal(gold:GetAttribute("Variant"), "Gold")
+			local function inside(model)
+				local position = model.PrimaryPart.CFrame.Position
+				local inward, along = Plots.toLocal(1, position.X, position.Z)
+				return Plots.inPen(1, inward, along, 0)
+			end
+			local before = {}
+			for _, model in pets do
+				expect.truthy(inside(model), model.Name .. " in the pen")
+				before[model] = model.PrimaryPart.CFrame.Position
+			end
+			session:renderFrame(1 / 10, 80)
+			local moved = 0
+			for _, model in pets do
+				expect.truthy(inside(model), model.Name .. " still in the pen")
+				if (model.PrimaryPart.CFrame.Position - before[model]).Magnitude > 1 then
+					moved += 1
+				end
+				expect.truthy(model:GetAttribute("Move"), "animated")
+			end
+			expect.truthy(moved > 0, "they wander")
+			expect.equal(plot.UpgradeButton.Pad.Upgrade.Enabled, true, "own button")
+			expect.equal(other.UpgradeButton.Pad.Upgrade.Enabled, false, "someone else's")
+
+			-- A bigger pen gives them more room; an empty list empties it.
+			plot:SetAttribute("PenLevel", 3)
+			session:renderFrame(1 / 60)
+			expect.equal(#workspace.PenPets:GetChildren(), 2)
+			plot:SetAttribute("Pets", "")
+			session:renderFrame(1 / 60)
+			expect.equal(#workspace.PenPets:GetChildren(), 0)
+		end)
+
+		it("walks ridden pets when their riders move", function()
+			local session, parts = startClient()
+			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			local workspace = session:service("Workspace")
+			local mounts = roblox.Instance.new("Folder")
+			mounts.Name = "Mounts"
+			mounts.Parent = workspace
+			local ridden = PetRig.build("Fox")
+			ridden:SetAttribute("Rider", LOCAL_USER_ID)
+			ridden.Parent = mounts
+			session:renderFrame(1 / 60)
+			expect.equal(ridden:GetAttribute("Move"), "Idle")
+			parts.root.AssemblyLinearVelocity = Vector3.new(0, 0, 20)
+			session:renderFrame(1 / 60)
+			expect.equal(ridden:GetAttribute("Move"), "Walk")
+		end)
+	end)
+
+	describe("Client: the world", function()
+		it("animates geysers, lava vents and clams in time with the server", function()
+			local session = startClient()
+			local Obstacles = shared(session).Obstacles
+			local Scenery = session:require(session:service("ServerScriptService").Server.Map.Scenery)
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local folder = roblox.Instance.new("Folder")
+			folder.Name = "Obstacles"
+			folder.Parent = map
+			map.Parent = session:service("Workspace")
+			local function first(kind)
+				for _, obstacle in Obstacles.all() do
+					if obstacle.kind == kind then
+						return obstacle
+					end
+				end
+			end
+			local geyser, clam = first("LavaVent"), first("GiantClam")
+			local vent = Scenery.buildObstacle(folder, geyser)
+			local shell = Scenery.buildObstacle(folder, clam)
+
+			-- A moment in the middle of a phase.
+			local function during(obstacle, activity)
+				local base = session.clock
+				for tenth = 0, 200 do
+					local t = base + tenth / 10
+					if
+						Obstacles.activity(obstacle, t - 0.15) == activity
+						and Obstacles.activity(obstacle, t + 0.15) == activity
+					then
+						return t
+					end
+				end
+				error("no " .. activity)
+			end
+
+			session.clock = during(geyser, "Active") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.truthy(vent.Burst.Transparency < 1, "lava shooting up")
+			expect.truthy(vent.Burst:FindFirstChildOfClass("PointLight").Enabled, "glowing")
+			session.clock = during(geyser, "Warning") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.equal(vent.Burst.Transparency, 1)
+			expect.truthy(vent.Vent.WarnPoint.Warn.Enabled, "smoking as a warning")
+			session.clock = during(geyser, "Idle") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.falsy(vent.Vent.WarnPoint.Warn.Enabled)
+
+			-- The clam snaps shut while active, and gapes open otherwise.
+			session.clock = during(clam, "Active") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(shell.Lid.CFrame.UpVector.Y, 1, 1e-3, "shut")
+			session.clock = during(clam, "Idle") - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.truthy(shell.Lid.CFrame.UpVector.Y < 0.6, "open")
+		end)
+
+		it("turns day to night with the runway cycle", function()
+			local session = startClient()
+			local Lighting = session:service("Lighting")
+			local CycleClock = session:require(session:service("ReplicatedStorage").Shared.CycleClock)
+			local cycleStart = math.floor(session.clock / 180) * 180 + 180
+			session.clock = cycleStart - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, CycleClock.SUNRISE, 1e-3)
+			session.clock = cycleStart + 63 - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, 12, 1e-3)
+			local noonBrightness = Lighting.Brightness
+			session.clock = cycleStart + 126 + 27 - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(Lighting.ClockTime, 0, 1e-3)
+			expect.truthy(Lighting.Brightness < noonBrightness, "darker at night")
+		end)
+	end)
+
 	describe("Client: HUD", function()
+		it("animates rigged pets: winged ones hover, beating their wings, and play the move they are given", function()
+			local session = startClient()
+			local workspace = session:service("Workspace")
+			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			-- Pets spawned from the admin panel.
+			local folder = roblox.Instance.new("Folder")
+			folder.Name = "AdminPets"
+			folder.Parent = workspace
+			session:fire(workspace, "ChildAdded", folder)
+			local phoenix = PetRig.build("LavaDragon")
+			phoenix.Parent = folder
+			session:fire(folder, "DescendantAdded", phoenix)
+			local fox = PetRig.build("Fox")
+			fox.Parent = folder
+			session:fire(folder, "DescendantAdded", fox)
+
+			session:renderFrame(0.1, 3)
+			local lift = phoenix.Root.Body.Transform.Position.Y
+			expect.truthy(lift > 1, "the phoenix rises off the ground to hover: " .. lift)
+			local wing = phoenix.Body.LeftWing.Transform
+			session:renderFrame(0.1)
+			expect.truthy(phoenix.Body.LeftWing.Transform ~= wing, "its wings beat")
+			-- The fox walks on the spot: its legs swing.
+			local leg = fox.Body.FrontLeftLeg.Transform
+			session:renderFrame(0.1)
+			expect.truthy(fox.Body.FrontLeftLeg.Transform ~= leg, "the fox's legs swing")
+
+			phoenix:SetAttribute("Move", "Idle")
+			session:renderFrame(0.1)
+			expect.truthy(phoenix.Root.Body.Transform.Position.Y < 0.5, "standing idle, it is back on the ground")
+			phoenix:SetAttribute("Move", "Fly")
+			session:renderFrame(0.1)
+			local _, _, _, _, _, _, _, _, _, _, forward = phoenix.Root.Body.Transform:GetComponents()
+			expect.truthy(phoenix.Root.Body.Transform.Position.Y > 1, "flying, it is up in the air")
+			expect.truthy(forward < 0.99, "and tipped forward")
+		end)
+
+		it("animates the pets in the Model Showroom, but not ones too far away to see", function()
+			local session = startClient()
+			local workspace = session:service("Workspace")
+			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+			-- The showroom keeps its pets a few folders deep, next to eggs (which are not pets).
+			local showroom = roblox.Instance.new("Folder")
+			showroom.Name = "Showroom"
+			local imported = roblox.Instance.new("Folder")
+			imported.Name = "Roll an Egg Pets"
+			imported.Parent = showroom
+			local forest = roblox.Instance.new("Folder")
+			forest.Name = "Forest"
+			forest.Parent = imported
+			local near = PetRig.build("Fox")
+			near.Parent = forest
+			local far = PetRig.build("Bear")
+			far:PivotTo(roblox.CFrame.new(0, 0, 2000))
+			far.Parent = forest
+			local egg = roblox.Instance.new("Model")
+			egg.Name = "Leafy Egg"
+			egg.Parent = forest
+			showroom.Parent = workspace
+			session:fire(workspace, "ChildAdded", showroom)
+
+			session:renderFrame(0.1, 3)
+			local leg = near.Body.FrontLeftLeg.Transform
+			session:renderFrame(0.1)
+			expect.truthy(near.Body.FrontLeftLeg.Transform ~= leg, "the Fox walks on the spot")
+			local ok = pcall(function()
+				return far.Body.FrontLeftLeg.Transform
+			end)
+			expect.falsy(ok, "the Bear, 2,000 studs away, was never moved")
+		end)
+
 		it("builds the HUD with Fusion", function()
-			local _, parts = startClient()
+			local session, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Announcement", "Leap", "Meters", "StudioTestPanel" } do
+			for _, name in
+				{ "Cycle", "Zone", "Luck", "Tabs", "Wallet", "DayNight", "Toast", "Announcement", "Leap", "Meters" }
+			do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")
-			expect.equal(labelOf(root.Wallet.Eggs).Text, "Eggs  2")
-			expect.equal(labelOf(root.Wallet.Coins).Text, "Coins  0")
+			expect.truthy(root.Tabs.Shop and root.Tabs.Settings, "tabs")
+			expect.equal(root.Wallet.Eggs.Content.Value.Text, "2")
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$0")
+			expect.equal(root.Wallet.Dollars.Under.Text, "", "no income yet")
+			expect.equal(root.Wallet.Stamina.Content.Value.Text, "100")
+			session:fromServer("DollarsChanged", 1520, 12)
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$1.52K")
+			expect.equal(root.Wallet.Dollars.Under.Text, "+$12/s")
+			-- Nothing open, and no luck boost running.
+			expect.equal(root.ShopPanel.Visible, false)
+			expect.equal(root.SettingsPanel.Visible, false)
+			expect.equal(root.Backdrop.Visible, false)
+			expect.equal(root.Luck.Visible, false)
 		end)
 
 		it("shows stamina, the runway cycle, and the zone", function()
@@ -845,69 +1513,702 @@ return function(harness)
 			session:renderFrame(1, 3)
 			expect.equal(claim.Visible, true)
 			expect.near(claim.Fill.Size.X.Scale, 0.25, 1e-3)
-			expect.equal(labelOf(claim).Text, "Epic Forest egg  25%  - not enough stamina!")
+			expect.equal(labelOf(claim).Text, "Epic Bear Egg  25%  - not enough stamina!")
 		end)
 
-		it("sends Studio test commands from the test panel", function()
+		it("counts down to nightfall by day, and to sunrise by night, at the bottom right", function()
 			local session, parts = startClient()
-			local button = hud(parts).StudioTestPanel.StaminaUp
-			session:fire(button, "Activated")
-			expect.equal(session:lastSent("DevCommand", "server").args[1], "StaminaUp")
+			local dayNight = hud(parts).DayNight
+			-- The stand-in clock starts 5 s into a cycle; night falls 126 s in.
+			session:renderFrame(1 / 60)
+			expect.equal(dayNight.Icon.Text, "🌙")
+			expect.equal(dayNight.Label.Text, "in 2m 1s")
+			session:renderFrame(1, 61)
+			expect.equal(dayNight.Label.Text, "in 1m")
+			session:renderFrame(1, 59)
+			expect.equal(dayNight.Label.Text, "in 1s")
+			-- Night: a sun and the time until the next sunrise, 54 s away.
+			session:renderFrame(1, 1)
+			expect.equal(dayNight.Icon.Text, "☀️")
+			expect.equal(dayNight.Label.Text, "in 54s")
+		end)
+
+		it("shows a running event and follows the runway cycle when admins move it on", function()
+			local session, parts = startClient()
+			local workspace = session:service("Workspace")
+			local cycle = hud(parts).Cycle
+			workspace:SetAttribute("ServerEvent", "Avalanche")
+			session:renderFrame(1 / 60)
+			expect.truthy(labelOf(cycle).Text:match("^Egg Avalanche!  Runway closes in"), labelOf(cycle).Text)
+			-- The stand-in clock starts 5 s into a cycle: 165 s on, the runway has closed.
+			workspace:SetAttribute("CycleOffset", 165.5)
+			session:renderFrame(1 / 60)
+			expect.truthy(labelOf(cycle).Text:match("^Runway closed"), labelOf(cycle).Text)
+		end)
+
+		it("names the Model Showroom as the place the player is in", function()
+			local session, parts = startClient()
+			parts.root.Position = Vector3.new(-3000, 13, 0)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Zone.Text, "Model Showroom")
 		end)
 
 		it("shows server announcements", function()
 			local session, parts = startClient()
-			session:fromServer("Announce", "Alex stole a Legendary egg from Sam!", { 255, 190, 40 })
+			session:fromServer("Announce", "A Legendary egg just dropped in the Forest!", { 255, 190, 40 })
 			session:renderFrame(1 / 60)
-			expect.equal(hud(parts).Toast.Text, "Alex stole a Legendary egg from Sam!")
+			expect.equal(hud(parts).Toast.Text, "A Legendary egg just dropped in the Forest!")
+			expect.equal(hud(parts).Toast.Visible, true)
+		end)
+	end)
+
+	describe("Client: admin panel", function()
+		-- A client whose player is an admin, with the server's answers to admin commands faked: every command is
+		-- recorded in `sent`, and answered with `answer` (ok, message, data) if set.
+		local function startAdmin()
+			local session, parts = startClient()
+			local sent = {}
+			local answer = { true, "Done." }
+			session.invokeHandlers.AdminCommand = function(command, args)
+				table.insert(sent, { command = command, args = args })
+				return table.unpack(answer)
+			end
+			parts.player:SetAttribute("IsAdmin", true)
+			session:renderFrame(1 / 60)
+			return session, parts, sent, answer
+		end
+
+		local function panel(parts)
+			return parts.playerGui.AdminPanel.Root
+		end
+
+		local function click(session, button)
+			session:fire(button, "Activated")
+			session:renderFrame(1 / 60)
+		end
+
+		local function body(parts)
+			return panel(parts).Window.Body
+		end
+
+		it("shows only to admins, behind an ADMIN button", function()
+			local session, parts = startClient()
+			session:renderFrame(1 / 60)
+			local gui = parts.playerGui:FindFirstChild("AdminPanel")
+			expect.truthy(gui, "the panel is built")
+			expect.equal(gui.Enabled, false, "but hidden from players who are not admins")
+
+			parts.player:SetAttribute("IsAdmin", true)
+			session:renderFrame(1 / 60)
+			expect.equal(gui.Enabled, true)
+			expect.equal(gui.Root.Window.Visible, false, "closed until the button is pressed")
+			click(session, gui.Root.Toggle)
+			expect.equal(gui.Root.Window.Visible, true)
+			click(session, gui.Root.Window.Close)
+			expect.equal(gui.Root.Window.Visible, false)
+		end)
+
+		it("drops and gives eggs from any zone, and shows the server's answer", function()
+			local session, parts, sent, answer = startAdmin()
+			click(session, panel(parts).Toggle)
+			local list = body(parts).EggList
+			expect.truthy(list:FindFirstChild("MossStag"), "the Forest's eggs are listed")
+			expect.equal(list.MossStag.Title.Text, "Moss Stag Egg")
+			expect.equal(list.MossStag.Rarity.Text, "Legendary")
+
+			click(session, list.MossStag.Drop)
+			expect.equal(sent[#sent].command, "DropEgg")
+			expect.equal(sent[#sent].args.egg, "MossStag")
+			expect.equal(sent[#sent].args.where, "Here")
+			expect.equal(panel(parts).Window.StatusLine.Text, "Done.")
+
+			-- Pick the Desert, and drop at the chute.
+			click(session, body(parts).Zone.Zones.Desert)
+			expect.equal(body(parts).EggList:FindFirstChild("MossStag"), nil, "the Forest's eggs are gone")
+			click(session, body(parts).Where.DropWhere.Chute)
+			click(session, body(parts).EggList.Sphinx.Drop)
+			expect.equal(sent[#sent].args.egg, "Sphinx")
+			expect.equal(sent[#sent].args.where, "Chute")
+
+			answer[1], answer[2] = false, "Your data has not loaded yet."
+			click(session, body(parts).EggList.Sphinx.Give)
+			expect.equal(sent[#sent].command, "GiveEgg")
+			expect.equal(panel(parts).Window.StatusLine.Text, "Your data has not loaded yet.")
+
+			click(session, body(parts).WholeZone.Buttons.DropAll)
+			expect.equal(sent[#sent].command, "DropZoneEggs")
+			expect.equal(sent[#sent].args.zone, 2)
+			click(session, body(parts).WholeZone.Buttons.ClearRunway)
+			expect.equal(sent[#sent].command, "ClearRunway")
+		end)
+
+		it("spawns and gives pets", function()
+			local session, parts, sent = startAdmin()
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Pets)
+			click(session, body(parts).Zone.Zones.Volcano)
+			local row = body(parts).PetList.LavaDragon
+			expect.equal(row.Title.Text, "Lava Dragon")
+			click(session, row.Spawn)
+			expect.equal(sent[#sent].command, "SpawnPet")
+			expect.equal(sent[#sent].args.pet, "LavaDragon")
+			click(session, row.Give)
+			expect.equal(sent[#sent].command, "GivePet")
+			click(session, body(parts).PetActions.Buttons.ShowZone)
+			expect.equal(sent[#sent].command, "ShowZonePets")
+			expect.equal(sent[#sent].args.zone, 5)
+		end)
+
+		it("flies, sets speeds and stamina, and lists the inventory", function()
+			local session, parts, sent, answer = startAdmin()
+			answer[3] = {
+				eggs = { { kind = "MossStag", name = "Moss Stag Egg", zone = 1, rarity = "Legendary", count = 3 } },
+				pets = { { kind = "Fox", name = "Fox", zone = 1, rarity = "Uncommon", count = 1 } },
+				eggCount = 3,
+				petCount = 1,
+			}
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Me)
+			expect.equal(sent[#sent].command, "GetInventory", "opening the tab loads the inventory")
+			local lines = body(parts).Inventory.Lines
+			expect.equal(lines.Summary.Text, "3 eggs, 1 pet")
+			expect.equal(lines.Line1.Text, "Moss Stag Egg  x3")
+			expect.equal(lines.Line2.Text, "Fox  x1")
+
+			local toggle = body(parts).Flight.FlyToggle
+			expect.equal(toggle.Text, "Fly")
+			click(session, toggle)
+			expect.equal(sent[#sent].command, "SetFlying")
+			expect.equal(sent[#sent].args.on, true)
+			-- The server answers by setting the attribute; the button follows it.
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.equal(body(parts).Flight.FlyToggle.Text, "Flying: tap to land")
+
+			click(session, body(parts).Flight.FlySpeed["160"])
+			expect.equal(sent[#sent].command, "SetFlySpeed")
+			expect.equal(sent[#sent].args.speed, 160)
+			click(session, body(parts).Walking.WalkSpeed["64"])
+			expect.equal(sent[#sent].args.speed, 64)
+			click(session, body(parts).Stamina.Buttons.Max)
+			expect.equal(sent[#sent].command, "Stamina")
+			expect.equal(sent[#sent].args.action, "Max")
+			local dollars = body(parts).Dollars.Buttons
+			expect.equal(dollars.Add1000000.Text, "+$1M")
+			click(session, dollars.Add1000000)
+			expect.equal(sent[#sent].command, "Dollars")
+			expect.equal(sent[#sent].args.amount, 1e6)
+			click(session, dollars.Reset)
+			expect.equal(sent[#sent].args.action, "Reset")
+			click(session, body(parts).Inventory.Buttons.HatchNow)
+			expect.equal(sent[#sent].command, "HatchNow")
+			click(session, body(parts).Inventory.Buttons.ClearEggs)
+			expect.equal(sent[#sent].command, "ClearInventory")
+			expect.equal(sent[#sent].args.what, "Eggs")
+		end)
+
+		it("starts events, moves the runway cycle on, and teleports", function()
+			local session, parts, sent = startAdmin()
+			click(session, panel(parts).Toggle)
+			click(session, panel(parts).Window.Tabs.Events)
+			expect.equal(body(parts).Events.Status.Text, "No event running.")
+			click(session, body(parts).Events.Buttons.StartAvalanche)
+			expect.equal(sent[#sent].command, "StartEvent")
+			expect.equal(sent[#sent].args.event, "Avalanche")
+			session:service("Workspace"):SetAttribute("ServerEvent", "Avalanche")
+			session:renderFrame(1 / 60)
+			expect.equal(body(parts).Events.Status.Text, "Running: Egg Avalanche, until the runway closes")
+			click(session, body(parts).Runway.Buttons.CloseRunway)
+			expect.equal(sent[#sent].command, "CloseRunway")
+			click(session, body(parts).Luck.Buttons.Luck4)
+			expect.equal(sent[#sent].command, "StartLuck")
+			expect.equal(sent[#sent].args.multiplier, 4)
+			click(session, body(parts).Luck.Buttons.StopLuck)
+			expect.equal(sent[#sent].command, "StopLuck")
+
+			click(session, panel(parts).Window.Tabs.Teleport)
+			click(session, body(parts).Places.Buttons.Showroom)
+			expect.equal(sent[#sent].command, "Teleport")
+			expect.equal(sent[#sent].args.to, "Showroom")
+			click(session, body(parts).Zones.Buttons.Ocean)
+			expect.equal(sent[#sent].args.to, "Zone")
+			expect.equal(sent[#sent].args.zone, 4)
+			expect.truthy(body(parts).Players:FindFirstChild("Nobody"), "nobody else to go to yet")
+
+			local friend = roblox.Instance.new("Player")
+			friend.Name = "Friend"
+			friend.UserId = 99
+			friend.Parent = session:service("Players")
+			session:fire(session:service("Players"), "PlayerAdded", friend)
+			session:renderFrame(1 / 60)
+			click(session, body(parts).Players.Friend.GoTo)
+			expect.equal(sent[#sent].command, "TeleportToPlayer")
+			expect.equal(sent[#sent].args.userId, 99)
+		end)
+	end)
+
+	describe("Client: flight", function()
+		local function flyVelocity(parts)
+			return parts.root:FindFirstChild("FlyVelocity")
+		end
+
+		it("flies where the camera looks while the Flying attribute is set, and lands when it is cleared", function()
+			local session, parts = startClient()
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "walking to start with")
+
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.truthy(flyVelocity(parts), "a LinearVelocity carries the character")
+			expect.truthy(parts.root:FindFirstChild("FlyGyro"), "an AlignOrientation keeps it upright")
+			expect.equal(parts.humanoid.PlatformStand, true)
+
+			-- The camera looks down the runway (+Z); pushing forward flies that way.
+			session.moveVector = Vector3.new(0, 0, -1)
+			session:renderFrame(0.1, 20)
+			local velocity = flyVelocity(parts).VectorVelocity
+			expect.truthy(velocity.Z > 70, "flying forward at about the default 80: " .. tostring(velocity))
+			session.moveVector = Vector3.zero
+			session.keysDown[Enum.KeyCode.Space] = true
+			session:renderFrame(0.1, 20)
+			expect.truthy(flyVelocity(parts).VectorVelocity.Y > 70, "rising")
+			session.keysDown[Enum.KeyCode.Space] = nil
+
+			parts.player:SetAttribute("Flying", false)
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "landed")
+			expect.equal(parts.humanoid.PlatformStand, false)
+		end)
+
+		it("lets go of the character while it rides an egg", function()
+			local session, parts = startClient()
+			parts.player:SetAttribute("Flying", true)
+			session:renderFrame(1 / 60)
+			expect.truthy(flyVelocity(parts))
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			session:renderFrame(1 / 60)
+			expect.equal(flyVelocity(parts), nil, "the ride holds the character, not flight")
+		end)
+	end)
+
+	-- The shop panel's scrolling body, and a button's text.
+	local function shopBody(parts)
+		return hud(parts).ShopPanel.Body.Scroll
+	end
+	local function buttonText(button)
+		return button.Face.Label.Text
+	end
+
+	describe("Client: hub stations", function()
+		local function layoutOf(session)
+			return session:require(session:service("ReplicatedStorage").Shared.HubLayout)
+		end
+
+		-- Stands the character beside a station and uses its prompt. (A key that is not a station's is tried from
+		-- beside the Sell stall.)
+		local function useStation(session, parts, key)
+			local stations = layoutOf(session).STATIONS
+			local station = stations[key] or stations.Sell
+			parts.root.CFrame = roblox.CFrame.new(station.x + 4, 13, station.z + 4)
+			local prompt = roblox.Instance.new("ProximityPrompt")
+			prompt:SetAttribute("Station", key)
+			session:fire(session:service("ProximityPromptService"), "PromptTriggered", prompt, parts.player)
+			session:heartbeat(1 / 60)
+			session:renderFrame(1 / 60)
+		end
+
+		local function click(session, button)
+			session:fire(button, "Activated")
+			session:renderFrame(1 / 60)
+		end
+
+		local function rows(panel)
+			return panel.Body.Scroll
+		end
+
+		it("opens a station's panel from its prompt and closes it when the player walks away", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			expect.equal(root.Trails.Visible, false)
+
+			useStation(session, parts, "Trails")
+			expect.equal(root.Trails.Visible, true)
+			expect.equal(root.Sell.Visible, false)
+			expect.equal(root.Fuse.Visible, false)
+			expect.equal(root.Backdrop.Visible, true, "the world is dimmed behind it")
+
+			parts.root.CFrame = roblox.CFrame.new(0, 13, 0)
+			session:heartbeat(1 / 60)
+			expect.equal(root.Trails.Visible, false)
+
+			-- The close button works too, and prompts that are not stations are ignored.
+			useStation(session, parts, "Sell")
+			expect.equal(root.Sell.Visible, true)
+			click(session, root.Sell.TitleBar.Close)
+			expect.equal(root.Sell.Visible, false)
+			useStation(session, parts, "Nothing")
+			for _, name in { "Trails", "Sell", "Fuse" } do
+				expect.equal(root[name].Visible, false, name)
+			end
+		end)
+
+		it("shows each trail's price, and whether it is owned or equipped", function()
+			local session, parts = startClient()
+			local panel = hud(parts).Trails
+			useStation(session, parts, "Trails")
+			local list = rows(panel)
+			local leaf = list.Leaf.Action
+			expect.equal(list.Leaf.TrailName.Text, "Leaf Trail")
+			expect.truthy(string.find(list.Leaf.Boost.Text, "x1.5</font> Stamina", 1, true), list.Leaf.Boost.Text)
+			expect.truthy(string.find(list.Leaf.Level.Text, "^Lvl 1 .*Common"), list.Leaf.Level.Text)
+			expect.truthy(string.find(list.Rainbow.Level.Text, "^Lvl 9 .*Eternal"), list.Rainbow.Level.Text)
+			-- Nine cards, each with a picture of its trail; the plain first trail has no particles in it.
+			local cards = 0
+			for _, child in list:GetChildren() do
+				if child:IsA("Frame") and child:FindFirstChild("Picture") then
+					cards += 1
+				end
+			end
+			expect.equal(cards, 9)
+			expect.truthy(list.Leaf.Picture:FindFirstChild("Ribbon"), "the ribbon")
+			expect.falsy(list.Leaf.Picture:FindFirstChild("Speck1"), "no particles")
+			expect.truthy(list.Rainbow.Picture:FindFirstChild("Halo") and list.Rainbow.Picture.Speck1, "the works")
+			expect.equal(buttonText(leaf), "$100")
+			expect.equal(buttonText(list.Rainbow.Action), "$750M")
+			local tooExpensive = leaf.Face.BackgroundColor3
+
+			session:fromServer("DollarsChanged", 600, 0)
+			session:renderFrame(1 / 60)
+			expect.truthy(leaf.Face.BackgroundColor3 ~= tooExpensive, "affordable trails light up")
+
+			session:fromServer("TrailsUpdated", { "Leaf" }, "Leaf")
+			session:renderFrame(1 / 60)
+			expect.equal(buttonText(leaf), "Equipped")
+			expect.equal(buttonText(list.Sunbeam.Action), "$1K")
+			expect.equal(panel.Footer.Text, "You have $600.  Trail boost: Max Stamina x1.5")
+
+			session:fromServer("TrailsUpdated", { "Leaf", "Sunbeam" }, "Sunbeam")
+			session:renderFrame(1 / 60)
+			expect.equal(buttonText(leaf), "Equip")
+			expect.equal(buttonText(list.Sunbeam.Action), "Equipped")
+		end)
+
+		it("asks the server to buy and equip trails, and says how it went", function()
+			local session, parts = startClient()
+			local list = rows(hud(parts).Trails)
+			useStation(session, parts, "Trails")
+			session.invokeHandlers.BuyTrail = function(trailId)
+				if trailId == "Rainbow" then
+					return false, "NotEnoughDollars"
+				end
+				return true, "BoughtAndEquipped"
+			end
+			session.invokeHandlers.EquipTrail = function()
+				return true, "Equipped"
+			end
+
+			click(session, list.Sunbeam.Action)
+			expect.equal(session:lastSent("BuyTrail", "server").args[1], "Sunbeam")
+			expect.equal(hud(parts).Toast.Text, "Sunbeam Trail equipped! Stamina x2")
+
+			click(session, list.Rainbow.Action)
+			expect.equal(hud(parts).Toast.Text, "Not enough dollars")
+
+			-- Owned trails are equipped instead of bought; the one already equipped does nothing.
+			session:fromServer("TrailsUpdated", { "Leaf", "Sunbeam" }, "Sunbeam")
+			session:renderFrame(1 / 60)
+			click(session, list.Leaf.Action)
+			expect.equal(session:lastSent("EquipTrail", "server").args[1], "Leaf")
+			click(session, list.Sunbeam.Action)
+			expect.equal(#session:sent("EquipTrail", "server"), 1)
+			expect.equal(#session:sent("BuyTrail", "server"), 2)
+		end)
+
+		it("lists the player's eggs at the Sell stall and sells them", function()
+			local session, parts = startClient()
+			local list = rows(hud(parts).Sell)
+			useStation(session, parts, "Sell")
+			session:fromServer("InventoryChanged", {
+				eggs = {
+					{ uid = "a", zone = 2, rarity = "Mythic", kind = "Sphinx", claimedAt = 0 },
+					{ uid = "b", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "c", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+					{ uid = "d", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+				},
+				hatching = {},
+				pets = {},
+				penLevel = 1,
+				eggCapacity = 2,
+				petCapacity = 10,
+				mount = "",
+			})
+			session:renderFrame(1 / 60)
+			expect.equal(list.Empty.Visible, false)
+			local leafy = list.Egg_Leafy
+			expect.equal(leafy.EggName.Text, "Leafy Egg")
+			expect.equal(leafy.Details.Text, "Common  x3   $25 each")
+			expect.equal(list.Egg_Sphinx.Details.Text, "Mythic  x1   $900 each")
+			expect.truthy(leafy.LayoutOrder < list.Egg_Sphinx.LayoutOrder, "in runway order")
+
+			session.invokeHandlers.SellEggs = function(_kind, count)
+				return count, count * 25
+			end
+			click(session, leafy.SellAll)
+			local request = session:lastSent("SellEggs", "server")
+			expect.equal(request.args[1], "Leafy")
+			expect.equal(request.args[2], 3)
+			expect.equal(hud(parts).Toast.Text, "Sold 3 Leafy Eggs for $75")
+
+			click(session, leafy.SellOne)
+			expect.equal(session:lastSent("SellEggs", "server").args[2], 1)
+			expect.equal(hud(parts).Toast.Text, "Sold Leafy Egg for $25")
+
+			-- Once everything is sold, the panel says so.
+			session:fromServer("InventoryChanged", {
+				eggs = {},
+				hatching = {},
+				pets = {},
+				penLevel = 1,
+				eggCapacity = 2,
+				petCapacity = 10,
+				mount = "",
+			})
+			session:renderFrame(1 / 60)
+			expect.equal(list.Empty.Visible, true)
+			expect.falsy(list:FindFirstChild("Egg_Leafy"), "sold rows are gone")
+		end)
+
+		it("explains the fuse machine", function()
+			local session, parts = startClient()
+			useStation(session, parts, "Fuse")
+			local panel = hud(parts).Fuse
+			expect.equal(panel.Visible, true)
+			local list = rows(panel)
+			expect.truthy(list.HowItWorks.Text:find("3 of the same pet"), list.HowItWorks.Text)
+			expect.truthy(list.Odds.Text:find("1 in 3"), list.Odds.Text)
+		end)
+	end)
+
+	describe("Client: shop", function()
+		it("opens and closes from the Shop tab, the close button, and the backdrop", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			session:fire(root.Tabs.Shop, "Activated")
+			expect.equal(root.ShopPanel.Visible, true)
+			expect.equal(root.Backdrop.Visible, true)
+			session:fire(root.ShopPanel.TitleBar.Close, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+
+			session:fire(root.Tabs.Shop, "Activated")
+			session:fire(root.Backdrop, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+
+			-- The Settings tab swaps one panel for the other; pressing it again closes it.
+			session:fire(root.Tabs.Shop, "Activated")
+			session:fire(root.Tabs.Settings, "Activated")
+			expect.equal(root.ShopPanel.Visible, false)
+			expect.equal(root.SettingsPanel.Visible, true)
+			session:fire(root.Tabs.Settings, "Activated")
+			expect.equal(root.SettingsPanel.Visible, false)
+		end)
+
+		it("opens at the right section from the + next to dollars and stamina", function()
+			local session, parts = startClient()
+			local root = hud(parts)
+			local chips = root.ShopPanel.Body.Sections
+			local featuredColor = chips.Featured.Face.BackgroundColor3
+			session:fire(root.Wallet.Dollars.Content.Add, "Activated")
+			expect.equal(root.ShopPanel.Visible, true)
+			task.wait(0.1)
+			expect.truthy(chips.Dollars.Face.BackgroundColor3 ~= chips.Luck.Face.BackgroundColor3, "Dollars chip lit")
+			expect.truthy(chips.Featured.Face.BackgroundColor3 ~= featuredColor, "Featured chip no longer lit")
+			expect.falsy(root.Wallet.Eggs.Content:FindFirstChild("Add"), "eggs cannot be bought")
+		end)
+
+		it("lists every item with its price, and asks the server to buy it", function()
+			local session, parts = startClient()
+			local body = shopBody(parts)
+			local robux = utf8.char(0xE002)
+
+			local dollars = body.Dollars.Grid.Dollars1
+			expect.equal(dollars.Title.Text, "+$5K")
+			expect.equal(buttonText(dollars.Buy), robux .. " 39")
+			session:fire(dollars.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "Dollars1")
+
+			expect.truthy(body.Stamina.Grid.Stamina3.Badge, "best value tag")
+			expect.equal(body.Luck.Grid.Luck2.Badge.Label.Text, "15 MIN")
+
+			local pen = body.Featured.PenUpgrade
+			expect.equal(pen.Current.Level.Text, "LEVEL 1")
+			expect.equal(pen.Next.Level.Text, "LEVEL 2")
+			expect.equal(pen.Next.Capacity.Text, "11 pets")
+			expect.equal(buttonText(pen.Buttons.BuyDollars), "750")
+			session:fire(pen.Buttons.BuyDollars, "Activated")
+			expect.equal(session:lastSent("BuyWithDollars", "server").args[1], "PenUpgrade")
+			session:fire(pen.Buttons.BuyRobux, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "PenUpgrade")
+
+			local pass = body.Passes.List.DoubleDollars
+			expect.equal(pass.Owned.Visible, false)
+			session:fire(pass.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "DoubleDollars")
+		end)
+
+		it("follows dollars, pen level, and passes from the server", function()
+			local session, parts =
+				startClient(nil, { shop = { dollars = 12500, penLevel = 3, passes = {}, luck = {} } })
+			local root = hud(parts)
+			local pen = shopBody(parts).Featured.PenUpgrade
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$12.5K")
+			expect.equal(pen.Current.Level.Text, "LEVEL 3")
+			expect.equal(buttonText(pen.Buttons.BuyDollars), "30K")
+
+			session:fromServer("PlayerStateUpdated", { dollars = 0, penLevel = 9, passes = { "DoubleDollars" } })
+			expect.equal(root.Wallet.Dollars.Content.Value.Text, "$0")
+			expect.equal(pen.Headline.Text, "YOUR PEN IS MAXED!")
+			expect.equal(pen.Buttons.Visible, false)
+			expect.equal(pen.Next.Visible, false)
+			local pass = shopBody(parts).Passes.List.DoubleDollars
+			expect.equal(pass.Owned.Visible, true)
+			expect.equal(pass.Buy.Visible, false)
+		end)
+
+		it("shows the stamina doubling, from x1 up to maxed out at x1024", function()
+			local session, parts = startClient()
+			local card = shopBody(parts).Stamina.StaminaDoubling
+			local robux = utf8.char(0xE002)
+			expect.equal(card.Multipliers.From.Text, "x1")
+			expect.equal(card.Multipliers.To.Text, "x2")
+			expect.equal(buttonText(card.Buy), robux .. " 49")
+			session:fire(card.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "StaminaDoubling")
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 32 })
+			expect.equal(card.Multipliers.From.Text, "x32")
+			expect.equal(card.Multipliers.To.Text, "x64")
+			expect.equal(buttonText(card.Buy), robux .. " 199")
+			expect.equal(card.Maxed.Visible, false)
+
+			session:fromServer("PlayerStateUpdated", { staminaMultiplier = 1024 })
+			expect.equal(card.Title.Text, "STAMINA MAXED OUT!")
+			expect.equal(card.Multipliers.From.Text, "x1024")
+			expect.equal(card.Multipliers.To.Visible, false)
+			expect.equal(card.Buy.Visible, false)
+			expect.equal(card.Maxed.Visible, true)
+		end)
+
+		it("shows how each purchase went", function()
+			local session, parts = startClient()
+			session:fromServer("PurchaseResult", "Dollars1", true, "+$5K!")
+			expect.equal(hud(parts).Toast.Text, "+$5K!")
 			expect.equal(hud(parts).Toast.Visible, true)
 		end)
 
-		it("says where and when a Secret or rarer egg spawned", function()
+		it("counts down a server luck boost", function()
 			local session, parts = startClient()
-			local banner = hud(parts).Announcement
-			expect.equal(banner.Visible, false)
-
-			local secret = eggData(session, 1, 3, "Secret", 0)
-			session:fromServer("EggSpawned", secret)
+			local root = hud(parts)
+			session:fromServer("LuckChanged", { { multiplier = 2, endsAt = session.clock + 90 } })
 			session:renderFrame(1 / 60)
-			expect.equal(banner.Visible, true)
-			expect.equal(banner.Title.Text, "SECRET EGG SPAWNED!")
-			local date = os.date("*t", math.floor(secret.spawnTime))
-			local hour = if date.hour % 12 == 0 then 12 else date.hour % 12
-			local clock =
-				string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
-			expect.equal(banner.Detail.Text, `Start of the Snow zone at {clock}`)
-			expect.equal(banner.BackgroundColor3, roblox.Color3.fromRGB(45, 45, 60))
+			expect.equal(root.Luck.Visible, true)
+			expect.equal(root.Luck.Label.Text, "🍀 x2 LUCK  1:30")
+			expect.equal(shopBody(parts).Luck.Grid.Luck2.Badge.Label.Text, "ON  1:30")
+			expect.equal(shopBody(parts).Luck.Grid.Luck4.Badge.Label.Text, "15 MIN")
 
-			-- Other messages use the toast and do not hide it.
-			session:fromServer("Announce", "Something else", nil)
-			expect.equal(hud(parts).Toast.Text, "Something else")
-			expect.equal(banner.Visible, true)
-
-			session:fromServer("EggSpawned", eggData(session, 2, 5, "Eternal", 0))
-			session:renderFrame(1 / 60)
-			expect.equal(banner.Title.Text, "ETERNAL EGG SPAWNED!")
-			expect.truthy(banner.Detail.Text:find("Start of the Volcano zone at ", 1, true) == 1, banner.Detail.Text)
+			session:renderFrame(1, 91)
+			expect.equal(root.Luck.Visible, false)
+			expect.equal(shopBody(parts).Luck.Grid.Luck2.Badge.Label.Text, "15 MIN")
 		end)
+	end)
 
-		it("says nothing when an egg below Secret spawns", function()
-			local session, parts = startClient()
-			for index, rarity in { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic" } do
-				session:fromServer("EggSpawned", eggData(session, index, 3, rarity, 0))
-			end
-			session:renderFrame(1 / 60)
-			expect.equal(hud(parts).Announcement.Visible, false)
-			expect.equal(hud(parts).Toast.Visible, false)
-		end)
+	describe("Client: settings", function()
+		local function settingsRow(parts, key)
+			return hud(parts).SettingsPanel.Body.Scroll[key]
+		end
 
-		it("does not announce rare eggs that were already rolling when the player joined", function()
-			local probe = Studio.open(place, { isServer = false })
-			local _, parts = startClient({
-				{ id = 9, zone = 3, rarity = "Secret", spawnTime = probe.clock - 4, lateral = 0, bounces = 3 },
+		local function press(session, button, x)
+			session:fire(button, "InputBegan", {
+				UserInputType = Enum.UserInputType.MouseButton1,
+				Position = Vector3.new(x, 0, 0),
 			})
-			expect.truthy(parts.eggFolder:FindFirstChild("Egg9"))
-			expect.equal(hud(parts).Announcement.Visible, false)
+		end
+
+		it("shows the saved settings and applies the volumes", function()
+			local session, parts = startClient(nil, { settings = { MusicVolume = 0.3, ShowOthersPets = false } })
+			task.wait(0.05)
+			expect.equal(settingsRow(parts, "MusicVolume").Slider.Percent.Text, "30%")
+			expect.equal(settingsRow(parts, "EffectsVolume").Slider.Percent.Text, "100%")
+			expect.equal(settingsRow(parts, "ShowOthersPets").Toggle.State.Text, "OFF")
+			expect.equal(settingsRow(parts, "ShowMyPets").Toggle.State.Text, "ON")
+			local sound = session:service("SoundService")
+			expect.near(sound.Music.Volume, 0.3, 1e-6)
+			expect.near(sound.Effects.Volume, 1, 1e-6)
+			expect.truthy(sound:FindFirstChild("Nature"), "Nature sound group")
+		end)
+
+		it("slides, switches, and saves a moment later", function()
+			local session, parts = startClient()
+			local sound = session:service("SoundService")
+			local slider = settingsRow(parts, "MusicVolume").Slider
+			slider.Track.AbsolutePosition = Vector2.new(100, 0)
+			slider.Track.AbsoluteSize = Vector2.new(200, 44)
+
+			-- Press a quarter of the way along, then drag to three quarters and let go.
+			press(session, slider.Track, 150)
+			expect.equal(slider.Percent.Text, "25%")
+			expect.near(sound.Music.Volume, 0.25, 1e-6)
+			local userInput = session:service("UserInputService")
+			session:fire(userInput, "InputChanged", {
+				UserInputType = Enum.UserInputType.MouseMovement,
+				Position = Vector3.new(250, 0, 0),
+			})
+			expect.equal(slider.Percent.Text, "75%")
+			session:fire(userInput, "InputEnded", { UserInputType = Enum.UserInputType.MouseButton1 })
+			session:fire(userInput, "InputChanged", {
+				UserInputType = Enum.UserInputType.MouseMovement,
+				Position = Vector3.new(120, 0, 0),
+			})
+			expect.equal(slider.Percent.Text, "75%", "no longer dragging")
+
+			local toggle = settingsRow(parts, "ShowMyPets").Toggle
+			session:fire(toggle, "Activated")
+			expect.equal(toggle.State.Text, "OFF")
+
+			expect.equal(#session:sent("SaveSettings"), 0, "waits before saving")
+			task.wait(1.7)
+			local saves = session:sent("SaveSettings", "server")
+			expect.equal(#saves, 1, "one save for all the changes")
+			expect.equal(saves[1].args[1].MusicVolume, 0.75)
+			expect.equal(saves[1].args[1].ShowMyPets, false)
+		end)
+
+		it("keeps changes made before the saved settings arrive, and saves them", function()
+			local session, parts = startClient(nil, {
+				settings = { MusicVolume = 0.3, ShowOthersPets = false },
+				settingsDelay = 0.3,
+			})
+			local sound = session:service("SoundService")
+			local slider = settingsRow(parts, "MusicVolume").Slider
+			slider.Track.AbsolutePosition = Vector2.new(100, 0)
+			slider.Track.AbsoluteSize = Vector2.new(200, 44)
+
+			-- The player moves the slider while the server is still answering.
+			press(session, slider.Track, 250)
+			expect.equal(slider.Percent.Text, "75%")
+
+			task.wait(0.4)
+			-- The player's change wins; saved settings they did not touch are loaded.
+			expect.equal(slider.Percent.Text, "75%")
+			expect.near(sound.Music.Volume, 0.75, 1e-6)
+			expect.equal(settingsRow(parts, "ShowOthersPets").Toggle.State.Text, "OFF")
+
+			task.wait(1.7)
+			local saves = session:sent("SaveSettings", "server")
+			expect.equal(#saves, 1, "the early change is saved")
+			expect.equal(saves[1].args[1].MusicVolume, 0.75)
+			expect.equal(saves[1].args[1].ShowOthersPets, false)
 		end)
 	end)
 end

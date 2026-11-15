@@ -4,23 +4,31 @@
 -- Eggs are not parts on the server. Each client draws them itself from the shared clock (see the client's
 -- EggController), so the server only ever sends "an egg appeared / was mounted / was left / is gone".
 
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
+local AdminTools = require(Shared.Config.AdminTools)
 local CycleClock = require(Shared.CycleClock)
+local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
+local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
 local Tuning = require(Shared.Config.Tuning)
+local Zones = require(Shared.Config.Zones)
 
 local DataService = require(script.Parent.DataService)
+local InventoryService = require(script.Parent.InventoryService)
+local MountService = require(script.Parent.MountService)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
+local Stats = require(script.Parent.Parent.Logic.Stats)
 
 -- Fastest a client may report steering; extra reports are dropped.
 local MIN_LATERAL_INTERVAL = 1 / 30
+-- How much higher above an egg a player riding a pet may be when they jump onto it.
+local MOUNTED_REACH = 40
 
 local RunwayService = {}
 
@@ -32,7 +40,7 @@ end)
 -- Players whose data has loaded, by UserId (the rules know riders only by that number).
 local playersByUserId: { [number]: Player } = {}
 local lastLateralAt: { [Player]: number } = {}
--- When each player was first seen on the runway without an egg under them (see checkLeaps).
+-- When each player was first seen on the runway on foot, without an egg under them (see checkLeaps).
 local offEggSince: { [Player]: number } = {}
 
 -- While a player rides, their character is held in place on their own device, so the server's copy of it stays
@@ -78,6 +86,15 @@ local function updateFocusParts(time: number)
 	end
 end
 
+-- Max Stamina from what the player owns (Logic/Stats): Max Stamina bought, doublings, and their trail's boost.
+local function maxStaminaOf(player: Player): number
+	local data = DataService.GetData(player)
+	if data == nil then
+		return Tuning.BASE_MAX_STAMINA
+	end
+	return Stats.maxStamina(data)
+end
+
 local function killCharacter(player: Player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -96,19 +113,45 @@ local function killCharacterAfter(player: Player, delay: number)
 	end)
 end
 
-local function grantEgg(player: Player, zone: number, rarity: string)
-	local data = DataService.GetData(player)
-	if data == nil then
+local function eggName(rarity: string, kind: string): string
+	local about = EggModels.describe(kind)
+	return `{rarity} {if about then about.name else "egg"}`
+end
+
+local function withArticle(phrase: string): string
+	return (if string.match(phrase, "^[AEIOU]") then "an " else "a ") .. phrase
+end
+
+-- At sunrise, tells everyone about the rarest eggs in the new lineup (Secret and up), rarest first.
+local function announceLineup(eggs: { { zone: number, rarity: string, kind: string } })
+	local seen = {}
+	local notable = {}
+	for _, entry in eggs do
+		if Rarities.Info[entry.rarity].announce and not seen[entry.kind] then
+			seen[entry.kind] = true
+			table.insert(notable, entry)
+		end
+	end
+	if #notable == 0 then
 		return
 	end
-	table.insert(data.Eggs, {
-		uid = HttpService:GenerateGUID(false),
-		zone = zone,
-		rarity = rarity,
-		claimedAt = os.time(),
-	})
-	data.Stats.EggsClaimed += 1
-	Net.InventoryUpdated:FireClient(player, #data.Eggs)
+	table.sort(notable, function(a, b)
+		local orderA, orderB = Rarities.Info[a.rarity].order, Rarities.Info[b.rarity].order
+		if orderA ~= orderB then
+			return orderA > orderB
+		end
+		return a.zone < b.zone
+	end)
+	local parts = {}
+	for index = 1, math.min(2, #notable) do
+		local entry = notable[index]
+		table.insert(parts, `{withArticle(eggName(entry.rarity, entry.kind))} in the {Zones.List[entry.zone].name}`)
+	end
+	local text = "Sunrise! Rolling today: " .. table.concat(parts, " and ")
+	if #notable > 2 then
+		text ..= ` (+{#notable - 2} more)`
+	end
+	Net.Announce:FireAllClients(text, Rarities.Info[notable[1].rarity].color)
 end
 
 -- Turns what the rules say happened into remotes and saved data.
@@ -116,18 +159,28 @@ local function dispatch(events)
 	for _, event in events do
 		local kind = event.type
 		if kind == "EggSpawned" then
-			-- Every client also shows the on-screen message for Secret and rarer eggs from this, in the player's own
-			-- local time (see the client's EggController).
-			Net.EggSpawned:FireAllClients(event.egg)
+			-- With `announce`, every client puts up the message saying where and when a Secret or rarer egg spawned,
+			-- in the player's own time zone (see the client's EggController).
+			Net.EggSpawned:FireAllClients(event.egg, event.announce)
+		elseif kind == "LineupRolled" then
+			announceLineup(event.eggs)
+		elseif kind == "ObstacleHit" then
+			Net.EggLateral:FireAllClients(event.id, event.lateral)
+			local player = playersByUserId[event.rider]
+			if player then
+				Net.ObstacleHit:FireClient(player, event.obstacle, event.tier, event.lateral)
+			end
 		elseif kind == "EggRemoved" then
 			Net.EggRemoved:FireAllClients(event.id, event.reason, event.by)
 		elseif kind == "EggMounted" then
 			Net.EggMounted:FireAllClients(event.id, event.rider, event.time)
 		elseif kind == "EggLeft" then
-			Net.EggLeft:FireAllClients(event.id, event.lateral, event.bounceTime)
+			Net.EggLeft:FireAllClients(event.id, event.time, event.lateral, event.cracking)
 		elseif kind == "RideStarted" then
 			local player = playersByUserId[event.rider]
 			if player then
+				-- A pet the player was riding goes away while they ride the egg.
+				MountService.OnRideStarted(player)
 				Net.RideStarted:FireClient(player, event.id, {
 					startTime = event.startTime,
 					startStamina = event.startStamina,
@@ -139,15 +192,18 @@ local function dispatch(events)
 		elseif kind == "RideEnded" then
 			local player = playersByUserId[event.rider]
 			if player then
+				MountService.OnRideEnded(player)
 				Net.RideEnded:FireClient(player, event.reason, {
 					eggId = event.id,
 					zone = event.zone,
 					rarity = event.rarity,
+					kind = event.kind,
 				})
-				if event.reason == "HitWall" then
+				if event.reason == "Hazard" or event.reason == "HitWall" then
+					-- Rode the egg into lava or tar, or into a bank.
 					killCharacter(player)
 				elseif event.reason == "FellOff" then
-					-- Over the edge through a gap: let them fall for a moment first.
+					-- Over the edge through a gap in the banks: let them fall for a moment first.
 					killCharacterAfter(player, Tuning.FALL_OFF_TIME)
 				end
 			end
@@ -157,12 +213,12 @@ local function dispatch(events)
 				Net.StaminaChanged:FireClient(player, event.value, event.time, event.rate, event.max)
 			end
 		elseif kind == "Claimed" then
-			-- Into the inventory now; the rider keeps rolling on the egg until they jump off.
+			-- Into the inventory now; the rider keeps rolling on the egg until they get off.
 			local player = playersByUserId[event.rider]
 			if player then
-				grantEgg(player, event.zone, event.rarity)
+				InventoryService.AddEgg(player, event.zone, event.rarity, event.kind)
 			end
-			Net.EggClaimed:FireAllClients(event.id, event.rider, event.rarity)
+			Net.EggClaimed:FireAllClients(event.id, event.rider, event.rarity, event.kind)
 		end
 	end
 end
@@ -190,16 +246,27 @@ local function onRequestMount(player: Player, eggId: unknown)
 	-- egg's copy nearest the player is the one they see.
 	local time = now()
 	local x, y, z = sim:eggCenter(egg, time)
-	local imageZ = Runway.nearestImage(z, root.Position.Z)
-	y += Runway.surfaceY(imageZ) - Runway.surfaceY(z)
-	local distance = (root.Position - Vector3.new(x, y, imageZ)).Magnitude
-	local inReach = distance <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
+	z = Runway.nearestImage(z, root.Position.Z)
+	-- (A player riding a tall pet is held high above the ground, so is allowed to be further above the egg.)
+	local offset = root.Position - Vector3.new(x, y, z)
+	local across = Vector3.new(offset.X, 0, offset.Z).Magnitude
+	local above = if MountService.IsMounted(player) then MOUNTED_REACH else 0
+	local inReach = across <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
+		and offset.Y <= egg.spec.radius + Tuning.MOUNT_TOLERANCE + above
+		and offset.Y >= -Tuning.MOUNT_TOLERANCE
 
 	sim:requestMount(player.UserId, eggId, time, inReach)
 end
 
 local function onRequestDismount(player: Player)
 	sim:requestDismount(player.UserId, now())
+end
+
+local function onReportHit(player: Player, obstacleId: unknown)
+	if typeof(obstacleId) ~= "number" or obstacleId ~= obstacleId then
+		return
+	end
+	sim:reportHit(player.UserId, obstacleId, now())
 end
 
 local function onRideLateral(player: Player, x: unknown)
@@ -235,8 +302,8 @@ local function onGetSnapshot(player: Player)
 			}
 			else nil,
 		agility = if rider then rider.agility else Tuning.BASE_AGILITY,
-		eggCount = if data then #data.Eggs else 0,
-		coins = if data then data.Coins else 0,
+		inventory = InventoryService.GetState(player),
+		dollars = if data then data.Dollars else 0,
 		serverTime = time,
 	}
 end
@@ -256,7 +323,7 @@ end
 local function onDataLoaded(player: Player, _data)
 	playersByUserId[player.UserId] = player
 	createFocus(player)
-	sim:addRider(player.UserId, Tuning.BASE_MAX_STAMINA, Tuning.BASE_AGILITY, now())
+	sim:addRider(player.UserId, maxStaminaOf(player), Tuning.BASE_AGILITY, now())
 
 	player.CharacterAdded:Connect(function(character)
 		hookCharacter(player, character)
@@ -281,21 +348,25 @@ local function onPlayerRemoving(player: Player)
 	end
 end
 
--- Players never walk on the runway: once past the hub they must be on an egg, or leaping to one. Each player's
--- own device kills them the moment they touch the runway (see the client's RideController); this is the server's
--- backstop, in case that does not happen.
+-- Players never walk on the runway: once past the start zone they must be on an egg, or leaping to one (riding a
+-- pet, or flying as an admin, is not walking). Each player's own device kills them the moment they touch the
+-- runway (see the client's RideController); this is the server's backstop, in case that does not happen.
 local function checkLeaps(time: number)
 	for _, player in playersByUserId do
 		local rider = sim:getRider(player.UserId)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		local onRunway = humanoid ~= nil
+		local onFoot = humanoid ~= nil
 			and humanoid.Health > 0
 			and root ~= nil
 			and root:IsA("BasePart")
 			and root.Position.Z >= 0
-		if not onRunway or (rider and rider.eggId ~= nil) then
+			and math.abs(root.Position.X) <= Runway.WIDTH / 2
+			and not (rider and rider.eggId ~= nil)
+			and not MountService.IsMounted(player)
+			and player:GetAttribute(AdminTools.FLYING) ~= true
+		if not onFoot then
 			offEggSince[player] = nil
 		else
 			local since = offEggSince[player] or time
@@ -311,9 +382,25 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other services
 
--- Changes a player's Max Stamina (upgrades will call this; for now only the Studio test panel does).
+-- Works a player's Max Stamina out again from what they own. Call after anything that changes it.
+function RunwayService.RefreshMaxStamina(player: Player)
+	sim:setMaxStamina(player.UserId, maxStaminaOf(player), now())
+end
+
+-- Server luck for every egg dropped from now on (1 = normal). See Shared/LuckBoost.
+function RunwayService.SetLuck(luck: number)
+	sim:setLuck(luck)
+end
+
+-- Sets a player's Max Stamina directly, ignoring what they own (only the admin panel does this).
 function RunwayService.SetMaxStamina(player: Player, maxStamina: number)
 	sim:setMaxStamina(player.UserId, maxStamina, now())
+end
+
+-- Whether the player is riding an egg (their character is then on the egg, wherever the server last saw it).
+function RunwayService.IsRiding(player: Player): boolean
+	local rider = sim:getRider(player.UserId)
+	return rider ~= nil and rider.eggId ~= nil
 end
 
 function RunwayService.GetMaxStamina(player: Player): number
@@ -322,8 +409,30 @@ function RunwayService.GetMaxStamina(player: Player): number
 end
 
 -- Drops an egg of a chosen rarity in a zone, if that rarity can drop there. Returns whether it did.
-function RunwayService.DropEgg(zoneId: number, rarity: string): boolean
-	return sim:spawnEgg(zoneId, now(), rarity) ~= nil
+-- `kind` picks one particular egg of the zone (its rarity then comes from the zone's lineup). `placement`
+-- ({ z, lateral }) drops it somewhere on the runway other than the zone's chute.
+function RunwayService.DropEgg(zoneId: number, rarity: string?, kind: string?, placement: RunwaySim.Placement?): boolean
+	return sim:spawnEgg(zoneId, now(), rarity, kind, placement) ~= nil
+end
+
+-- Removes every egg nobody is riding, as a closure does. Returns how many went.
+function RunwayService.ClearEggs(): number
+	return sim:clearUnridden()
+end
+
+-- Fills a player's stamina to their Max Stamina.
+function RunwayService.RefillStamina(player: Player)
+	sim:refillStamina(player.UserId, now())
+end
+
+-- Takes a player off the egg they are riding, as if they had hopped off. Does nothing if they are not riding.
+function RunwayService.Dismount(player: Player)
+	sim:requestDismount(player.UserId, now())
+end
+
+-- How many eggs drop, as a multiple of the usual rate (2 during an Egg Avalanche).
+function RunwayService.SetEggRate(multiplier: number)
+	sim:setEggRate(multiplier, now())
 end
 
 -- The zone a player's character is standing in (1 when they are at the hub).
@@ -343,6 +452,7 @@ function RunwayService.Init()
 
 	Net.RequestMount.OnServerEvent:Connect(onRequestMount)
 	Net.RequestDismount.OnServerEvent:Connect(onRequestDismount)
+	Net.ReportHit.OnServerEvent:Connect(onReportHit)
 	Net.RideLateral.OnServerEvent:Connect(onRideLateral)
 	Net.GetSnapshot.OnServerInvoke = onGetSnapshot
 
