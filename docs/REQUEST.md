@@ -13,7 +13,7 @@ Core loop:
    rider disappears, every nest hatches 30x faster, and a fresh lineup of eggs starts.
 3. Players chase eggs on foot or riding a pet and jump on. While riding they steer to dodge obstacles as stamina drains,
    staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
-   Leaving an egg makes it bounce and crack; rarer eggs survive more bounces.
+   Leaving an egg costs it a bounce, and it cracks when it has none left; rarer eggs have more bounces.
 4. Another player can jump onto the same egg to challenge the rider -> a rhythm-tap duel graded Perfect / Great / Good / Poor;
    the better score wins. A winning challenger steals the egg and its progress, but must have the stamina to cover it.
 5. Claimed eggs go straight to inventory. Players place them in nests in their pet pen; eggs hatch over real time,
@@ -49,7 +49,8 @@ Original theme, art, and creatures.
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
     - [ ] Eggs appear on the ground at the start of their zone (no drop from above), roll straight down the strip,
-          and leave a small dust trail behind them (decided)
+          and leave a small dust trail behind them; they never leave the ground, not even when a rider gets off
+          (decided)
 - [ ] Zone rarity caps (decided):
     - [ ] Forest: Common-Legendary
     - [ ] Desert: Common-Mythic
@@ -109,14 +110,17 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] Riding is steering only (decided): move left/right across the runway width to dodge obstacles; no taps while riding
     - [ ] Agility upgrade increases steering speed
 - [ ] Stamina drains while riding (see table) and regenerates on foot or on a pet
-- [ ] Claim meter fills while you stay on; 100% = "CLAIMED!" -> egg flies into inventory
+- [ ] Claim meter fills while you stay on; 100% = "CLAIMED!" -> egg goes straight into the inventory
+    - [ ] The rider stays on and keeps rolling on the claimed egg, just for show (no stamina cost, can't be thrown off),
+          until they jump off; it then disappears unless they hop back on within 3 s; nobody else can get on it;
+          riding it over the end cliff still kills the rider (decided)
 - [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
     - [ ] Zone-themed obstacles (proposed): Forest: rolling logs, swinging vines; Desert: tumbleweeds, sand geysers;
           Snow: giant snowballs, ice patches (slide sideways); Ocean: crashing waves, snapping clams;
           Volcano: lava bursts (lethal), falling rocks; every obstacle is telegraphed before it arrives
 - [ ] Leaving an egg (decided)
-    - [ ] Whenever an egg is left with no rider (jumped off, knocked off, out of stamina, rider died), it bounces once
-          in the air and loses a bounce; at 0 bounces it cracks and splats
+    - [ ] Whenever an unclaimed egg is left with no rider (jumped off, knocked off, out of stamina, rider died), it
+          keeps rolling on the ground (no hop) and loses a bounce; at 0 bounces it cracks and splats at once (decided)
     - [ ] Bounces by rarity (decided for now): Common/Uncommon 1, Rare/Epic 2, Legendary/Mythic/Secret 3, Eternal 4
     - [ ] An egg with bounces left keeps rolling, and anyone can jump on (claim progress starts from 0)
 - [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost
@@ -248,7 +252,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
 - [ ] All 3D art made by Claude in Blender (decided): pets, eggs, obstacles, zone kits, hub, plots, pens, nests,
       teleport pads
     - [ ] Eggs: one base shape x zone material (moss, sandstone, ice, coral, obsidian) x rarity color/glow/size
-          (33 combinations), plus 5 zone-themed Titan Eggs and the Robux egg; bounce squash + crack + cartoon yolk splat
+          (33 combinations), plus 5 zone-themed Titan Eggs and the Robux egg; crack + cartoon yolk splat
           (no gore)
     - [ ] Pets: 40 core + 5 Robux-egg pets, all rideable; shared skeletons with identical bone names;
           animations per skeleton: idle, walk (or swim), run, jump, ride pose
@@ -268,9 +272,9 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
     - [ ] Mobile: left thumb steers, right thumb has Jump; during a duel the right half of the screen becomes the tap area
     - [ ] Keyboard/gamepad prompts swap automatically by input type
 - [ ] Audio (proposed: licensed tracks and sounds from Roblox's Creator Store): music per zone; rolling rumble;
-      bounce boing + crack; per-rarity cues; claim fanfare; duel beat track + grade sounds; splat; closing horn;
+      crack; per-rarity cues; claim fanfare; duel beat track + grade sounds; splat; closing horn;
       Titan Egg alarm
-- [ ] VFX: rarity glows, dust trails, bounce/crack, claim burst, splat, hatch reveal, duel flash, Titan Egg landing,
+- [ ] VFX: rarity glows, dust trails, crack, claim burst, splat, hatch reveal, duel flash, Titan Egg landing,
       closure pop wave
 - [ ] Accessibility: rarity icons as well as colors; reduce camera shake; haptics toggle; duel timing calibration;
       duels playable with sound off (visual beat first)
@@ -295,8 +299,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   in that server; stored on the nest, so hatch math stays timestamp-based
 - Egg motion (decided): down-runway position = EggMotion(serverTime - spawnTime), fixed by time; side-to-side position is
   steered by the rider: the rider's client predicts it and sends updates ~10x/s, the server caps them at the rider's
-  Agility speed and replicates them; riderless eggs hold their last side-to-side position; bounces are recorded as timed
-  events so every client plays the same hop; clients only render eggs in zones near them
+  Agility speed and replicates them; riderless eggs hold their last side-to-side position; eggs never leave the
+  ground, so height is never synced; clients only render eggs in zones near them
 - Riders on eggs: each client attaches rider characters to its own local copy of the egg (the server publishes who rides
   which egg), so riders don't drift off eggs on other players' screens
 - Obstacle hits: client detects hits for instant feedback; the server runs a rough backup check (known obstacle timeline

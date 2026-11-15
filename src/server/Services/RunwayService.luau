@@ -112,7 +112,7 @@ local function dispatch(events)
 		elseif kind == "EggMounted" then
 			Net.EggMounted:FireAllClients(event.id, event.rider, event.time)
 		elseif kind == "EggLeft" then
-			Net.EggLeft:FireAllClients(event.id, event.time, event.bouncesLeft, event.lateral)
+			Net.EggLeft:FireAllClients(event.id, event.bouncesLeft, event.lateral)
 		elseif kind == "RideStarted" then
 			local player = playersByUserId[event.rider]
 			if player then
@@ -122,6 +122,7 @@ local function dispatch(events)
 					drain = event.drain,
 					claimTime = event.claimTime,
 					combo = event.combo,
+					claimed = event.claimed,
 				})
 			end
 		elseif kind == "RideEnded" then
@@ -143,10 +144,12 @@ local function dispatch(events)
 				Net.StaminaChanged:FireClient(player, event.value, event.time, event.rate, event.max)
 			end
 		elseif kind == "Claimed" then
+			-- Into the inventory now; the rider keeps rolling on the egg until they jump off.
 			local player = playersByUserId[event.rider]
 			if player then
 				grantEgg(player, event.zone, event.rarity)
 			end
+			Net.EggClaimed:FireAllClients(event.id, event.rider, event.rarity)
 		end
 	end
 end

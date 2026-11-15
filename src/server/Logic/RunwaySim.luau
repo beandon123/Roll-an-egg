@@ -1,6 +1,10 @@
 --!strict
 -- The rules of the runway: eggs, riding, stamina, claiming, bounces and cracking, closures.
 --
+-- Eggs never leave the ground. Leaving an egg without a rider costs it a bounce (it cracks at 0). Claiming an egg
+-- puts it in the rider's inventory straight away, but the rider stays on and keeps rolling until they jump off;
+-- after that the egg disappears unless they hop back on within a few seconds.
+--
 -- This module holds the rules only. It never touches players, parts, or remotes: RunwayService feeds it the
 -- clock and player requests, then turns the events it emits into remotes and saved data. Keeping it free of
 -- Roblox objects means the whole rulebook is covered by tests that run outside Studio (see tests/).
@@ -31,10 +35,11 @@ export type Egg = {
 	bouncesLeft: number,
 	riderId: number?,
 	everRidden: boolean,
-	-- When the egg last started a hop (it hops each time it is left without a rider).
-	bounceTime: number?,
-	-- Set when the egg is out of bounces: it cracks at this time and cannot be mounted meanwhile.
-	crackAt: number?,
+	-- Who claimed it. A claimed egg is already in their inventory: it stays on the runway only so they can keep
+	-- rolling on it, and nobody else can get on.
+	ownerId: number?,
+	-- Set while a claimed egg has no rider: it disappears at this time unless its owner hops back on first.
+	vanishAt: number?,
 }
 
 export type Ride = {
@@ -44,6 +49,8 @@ export type Ride = {
 	claimAt: number,
 	emptyAt: number,
 	lateralTime: number,
+	-- Riding an egg already claimed: just for show, so no drain, no claim meter, and no being thrown off.
+	claimed: boolean,
 }
 
 export type Rider = {
@@ -66,8 +73,8 @@ export type Rider = {
 }
 
 -- Why a ride ended.
-export type RideEndReason = "Dismount" | "ThrownOff" | "Claimed" | "Cliff" | "Died" | "Left"
--- Why an egg left the runway.
+export type RideEndReason = "Dismount" | "ThrownOff" | "Cliff" | "Died" | "Left"
+-- Why an egg left the runway. "Claimed" is a claimed egg disappearing once its owner has got off for good.
 export type EggRemoveReason = "Faded" | "Cracked" | "Claimed" | "Closure" | "Cliff"
 
 export type SerializedEgg = {
@@ -78,15 +85,14 @@ export type SerializedEgg = {
 	lateral: number,
 	rider: number?,
 	bounces: number,
-	bounceTime: number?,
-	cracking: boolean,
+	owner: number?,
 }
 
 export type Event =
 	{ type: "EggSpawned", egg: SerializedEgg }
 	| { type: "EggRemoved", id: number, reason: EggRemoveReason, by: number? }
 	| { type: "EggMounted", id: number, rider: number, time: number }
-	| { type: "EggLeft", id: number, time: number, bouncesLeft: number, lateral: number }
+	| { type: "EggLeft", id: number, bouncesLeft: number, lateral: number }
 	| {
 		type: "RideStarted",
 		rider: number,
@@ -96,10 +102,11 @@ export type Event =
 		drain: number,
 		claimTime: number,
 		combo: number,
+		claimed: boolean,
 	}
 	| { type: "RideEnded", rider: number, reason: RideEndReason, id: number, zone: number, rarity: string }
 	| { type: "StaminaChanged", rider: number, value: number, time: number, rate: number, max: number }
-	| { type: "Claimed", rider: number, zone: number, rarity: string }
+	| { type: "Claimed", rider: number, id: number, zone: number, rarity: string }
 
 local RunwaySim = {}
 RunwaySim.__index = RunwaySim
@@ -156,8 +163,7 @@ local function serialize(egg: Egg): SerializedEgg
 		lateral = egg.lateral,
 		rider = egg.riderId,
 		bounces = egg.bouncesLeft,
-		bounceTime = egg.bounceTime,
-		cracking = egg.crackAt ~= nil,
+		owner = egg.ownerId,
 	}
 end
 
@@ -206,31 +212,36 @@ function RunwaySim.spawnEgg(self: RunwaySim, zoneId: number, now: number, forced
 		bouncesLeft = spec.bounces,
 		riderId = nil,
 		everRidden = false,
-		bounceTime = nil,
-		crackAt = nil,
+		ownerId = nil,
+		vanishAt = nil,
 	}
 	self.eggs[egg.id] = egg
 	self:_emit({ type = "EggSpawned", egg = serialize(egg) })
 	return egg
 end
 
--- Called whenever an egg is left without a rider (and was not claimed): it hops and loses a bounce.
+-- Called whenever an egg is left without a rider. It keeps rolling along the ground.
+-- An unclaimed egg loses a bounce, and cracks at once when it has none left. A claimed egg waits a few seconds for
+-- its owner to hop back on, then disappears.
 function RunwaySim._leaveEgg(self: RunwaySim, egg: Egg, now: number)
 	if self.phase == "Closed" then
 		-- An egg that loses its rider while the runway is closed disappears like the rest.
 		self:_removeEgg(egg, "Closure")
 		return
 	end
-	egg.bouncesLeft -= 1
-	egg.bounceTime = now
-	if egg.bouncesLeft <= 0 then
-		egg.crackAt = now + Tuning.HOP_DURATION
+	if egg.ownerId ~= nil then
+		egg.vanishAt = now + Tuning.CLAIMED_EGG_LINGER
+	else
+		egg.bouncesLeft -= 1
+		if egg.bouncesLeft <= 0 then
+			self:_removeEgg(egg, "Cracked")
+			return
+		end
 	end
 	self:_emit({
 		type = "EggLeft",
 		id = egg.id,
-		time = now,
-		bouncesLeft = math.max(0, egg.bouncesLeft),
+		bouncesLeft = egg.bouncesLeft,
 		lateral = egg.lateral,
 	})
 end
@@ -301,10 +312,12 @@ function RunwaySim.setMaxStamina(self: RunwaySim, riderId: number, maxStamina: n
 	end
 	local current = self:getStamina(riderId, now)
 	rider.maxStamina = maxStamina
-	local rate = if rider.ride then -rider.ride.drain else self:_regenRate(rider)
+	local ride = rider.ride
+	local draining = ride ~= nil and not ride.claimed
+	local rate = if ride and draining then -ride.drain else self:_regenRate(rider)
 	self:_setStamina(rider, current, now, rate)
-	if rider.ride then
-		rider.ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, rider.ride.drain)
+	if ride and draining then
+		ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, ride.drain)
 	end
 end
 
@@ -338,14 +351,28 @@ function RunwaySim._endRide(self: RunwaySim, rider: Rider, now: number, reason: 
 
 	if egg then
 		egg.riderId = nil
-		if reason == "Claimed" then
-			self:_removeEgg(egg, "Claimed", rider.id)
-		elseif reason == "Cliff" then
+		if reason == "Cliff" then
 			self:_removeEgg(egg, "Cliff")
 		else
 			self:_leaveEgg(egg, now)
 		end
 	end
+end
+
+-- The claim meter is full: the egg goes into the rider's inventory now. The rider stays on and keeps rolling until
+-- they jump off; from here on the ride is only for show, so it costs no stamina and cannot throw them off.
+function RunwaySim._claim(self: RunwaySim, rider: Rider, ride: Ride, now: number)
+	local egg = self.eggs[rider.eggId :: number]
+	if egg == nil then
+		return
+	end
+	egg.ownerId = rider.id
+	ride.claimed = true
+	ride.drain = 0
+	ride.claimAt = math.huge
+	ride.emptyAt = math.huge
+	self:_setStamina(rider, self:getStamina(rider.id, now), now, self:_regenRate(rider))
+	self:_emit({ type = "Claimed", rider = rider.id, id = egg.id, zone = egg.zone, rarity = egg.rarity })
 end
 
 -- A player asks to jump onto an egg. `inReach` is RunwayService's verdict on whether the player's character is
@@ -373,16 +400,21 @@ function RunwaySim.requestMount(
 		return false, "Stunned"
 	end
 	local egg = self.eggs[eggId]
-	if egg == nil or egg.crackAt ~= nil then
+	if egg == nil then
 		return false, "NoEgg"
 	end
 	if egg.riderId ~= nil then
 		-- Duels will start here once they are built.
 		return false, "Occupied"
 	end
+	if egg.ownerId ~= nil and egg.ownerId ~= riderId then
+		return false, "Claimed"
+	end
 	if not inReach then
 		return false, "TooFar"
 	end
+	-- The owner hopping back onto their own claimed egg.
+	local claimed = egg.ownerId == riderId
 
 	local stamina = self:getStamina(riderId, now)
 
@@ -400,20 +432,32 @@ function RunwaySim.requestMount(
 	rider.lastLeaveTime = nil
 
 	local spec = egg.spec
-	local ride: Ride = {
-		startTime = now,
-		startStamina = stamina,
-		drain = spec.drain,
-		claimAt = now + spec.claimTime,
-		emptyAt = now + StaminaMath.timeUntilEmpty(stamina, spec.drain),
-		lateralTime = now,
-	}
+	local ride: Ride = if claimed
+		then {
+			startTime = now,
+			startStamina = stamina,
+			drain = 0,
+			claimAt = math.huge,
+			emptyAt = math.huge,
+			lateralTime = now,
+			claimed = true,
+		}
+		else {
+			startTime = now,
+			startStamina = stamina,
+			drain = spec.drain,
+			claimAt = now + spec.claimTime,
+			emptyAt = now + StaminaMath.timeUntilEmpty(stamina, spec.drain),
+			lateralTime = now,
+			claimed = false,
+		}
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
 	egg.everRidden = true
+	egg.vanishAt = nil
 
-	self:_setStamina(rider, stamina, now, -spec.drain)
+	self:_setStamina(rider, stamina, now, if claimed then self:_regenRate(rider) else -spec.drain)
 	self:_emit({ type = "EggMounted", id = eggId, rider = riderId, time = now })
 	self:_emit({
 		type = "RideStarted",
@@ -421,9 +465,10 @@ function RunwaySim.requestMount(
 		id = eggId,
 		startTime = now,
 		startStamina = stamina,
-		drain = spec.drain,
+		drain = ride.drain,
 		claimTime = spec.claimTime,
 		combo = rider.combo,
+		claimed = claimed,
 	})
 	return true, nil
 end
@@ -515,7 +560,8 @@ function RunwaySim._countZone(self: RunwaySim, zoneId: number): number
 	return count
 end
 
--- Advances the rules to `now`: drops eggs, finishes claims, throws off exhausted riders, cracks and fades eggs.
+-- Advances the rules to `now`: drops eggs, finishes claims, throws off exhausted riders, and removes eggs that roll
+-- off the end, claimed eggs left behind, and eggs nobody rode.
 function RunwaySim.step(self: RunwaySim, now: number)
 	-- Drop new eggs.
 	if self.phase ~= "Closed" then
@@ -536,40 +582,32 @@ function RunwaySim.step(self: RunwaySim, now: number)
 		end
 	end
 
-	-- Finish rides: a claim that completes before the stamina runs out wins.
+	-- Claims: one that completes before the stamina runs out wins. Rides on claimed eggs have nothing to finish.
 	for _, rider in self.riders do
 		local ride = rider.ride
-		if ride then
+		if ride and not ride.claimed then
 			if now >= ride.claimAt and ride.claimAt <= ride.emptyAt then
-				local egg = self.eggs[rider.eggId :: number]
-				if egg then
-					self:_emit({ type = "Claimed", rider = rider.id, zone = egg.zone, rarity = egg.rarity })
-				end
-				self:_endRide(rider, now, "Claimed")
+				self:_claim(rider, ride, now)
 			elseif now >= ride.emptyAt then
 				self:_endRide(rider, now, "ThrownOff")
 			end
 		end
 	end
 
-	-- Eggs that crack, roll off the end, or fade.
+	-- Eggs that roll off the end, claimed eggs their owner did not hop back onto, and eggs nobody rode.
 	for _, egg in self.eggs do
-		if egg.crackAt ~= nil then
-			if now >= egg.crackAt then
-				self:_removeEgg(egg, "Cracked")
+		local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
+		if z >= Runway.LENGTH then
+			local rider = if egg.riderId then self.riders[egg.riderId] else nil
+			if rider then
+				self:_endRide(rider, now, "Cliff")
+			else
+				self:_removeEgg(egg, "Cliff")
 			end
-		else
-			local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
-			if z >= Runway.LENGTH then
-				local rider = if egg.riderId then self.riders[egg.riderId] else nil
-				if rider then
-					self:_endRide(rider, now, "Cliff")
-				else
-					self:_removeEgg(egg, "Cliff")
-				end
-			elseif not egg.everRidden and now - egg.spawnTime >= Tuning.EGG_UNRIDDEN_LIFETIME then
-				self:_removeEgg(egg, "Faded")
-			end
+		elseif egg.vanishAt ~= nil and now >= egg.vanishAt then
+			self:_removeEgg(egg, "Claimed", egg.ownerId)
+		elseif not egg.everRidden and now - egg.spawnTime >= Tuning.EGG_UNRIDDEN_LIFETIME then
+			self:_removeEgg(egg, "Faded")
 		end
 	end
 end

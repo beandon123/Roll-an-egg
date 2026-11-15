@@ -24,9 +24,8 @@ Tuning.EGGS_PER_ZONE = 8
 -- Eggs appear on the ground at the start of their zone. This is the gap in studs between the zone's start line
 -- and the back of a new egg.
 Tuning.EGG_SPAWN_GAP = 2
--- The hop an egg makes when it is left without a rider.
-Tuning.HOP_DURATION = 0.7
-Tuning.HOP_HEIGHT = 5
+-- Seconds a claimed egg keeps rolling after its owner jumps off, so they can hop back on. Then it disappears.
+Tuning.CLAIMED_EGG_LINGER = 3
 
 -- Riding
 -- Studs per second a rider can steer the egg sideways before upgrades.

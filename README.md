@@ -13,8 +13,10 @@ The first playable slice: **the runway and riding**.
 - When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when. Other eggs
   spawn quietly.
 - Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
+- A claimed egg goes into your inventory straight away, but you keep rolling on it (no stamina cost) until you jump
+  off. It then disappears unless you hop back on within 3 seconds. Nobody else can get on it.
 - Stamina drains while riding. If it runs out first, you are thrown off and stunned.
-- Leaving an egg makes it hop and lose a bounce; at zero bounces it cracks.
+- Eggs never leave the ground. Leaving an unclaimed egg costs it a bounce; at zero bounces it cracks and splats.
 - The 3-minute runway cycle: a warning, then a 10-second closure that clears every egg without a rider.
 - Claimed eggs are saved to the player's data (ProfileStore).
 - A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.

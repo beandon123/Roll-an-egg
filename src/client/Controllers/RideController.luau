@@ -91,6 +91,7 @@ local function release(reason: string)
 
 	UiState.ride = nil
 	UiState.riding:set(false)
+	UiState.rideClaimed:set(false)
 	lastLeftEggId = ride.eggId
 	lastLeftAt = os.clock()
 
@@ -117,9 +118,6 @@ local function release(reason: string)
 				humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			end
 		end)
-	elseif reason == "Claimed" then
-		root.AssemblyLinearVelocity = Vector3.new(0, 30, eggSpeed)
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 	end
 end
 
@@ -141,11 +139,14 @@ local function onRideStarted(eggId: number, info)
 		return
 	end
 
+	-- `claimed`: getting back onto an egg this player already claimed. It is just for show.
+	local claimed = info.claimed == true
 	UiState.ride = {
 		eggId = eggId,
 		startTime = info.startTime,
 		claimTime = info.claimTime,
 		drain = info.drain,
+		claimed = claimed,
 	}
 	rideStartedAt = os.clock()
 	awaitingJumpRelease = true
@@ -163,7 +164,8 @@ local function onRideStarted(eggId: number, info)
 	else
 		UiState.rideTitle:set("Egg")
 	end
-	UiState.claimProgress:set(0)
+	UiState.claimProgress:set(if claimed then 1 else 0)
+	UiState.rideClaimed:set(claimed)
 	UiState.riding:set(true)
 
 	if info.combo and info.combo > 0 then
@@ -171,11 +173,25 @@ local function onRideStarted(eggId: number, info)
 	end
 end
 
+-- The local player's claim meter filled: the egg is in their inventory. They stay on it, rolling, until they jump
+-- off; the ride is just for show from now on.
+local function onEggClaimed(eggId: number, userId: number, rarity: string)
+	if userId ~= localPlayer.UserId then
+		return
+	end
+	local info = Rarities.Info[rarity]
+	UiState.showToast(`CLAIMED! +1 {rarity} egg`, if info then rgb(info.color) else nil, 3)
+
+	local ride = UiState.ride
+	if ride and ride.eggId == eggId then
+		ride.claimed = true
+		UiState.rideClaimed:set(true)
+		UiState.claimProgress:set(1)
+	end
+end
+
 local function onRideEnded(reason: string, info)
-	if reason == "Claimed" then
-		local color = if Rarities.Info[info.rarity] then rgb(Rarities.Info[info.rarity].color) else nil
-		UiState.showToast(`CLAIMED! +1 {info.rarity} egg`, color, 3)
-	elseif reason == "ThrownOff" then
+	if reason == "ThrownOff" then
 		UiState.showToast("Out of stamina!", Color3.fromRGB(255, 110, 110))
 	elseif reason == "Cliff" then
 		UiState.showToast("Over the edge!", Color3.fromRGB(255, 110, 110))
@@ -245,6 +261,7 @@ local function onCharacterAdded(character: Model)
 	-- A fresh character is never riding.
 	UiState.ride = nil
 	UiState.riding:set(false)
+	UiState.rideClaimed:set(false)
 	stunnedUntil = 0
 
 	local humanoid = character:WaitForChild("Humanoid", 10)
@@ -253,6 +270,7 @@ local function onCharacterAdded(character: Model)
 			if UiState.ride ~= nil then
 				UiState.ride = nil
 				UiState.riding:set(false)
+				UiState.rideClaimed:set(false)
 			end
 			-- Let the body fall rather than hang where the egg was.
 			local root = character:FindFirstChild("HumanoidRootPart")
@@ -266,6 +284,7 @@ end
 function RideController.Init()
 	Net.RideStarted.OnClientEvent:Connect(onRideStarted)
 	Net.RideEnded.OnClientEvent:Connect(onRideEnded)
+	Net.EggClaimed.OnClientEvent:Connect(onEggClaimed)
 
 	Net.StaminaChanged.OnClientEvent:Connect(function(value: number, time: number, rate: number, max: number)
 		UiState.staminaState = { value = value, time = time, rate = rate, max = max }

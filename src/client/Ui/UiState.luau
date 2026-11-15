@@ -25,6 +25,8 @@ local UiState = {
 	riding = scope:Value(false),
 	rideTitle = scope:Value(""),
 	claimProgress = scope:Value(0),
+	-- True once the egg being ridden is claimed (already in the inventory); the rest of the ride is for show.
+	rideClaimed = scope:Value(false),
 	-- True while the rider's stamina will run out before the claim finishes.
 	rideDoomed = scope:Value(false),
 
@@ -41,8 +43,8 @@ local UiState = {
 	-- Plain data (not shown directly): the numbers the stamina bar is worked out from each frame.
 	-- See Shared/StaminaMath.
 	staminaState = { value = 100, time = 0, rate = 0, max = 100 },
-	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain }
-	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number }?,
+	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain, claimed }
+	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number, claimed: boolean }?,
 }
 
 local toastToken = 0

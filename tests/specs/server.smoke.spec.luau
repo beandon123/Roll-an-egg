@@ -201,21 +201,33 @@ return function(harness)
 			session:heartbeat(0.5)
 			expect.near(player.ReplicationFocus.Position.Z, eggPosition(session, egg).Z, 1e-3)
 
+			-- The claim: the egg is saved straight away, and everyone is told it is taken.
 			session:heartbeat(0.1, 50)
-			local ended = session:lastSent("RideEnded", player)
-			expect.truthy(ended, "RideEnded")
-			expect.equal(ended.args[1], "Claimed")
-			expect.equal(ended.args[2].rarity, "Common")
+			local claimed = session:lastSent("EggClaimed", "all")
+			expect.truthy(claimed, "EggClaimed")
+			expect.equal(claimed.args[1], egg.id)
+			expect.equal(claimed.args[2], 1, "claimed by")
+			expect.equal(claimed.args[3], "Common")
+			expect.equal(session:lastSent("InventoryUpdated", player).args[1], 1)
 
-			local removed
-			for _, entry in session:sent("EggRemoved", "all") do
-				if entry.args[1] == egg.id then
-					removed = entry
-				end
-			end
+			-- The player is still on the egg, rolling, and pays no stamina for it.
+			expect.equal(#session:sent("RideEnded", player), 0)
+			expect.truthy(session:lastSent("StaminaChanged", player).args[3] > 0, "stamina regenerates")
+			session:heartbeat(0.5, 10)
+			expect.equal(#session:sent("RideEnded", player), 0)
+			expect.near(player.ReplicationFocus.Position.Z, eggPosition(session, egg).Z, 1e-3)
+
+			-- Jumping off: the egg disappears a few seconds later.
+			local tuning = shared(session).Tuning
+			session:fromClient("RequestDismount", player)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("RideEnded", player).args[1], "Dismount")
+			expect.equal(#session:sent("EggRemoved", "all"), 0)
+			session:heartbeat(0.1, math.ceil(tuning.CLAIMED_EGG_LINGER * 10) + 1)
+			local removed = session:lastSent("EggRemoved", "all")
+			expect.equal(removed.args[1], egg.id)
 			expect.equal(removed.args[2], "Claimed")
 			expect.equal(removed.args[3], 1, "claimed by")
-			expect.equal(session:lastSent("InventoryUpdated", player).args[1], 1)
 
 			local data = session.profiles.Player_1.Data
 			expect.equal(#data.Eggs, 1)
@@ -250,7 +262,7 @@ return function(harness)
 			expect.equal(#session:sent("EggLateral"), 0)
 		end)
 
-		it("throws off a rider who runs out of stamina and bounces the egg", function()
+		it("throws off a rider who runs out of stamina, costing the egg a bounce", function()
 			local session = startServer()
 			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
@@ -261,7 +273,7 @@ return function(harness)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "ThrownOff")
 			local left = session:lastSent("EggLeft", "all")
 			expect.equal(left.args[1], egg.id)
-			expect.equal(left.args[3], 1, "bounces left")
+			expect.equal(left.args[2], 1, "bounces left")
 			expect.equal(#session.profiles.Player_1.Data.Eggs, 0)
 		end)
 

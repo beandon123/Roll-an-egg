@@ -10,20 +10,6 @@ function EggMotion.zAt(spawnTime: number, startZ: number, rollSpeed: number, now
 	return startZ + rollSpeed * math.max(0, now - spawnTime)
 end
 
--- Extra height during the hop an egg makes when it is left without a rider.
--- `bounceTime` is when the hop began, or nil if the egg has never hopped.
-function EggMotion.hopOffset(bounceTime: number?, now: number, hopDuration: number, hopHeight: number): number
-	if bounceTime == nil or hopDuration <= 0 then
-		return 0
-	end
-	local u = (now - bounceTime) / hopDuration
-	if u <= 0 or u >= 1 then
-		return 0
-	end
-	-- A parabola that peaks at hopHeight halfway through.
-	return hopHeight * 4 * u * (1 - u)
-end
-
 -- How far (radians) an egg of this radius has turned after rolling `distance` studs.
 function EggMotion.rollAngle(distance: number, radius: number): number
 	if radius <= 0 then

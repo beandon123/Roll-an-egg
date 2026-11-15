@@ -32,7 +32,11 @@ local function update()
 
 	-- Claim progress, and whether stamina will run out first.
 	local ride = UiState.ride
-	if ride then
+	if ride and ride.claimed then
+		-- Already in the inventory: a full meter, and nothing to run out of.
+		UiState.claimProgress:set(1)
+		UiState.rideDoomed:set(false)
+	elseif ride then
 		local progress = math.clamp((now - ride.startTime) / ride.claimTime, 0, 1)
 		UiState.claimProgress:set(progress)
 		local timeLeft = ride.claimTime * (1 - progress)

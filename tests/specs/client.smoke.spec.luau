@@ -70,9 +70,8 @@ return function(harness)
 			spawnTime = session.clock - (age or 5),
 			lateral = lateral or 0,
 			rider = nil,
+			owner = nil,
 			bounces = 1,
-			bounceTime = nil,
-			cracking = false,
 		}
 	end
 
@@ -154,7 +153,6 @@ return function(harness)
 					spawnTime = clock - 3,
 					lateral = 2,
 					bounces = 2,
-					cracking = false,
 				},
 			})
 			expect.equal(#parts.eggFolder:GetChildren(), 1)
@@ -200,8 +198,15 @@ return function(harness)
 
 			session:fromServer("EggMounted", 1, 999, session.clock)
 			expect.equal(need.Text, "Taken")
-			session:fromServer("EggLeft", 1, session.clock, 0, 4)
+			session:fromServer("EggLeft", 1, 0, 4)
 			expect.equal(need.Text, "Needs 500")
+
+			-- Claimed: by someone else, then (on another egg) by this player.
+			session:fromServer("EggClaimed", 1, 999, "Common")
+			expect.equal(need.Text, "Claimed")
+			session:fromServer("EggSpawned", eggData(session, 2, 1, "Common", 5, 10))
+			session:fromServer("EggClaimed", 2, LOCAL_USER_ID, "Common")
+			expect.equal(parts.eggFolder.Egg2.Shell.Label:GetChildren()[2].Text, "Yours!")
 		end)
 	end)
 
@@ -290,21 +295,25 @@ return function(harness)
 			expect.truthy(snow.R > forest.R and snow.B > forest.B, "paler dust on snow than on grass")
 		end)
 
-		it("stops the dust while an egg hops, and puffs when it lands", function()
+		it("keeps an egg on the ground, and its dust going, when its rider gets off", function()
 			local session, parts = startClient()
+			local modules = shared(session)
 			local egg = eggData(session, 1, 1, "Rare", 3)
+			egg.rider = 999
 			session:fromServer("EggSpawned", egg)
 			session:renderFrame(1 / 60)
 			local emitter = dustOf(parts, 1).Dust
 			expect.equal(emitter.Enabled, true)
 
-			session:fromServer("EggLeft", 1, session.clock, 1, 0)
-			session:renderFrame(0.2)
-			expect.equal(emitter.Enabled, false, "in the air")
-			local before = session.emitted[emitter] or 0
-			session:renderFrame(0.6)
-			expect.equal(emitter.Enabled, true, "back on the ground")
-			expect.truthy((session.emitted[emitter] or 0) > before, "landing puff")
+			session:fromServer("EggLeft", 1, 1, 0)
+			local shell = parts.eggFolder.Egg1.Shell
+			for _ = 1, 60 do
+				session:renderFrame(1 / 60)
+				local position = shell.CFrame.Position
+				local _, spec = eggCenter(session, egg)
+				expect.near(position.Y, modules.Runway.surfaceY(position.Z) + spec.radius, 1e-3, "on the ground")
+				expect.equal(emitter.Enabled, true)
+			end
 		end)
 
 		it("stops the dust when an egg is removed and clears it once the puffs have faded", function()
@@ -357,13 +366,13 @@ return function(harness)
 			expect.equal(session:lastSent("RequestMount", "server").args[1], 1)
 		end)
 
-		it("does not try to mount an egg that is taken or cracking", function()
+		it("does not try to mount an egg that is taken or someone else claimed", function()
 			local session, parts = startClient()
 			local taken = eggData(session, 1, 1, "Common")
 			taken.rider = 999
-			local cracking = eggData(session, 2, 1, "Common", 5, 10)
-			cracking.cracking = true
-			for _, egg in { taken, cracking } do
+			local claimed = eggData(session, 2, 1, "Common", 5, 10)
+			claimed.owner = 999
+			for _, egg in { taken, claimed } do
 				session:fromServer("EggSpawned", egg)
 				jumpOnto(session, parts, egg)
 				session:heartbeat(1 / 60)
@@ -439,22 +448,70 @@ return function(harness)
 			expect.equal(#session:sent("RequestMount"), 0)
 		end)
 
-		it("lets go and celebrates when the egg is claimed", function()
+		it("celebrates a claim and keeps the rider rolling on the egg until they jump off", function()
 			local session, parts = startClient()
 			local egg = eggData(session, 1, 1, "Common")
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
+			session:renderFrame(1, 2)
 
-			session:fromServer("RideEnded", "Claimed", { eggId = 1, zone = 1, rarity = "Common" })
-			session:fromServer("EggRemoved", 1, "Claimed", LOCAL_USER_ID)
+			session:fromServer("EggClaimed", 1, LOCAL_USER_ID, "Common")
 			session:fromServer("InventoryUpdated", 3)
+			session:fromServer("StaminaChanged", 60, session.clock, 12, 100)
 			session:renderFrame(1 / 60)
 
-			expect.equal(parts.root.Anchored, false)
 			local toast = hud(parts).Toast
 			expect.equal(toast.Text, "CLAIMED! +1 Common egg")
 			expect.equal(toast.Visible, true)
 			expect.equal(labelOf(hud(parts).Wallet.Eggs).Text, "Eggs  3")
+
+			-- Still on the egg, with a full meter that says so.
+			expect.equal(parts.root.Anchored, true)
+			local meters = hud(parts).Meters
+			expect.equal(meters.Claim.Visible, true)
+			expect.near(meters.Claim.Fill.Size.X.Scale, 1, 1e-6)
+			expect.equal(labelOf(meters.Claim).Text, "Common Forest egg claimed!")
+			expect.equal(meters.RideHint.Text, "In your inventory  -  keep rolling, or jump to hop off")
+			expect.equal(parts.eggFolder.Egg1.Shell.Label:GetChildren()[2].Text, "Yours!")
+
+			-- Long after the claim time, still riding: nothing runs out.
+			session:renderFrame(1, 20)
+			local center, spec = eggCenter(session, egg)
+			expect.near(parts.root.CFrame.Position.Z, center.Z, 1e-2, "rider rolls with the egg")
+			expect.near(parts.root.CFrame.Position.Y, center.Y + spec.radius + 2, 1e-2)
+			expect.equal(labelOf(meters.Claim).Text, "Common Forest egg claimed!")
+
+			-- Jump off.
+			task.wait(0.6)
+			session:heartbeat(1 / 60)
+			session:fire(session:service("UserInputService"), "JumpRequest")
+			expect.equal(#session:sent("RequestDismount", "server"), 1)
+			expect.equal(parts.root.Anchored, false)
+			expect.equal(meters.Claim.Visible, false)
+		end)
+
+		it("lets the owner hop back onto their claimed egg, which shows as claimed straight away", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Rare")
+			egg.owner = LOCAL_USER_ID
+			session:fromServer("EggSpawned", egg)
+			jumpOnto(session, parts, egg)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("RequestMount", "server").args[1], 1)
+
+			session:fromServer("EggMounted", 1, LOCAL_USER_ID, session.clock)
+			session:fromServer("RideStarted", 1, {
+				startTime = session.clock,
+				startStamina = 100,
+				drain = 0,
+				claimTime = 9,
+				combo = 0,
+				claimed = true,
+			})
+			session:renderFrame(1 / 60)
+			local claim = hud(parts).Meters.Claim
+			expect.near(claim.Fill.Size.X.Scale, 1, 1e-6)
+			expect.equal(labelOf(claim).Text, "Rare Forest egg claimed!")
 		end)
 
 		it("stuns a rider who is thrown off", function()
@@ -464,7 +521,7 @@ return function(harness)
 			startRide(session, egg, 9)
 
 			session:fromServer("RideEnded", "ThrownOff", { eggId = 1, zone = 1, rarity = "Rare" })
-			session:fromServer("EggLeft", 1, session.clock, 1, 0)
+			session:fromServer("EggLeft", 1, 1, 0)
 			expect.equal(parts.root.Anchored, false)
 			expect.equal(parts.humanoid.PlatformStand, true)
 

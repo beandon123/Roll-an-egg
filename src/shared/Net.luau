@@ -12,10 +12,11 @@ local EVENTS = {
 	"EggSpawned", -- (egg)
 	"EggRemoved", -- (eggId, reason, byUserId?)
 	"EggMounted", -- (eggId, userId, time)
-	"EggLeft", -- (eggId, time, bouncesLeft, lateral)
+	"EggLeft", -- (eggId, bouncesLeft, lateral)
+	"EggClaimed", -- (eggId, userId, rarity): in that player's inventory now; they may still be riding it
 	"Announce", -- (text, colorRgb?)
 	-- Server -> one player
-	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
+	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo, claimed })
 	"RideEnded", -- (reason, { eggId, zone, rarity })
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"InventoryUpdated", -- (eggCount)

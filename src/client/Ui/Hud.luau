@@ -196,6 +196,9 @@ function Hud.mount(playerGui: Instance)
 	end)
 
 	local claimText = scope:Computed(function(use)
+		if use(UiState.rideClaimed) then
+			return `{use(UiState.rideTitle)} claimed!`
+		end
 		local percent = math.floor(use(UiState.claimProgress) * 100)
 		if use(UiState.rideDoomed) then
 			return `{use(UiState.rideTitle)}  {percent}%  - not enough stamina!`
@@ -349,7 +352,12 @@ function Hud.mount(playerGui: Instance)
 								Size = UDim2.new(1, 0, 0, 18),
 								BackgroundTransparency = 1,
 								Font = Enum.Font.GothamBold,
-								Text = "Steer left / right  -  Jump to hop off",
+								Text = scope:Computed(function(use)
+									if use(UiState.rideClaimed) then
+										return "In your inventory  -  keep rolling, or jump to hop off"
+									end
+									return "Steer left / right  -  Jump to hop off"
+								end),
 								TextColor3 = WHITE,
 								TextSize = 14,
 								TextStrokeTransparency = 0.3,
