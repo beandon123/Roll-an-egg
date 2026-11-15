@@ -7,19 +7,26 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway and riding**.
 
-- A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano) and their signs.
+- A placeholder map: the hub, five zone slabs (Forest, Desert, Snow, Ocean, Volcano), their gates, and walls with
+  large gaps along both sides.
+- The runway never ends. The last zone repeats seamlessly: riders are quietly carried back one repeat at a time, and
+  light fog in the distance means nobody ever sees an end.
 - Eggs appear on the ground at the start of every zone and roll down the runway, leaving a small trail of dust.
   Rarity sets their size, speed, color and stamina requirement.
 - When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when. Other eggs
   spawn quietly.
-- Jump next to an egg to get on. Steer left/right. Stay on until the claim meter fills and the egg is yours.
+- Players never walk on the runway. Stepping off the hub, or jumping off an egg, launches a floaty leap with
+  3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to the hub).
+- On an egg: steer left/right and stay on until the claim meter fills. Steering into a wall kills you; steering into
+  a gap sends you and the egg over the edge.
 - A claimed egg goes into your inventory straight away, but you keep rolling on it (no stamina cost) until you jump
-  off. It then disappears unless you hop back on within 3 seconds. Nobody else can get on it.
-- Stamina drains while riding. If it runs out first, you are thrown off and stunned.
-- Eggs never leave the ground. Leaving an unclaimed egg costs it a bounce; at zero bounces it cracks and splats.
+  off; then it disappears. Nobody else can get on it.
+- Stamina drains while riding. If it runs out first, you lose your balance and tumble off, and the egg bounces
+  slightly and cracks. A cracked egg, or one that went over the edge, comes back at the start of its zone a few
+  seconds later. Jumping off an unclaimed egg (or dying on it) leaves it rolling for anyone.
 - The 3-minute runway cycle: a warning, then a 10-second closure that clears every egg without a rider.
 - Claimed eggs are saved to the player's data (ProfileStore).
-- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter.
+- A simple HUD: runway timer, zone, coins, eggs held, stamina bar, claim meter, leap countdown.
 
 Everything visual is a placeholder made of plain parts. Not built yet: obstacles, duels, plots and pens, hatching,
 pets and mounts, coins and upgrades, teleport pads, server events, the tutorial, and all final art and sound.
@@ -48,9 +55,9 @@ Services* is on. Otherwise the game still runs and simply does not save.
 
 | Action | Keyboard | Phone / tablet | Gamepad |
 | --- | --- | --- | --- |
-| Get on an egg | Jump (Space) next to it | Jump button | A |
+| Land on an egg | Steer onto it while leaping | Thumbstick | Left stick |
 | Steer | A / D | Thumbstick | Left stick |
-| Hop off | Jump again | Jump button | A |
+| Leap off | Jump | Jump button | A |
 
 ### Studio test tools
 
@@ -94,7 +101,7 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, bounces, closures).
+  stamina, cracking, the side walls, the endless last zone, closures).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes.
 

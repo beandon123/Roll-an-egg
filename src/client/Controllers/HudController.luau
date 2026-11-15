@@ -45,6 +45,12 @@ local function update()
 		UiState.rideDoomed:set(false)
 	end
 
+	-- Time left to land on an egg while leaping.
+	local leapEndsAt = UiState.leapEndsAt
+	if leapEndsAt then
+		UiState.leapSecondsLeft:set(math.max(0, math.ceil((leapEndsAt - os.clock()) * 10) / 10))
+	end
+
 	-- Which zone the player is in.
 	local character = localPlayer.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")

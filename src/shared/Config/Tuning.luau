@@ -17,15 +17,22 @@ Tuning.DRAIN_FRACTION = 0.8
 Tuning.EGG_BASE_RADIUS = 3
 -- How much longer the egg is (side to side) than its rolling diameter.
 Tuning.EGG_LENGTH_RATIO = 1.3
--- Seconds before an egg nobody has jumped on fades out.
+-- Seconds an egg rolls with nobody on it (since it appeared, or since its rider left) before it fades out.
 Tuning.EGG_UNRIDDEN_LIFETIME = 60
 -- Target number of eggs alive per zone; sets the drop rate.
 Tuning.EGGS_PER_ZONE = 8
 -- Eggs appear on the ground at the start of their zone. This is the gap in studs between the zone's start line
 -- and the back of a new egg.
 Tuning.EGG_SPAWN_GAP = 2
--- Seconds a claimed egg keeps rolling after its owner jumps off, so they can hop back on. Then it disappears.
-Tuning.CLAIMED_EGG_LINGER = 3
+-- New eggs appear at least this many studs in from where an egg would touch the side walls.
+Tuning.EGG_SPAWN_EDGE_MARGIN = 4
+-- When a rider runs out of stamina the egg makes one small bounce, then cracks open.
+Tuning.CRACK_BOUNCE_TIME = 0.6
+Tuning.CRACK_BOUNCE_HEIGHT = 2.5
+-- Seconds after an egg cracks or falls off the side before the same egg appears again at the start of its zone.
+Tuning.EGG_RESPAWN_DELAY = 5
+-- Studs an egg is knocked back toward the middle when its rider crashes it into a wall.
+Tuning.WALL_KNOCKBACK = 6
 
 -- Riding
 -- Studs per second a rider can steer the egg sideways before upgrades.
@@ -45,6 +52,22 @@ Tuning.HOP_COMBO_WINDOW = 1.0
 Tuning.HOP_COMBO_REFUND = 0.10
 -- How often the rider's client reports its sideways position (per second).
 Tuning.LATERAL_SEND_RATE = 10
+
+-- Leaping. Players never walk on the runway: stepping onto it from the hub, or jumping off an egg, starts a long,
+-- floaty leap, and they must land on an egg before touching the runway or before LEAP_TIME runs out.
+Tuning.LEAP_TIME = 3.5
+-- Upward speed at the start of a leap, and the fraction of normal gravity during it.
+Tuning.LEAP_UP_SPEED = 45
+Tuning.LEAP_GRAVITY = 0.2
+-- Forward speed when leaping off the hub onto the runway.
+Tuning.LEAP_FORWARD_SPEED = 18
+-- A character whose root part is lower than this above the runway is standing on it.
+Tuning.STANDING_HEIGHT = 3.4
+-- Extra seconds the server allows before it kills a player who is still on the runway without an egg (the
+-- player's own device normally does it first, the moment they touch the runway).
+Tuning.LEAP_SERVER_GRACE = 1.5
+-- Seconds a rider who goes off the side through a gap falls before they die.
+Tuning.FALL_OFF_TIME = 0.8
 
 -- Characters
 Tuning.RESPAWN_TIME = 2

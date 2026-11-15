@@ -32,6 +32,8 @@ end)
 -- Players whose data has loaded, by UserId (the rules know riders only by that number).
 local playersByUserId: { [number]: Player } = {}
 local lastLateralAt: { [Player]: number } = {}
+-- When each player was first seen on the runway without an egg under them (see checkLeaps).
+local offEggSince: { [Player]: number } = {}
 
 -- While a player rides, their character is held in place on their own device, so the server's copy of it stays
 -- where they got on. Streaming would then load the map around the wrong spot. So every player gets an invisible
@@ -84,6 +86,16 @@ local function killCharacter(player: Player)
 	end
 end
 
+-- Kills the character the player has now after `delay` seconds, unless it has already died or been replaced.
+local function killCharacterAfter(player: Player, delay: number)
+	local character = player.Character
+	task.delay(delay, function()
+		if player.Character == character then
+			killCharacter(player)
+		end
+	end)
+end
+
 local function grantEgg(player: Player, zone: number, rarity: string)
 	local data = DataService.GetData(player)
 	if data == nil then
@@ -112,7 +124,7 @@ local function dispatch(events)
 		elseif kind == "EggMounted" then
 			Net.EggMounted:FireAllClients(event.id, event.rider, event.time)
 		elseif kind == "EggLeft" then
-			Net.EggLeft:FireAllClients(event.id, event.bouncesLeft, event.lateral)
+			Net.EggLeft:FireAllClients(event.id, event.lateral, event.bounceTime)
 		elseif kind == "RideStarted" then
 			local player = playersByUserId[event.rider]
 			if player then
@@ -122,7 +134,6 @@ local function dispatch(events)
 					drain = event.drain,
 					claimTime = event.claimTime,
 					combo = event.combo,
-					claimed = event.claimed,
 				})
 			end
 		elseif kind == "RideEnded" then
@@ -133,9 +144,11 @@ local function dispatch(events)
 					zone = event.zone,
 					rarity = event.rarity,
 				})
-				if event.reason == "Cliff" then
-					-- Rode the egg over the end of the runway.
+				if event.reason == "HitWall" then
 					killCharacter(player)
+				elseif event.reason == "FellOff" then
+					-- Over the edge through a gap: let them fall for a moment first.
+					killCharacterAfter(player, Tuning.FALL_OFF_TIME)
 				end
 			end
 		elseif kind == "StaminaChanged" then
@@ -173,10 +186,13 @@ local function onRequestMount(player: Player, eggId: unknown)
 		return
 	end
 
-	-- The player must really be next to the egg, with some slack for network delay.
+	-- The player must really be next to the egg, with some slack for network delay. In the endless last zone, the
+	-- egg's copy nearest the player is the one they see.
 	local time = now()
 	local x, y, z = sim:eggCenter(egg, time)
-	local distance = (root.Position - Vector3.new(x, y, z)).Magnitude
+	local imageZ = Runway.nearestImage(z, root.Position.Z)
+	y += Runway.surfaceY(imageZ) - Runway.surfaceY(z)
+	local distance = (root.Position - Vector3.new(x, y, imageZ)).Magnitude
 	local inReach = distance <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
 
 	sim:requestMount(player.UserId, eggId, time, inReach)
@@ -257,10 +273,38 @@ local function onPlayerRemoving(player: Player)
 	sim:removeRider(player.UserId, now())
 	playersByUserId[player.UserId] = nil
 	lastLateralAt[player] = nil
+	offEggSince[player] = nil
 	local part = focusParts[player]
 	if part then
 		focusParts[player] = nil
 		part:Destroy()
+	end
+end
+
+-- Players never walk on the runway: once past the hub they must be on an egg, or leaping to one. Each player's
+-- own device kills them the moment they touch the runway (see the client's RideController); this is the server's
+-- backstop, in case that does not happen.
+local function checkLeaps(time: number)
+	for _, player in playersByUserId do
+		local rider = sim:getRider(player.UserId)
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local onRunway = humanoid ~= nil
+			and humanoid.Health > 0
+			and root ~= nil
+			and root:IsA("BasePart")
+			and root.Position.Z >= 0
+		if not onRunway or (rider and rider.eggId ~= nil) then
+			offEggSince[player] = nil
+		else
+			local since = offEggSince[player] or time
+			offEggSince[player] = since
+			if time - since > Tuning.LEAP_TIME + Tuning.LEAP_SERVER_GRACE then
+				offEggSince[player] = nil
+				killCharacter(player)
+			end
+		end
 	end
 end
 
@@ -313,6 +357,7 @@ function RunwayService.Start()
 		sim:step(time)
 		dispatch(sim:takeEvents())
 		updateFocusParts(time)
+		checkLeaps(time)
 	end)
 end
 

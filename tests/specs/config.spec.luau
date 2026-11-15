@@ -27,7 +27,6 @@ return function(harness)
 				expect.truthy(higher.size > lower.size, "size")
 				expect.truthy(higher.claimTime > lower.claimTime, "claimTime")
 				expect.truthy(higher.rollSpeed > lower.rollSpeed, "rollSpeed")
-				expect.truthy(higher.bounces >= lower.bounces, "bounces")
 				expect.truthy(higher.hatchTime > lower.hatchTime, "hatchTime")
 			end
 		end)

@@ -58,7 +58,8 @@ return function(harness)
 			expect.equal(Runway.surfaceY(-50), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(0), Runway.BASE_Y)
 			expect.near(Runway.surfaceY(100), Runway.BASE_Y - 4)
-			expect.near(Runway.surfaceY(Runway.LENGTH + 500), Runway.BASE_Y - Runway.SLOPE * Runway.LENGTH)
+			-- No end: the slope carries on past the last zone.
+			expect.near(Runway.surfaceY(Runway.LENGTH + 500), Runway.BASE_Y - Runway.SLOPE * (Runway.LENGTH + 500))
 		end)
 
 		it("knows which zone a position is in", function()
@@ -67,8 +68,102 @@ return function(harness)
 			expect.equal(Runway.zoneAt(599.9), 1)
 			expect.equal(Runway.zoneAt(600), 2)
 			expect.equal(Runway.zoneAt(2999), 5)
-			expect.equal(Runway.zoneAt(3000), nil)
+			-- The last zone never ends.
+			expect.equal(Runway.zoneAt(3000), 5)
+			expect.equal(Runway.zoneAt(50000), 5)
 			expect.equal(Runway.zoneStartZ(3), 1200)
+		end)
+
+		it("loops the last zone: anything reaching the end of the loop is carried back one loop", function()
+			expect.equal(Runway.FINAL_ZONE_START, 2400)
+			expect.equal(Runway.LOOP_LENGTH, 600)
+			expect.equal(Runway.LOOP_END - Runway.LOOP_START, Runway.LOOP_LENGTH)
+			expect.truthy(Runway.LOOP_START > Runway.FINAL_ZONE_START, "the loop starts inside the last zone")
+			expect.near(Runway.LOOP_RISE, Runway.surfaceY(Runway.LOOP_START) - Runway.surfaceY(Runway.LOOP_END))
+
+			expect.equal(Runway.wrapZ(100), 100)
+			expect.equal(Runway.wrapZ(Runway.LOOP_END - 1), Runway.LOOP_END - 1)
+			expect.near(Runway.wrapZ(Runway.LOOP_END), Runway.LOOP_START)
+			expect.near(Runway.wrapZ(Runway.LOOP_END + 10), Runway.LOOP_START + 10)
+			expect.near(Runway.wrapZ(Runway.LOOP_END + 5 * Runway.LOOP_LENGTH + 10), Runway.LOOP_START + 10)
+			-- Never anywhere but inside the loop once past it, however far it has rolled.
+			for _, z in { 5000, 12345.6, 1e6 } do
+				local wrapped = Runway.wrapZ(z)
+				expect.truthy(wrapped >= Runway.LOOP_START and wrapped < Runway.LOOP_END, tostring(z))
+			end
+		end)
+
+		it("draws things in the last zone at their copy nearest the viewer", function()
+			local L = Runway.LOOP_LENGTH
+			-- Before the last zone there is only one copy.
+			expect.equal(Runway.nearestImage(1000, 3200), 1000)
+			-- A viewer near the end of the loop sees an egg just past the loop's start as one loop ahead.
+			expect.equal(Runway.nearestImage(Runway.LOOP_START + 10, Runway.LOOP_END - 5), Runway.LOOP_START + 10 + L)
+			expect.equal(Runway.nearestImage(Runway.LOOP_START + 10, Runway.LOOP_START), Runway.LOOP_START + 10)
+			-- Never a copy before the last zone starts, even for a viewer far behind it.
+			expect.equal(Runway.nearestImage(2450, 0), 2450)
+			expect.equal(Runway.nearestImage(2450 + L, 0), 2450)
+			-- The copy chosen is always within half a loop of the viewer (when the viewer is on the loop).
+			for viewer = Runway.LOOP_START, Runway.LOOP_END, 37 do
+				for z = Runway.FINAL_ZONE_START, Runway.LOOP_END, 53 do
+					expect.truthy(math.abs(Runway.nearestImage(z, viewer) - viewer) <= L / 2 + 1e-9)
+				end
+			end
+		end)
+
+		it("lines both sides with walls and fairly large gaps", function()
+			for _, side in { -1, 1 } do
+				local walls = Runway.wallsBetween(side, 0, Runway.LENGTH + Runway.RUNOUT)
+				expect.truthy(#walls > 20, "walls on side " .. side)
+				for index, wall in walls do
+					local length = wall.endZ - wall.startZ
+					-- Walls cut at the end of the stretch asked for can be shorter.
+					if wall.endZ < Runway.LENGTH + Runway.RUNOUT then
+						expect.truthy(length >= Runway.WALL_MIN_LENGTH - 1e-9, "wall length " .. length)
+					end
+					expect.truthy(length <= Runway.WALL_MAX_LENGTH + 1e-9, "wall length " .. length)
+					expect.truthy(wall.height >= Runway.WALL_MIN_HEIGHT and wall.height <= Runway.WALL_MAX_HEIGHT)
+					local nextWall = walls[index + 1]
+					if nextWall then
+						local gap = nextWall.startZ - wall.endZ
+						expect.truthy(gap >= Runway.GAP_MIN_LENGTH - 1e-9, "gap of " .. gap .. " at z " .. wall.endZ)
+						expect.truthy(gap <= Runway.GAP_MAX_LENGTH + 1e-9, "gap of " .. gap .. " at z " .. wall.endZ)
+					end
+				end
+			end
+			-- Both sides are different.
+			local left, right = Runway.wallsBetween(-1, 0, 600), Runway.wallsBetween(1, 0, 600)
+			expect.truthy(left[1].endZ ~= right[1].endZ)
+		end)
+
+		it("repeats the last zone's walls every loop, so being carried back is seamless", function()
+			for _, side in { -1, 1 } do
+				for z = Runway.FINAL_ZONE_START, Runway.LOOP_END + Runway.LOOP_VIEW, 7 do
+					expect.equal(
+						Runway.wallAt(side, z, 0.5),
+						Runway.wallAt(side, z + Runway.LOOP_LENGTH, 0.5),
+						"z " .. z
+					)
+				end
+			end
+		end)
+
+		it("tells a wall from a gap at an egg's position", function()
+			local wall = Runway.wallsBetween(1, 0, 600)[1]
+			local middle = (wall.startZ + wall.endZ) / 2
+			expect.equal(Runway.wallAt(1, middle, 3), true)
+			local nextWall = Runway.wallsBetween(1, wall.endZ, 600)[1]
+			local gapMiddle = (wall.endZ + nextWall.startZ) / 2
+			expect.equal(Runway.wallAt(1, gapMiddle, 3), false)
+			-- An egg wider than what is left of the gap touches the wall beside it.
+			expect.equal(Runway.wallAt(1, wall.endZ + 2, 3), true)
+		end)
+
+		it("knows when an egg is pressed against the side", function()
+			local limit = Runway.maxLateral(4)
+			expect.equal(Runway.isAtEdge(limit, 4), true)
+			expect.equal(Runway.isAtEdge(-limit, 4), true)
+			expect.equal(Runway.isAtEdge(limit - 1, 4), false)
 		end)
 
 		it("keeps eggs on the runway", function()
@@ -86,6 +181,14 @@ return function(harness)
 			expect.equal(EggMotion.zAt(100, 612, 12, 110), 732)
 			-- Never behind its starting point, even if a client's clock is slightly behind.
 			expect.equal(EggMotion.zAt(100, 612, 12, 99), 612)
+		end)
+
+		it("bounces once, slightly, before cracking", function()
+			expect.equal(EggMotion.bounceOffset(nil, 10, 0.6, 2.5), 0)
+			expect.equal(EggMotion.bounceOffset(10, 10, 0.6, 2.5), 0)
+			expect.near(EggMotion.bounceOffset(10, 10.3, 0.6, 2.5), 2.5)
+			expect.near(EggMotion.bounceOffset(10, 10.6, 0.6, 2.5), 0, 1e-9)
+			expect.equal(EggMotion.bounceOffset(10, 12, 0.6, 2.5), 0)
 		end)
 
 		it("turns one full circle per circumference rolled", function()

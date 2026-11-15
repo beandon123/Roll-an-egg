@@ -333,6 +333,23 @@ function Hud.mount(playerGui: Instance)
 						},
 					}),
 
+					-- While leaping: land on an egg before the time runs out.
+					scope:New("TextLabel")({
+						Name = "Leap",
+						AnchorPoint = Vector2.new(0.5, 1),
+						Position = UDim2.new(0.5, 0, 1, -120),
+						Size = UDim2.fromOffset(380, 40),
+						BackgroundTransparency = 1,
+						Font = Enum.Font.FredokaOne,
+						Text = scope:Computed(function(use)
+							return string.format("Land on an egg!  %.1f", use(UiState.leapSecondsLeft))
+						end),
+						TextColor3 = WARNING_COLOR,
+						TextSize = 30,
+						TextStrokeTransparency = 0,
+						Visible = UiState.leaping,
+					}),
+
 					-- Bottom centre: claim meter (while riding) above the stamina bar.
 					scope:New("Frame")({
 						Name = "Meters",
@@ -354,9 +371,9 @@ function Hud.mount(playerGui: Instance)
 								Font = Enum.Font.GothamBold,
 								Text = scope:Computed(function(use)
 									if use(UiState.rideClaimed) then
-										return "In your inventory  -  keep rolling, or jump to hop off"
+										return "In your inventory  -  keep rolling, or jump to leap off"
 									end
-									return "Steer left / right  -  Jump to hop off"
+									return "Steer left / right  -  Jump to leap off"
 								end),
 								TextColor3 = WHITE,
 								TextSize = 14,

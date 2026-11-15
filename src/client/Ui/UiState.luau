@@ -27,6 +27,10 @@ local UiState = {
 	claimProgress = scope:Value(0),
 	-- True once the egg being ridden is claimed (already in the inventory); the rest of the ride is for show.
 	rideClaimed = scope:Value(false),
+
+	-- While leaping onto the runway or off an egg: whole tenths of a second left to land on an egg.
+	leaping = scope:Value(false),
+	leapSecondsLeft = scope:Value(0),
 	-- True while the rider's stamina will run out before the claim finishes.
 	rideDoomed = scope:Value(false),
 
@@ -43,6 +47,8 @@ local UiState = {
 	-- Plain data (not shown directly): the numbers the stamina bar is worked out from each frame.
 	-- See Shared/StaminaMath.
 	staminaState = { value = 100, time = 0, rate = 0, max = 100 },
+	-- When the current leap runs out (os.clock()), or nil when not leaping.
+	leapEndsAt = nil :: number?,
 	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain, claimed }
 	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number, claimed: boolean }?,
 }

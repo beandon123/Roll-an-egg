@@ -389,6 +389,9 @@ function Session:addPlayer(userId: number, name: string)
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
 	root.Position = roblox.Vector3.new(0, 13, -100)
+	-- Lune has no physics, so these have no values of their own.
+	root.AssemblyMass = 10
+	root.AssemblyLinearVelocity = roblox.Vector3.zero
 	root.Parent = character
 	character.Parent = self:service("Workspace")
 	player.Character = character

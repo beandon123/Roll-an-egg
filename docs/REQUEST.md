@@ -13,7 +13,7 @@ Core loop:
    rider disappears, every nest hatches 30x faster, and a fresh lineup of eggs starts.
 3. Players chase eggs on foot or riding a pet and jump on. While riding they steer to dodge obstacles as stamina drains,
    staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
-   Leaving an egg costs it a bounce, and it cracks when it has none left; rarer eggs have more bounces.
+   If a rider runs out of stamina, the egg bounces slightly and cracks, and comes back at the start of its zone.
 4. Another player can jump onto the same egg to challenge the rider -> a rhythm-tap duel graded Perfect / Great / Good / Poor;
    the better score wins. A winning challenger steals the egg and its progress, but must have the stamina to cover it.
 5. Claimed eggs go straight to inventory. Players place them in nests in their pet pen; eggs hatch over real time,
@@ -39,8 +39,12 @@ Original theme, art, and creatures.
 ## Desired Features
 ### Runway & Zones
 - [ ] One straight runway (~3,000 studs) holding five zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
-      5 Volcano; ends at a cliff after the Volcano; more zones added later (decided)
-    - [ ] Anyone can walk or ride into any zone (decided); the scenery, music, and obstacles change zone by zone
+      5 Volcano; more zones added later (decided)
+    - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
+          repeat at a time, and distance fog means the end is never visible
+    - [ ] Walls along both sides with natural, fairly large gaps (decided): steering into a wall kills the rider;
+          steering into a gap sends egg and rider over the edge
+    - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with coins (decided)
@@ -61,8 +65,10 @@ Original theme, art, and creatures.
       ~8 active eggs per zone (12 during Egg Avalanche)
 - [ ] Egg lifecycle
     - [ ] Never jumped on: fades out after ~60 s (decided)
-    - [ ] Jumped on: loses a bounce each time it's left with no rider; cracks and splats at 0 (see Riding)
-    - [ ] An egg going over the cliff at the end splats, along with its rider
+    - [ ] Rider ran out of stamina: bounces slightly, cracks and splats; the same egg comes back at the start of its
+          zone ~5 s later (decided). The same happens to an egg steered over the edge through a gap
+    - [ ] Left by its rider any other way (jumped off, crashed into a wall, died): keeps rolling, free for anyone;
+          fades ~60 s later if nobody gets on
     - [ ] At each runway closure, every egg without a rider disappears; ridden eggs stay and keep rolling (decided)
 - [ ] Rarities: Common, Uncommon, Rare, Epic, Legendary, Mythic, Secret, Eternal (decided) + Titan Egg (event) + Robux egg
     - [ ] Rarer eggs are bigger and need more stamina (decided)
@@ -73,15 +79,15 @@ Original theme, art, and creatures.
 
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
-    Rarity     Size   Claim time  Roll speed  Bounces  Duel (beats @ tempo)
-    Common     1.0x   5 s         12 st/s     1        6 @ 90 bpm
-    Uncommon   1.1x   7 s         13 st/s     1        6 @ 100 bpm
-    Rare       1.25x  9 s         14 st/s     2        8 @ 110 bpm
-    Epic       1.4x   12 s        16 st/s     2        8 @ 125 bpm
-    Legendary  1.6x   15 s        17 st/s     3        10 @ 135 bpm
-    Mythic     1.8x   18 s        19 st/s     3        10 @ 150 bpm
-    Secret     2.0x   22 s        20 st/s     3        12 @ 160 bpm
-    Eternal    2.3x   26 s        21 st/s     4        12 @ 170 bpm
+    Rarity     Size   Claim time  Roll speed  Duel (beats @ tempo)
+    Common     1.0x   5 s         12 st/s     6 @ 90 bpm
+    Uncommon   1.1x   7 s         13 st/s     6 @ 100 bpm
+    Rare       1.25x  9 s         14 st/s     8 @ 110 bpm
+    Epic       1.4x   12 s        16 st/s     8 @ 125 bpm
+    Legendary  1.6x   15 s        17 st/s     10 @ 135 bpm
+    Mythic     1.8x   18 s        19 st/s     10 @ 150 bpm
+    Secret     2.0x   22 s        20 st/s     12 @ 160 bpm
+    Eternal    2.3x   26 s        21 st/s     12 @ 170 bpm
 
 First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500 / 2,000 decided, rest proposed):
 
@@ -112,22 +118,24 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
 - [ ] Stamina drains while riding (see table) and regenerates on foot or on a pet
 - [ ] Claim meter fills while you stay on; 100% = "CLAIMED!" -> egg goes straight into the inventory
     - [ ] The rider stays on and keeps rolling on the claimed egg, just for show (no stamina cost, can't be thrown off),
-          until they jump off; it then disappears unless they hop back on within 3 s; nobody else can get on it;
-          riding it over the end cliff still kills the rider (decided)
+          until they jump off; it then disappears; nobody else can get on it (decided)
 - [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
     - [ ] Zone-themed obstacles (proposed): Forest: rolling logs, swinging vines; Desert: tumbleweeds, sand geysers;
           Snow: giant snowballs, ice patches (slide sideways); Ocean: crashing waves, snapping clams;
           Volcano: lava bursts (lethal), falling rocks; every obstacle is telegraphed before it arrives
 - [ ] Leaving an egg (decided)
-    - [ ] Whenever an unclaimed egg is left with no rider (jumped off, knocked off, out of stamina, rider died), it
-          keeps rolling on the ground (no hop) and loses a bounce; at 0 bounces it cracks and splats at once (decided)
-    - [ ] Bounces by rarity (decided for now): Common/Uncommon 1, Rare/Epic 2, Legendary/Mythic/Secret 3, Eternal 4
-    - [ ] An egg with bounces left keeps rolling, and anyone can jump on (claim progress starts from 0)
-- [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost
-- [ ] Death (lethal obstacle, falling off the runway's side edge, riding over the end cliff, resetting): cartoon splat,
-      respawn at your plot; current ride lost; no coins or items lost
+    - [ ] Eggs only bounce and crack when the rider runs out of stamina ("loses their balance"); see Egg lifecycle
+    - [ ] Any other way of leaving an unclaimed egg leaves it rolling on the ground, and anyone can jump on (claim
+          progress starts from 0)
+- [ ] Players never walk on the runway (decided): stepping off the hub, or jumping off an egg, launches a floaty leap
+      with a few seconds (3.5 s) to land on an egg; touching the runway first, or running out of time, kills them
+- [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost; they
+      are leaping, so only a lucky landing on another egg saves them
+- [ ] Death (decided: crashing into a side wall, going over the side through a gap, missing an egg when leaping;
+      later also lethal obstacles; resetting): cartoon splat, respawn at your plot; current ride lost; no coins or
+      items lost
 - [ ] Egg-to-egg hopping: progress resets on the new egg; landing within 1 s of leaving the last one refunds 10% stamina
-      and builds a hop-combo counter (the egg you left still loses a bounce)
+      and builds a hop-combo counter
 - [ ] Claim feedback: burst VFX, fanfare, "+1 RARE EGG" popup
 
 ### Egg Duels (PvP)
@@ -141,9 +149,9 @@ First-pass stamina requirement per egg (base Max Stamina 100; zone baselines 500
     - [ ] Timing windows (first pass): Perfect +/-45 ms, Great +/-90 ms, Good +/-140 ms, anything else Poor
     - [ ] Stamina and upgrades play no part in the duel itself (decided)
 - [ ] During the duel: claim progress and stamina drain pause; the egg keeps rolling but ignores obstacles;
-      duels can't start in the last 100 studs before the end cliff
+      duels can't start next to a gap in the side walls
 - [ ] A winning challenger takes over with the defender's progress -> "STOLEN!" (decided); loser is thrown off
-      (stun, not death); the egg doesn't lose a bounce because it still has a rider
+      (stun, not death)
     - [ ] On takeover, the winner immediately pays the stamina for the progress they inherited; if they can't cover it,
           they're thrown off (decided), so low-stamina players can win duels but can't keep high-tier eggs
 - [ ] Anti-grief: 15 s challenge cooldown per player; can't challenge the same player again for 30 s;
@@ -225,7 +233,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
       (Titan Egg on cycle 0 of every 20, Egg Avalanche on cycle 10); HUD shows the next event's countdown
 - [ ] Titan Egg: a much larger egg that can land in any zone, with an equal chance per zone (decided)
     - [ ] Announced 60 s ahead with a map marker showing where it will land; zone-themed giant shell
-    - [ ] Up to 4 players ride it together and share one claim meter; no duels; 5 bounces
+    - [ ] Up to 4 players ride it together and share one claim meter; no duels
     - [ ] Riders' stamina drains at that zone's Common rate (decided)
     - [ ] Everyone still on at 100% gets a Titan egg that can only hatch pets from that zone,
           with odds tilted toward the zone's rarer pets (decided)
@@ -259,12 +267,13 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub with a ring of plots and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
-      -> Ocean (a causeway over a shallow reef) -> Volcano -> end cliff; each zone has its own palette, props, lighting,
+      -> Ocean (a causeway over a shallow reef) -> Volcano, repeating forever; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, nests glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = coins, stamina, inventory, shop, index, mount, Reset shortcut,
       runway-closing timer, next-event timer
-    - [ ] Riding HUD (only while riding): stamina bar, claim meter, bounces-left pips, obstacle warning markers
+    - [ ] Riding HUD (only while riding): stamina bar, claim meter, obstacle warning markers; leap countdown while
+          leaping
     - [ ] Marker above every egg: its stamina requirement, green if you have enough and red if not;
           above ridden eggs: crossed swords = you can challenge, gold lock = Locked In (75%+)
     - [ ] Duel UI: both players shown wrestling on the egg; beat track at center screen; Perfect/Great/Good/Poor pop-ups;
@@ -284,8 +293,8 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   (see `vendor/README.md`)
 - Structure:
     - ReplicatedStorage/Shared: Config (zones, rarity tuning, stamina requirements, spawn odds per zone, hatch times,
-      upgrade and teleport costs, obstacles, pets, events), Types, EggMotion (down-runway position from time + bounce
-      events), ObstacleTimeline, DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
+      upgrade and teleport costs, obstacles, pets, events), Types, EggMotion (down-runway position from time + the
+      crack bounce), ObstacleTimeline, DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
     - ServerScriptService/Server/Services: Data, Cycle, Runway, Zone, Teleport, Ride, Duel, Plot, Pen, Hatch, Pet,
       Economy, Shop, Quest, Event, Leaderboard, AntiCheat
     - StarterPlayerScripts/Client/Controllers: Ride, Steering, Duel, Mount, Pen (roaming), Camera, Input, UI, VFX, Sound
@@ -342,7 +351,7 @@ Draft roster (edit freely; Robux-egg pets designed during the art phase):
   no off-platform links; complete Roblox's maturity questionnaire; splats stay cartoonish
 - Roadmap:
     - MVP (internal playtest, placeholder art): Forest + Desert zones, runway cycle + closures, steering rides,
-      obstacles, bounces/cracking, claiming, rhythm duels, pen + nests + hatching, ~6 pets with mounting, coins,
+      obstacles, cracking, claiming, rhythm duels, pen + nests + hatching, ~6 pets with mounting, coins,
       core upgrades, saving, tutorial
     - Launch: all 5 zones, 40 core pets + Robux egg (5 pets), teleport pads, final art, retention features,
       Titan Egg + Egg Avalanche, monetization, compliance pass, analytics

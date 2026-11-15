@@ -7,6 +7,7 @@
 local Controllers = script.Controllers
 
 local ORDER = {
+	"WorldController",
 	"EggController",
 	"RideController",
 	"HudController",

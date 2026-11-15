@@ -9,6 +9,7 @@ local task = require("@lune/task")
 local Studio = require("../studio")
 
 local Enum = roblox.Enum
+local CFrame = roblox.CFrame
 local Vector3 = roblox.Vector3
 
 return function(harness)
@@ -198,7 +199,7 @@ return function(harness)
 
 			session:fromServer("EggMounted", 1, 999, session.clock)
 			expect.equal(need.Text, "Taken")
-			session:fromServer("EggLeft", 1, 0, 4)
+			session:fromServer("EggLeft", 1, 4)
 			expect.equal(need.Text, "Needs 500")
 
 			-- Claimed: by someone else, then (on another egg) by this player.
@@ -305,7 +306,7 @@ return function(harness)
 			local emitter = dustOf(parts, 1).Dust
 			expect.equal(emitter.Enabled, true)
 
-			session:fromServer("EggLeft", 1, 1, 0)
+			session:fromServer("EggLeft", 1, 0)
 			local shell = parts.eggFolder.Egg1.Shell
 			for _ = 1, 60 do
 				session:renderFrame(1 / 60)
@@ -471,7 +472,7 @@ return function(harness)
 			expect.equal(meters.Claim.Visible, true)
 			expect.near(meters.Claim.Fill.Size.X.Scale, 1, 1e-6)
 			expect.equal(labelOf(meters.Claim).Text, "Common Forest egg claimed!")
-			expect.equal(meters.RideHint.Text, "In your inventory  -  keep rolling, or jump to hop off")
+			expect.equal(meters.RideHint.Text, "In your inventory  -  keep rolling, or jump to leap off")
 			expect.equal(parts.eggFolder.Egg1.Shell.Label:GetChildren()[2].Text, "Yours!")
 
 			-- Long after the claim time, still riding: nothing runs out.
@@ -490,28 +491,44 @@ return function(harness)
 			expect.equal(meters.Claim.Visible, false)
 		end)
 
-		it("lets the owner hop back onto their claimed egg, which shows as claimed straight away", function()
+		it("bounces an egg slightly before it cracks, and nobody can land on it meanwhile", function()
 			local session, parts = startClient()
-			local egg = eggData(session, 1, 1, "Rare")
-			egg.owner = LOCAL_USER_ID
+			local modules = shared(session)
+			local egg = eggData(session, 1, 1, "Rare", 3)
 			session:fromServer("EggSpawned", egg)
+			session:renderFrame(1 / 60)
+			local shell = parts.eggFolder.Egg1.Shell
+			local emitter = parts.dustFolder.Dust1.Dust
+
+			session:fromServer("EggLeft", 1, 0, session.clock)
+			session:renderFrame(modules.Tuning.CRACK_BOUNCE_TIME / 2)
+			local position = shell.CFrame.Position
+			local _, spec = eggCenter(session, egg)
+			local lift = position.Y - (modules.Runway.surfaceY(position.Z) + spec.radius)
+			expect.near(lift, modules.Tuning.CRACK_BOUNCE_HEIGHT, 1e-2)
+			expect.truthy(lift < 4, "only a slight bounce")
+			expect.equal(emitter.Enabled, false, "no dust in the air")
+
 			jumpOnto(session, parts, egg)
 			session:heartbeat(1 / 60)
-			expect.equal(session:lastSent("RequestMount", "server").args[1], 1)
+			expect.equal(#session:sent("RequestMount"), 0)
 
-			session:fromServer("EggMounted", 1, LOCAL_USER_ID, session.clock)
-			session:fromServer("RideStarted", 1, {
-				startTime = session.clock,
-				startStamina = 100,
-				drain = 0,
-				claimTime = 9,
-				combo = 0,
-				claimed = true,
-			})
+			session:fromServer("EggRemoved", 1, "Cracked")
+			expect.truthy(parts.eggFolder:FindFirstChild("Splat"), "splat")
+		end)
+
+		it("drops an egg out of sight when it goes off the side", function()
+			local session, parts = startClient()
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 3, 20))
 			session:renderFrame(1 / 60)
-			local claim = hud(parts).Meters.Claim
-			expect.near(claim.Fill.Size.X.Scale, 1, 1e-6)
-			expect.equal(labelOf(claim).Text, "Rare Forest egg claimed!")
+			local shell = parts.eggFolder.Egg1.Shell
+			local before = shell.CFrame.Position
+			session:fromServer("EggRemoved", 1, "FellOff")
+			local after = shell.CFrame.Position
+			expect.truthy(after.Y < before.Y - 30, "falls")
+			expect.truthy(after.X > before.X, "off the side it was on")
+			task.wait(0.9)
+			expect.falsy(parts.eggFolder:FindFirstChild("Egg1"))
 		end)
 
 		it("stuns a rider who is thrown off", function()
@@ -521,7 +538,7 @@ return function(harness)
 			startRide(session, egg, 9)
 
 			session:fromServer("RideEnded", "ThrownOff", { eggId = 1, zone = 1, rarity = "Rare" })
-			session:fromServer("EggLeft", 1, 1, 0)
+			session:fromServer("EggLeft", 1, 0, session.clock)
 			expect.equal(parts.root.Anchored, false)
 			expect.equal(parts.humanoid.PlatformStand, true)
 
@@ -564,11 +581,217 @@ return function(harness)
 		end)
 	end)
 
+	describe("Client: leaping", function()
+		local function leapForce(parts)
+			return parts.root:FindFirstChild("LeapForce")
+		end
+
+		it("launches a player into a floaty leap as soon as they step off the hub onto the runway", function()
+			local session, parts = startClient()
+			local tuning = shared(session).Tuning
+			parts.root.Position = Vector3.new(0, 13, -5)
+			session:heartbeat(1 / 60)
+			expect.falsy(leapForce(parts), "still on the hub")
+
+			parts.root.Position = Vector3.new(0, 13, 1)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.root.AssemblyLinearVelocity.Y, tuning.LEAP_UP_SPEED)
+			expect.truthy(parts.root.AssemblyLinearVelocity.Z >= tuning.LEAP_FORWARD_SPEED, "forward")
+			local force = leapForce(parts)
+			expect.truthy(force and force.Enabled, "lighter gravity")
+			expect.near(force.Force.Y, 10 * session:service("Workspace").Gravity * (1 - tuning.LEAP_GRAVITY), 1e-3)
+			expect.equal(parts.humanoid:GetState(), Enum.HumanoidStateType.Freefall)
+
+			session:renderFrame(1 / 60)
+			local leap = hud(parts).Leap
+			expect.equal(leap.Visible, true)
+			expect.truthy(leap.Text:match("^Land on an egg!  %d%.%d$"), leap.Text)
+		end)
+
+		it("kills a leaping player who touches the runway", function()
+			local session, parts = startClient()
+			local runway = shared(session).Runway
+			parts.root.Position = Vector3.new(0, 40, 30)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 100)
+			parts.root.Position = Vector3.new(0, runway.surfaceY(30) + 3, 30)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 0)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Toast.Text, "Missed the egg!")
+		end)
+
+		it("kills a leaping player who has not landed on an egg in time", function()
+			local session, parts = startClient()
+			local tuning = shared(session).Tuning
+			parts.root.Position = Vector3.new(0, 60, 30)
+			session:heartbeat(1 / 60)
+			task.wait(tuning.LEAP_TIME - 0.5)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 100)
+			task.wait(0.6)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 0)
+		end)
+
+		it("waits for the answer to a landing before counting a touch of the runway", function()
+			local session, parts = startClient()
+			local runway = shared(session).Runway
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			jumpOnto(session, parts, egg)
+			session:heartbeat(1 / 60)
+			expect.truthy(session:lastSent("RequestMount", "server"), "asked to land")
+
+			-- Slipped past the egg onto the runway while the server answers.
+			local center = eggCenter(session, egg)
+			parts.root.Position = Vector3.new(center.X, runway.surfaceY(center.Z) + 3, center.Z)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 100)
+			startRide(session, egg)
+			session:heartbeat(1 / 60)
+			expect.equal(parts.humanoid.Health, 100)
+			expect.equal(parts.root.Anchored, true)
+			expect.equal(leapForce(parts).Enabled, false)
+			expect.equal(hud(parts).Leap.Visible, false)
+		end)
+
+		it("leaps off an egg with time to land on another", function()
+			local session, parts = startClient()
+			local tuning = shared(session).Tuning
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			local userInput = session:service("UserInputService")
+			startRide(session, egg)
+			task.wait(0.4)
+			session:heartbeat(1 / 60)
+			session:fire(userInput, "JumpRequest")
+			expect.equal(parts.root.AssemblyLinearVelocity.Y, tuning.LEAP_UP_SPEED)
+			expect.truthy(leapForce(parts).Enabled, "floaty")
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Leap.Visible, true)
+		end)
+
+		it("dies at once on hitting a wall", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Common", 3, 20)
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			session:fromServer("RideEnded", "HitWall", { eggId = 1, zone = 1, rarity = "Common" })
+			expect.equal(parts.humanoid.Health, 0)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Toast.Text, "Hit the wall!")
+		end)
+
+		it("goes over the edge through a gap, and does not start a leap", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Common", 3, 20)
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			session:fromServer("RideEnded", "FellOff", { eggId = 1, zone = 1, rarity = "Common" })
+			expect.equal(parts.root.Anchored, false)
+			expect.truthy(parts.root.AssemblyLinearVelocity.X > 0, "off the side it was on")
+			session:heartbeat(1 / 60)
+			expect.falsy(leapForce(parts), "no leap")
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Toast.Text, "Off the edge!")
+		end)
+	end)
+
+	describe("Client: the endless last zone", function()
+		it("builds the repeat of the last zone past the end of the runway", function()
+			local session = startClient()
+			local runway = shared(session).Runway
+			local endless = session:service("Workspace"):FindFirstChild("EndlessRunway")
+			expect.truthy(endless, "Workspace.EndlessRunway")
+			local grounds, walls, signs = 0, 0, {}
+			for _, part in endless:GetChildren() do
+				local position = part.CFrame.Position
+				if part.Name == "Ground" then
+					grounds += 1
+					expect.truthy(part.Size.Z <= 2048, "within Roblox's part size limit")
+				elseif part.Name == "Wall" then
+					walls += 1
+					expect.truthy(position.Z >= runway.LENGTH, "past the server's walls")
+				elseif part.Name == "Sign" then
+					table.insert(signs, position.Z)
+				end
+			end
+			expect.truthy(grounds >= 2, "ground")
+			expect.truthy(walls > 20, "walls")
+			table.sort(signs)
+			expect.near(signs[1], runway.FINAL_ZONE_START + runway.LOOP_LENGTH)
+			expect.near(signs[2] - signs[1], runway.LOOP_LENGTH)
+			expect.truthy(signs[#signs] > runway.LOOP_END + runway.LOOP_VIEW, "gates well past the loop")
+		end)
+
+		it("carries a leaping player back one loop at the end", function()
+			local session, parts = startClient()
+			local runway = shared(session).Runway
+			-- (The stand-in keeps Position and CFrame apart; Roblox keeps them in step.)
+			parts.root.Position = Vector3.new(4, 30, runway.LOOP_END + 1)
+			parts.root.CFrame = CFrame.new(parts.root.Position)
+			session:heartbeat(1 / 60)
+			local position = parts.root.CFrame.Position
+			expect.near(position.Z, runway.LOOP_START + 1, 1e-3)
+			expect.near(position.Y, 30 + runway.LOOP_RISE, 1e-3)
+			expect.near(position.X, 4, 1e-3)
+			expect.equal(parts.humanoid.Health, 100)
+		end)
+
+		it("carries a rider and everything around them back one loop together, so nothing seems to move", function()
+			local session, parts = startClient()
+			local runway = shared(session).Runway
+			-- The rider's Eternal egg (21 studs/s) is 10 studs from the end of the loop.
+			local mineSpec = shared(session).EggSpec.get(5, "Eternal")
+			local mine = eggData(session, 1, 5, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / 21, 0)
+			-- Another egg (12 studs/s) has already been carried back, to just past the start of the loop.
+			local otherSpec = shared(session).EggSpec.get(5, "Common")
+			local other = eggData(session, 2, 5, "Common", (runway.LOOP_END + 20 - otherSpec.startZ) / 12, 10)
+			session:fromServer("EggSpawned", mine)
+			session:fromServer("EggSpawned", other)
+			startRide(session, mine)
+			local camera = session:service("Workspace").CurrentCamera
+			-- One frame to sit the rider on their egg; from then on the camera follows them, as it would in the game.
+			session:renderFrame(1 / 60)
+
+			local otherShell = parts.eggFolder.Egg2.Shell
+			local otherDust = parts.dustFolder.Dust2.Dust
+			local echo = parts.dustFolder.Echo2.Dust
+			local wrapped = false
+			local lastGap = nil
+			for _ = 1, 60 do
+				camera.CFrame = CFrame.new(parts.root.CFrame.Position + Vector3.new(0, 10, -20))
+				session:renderFrame(1 / 60)
+				local rider = parts.root.CFrame.Position
+				local otherZ = otherShell.CFrame.Position.Z
+				-- The other egg is always drawn just ahead of the rider, closing in at 9 studs a second.
+				local gap = otherZ - rider.Z
+				expect.truthy(gap > 0 and gap < 35, "gap " .. gap)
+				if lastGap then
+					expect.near(gap, lastGap - 9 / 60, 0.05)
+				end
+				lastGap = gap
+				-- Heights match too: both stay on the ground.
+				expect.near(otherShell.CFrame.Position.Y, runway.surfaceY(otherZ) + otherSpec.radius, 1e-3)
+				if rider.Z < runway.LOOP_START + 100 then
+					wrapped = true
+				elseif rider.Z > runway.LOOP_END - 60 then
+					-- About to be carried back: the other egg's trail is also being laid one loop back.
+					expect.equal(echo.Enabled, true)
+				end
+			end
+			expect.truthy(wrapped, "the rider was carried back")
+			expect.equal(session.emitted[otherDust], nil, "the other egg did not pop in")
+			expect.equal(parts.humanoid.Health, 100)
+		end)
+	end)
+
 	describe("Client: HUD", function()
 		it("builds the HUD with Fusion", function()
 			local _, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Announcement", "Meters", "StudioTestPanel" } do
+			for _, name in { "Cycle", "Zone", "Wallet", "Toast", "Announcement", "Leap", "Meters", "StudioTestPanel" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			expect.truthy(root.Meters.Claim and root.Meters.Stamina and root.Meters.RideHint, "meters")

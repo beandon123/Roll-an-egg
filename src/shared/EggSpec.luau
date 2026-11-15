@@ -19,7 +19,6 @@ export type Spec = {
 	startZ: number,
 	rollSpeed: number,
 	claimTime: number,
-	bounces: number,
 	-- Stamina requirement shown on the egg.
 	requirement: number,
 	-- Stamina lost per second while riding it.
@@ -57,7 +56,6 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_GAP + radius,
 		rollSpeed = info.rollSpeed,
 		claimTime = info.claimTime,
-		bounces = info.bounces,
 		requirement = requirement,
 		drain = StaminaMath.drainRate(requirement, info.claimTime, Tuning.DRAIN_FRACTION),
 	}

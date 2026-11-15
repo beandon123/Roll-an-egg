@@ -4,10 +4,15 @@
 -- is gone", and each device works out where every egg is from the shared clock (Shared/EggMotion). That keeps
 -- eggs perfectly smooth and costs almost no network traffic.
 --
--- An egg appears on the ground at the start of its zone and rolls straight down the runway. It never leaves the
--- ground, not even when a rider gets off. A claimed egg keeps rolling with its owner on it until they jump off.
+-- An egg appears on the ground at the start of its zone and rolls straight down the runway. The only time it
+-- leaves the ground is the one small bounce it makes before cracking, when its rider runs out of stamina.
 --
 -- Riders are pinned to this device's copy of the egg, so nobody appears to slide off because of lag.
+--
+-- The last zone never ends (see Shared/Runway). Every egg in it is drawn at its copy nearest the local player, so
+-- when the local player is carried back one loop, everything around them is carried back with them and nothing
+-- seems to move. Dust is the one thing that cannot be moved once made, so near the end of a loop each egg also lays
+-- its trail one loop back ("echo" dust), ready for when the player arrives there.
 --
 -- Also shows the on-screen message when a Secret or rarer egg spawns.
 
@@ -39,6 +44,13 @@ local LATERAL_SMOOTHING = 12
 
 -- Seconds a new egg takes to fade in where it appears.
 local APPEAR_TIME = 0.25
+-- An egg drawn this many studs from where it was drawn last frame has jumped to another copy of itself (it just
+-- rolled into the endless last zone). Unless the local player jumped too, it fades in as if new.
+local POP_DISTANCE = 50
+-- Within this many studs of the end of a loop, eggs also lay their dust one loop back (see the header).
+local ECHO_RANGE = 60
+-- Seconds an egg that goes off the side takes to fall out of sight.
+local FALL_TIME = 0.7
 
 -- Dust kicked up behind a rolling egg. Puffs stay where they were made, so a moving egg leaves a short trail
 -- behind it. The texture is Roblox's built-in smoke, so no uploaded asset is needed.
@@ -79,9 +91,10 @@ export type ClientEgg = {
 	lateral: number,
 	targetLateral: number,
 	riderUserId: number?,
-	-- Who claimed it, once someone has. Only they can get on it.
+	-- Who claimed it, once someone has. Nobody else can get on it, and it disappears when they get off.
 	ownerUserId: number?,
-	bouncesLeft: number,
+	-- Set while it bounces before cracking (its rider ran out of stamina).
+	bounceTime: number?,
 	model: Model,
 	shell: Part,
 	needLabel: TextLabel,
@@ -90,8 +103,15 @@ export type ClientEgg = {
 	dust: Part,
 	dustEmitter: ParticleEmitter,
 	dustOn: boolean,
+	-- The same, one loop back (see the header).
+	echo: Part,
+	echoEmitter: ParticleEmitter,
+	echoOn: boolean,
 	-- The zone whose ground color the dust has.
 	dustZone: number?,
+	-- Where it was drawn last frame.
+	drawnX: number?,
+	drawnZ: number?,
 }
 
 local EggController = {}
@@ -100,6 +120,8 @@ local eggs: { [number]: ClientEgg } = {}
 local eggFolder: Folder
 local dustFolder: Folder
 local localMaxStamina = Tuning.BASE_MAX_STAMINA
+-- The local player's position along the runway last frame (see getReferenceZ).
+local lastReferenceZ: number? = nil
 
 local function rgb(color: { number }): Color3
 	return Color3.fromRGB(color[1], color[2], color[3])
@@ -203,8 +225,9 @@ local function dustColor(zoneId: number): Color3
 	return rgb(Zones.List[zoneId].ground):Lerp(DUST_TINT, DUST_TINT_AMOUNT)
 end
 
-local function buildDust(spec, id: number): (Part, ParticleEmitter)
-	local part = newEggPart("Dust" .. id, dustFolder)
+-- An invisible strip on the ground that dust comes from.
+local function buildDust(name: string, spec): (Part, ParticleEmitter)
+	local part = newEggPart(name, dustFolder)
 	part.Transparency = 1
 	-- As wide as most of the egg, since it rolls on its side.
 	part.Size = Vector3.new(spec.halfLength * 1.5, 0.2, spec.radius * 0.5)
@@ -234,18 +257,49 @@ end
 -- Lets the puffs already in the air fade, then removes the egg's dust.
 local function stopDust(egg: ClientEgg)
 	egg.dustEmitter.Enabled = false
-	egg.dustOn = false
-	local dust = egg.dust
+	egg.echoEmitter.Enabled = false
+	egg.dustOn, egg.echoOn = false, false
+	local dust, echo = egg.dust, egg.echo
 	task.delay(DUST_LIFETIME.Max, function()
 		dust:Destroy()
+		echo:Destroy()
 	end)
 end
 
--- Where an egg is right now: side-to-side position, height of its centre (always resting on the ground), and
--- distance down the runway.
-local function eggPosition(egg: ClientEgg, now: number): (number, number, number)
+-- How far the egg has rolled in all, and where along the runway it is now (carried back in the endless last zone).
+local function travel(egg: ClientEgg, now: number): (number, number)
 	local z = EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now)
-	return egg.lateral, Runway.surfaceY(z) + egg.spec.radius, z
+	return z - egg.startZ, Runway.wrapZ(z)
+end
+
+-- Where the local player is along the runway: on their egg while riding, else their character. Eggs in the endless
+-- last zone are drawn at their copy nearest this.
+local function getReferenceZ(now: number): number
+	local ride = UiState.ride
+	local mine = if ride then eggs[ride.eggId] else nil
+	if mine then
+		local _, z = travel(mine, now)
+		return z
+	end
+	local character = localPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		return root.Position.Z
+	end
+	local camera = Workspace.CurrentCamera
+	return if camera then camera.CFrame.Position.Z else 0
+end
+
+-- Where to draw an egg: side-to-side position, height of its centre, distance down the runway, and how high it is
+-- off the ground (only during its bounce before cracking). The egg the local player rides is drawn where it really
+-- is, so it carries them back one loop when it gets there; every other egg is drawn at its copy nearest them.
+local function eggPosition(egg: ClientEgg, now: number, referenceZ: number): (number, number, number, number)
+	local _, z = travel(egg, now)
+	if egg.riderUserId ~= localPlayer.UserId then
+		z = Runway.nearestImage(z, referenceZ)
+	end
+	local bounce = EggMotion.bounceOffset(egg.bounceTime, now, Tuning.CRACK_BOUNCE_TIME, Tuning.CRACK_BOUNCE_HEIGHT)
+	return egg.lateral, Runway.surfaceY(z) + egg.spec.radius + bounce, z, bounce
 end
 
 local function getCameraPosition(): Vector3?
@@ -253,24 +307,52 @@ local function getCameraPosition(): Vector3?
 	return if camera then camera.CFrame.Position else nil
 end
 
+local function setEmitting(emitter: ParticleEmitter, on: boolean, current: boolean): boolean
+	if on ~= current then
+		emitter.Enabled = on
+	end
+	return on
+end
+
 -- Moves the dust strip to the ground just behind where the egg touches it, and turns the dust on while the egg is
--- near the camera.
-local function updateDust(egg: ClientEgg, x: number, z: number, cameraPosition: Vector3?)
-	local ground = Runway.surfaceY(z)
-	local position = Vector3.new(x, ground + 0.2, z - egg.spec.radius * 0.5)
+-- rolling on the ground near the camera. `echoing`: the local player is about to be carried back one loop.
+local function updateDust(egg: ClientEgg, x: number, z: number, cameraPosition: Vector3?, echoing: boolean)
+	local dustZ = z - egg.spec.radius * 0.5
+	local position = Vector3.new(x, Runway.surfaceY(dustZ) + 0.2, dustZ)
 	egg.dust.CFrame = CFrame.new(position)
 
 	-- Eggs roll into later zones; their dust matches the ground they are on.
 	local zoneId = Runway.zoneAt(z)
 	if zoneId ~= nil and zoneId ~= egg.dustZone then
 		egg.dustZone = zoneId
-		egg.dustEmitter.Color = ColorSequence.new(dustColor(zoneId))
+		local color = ColorSequence.new(dustColor(zoneId))
+		egg.dustEmitter.Color = color
+		egg.echoEmitter.Color = color
 	end
 
-	local on = cameraPosition == nil or (cameraPosition - position).Magnitude <= DUST_MAX_DISTANCE
-	if on ~= egg.dustOn then
-		egg.dustOn = on
-		egg.dustEmitter.Enabled = on
+	local near = cameraPosition == nil or (cameraPosition - position).Magnitude <= DUST_MAX_DISTANCE
+	local on = near and egg.bounceTime == nil
+	egg.dustOn = setEmitting(egg.dustEmitter, on, egg.dustOn)
+
+	local echoOn = on and echoing
+	if echoOn then
+		local echoZ = dustZ - Runway.LOOP_LENGTH
+		egg.echo.CFrame = CFrame.new(x, Runway.surfaceY(echoZ) + 0.2, echoZ)
+	end
+	egg.echoOn = setEmitting(egg.echoEmitter, echoOn, egg.echoOn)
+end
+
+-- Fades an egg in with a puff of dust, as when it first appears.
+local function appear(egg: ClientEgg)
+	for _, descendant in egg.model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Transparency = 1
+			TweenService:Create(descendant, TweenInfo.new(APPEAR_TIME), { Transparency = 0 }):Play()
+		end
+	end
+	if egg.dustOn then
+		-- Only when the dust is on, which means near enough the camera to be seen.
+		egg.dustEmitter:Emit(APPEAR_PUFFS)
 	end
 end
 
@@ -298,6 +380,28 @@ local function announceIfRare(egg: ClientEgg)
 	)
 end
 
+-- Holds a rider's character on top of an egg.
+local function pinRider(userId: number, x: number, y: number, z: number, radius: number)
+	local player = Players:GetPlayerByUserId(userId)
+	local character = player and player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		root.CFrame = CFrame.new(x, y + radius + SEAT_HEIGHT, z) * FACE_FORWARD
+	end
+end
+
+-- Puts an egg where it belongs this frame, with its dust and rider.
+local function draw(egg: ClientEgg, now: number, referenceZ: number, cameraPosition: Vector3?, echoing: boolean)
+	local x, y, z = eggPosition(egg, now, referenceZ)
+	local rolled = travel(egg, now)
+	egg.model:PivotTo(CFrame.new(x, y, z) * CFrame.Angles(EggMotion.rollAngle(rolled, egg.spec.radius), 0, 0))
+	egg.drawnX, egg.drawnZ = x, z
+	updateDust(egg, x, z, cameraPosition, echoing)
+	if egg.riderUserId ~= nil then
+		pinRider(egg.riderUserId, x, y, z, egg.spec.radius)
+	end
+end
+
 local function addEgg(data): ClientEgg?
 	if typeof(data) ~= "table" or eggs[data.id] ~= nil then
 		return nil
@@ -308,7 +412,8 @@ local function addEgg(data): ClientEgg?
 	end
 
 	local model, shell, needLabel = buildModel(spec, data.zone, data.rarity, data.id)
-	local dust, dustEmitter = buildDust(spec, data.id)
+	local dust, dustEmitter = buildDust("Dust" .. data.id, spec)
+	local echo, echoEmitter = buildDust("Echo" .. data.id, spec)
 	local egg: ClientEgg = {
 		id = data.id,
 		zone = data.zone,
@@ -320,37 +425,31 @@ local function addEgg(data): ClientEgg?
 		targetLateral = data.lateral,
 		riderUserId = data.rider,
 		ownerUserId = data.owner,
-		bouncesLeft = data.bounces,
+		bounceTime = data.bounceTime,
 		model = model,
 		shell = shell,
 		needLabel = needLabel,
 		dust = dust,
 		dustEmitter = dustEmitter,
 		dustOn = false,
+		echo = echo,
+		echoEmitter = echoEmitter,
+		echoOn = false,
 		dustZone = nil,
+		drawnX = nil,
+		drawnZ = nil,
 	}
 	eggs[egg.id] = egg
 	refreshLabel(egg)
 
 	local now = Workspace:GetServerTimeNow()
-	local x, y, z = eggPosition(egg, now)
-	model:PivotTo(CFrame.new(x, y, z))
+	draw(egg, now, getReferenceZ(now), getCameraPosition(), false)
 	model.Parent = eggFolder
-	updateDust(egg, x, z, getCameraPosition())
 
 	-- A brand-new egg fades in with a puff of dust where it appears. Eggs that were already rolling when this
 	-- player joined just show up.
 	if now - egg.spawnTime < 1 then
-		for _, descendant in model:GetDescendants() do
-			if descendant:IsA("BasePart") then
-				descendant.Transparency = 1
-				TweenService:Create(descendant, TweenInfo.new(APPEAR_TIME), { Transparency = 0 }):Play()
-			end
-		end
-		if egg.dustOn then
-			-- Only when the dust is on, which means near enough the camera to be seen.
-			dustEmitter:Emit(APPEAR_PUFFS)
-		end
+		appear(egg)
 	end
 	return egg
 end
@@ -385,36 +484,38 @@ local function removeEgg(eggId: number, reason: string?)
 		return
 	end
 	eggs[eggId] = nil
-
 	stopDust(egg)
+	egg.needLabel.Parent.Enabled = false
 
+	local x = egg.drawnX or egg.lateral
+	local z = egg.drawnZ or select(2, travel(egg, Workspace:GetServerTimeNow()))
 	if reason == "Cracked" then
-		local x, _, z = eggPosition(egg, Workspace:GetServerTimeNow())
 		showSplat(egg, x, z)
 		egg.model:Destroy()
 		return
 	end
 
-	-- Everything else fades out quickly.
-	egg.needLabel.Parent.Enabled = false
+	local tweenInfo = TweenInfo.new(0.25)
+	local goal: { [string]: any } = { Transparency = 1 }
+	local lifetime = 0.3
+	if reason == "FellOff" then
+		-- Tips over the side through a gap in the wall and drops out of sight.
+		tweenInfo = TweenInfo.new(FALL_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		lifetime = FALL_TIME + 0.1
+	end
+	local drop = Vector3.new(if x > 0 then 12 else -12, -40, 0)
 	for _, descendant in egg.model:GetDescendants() do
 		if descendant:IsA("BasePart") then
-			TweenService:Create(descendant, TweenInfo.new(0.25), { Transparency = 1 }):Play()
+			local partGoal = table.clone(goal)
+			if reason == "FellOff" then
+				partGoal.CFrame = descendant.CFrame + drop
+			end
+			TweenService:Create(descendant, tweenInfo, partGoal):Play()
 		end
 	end
-	task.delay(0.3, function()
+	task.delay(lifetime, function()
 		egg.model:Destroy()
 	end)
-end
-
--- Holds a rider's character on top of an egg.
-local function pinRider(userId: number, x: number, y: number, z: number, radius: number)
-	local player = Players:GetPlayerByUserId(userId)
-	local character = player and player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") then
-		root.CFrame = CFrame.new(x, y + radius + SEAT_HEIGHT, z) * FACE_FORWARD
-	end
 end
 
 local function render(deltaTime: number)
@@ -423,26 +524,27 @@ local function render(deltaTime: number)
 	local localUserId = localPlayer.UserId
 	local cameraPosition = getCameraPosition()
 
-	for eggId, egg in eggs do
+	local referenceZ = getReferenceZ(now)
+	-- The local player was just carried back one loop (or respawned): everything moved with them.
+	local playerJumped = lastReferenceZ ~= nil and math.abs(referenceZ - lastReferenceZ) > POP_DISTANCE
+	lastReferenceZ = referenceZ
+	local echoing = referenceZ >= Runway.LOOP_END - ECHO_RANGE and referenceZ < Runway.LOOP_END
+
+	for _, egg in eggs do
 		-- The local rider steers their own egg directly (see RideController); everyone else's eases toward
 		-- the last position the server reported.
 		if egg.riderUserId ~= localUserId then
 			egg.lateral += (egg.targetLateral - egg.lateral) * smoothing
 		end
 
-		local x, y, z = eggPosition(egg, now)
-		if z > Runway.LENGTH + 40 then
-			-- Safety net: the server removes eggs at the end of the runway, but never draw one past it.
-			removeEgg(eggId, nil)
-			continue
-		end
-
-		local angle = EggMotion.rollAngle(z - egg.startZ, egg.spec.radius)
-		egg.model:PivotTo(CFrame.new(x, y, z) * CFrame.Angles(angle, 0, 0))
-		updateDust(egg, x, z, cameraPosition)
-
-		if egg.riderUserId ~= nil then
-			pinRider(egg.riderUserId, x, y, z, egg.spec.radius)
+		local drawnBefore = egg.drawnZ
+		draw(egg, now, referenceZ, cameraPosition, echoing)
+		if
+			drawnBefore ~= nil
+			and not playerJumped
+			and math.abs((egg.drawnZ :: number) - drawnBefore) > POP_DISTANCE
+		then
+			appear(egg)
 		end
 	end
 end
@@ -454,21 +556,16 @@ function EggController.GetEgg(eggId: number): ClientEgg?
 	return eggs[eggId]
 end
 
--- The closest egg a jumping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
--- player just jumped off). Eggs someone else has claimed are skipped; the local player's own are not, so they can
--- hop back on.
+-- The closest egg a leaping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
+-- player just jumped off). Eggs that are taken, claimed, or cracking are skipped.
 function EggController.FindMountable(position: Vector3, now: number, ignoreEggId: number?): number?
 	local bestId: number? = nil
 	local bestDistance = math.huge
-	local localUserId = localPlayer.UserId
 	for eggId, egg in eggs do
-		if egg.riderUserId ~= nil or eggId == ignoreEggId then
+		if egg.riderUserId ~= nil or egg.ownerUserId ~= nil or egg.bounceTime ~= nil or eggId == ignoreEggId then
 			continue
 		end
-		if egg.ownerUserId ~= nil and egg.ownerUserId ~= localUserId then
-			continue
-		end
-		local x, y, z = eggPosition(egg, now)
+		local x, y, z = eggPosition(egg, now, position.Z)
 		local dx, dz = position.X - x, position.Z - z
 		-- The egg's footprint is an oval: long side to side, short front to back.
 		local nx = dx / (egg.spec.halfLength + Tuning.MOUNT_REACH)
@@ -476,7 +573,7 @@ function EggController.FindMountable(position: Vector3, now: number, ignoreEggId
 		if nx * nx + nz * nz > 1 then
 			continue
 		end
-		-- The player must be at least level with the middle of the egg, so running into one does nothing.
+		-- The player must be at least level with the middle of the egg.
 		if position.Y < y - 1 or position.Y > y + egg.spec.radius + 9 then
 			continue
 		end
@@ -534,11 +631,11 @@ function EggController.Init()
 		end
 	end)
 
-	Net.EggLeft.OnClientEvent:Connect(function(eggId: number, bouncesLeft: number, lateral: number)
+	Net.EggLeft.OnClientEvent:Connect(function(eggId: number, lateral: number, bounceTime: number?)
 		local egg = eggs[eggId]
 		if egg then
 			egg.riderUserId = nil
-			egg.bouncesLeft = bouncesLeft
+			egg.bounceTime = bounceTime
 			egg.targetLateral = lateral
 			refreshLabel(egg)
 		end

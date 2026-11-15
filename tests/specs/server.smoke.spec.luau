@@ -90,6 +90,19 @@ return function(harness)
 			expect.near(map.Forest.Ground.Size.X, runway.WIDTH)
 			expect.near(map.Forest.Ground.Size.Z, 600 / math.cos(math.atan(0.04)), 1e-3)
 			expect.equal(map.Desert.Sign.SurfaceGui.TextLabel.Text, "DESERT")
+			-- Walls along both sides, with gaps, up to where each player's device takes over.
+			local walls = map.Walls:GetChildren()
+			expect.truthy(#walls > 20, "walls")
+			local sides = {}
+			for _, wall in walls do
+				local position = wall.CFrame.Position
+				sides[if position.X > 0 then 1 else -1] = true
+				expect.truthy(math.abs(position.X) > runway.WIDTH / 2, "outside the runway")
+				expect.truthy(position.Z < runway.LENGTH)
+			end
+			expect.truthy(sides[1] and sides[-1], "both sides")
+			expect.falsy(map:FindFirstChild("EdgeWarning"), "no end of the runway to warn about")
+			expect.equal(session:service("Lighting").FogEnd, 2000)
 			expect.equal(session:service("Players").RespawnTime, 2)
 			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
 		end)
@@ -217,13 +230,10 @@ return function(harness)
 			expect.equal(#session:sent("RideEnded", player), 0)
 			expect.near(player.ReplicationFocus.Position.Z, eggPosition(session, egg).Z, 1e-3)
 
-			-- Jumping off: the egg disappears a few seconds later.
-			local tuning = shared(session).Tuning
+			-- Jumping off: the egg disappears at once.
 			session:fromClient("RequestDismount", player)
 			session:heartbeat(1 / 60)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "Dismount")
-			expect.equal(#session:sent("EggRemoved", "all"), 0)
-			session:heartbeat(0.1, math.ceil(tuning.CLAIMED_EGG_LINGER * 10) + 1)
 			local removed = session:lastSent("EggRemoved", "all")
 			expect.equal(removed.args[1], egg.id)
 			expect.equal(removed.args[2], "Claimed")
@@ -262,7 +272,7 @@ return function(harness)
 			expect.equal(#session:sent("EggLateral"), 0)
 		end)
 
-		it("throws off a rider who runs out of stamina, costing the egg a bounce", function()
+		it("throws off a rider who runs out of stamina; the egg bounces, cracks, and comes back", function()
 			local session = startServer()
 			local player, _, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
@@ -273,8 +283,22 @@ return function(harness)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "ThrownOff")
 			local left = session:lastSent("EggLeft", "all")
 			expect.equal(left.args[1], egg.id)
-			expect.equal(left.args[2], 1, "bounces left")
+			expect.truthy(left.args[3], "bounce time")
 			expect.equal(#session.profiles.Player_1.Data.Eggs, 0)
+
+			local tuning = shared(session).Tuning
+			session:clearSent()
+			session:heartbeat(0.1, math.ceil((tuning.CRACK_BOUNCE_TIME + tuning.EGG_RESPAWN_DELAY) * 10) + 2)
+			local cracked = session:lastSent("EggRemoved", "all")
+			expect.equal(cracked.args[1], egg.id)
+			expect.equal(cracked.args[2], "Cracked")
+			local back = false
+			for _, entry in session:sent("EggSpawned", "all") do
+				if entry.args[1].zone == 1 and entry.args[1].rarity == "Epic" then
+					back = true
+				end
+			end
+			expect.truthy(back, "the Epic egg is back at the start of the Forest")
 		end)
 
 		it("relays steering to everyone", function()
@@ -318,20 +342,88 @@ return function(harness)
 			expect.equal(session:lastSent("EggLeft", "all").args[1], second.id)
 		end)
 
-		it("kills a rider who goes over the end of the runway", function()
+		-- Rides a Forest egg into the side of the runway once it is a few studs into the stretch `pick` returns
+		-- (a wall, or a gap), steering toward the side the egg is already nearer. Returns the RideEnded reason.
+		local function steerIntoSide(session, player, root, pick)
+			local modules = shared(session)
+			runwayService(session).SetMaxStamina(player, 1e9)
+			local egg = dropEgg(session, 1, "Legendary")
+			local side = if egg.lateral >= 0 then 1 else -1
+			local startZ = pick(modules.Runway, side)
+			while eggPosition(session, egg).Z < startZ + 8 do
+				session:heartbeat(0.1)
+			end
+			root.Position = eggPosition(session, egg) + roblox.Vector3.new(0, 2, 0)
+			session:fromClient("RequestMount", player, egg.id)
+			session:heartbeat(1 / 60)
+			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
+			for _ = 1, 100 do
+				session:heartbeat(0.05)
+				session:fromClient("RideLateral", player, side * 999)
+				local ended = session:lastSent("RideEnded", player)
+				if ended then
+					return ended.args[1]
+				end
+			end
+			error("never reached the side")
+		end
+
+		it("kills a rider who steers into a wall", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local ended = steerIntoSide(session, player, root, function(runway, side)
+				return runway.wallsBetween(side, 40, 600)[1].startZ
+			end)
+			expect.equal(ended, "HitWall")
+			expect.equal(humanoid.Health, 0)
+		end)
+
+		it("kills a rider who goes off the side through a gap, after a short fall", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local ended = steerIntoSide(session, player, root, function(runway, side)
+				return runway.wallsBetween(side, 40, 600)[1].endZ
+			end)
+			expect.equal(ended, "FellOff")
+			expect.equal(humanoid.Health, 100, "still falling")
+			task.wait(shared(session).Tuning.FALL_OFF_TIME + 0.2)
+			expect.equal(humanoid.Health, 0)
+		end)
+
+		it("keeps a rider going far past where the runway used to end", function()
 			local session = startServer()
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
-			local egg = dropEgg(session, 5, "Eternal")
+			local egg = mount(session, player, root, 5, "Eternal")
+			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
+			-- 60 s at 21 studs a second: over 1,200 studs, twice the length of the last zone.
+			session:heartbeat(0.5, 120)
+			expect.equal(#session:sent("RideEnded", player), 0)
+			expect.equal(humanoid.Health, 100)
+			-- The streaming focus follows the egg round the loop.
+			local runway = shared(session).Runway
+			local z = player.ReplicationFocus.Position.Z
+			expect.truthy(z >= runway.FINAL_ZONE_START and z < runway.LOOP_END, "focus at " .. z)
+			expect.truthy(session:lastSent("EggClaimed", "all"), "claimed on the way")
+			expect.equal(session:lastSent("EggClaimed", "all").args[1], egg.id)
+		end)
 
-			-- Wait until the egg is too close to the end to be claimed, then get on.
-			session:heartbeat(0.5, 20)
-			root.Position = eggPosition(session, egg)
-			session:fromClient("RequestMount", player, egg.id)
-			session:heartbeat(0.5, 40)
-			expect.equal(session:lastSent("RideEnded", player).args[1], "Cliff")
-			expect.equal(humanoid.Health, 0)
+		it("kills a player who stays on the runway without landing on an egg", function()
+			local session = startServer()
+			local tuning = shared(session).Tuning
+			local _, leaper, leaperRoot = session:addPlayer(1, "Leaper")
+			local _, idler, idlerRoot = session:addPlayer(2, "Idler")
+			session:heartbeat(1 / 60)
+			leaperRoot.Position = roblox.Vector3.new(0, 40, 60)
+			idlerRoot.Position = roblox.Vector3.new(0, 13, -100) -- at the hub
+			session:heartbeat(0.5, math.floor(tuning.LEAP_TIME * 2))
+			expect.equal(leaper.Health, 100, "still has time to land")
+			session:heartbeat(0.5, math.ceil(tuning.LEAP_SERVER_GRACE * 2) + 2)
+			expect.equal(leaper.Health, 0)
+			expect.equal(idler.Health, 100)
 		end)
 	end)
 
