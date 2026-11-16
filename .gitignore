@@ -17,3 +17,6 @@ Thumbs.db
 
 # Test output
 /tests/.tmp/
+
+# Tool output: the egg gallery (lune run tools/egg-gallery) and the Studio model files (lune run tools/export-models)
+/tools/out/

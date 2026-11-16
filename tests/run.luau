@@ -9,7 +9,13 @@ local harness = require("./harness")
 local specs = {
 	"./specs/config.spec",
 	"./specs/shared.spec",
+	"./specs/eggModels.spec",
+	"./specs/petModels.spec",
 	"./specs/runwaySim.spec",
+	"./specs/hatchery.spec",
+	"./specs/hubLayout.spec",
+	"./specs/stalls.spec",
+	"./specs/fuse.spec",
 	"./specs/server.smoke.spec",
 	"./specs/client.smoke.spec",
 }

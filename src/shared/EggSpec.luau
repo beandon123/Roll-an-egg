@@ -1,8 +1,10 @@
 --!strict
--- Everything about one kind of egg (a zone + a rarity), worked out once from the config tables.
+-- Everything about one tier of egg (a zone + a rarity), worked out once from the config tables: its size, speed,
+-- claim time and stamina. Every egg of the same zone and rarity shares these; only the look differs.
 
 local Config = script.Parent.Config
 local Rarities = require(Config.Rarities)
+local Runway = require(script.Parent.Runway)
 local StaminaMath = require(script.Parent.StaminaMath)
 local Tuning = require(Config.Tuning)
 local Zones = require(Config.Zones)
@@ -14,9 +16,10 @@ export type Spec = {
 	radius: number,
 	-- Half the egg's side-to-side length in studs.
 	halfLength: number,
+	-- Distance down the runway where the egg's centre starts: resting on the ground, just past its zone's start line.
+	startZ: number,
 	rollSpeed: number,
 	claimTime: number,
-	bounces: number,
 	-- Stamina requirement shown on the egg.
 	requirement: number,
 	-- Stamina lost per second while riding it.
@@ -51,9 +54,9 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 		rarity = rarity,
 		radius = radius,
 		halfLength = radius * Tuning.EGG_LENGTH_RATIO,
+		startZ = Runway.zoneStartZ(zoneId) + Tuning.EGG_SPAWN_GAP + radius,
 		rollSpeed = info.rollSpeed,
 		claimTime = info.claimTime,
-		bounces = info.bounces,
 		requirement = requirement,
 		drain = StaminaMath.drainRate(requirement, info.claimTime, Tuning.DRAIN_FRACTION),
 	}
@@ -62,18 +65,40 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 end
 
 -- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights.
-function EggSpec.rollRarity(zoneId: number, random01: number): string
+-- `luck` (default 1) comes from server luck boosts (see Shared/LuckBoost): every rarity above Common is `luck` times
+-- as likely (compared with Common) as normal. `rareOdds`, if given, scales the weight of every rarity from
+-- `rareFrom` up (mid-cycle drops use it to make Secret and Eternal eggs much rarer than in the sunrise lineup).
+function EggSpec.rollRarity(
+	zoneId: number,
+	random01: number,
+	luck: number?,
+	rareOdds: number?,
+	rareFrom: string?
+): string
 	local zone = Zones.List[zoneId]
+	local multiplier = math.max(1, luck or 1)
+	local fromOrder = if rareFrom and Rarities.Info[rareFrom] then Rarities.Info[rareFrom].order else math.huge
+	local function weightOf(rarity: string): number
+		local weight = zone.weights[rarity] or 0
+		if rarity ~= "Common" then
+			weight *= multiplier
+		end
+		if rareOdds and Rarities.Info[rarity].order >= fromOrder then
+			weight *= rareOdds
+		end
+		return weight
+	end
+
 	local total = 0
 	for _, rarity in Rarities.Order do
-		total += zone.weights[rarity] or 0
+		total += weightOf(rarity)
 	end
 
 	local target = random01 * total
 	local running = 0
-	local last = "Common"
+	local last = ""
 	for _, rarity in Rarities.Order do
-		local weight = zone.weights[rarity] or 0
+		local weight = weightOf(rarity)
 		if weight > 0 then
 			running += weight
 			last = rarity
@@ -83,6 +108,41 @@ function EggSpec.rollRarity(zoneId: number, random01: number): string
 		end
 	end
 	return last
+end
+
+-- The zone's eggs of one rarity (design names such as "MossStag"), in the order the zone lists them.
+function EggSpec.eggsOf(zoneId: number, rarity: string): { string }
+	local zone = Zones.List[zoneId]
+	local list = {}
+	if zone then
+		for _, entry in zone.eggs do
+			if entry.rarity == rarity then
+				table.insert(list, entry.egg)
+			end
+		end
+	end
+	return list
+end
+
+-- Picks one of the zone's eggs of a rarity from a random number in [0, 1), each equally likely.
+function EggSpec.pickEgg(zoneId: number, rarity: string, random01: number): string?
+	local list = EggSpec.eggsOf(zoneId, rarity)
+	if #list == 0 then
+		return nil
+	end
+	return list[math.clamp(math.floor(random01 * #list) + 1, 1, #list)]
+end
+
+-- The zone and rarity an egg drops at, or nil if it is in no zone's lineup.
+function EggSpec.placeOf(kind: string): (number?, string?)
+	for zoneId, zone in Zones.List do
+		for _, entry in zone.eggs do
+			if entry.egg == kind then
+				return zoneId, entry.rarity
+			end
+		end
+	end
+	return nil, nil
 end
 
 return EggSpec

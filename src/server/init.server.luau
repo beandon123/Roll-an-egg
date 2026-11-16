@@ -10,7 +10,17 @@ local ORDER = {
 	"DataService",
 	"RunwayService",
 	"MapService",
-	"DevService",
+	"PlotService",
+	"MountService",
+	"InventoryService",
+	"ShopService",
+	"StationService",
+	"SettingsService",
+	"LeaderboardService",
+	"TeleportService",
+	"ShowroomService",
+	"EventService",
+	"AdminService",
 }
 
 local loaded = {}

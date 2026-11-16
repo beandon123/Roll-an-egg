@@ -10,27 +10,18 @@ function EggMotion.zAt(spawnTime: number, startZ: number, rollSpeed: number, now
 	return startZ + rollSpeed * math.max(0, now - spawnTime)
 end
 
--- Extra height while an egg drops in from its chute. `age` is seconds since it spawned.
-function EggMotion.dropOffset(age: number, dropTime: number, dropHeight: number): number
-	if age >= dropTime or dropTime <= 0 then
+-- Extra height during the one small bounce an egg makes before it cracks (when its rider runs out of stamina).
+-- `bounceTime` is when the bounce began, or nil if the egg is not bouncing.
+function EggMotion.bounceOffset(bounceTime: number?, now: number, duration: number, height: number): number
+	if bounceTime == nil or duration <= 0 then
 		return 0
 	end
-	local remaining = 1 - math.max(0, age) / dropTime
-	return dropHeight * remaining * remaining
-end
-
--- Extra height during the hop an egg makes when it is left without a rider.
--- `bounceTime` is when the hop began, or nil if the egg has never hopped.
-function EggMotion.hopOffset(bounceTime: number?, now: number, hopDuration: number, hopHeight: number): number
-	if bounceTime == nil or hopDuration <= 0 then
-		return 0
-	end
-	local u = (now - bounceTime) / hopDuration
+	local u = (now - bounceTime) / duration
 	if u <= 0 or u >= 1 then
 		return 0
 	end
-	-- A parabola that peaks at hopHeight halfway through.
-	return hopHeight * 4 * u * (1 - u)
+	-- A parabola that peaks at `height` halfway through.
+	return height * 4 * u * (1 - u)
 end
 
 -- How far (radians) an egg of this radius has turned after rolling `distance` studs.
