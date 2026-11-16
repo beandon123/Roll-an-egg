@@ -21,8 +21,11 @@
 -- Also shows the on-screen message when a Secret or rarer egg spawns.
 --
 -- Each egg's look comes from Shared/EggModels (a blocky model, different for every zone and rarity), built into parts
--- by Shared/EggRig. The parts are welded to one invisible, anchored root part, so moving an egg each frame is a
--- single CFrame write.
+-- by Shared/EggRig. Every part is anchored, and this controller writes where every one of them goes, each at its own
+-- place on the egg (see setPose). Nothing is welded: an egg is never moved by moving one part and trusting the rest to
+-- follow, because parts moved before a weld takes hold are left behind and then swing round the egg as it rolls.
+--
+-- Eggs far from the camera are redrawn less often (see redrawInterval), since nobody can see the difference.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -70,6 +73,14 @@ local DUST_MAX_DISTANCE = 250
 -- Seconds an egg that goes off the side takes to fall out of sight.
 local FALL_TIME = 0.7
 
+-- Eggs far from the camera are redrawn every few frames instead of every frame: within NEAR_DISTANCE studs every
+-- frame, out to FAR_DISTANCE every MID_REDRAW_FRAMES frames, beyond that every FAR_REDRAW_FRAMES. An egg someone is
+-- riding is always redrawn, because its rider is held on it.
+local NEAR_DISTANCE = 500
+local FAR_DISTANCE = 1500
+local MID_REDRAW_FRAMES = 2
+local FAR_REDRAW_FRAMES = 6
+
 -- Eggs with an even id lie the other way round (pointed end to the left), so the runway looks less uniform.
 local FLIPPED = CFrame.Angles(0, math.pi, 0)
 -- How quickly a riderless egg settles onto its path after its rider leaves (it starts from where it was drawn).
@@ -113,8 +124,18 @@ export type ClientEgg = {
 	bounceTime: number?,
 	cracking: boolean,
 	model: Model,
-	-- The invisible part every other part is welded to. Moving it moves the whole egg.
+	-- The invisible part at the middle of the egg, which its label and effects sit on.
 	root: Part,
+	-- Every part of the egg (the root first, then its blocks), where each one sits measured from the root, and how
+	-- see-through its design makes it. `cframes` is a scratch list, reused every frame, of where each part goes.
+	parts: { BasePart },
+	offsets: { CFrame },
+	shown: { number },
+	cframes: { CFrame },
+	-- Whether the model is in the Workspace yet.
+	placed: boolean,
+	-- How high its middle rides above the ground (EggRig.rollHeight).
+	rollHeight: number,
 	-- Which way round the egg lies.
 	facing: CFrame,
 	needLabel: TextLabel,
@@ -128,9 +149,10 @@ export type ClientEgg = {
 	echoOn: boolean,
 	dustZone: number?,
 	wobbleAt: number?,
-	-- Where it was drawn last frame.
+	-- Where it was last drawn, and on which frame.
 	drawnX: number?,
 	drawnZ: number?,
+	drawnFrame: number,
 }
 
 local EggController = {}
@@ -142,6 +164,10 @@ local eggFolder: Folder
 local localMaxStamina = Tuning.BASE_MAX_STAMINA
 -- The local player's position along the runway last frame (see getReferenceZ).
 local lastReferenceZ: number? = nil
+-- Frames drawn so far, for redrawing far-off eggs every few frames, and the frame on which the local player was last
+-- carried back one loop (or respawned).
+local frame = 0
+local lastJumpFrame = 0
 
 local function rgb(color: { number }): Color3
 	return Color3.fromRGB(color[1], color[2], color[3])
@@ -224,6 +250,39 @@ local function buildModel(spec, kind: string, rarity: string, id: number): (Mode
 	local needLabel = newLabel(billboard, "", CAN_AFFORD_COLOR, UDim2.fromScale(0, 0.55), UDim2.fromScale(1, 0.45))
 
 	return model, root, needLabel
+end
+
+-- Every part of a freshly copied egg model (the root first, then its blocks), where each one sits measured from the
+-- root, and how see-through its design makes it. Read before anything moves or fades the egg.
+local function layoutOf(model: Model, root: Part): ({ BasePart }, { CFrame }, { number })
+	local parts: { BasePart } = { root }
+	local offsets = { CFrame.identity }
+	local shown = { root.Transparency }
+	local rootCFrame = root.CFrame
+	for _, child in model:GetChildren() do
+		if child:IsA("BasePart") and child ~= root then
+			table.insert(parts, child)
+			table.insert(offsets, rootCFrame:ToObjectSpace(child.CFrame))
+			table.insert(shown, child.Transparency)
+		end
+	end
+	return parts, offsets, shown
+end
+
+-- Puts the whole egg at `pose` (where its root goes): every part is written, each at its own place on the egg. Once
+-- the egg is in the Workspace all its parts move in one call.
+local function setPose(egg: ClientEgg, pose: CFrame)
+	local parts, offsets, cframes = egg.parts, egg.offsets, egg.cframes
+	for index = 1, #parts do
+		cframes[index] = pose * offsets[index]
+	end
+	if egg.placed then
+		Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+	else
+		for index, part in parts do
+			part.CFrame = cframes[index]
+		end
+	end
 end
 
 -- The dust an egg kicks up as it rolls: puffs from a strip across its width, drifting up and back.
@@ -310,7 +369,7 @@ local function eggPosition(egg: ClientEgg, now: number, referenceZ: number): (nu
 		z = Runway.nearestImage(z, referenceZ)
 	end
 	local bounce = EggMotion.bounceOffset(egg.bounceTime, now, Tuning.CRACK_BOUNCE_TIME, Tuning.CRACK_BOUNCE_HEIGHT)
-	return x, Runway.surfaceY(z) + egg.spec.radius + bounce, z, bounce
+	return x, Runway.surfaceY(z) + egg.rollHeight + bounce, z, bounce
 end
 
 local function getCameraPosition(): Vector3?
@@ -353,18 +412,14 @@ local function updateDust(egg: ClientEgg, x: number, z: number, cameraPosition: 
 	egg.echoOn = setEmitting(egg.echoEmitter, echoOn, egg.echoOn)
 end
 
--- Fades an egg in with a puff of dust, as when it first appears.
+-- Fades an egg in with a puff of dust, as when it first appears. Each part fades to how see-through its design makes
+-- it (not to whatever it is right now, which is partly faded if the egg was already fading in).
 local function appear(egg: ClientEgg)
-	for _, descendant in egg.model:GetDescendants() do
-		if
-			descendant:IsA("BasePart")
-			and descendant ~= egg.root
-			and descendant ~= egg.dust
-			and descendant ~= egg.echo
-		then
-			local shown = descendant.Transparency
-			descendant.Transparency = 1
-			TweenService:Create(descendant, TweenInfo.new(APPEAR_TIME), { Transparency = shown }):Play()
+	for index, part in egg.parts do
+		local shown = egg.shown[index]
+		if shown < 1 then
+			part.Transparency = 1
+			TweenService:Create(part, TweenInfo.new(APPEAR_TIME), { Transparency = shown }):Play()
 		end
 	end
 	if egg.dustOn then
@@ -406,9 +461,17 @@ local function pinRider(userId: number, x: number, y: number, z: number, radius:
 	end
 end
 
--- Puts an egg where it belongs this frame, with its dust and rider.
-local function draw(egg: ClientEgg, now: number, referenceZ: number, cameraPosition: Vector3?, echoing: boolean)
-	local x, y, z = eggPosition(egg, now, referenceZ)
+-- Puts an egg at (x, y, z), where eggPosition says it belongs this frame, turned as far as it has rolled, with its
+-- dust and rider.
+local function draw(
+	egg: ClientEgg,
+	now: number,
+	x: number,
+	y: number,
+	z: number,
+	cameraPosition: Vector3?,
+	echoing: boolean
+)
 	local wobble = CFrame.identity
 	if egg.wobbleAt then
 		local t = now - egg.wobbleAt
@@ -419,7 +482,7 @@ local function draw(egg: ClientEgg, now: number, referenceZ: number, cameraPosit
 		end
 	end
 	local angle = EggMotion.rollAngle(rolled(egg, now), egg.spec.radius)
-	egg.root.CFrame = CFrame.new(x, y, z) * wobble * CFrame.Angles(angle, 0, 0) * egg.facing
+	setPose(egg, CFrame.new(x, y, z) * wobble * CFrame.Angles(angle, 0, 0) * egg.facing)
 	egg.drawnX, egg.drawnZ = x, z
 	updateDust(egg, x, z, cameraPosition, echoing)
 	if egg.riderUserId ~= nil then
@@ -445,6 +508,8 @@ local function addEgg(data): ClientEgg?
 	end
 
 	local model, root, needLabel = buildModel(spec, kind, data.rarity, data.id)
+	-- Before the dust strips join the model: they are placed on their own, not as parts of the egg.
+	local parts, offsets, shown = layoutOf(model, root)
 	local dust, dustEmitter = addDust(model, spec)
 	local echo = dust:Clone()
 	echo.Name = "Echo"
@@ -474,6 +539,12 @@ local function addEgg(data): ClientEgg?
 		cracking = data.bounceTime ~= nil,
 		model = model,
 		root = root,
+		parts = parts,
+		offsets = offsets,
+		shown = shown,
+		cframes = table.create(#parts),
+		placed = false,
+		rollHeight = EggRig.rollHeight(spec.radius),
 		facing = if data.id % 2 == 0 then FLIPPED else CFrame.identity,
 		needLabel = needLabel,
 		dust = dust,
@@ -486,13 +557,17 @@ local function addEgg(data): ClientEgg?
 		wobbleAt = nil,
 		drawnX = nil,
 		drawnZ = nil,
+		drawnFrame = frame,
 	}
 	eggs[egg.id] = egg
 	refreshLabel(egg)
 
+	-- Every part is put in its place before the egg is shown, so it never appears anywhere but where it belongs.
 	local now = Workspace:GetServerTimeNow()
-	draw(egg, now, getReferenceZ(now), getCameraPosition(), false)
+	local x, y, z = eggPosition(egg, now, getReferenceZ(now))
+	draw(egg, now, x, y, z, getCameraPosition(), false)
 	model.Parent = eggFolder
+	egg.placed = true
 	-- A brand-new egg fades in with a puff of dust where it appears. Eggs that were already rolling when this
 	-- player joined just show up.
 	if now - egg.spawnTime < 1 then
@@ -559,7 +634,7 @@ local function removeEgg(eggId: number, reason: string?)
 		end
 	end
 	if falling then
-		-- The parts are welded to the root, so the root falls too.
+		-- The root falls with them, taking the egg's light and particles along.
 		TweenService:Create(egg.root, tweenInfo, { CFrame = egg.root.CFrame + drop }):Play()
 	end
 	task.delay(if falling then FALL_TIME + 0.1 else 0.3, function()
@@ -567,7 +642,18 @@ local function removeEgg(eggId: number, reason: string?)
 	end)
 end
 
+-- How many frames go by between redraws of an egg this many studs from the camera.
+local function redrawInterval(distance: number): number
+	if distance <= NEAR_DISTANCE then
+		return 1
+	elseif distance <= FAR_DISTANCE then
+		return MID_REDRAW_FRAMES
+	end
+	return FAR_REDRAW_FRAMES
+end
+
 local function render(deltaTime: number)
+	frame += 1
 	local now = Workspace:GetServerTimeNow()
 	local smoothing = math.min(1, deltaTime * LATERAL_SMOOTHING)
 	local localUserId = localPlayer.UserId
@@ -576,7 +662,9 @@ local function render(deltaTime: number)
 
 	local referenceZ = getReferenceZ(now)
 	-- The local player was just carried back one loop (or respawned): everything moved with them.
-	local playerJumped = lastReferenceZ ~= nil and math.abs(referenceZ - lastReferenceZ) > POP_DISTANCE
+	if lastReferenceZ ~= nil and math.abs(referenceZ - lastReferenceZ) > POP_DISTANCE then
+		lastJumpFrame = frame
+	end
 	lastReferenceZ = referenceZ
 	local echoing = referenceZ >= Runway.LOOP_END - ECHO_RANGE and referenceZ < Runway.LOOP_END
 
@@ -594,13 +682,21 @@ local function render(deltaTime: number)
 			egg.lateral += (egg.targetLateral - egg.lateral) * smoothing
 		end
 
-		local drawnBefore = egg.drawnZ
-		draw(egg, now, referenceZ, cameraPosition, echoing)
-		if
-			drawnBefore ~= nil
-			and not playerJumped
-			and math.abs((egg.drawnZ :: number) - drawnBefore) > POP_DISTANCE
-		then
+		local x, y, z = eggPosition(egg, now, referenceZ)
+		if egg.riderUserId == nil and cameraPosition ~= nil then
+			-- Far from the camera: redrawn only every few frames (eggs take turns, by id).
+			local interval = redrawInterval((cameraPosition - Vector3.new(x, y, z)).Magnitude)
+			if interval > 1 and (frame + eggId) % interval ~= 0 then
+				continue
+			end
+		end
+
+		local drawnBefore, drawnFrame = egg.drawnZ, egg.drawnFrame
+		draw(egg, now, x, y, z, cameraPosition, echoing)
+		egg.drawnFrame = frame
+		-- An egg that jumped to another copy of itself fades in there, unless it only moved because the local player
+		-- did (since it was last drawn).
+		if drawnBefore ~= nil and drawnFrame >= lastJumpFrame and math.abs(z - drawnBefore) > POP_DISTANCE then
 			appear(egg)
 		end
 	end

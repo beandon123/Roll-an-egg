@@ -46,8 +46,10 @@ Tuning.EGG_RESPAWN_DELAY = 5
 Tuning.WALL_KNOCKBACK = 6
 
 -- Riding
--- Studs per second a rider can steer the egg sideways before upgrades.
-Tuning.BASE_AGILITY = 14
+-- Studs per second a rider can steer the egg sideways before upgrades. Tuned with the eggs' roll speeds
+-- (Config/Rarities): the faster eggs roll, the sooner the next row of obstacles arrives, so the quicker a rider has to
+-- be able to move over.
+Tuning.BASE_AGILITY = 21
 -- How close (studs beyond the egg's radius) a jumping player must be for the client to ask to mount.
 Tuning.MOUNT_REACH = 2.5
 -- How far (studs beyond the egg's radius) the server lets the player be from the egg when it checks a mount.
@@ -70,8 +72,9 @@ Tuning.LEAP_TIME = 3.5
 -- Upward speed at the start of a leap, and the fraction of normal gravity during it.
 Tuning.LEAP_UP_SPEED = 45
 Tuning.LEAP_GRAVITY = 0.2
--- Forward speed when leaping off the hub onto the runway.
-Tuning.LEAP_FORWARD_SPEED = 18
+-- Forward speed when leaping off the hub onto the runway: half as fast again as the slowest egg rolls
+-- (Config/Rarities), so the leap carries a player in among the eggs rolling away from the start.
+Tuning.LEAP_FORWARD_SPEED = 27
 -- A character whose root part is lower than this above the runway is standing on it.
 Tuning.STANDING_HEIGHT = 3.4
 -- Extra seconds the server allows before it kills a player who is still on the runway without an egg (the

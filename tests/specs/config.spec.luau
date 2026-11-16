@@ -33,6 +33,15 @@ return function(harness)
 				expect.truthy(higher.hatchTime > lower.hatchTime, "hatchTime")
 			end
 		end)
+
+		it("rolls every egg faster than walking, and slower than a pet of its own rarity runs", function()
+			local Economy = harness.load("src/shared/Config/Economy")
+			for _, rarity in Rarities.Order do
+				local speed = Rarities.Info[rarity].rollSpeed
+				expect.truthy(speed > 16, rarity .. " outpaces a player on foot")
+				expect.truthy(speed < Economy.MOUNT_SPEED[rarity], rarity .. " can be caught on a pet of its rarity")
+			end
+		end)
 	end)
 
 	describe("Zones", function()
@@ -193,13 +202,14 @@ return function(harness)
 			end
 		end)
 
-		it("lets every egg be claimed before it rolls off the end of the runway", function()
+		it("lets every egg be claimed within a zone and a half of riding", function()
+			-- The runway has no end (the last zone repeats), so a claim cannot run out of it; but claiming one egg
+			-- should not take a tour of the whole runway either.
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					local rideDistance = spec.rollSpeed * spec.claimTime
-					local room = Runway.LENGTH - Runway.zoneStartZ(zone.id)
-					expect.truthy(rideDistance < room * 0.95, zone.name .. " " .. rarity)
+					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 1.5, zone.name .. " " .. rarity)
 				end
 			end
 		end)

@@ -593,9 +593,9 @@ return function(harness)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = mount(session, player, root, 6, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 60 s at 21 studs a second: over 1,200 studs, twice the length of the last zone. Steer round the
-			-- obstacles along one path planned for the whole ride from where the egg is now. It is planned in
-			-- distance rolled, not where the egg is drawn: the last zone repeats, so the obstacles match.
+			-- 60 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
+			-- path planned for the whole ride from where the egg is now. It is planned in distance rolled, not where
+			-- the egg is drawn: the last zone repeats, so the obstacles match.
 			local modules = shared(session)
 			local spec = modules.EggSpec.get(6, "Eternal")
 			local function rolledZ()
@@ -603,7 +603,9 @@ return function(harness)
 			end
 			local fromZ = rolledZ()
 			local lane = modules.Runway.mountLateral(eggPosition(session, egg).X, spec.halfLength)
-			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + 1400, spec.halfLength, spec.radius)
+			local rideLength = spec.rollSpeed * 60
+			expect.truthy(rideLength > modules.Runway.LOOP_LENGTH * 2, "more than twice round the loop")
+			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + rideLength + 100, spec.halfLength, spec.radius)
 			for _ = 1, 60 * 30 do
 				session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, rolledZ()))
 				session:heartbeat(1 / 30)
@@ -935,6 +937,8 @@ return function(harness)
 			})
 			humanoid.WalkSpeed = 16
 			humanoid.HipHeight = 2
+			-- Well away from the origin, where pet models are built.
+			root.CFrame = roblox.CFrame.new(60, 13, -150)
 			session:fromClient("RidePet", player, "steed")
 			local mounts = session:service("Workspace").Mounts:GetChildren()
 			expect.equal(#mounts, 1)
@@ -944,6 +948,19 @@ return function(harness)
 			expect.equal(ridden:GetAttribute("Variant"), "Gold")
 			expect.equal(ridden.PrimaryPart.MountWeld.Part0, root)
 			expect.equal(ridden.PrimaryPart.Anchored, false)
+			-- All of it is under the rider: every part arrives with the root (which is the size of the whole pet), not
+			-- left behind where pet models are built.
+			local reach = ridden.PrimaryPart.Size.Magnitude
+			expect.truthy(
+				(ridden.PrimaryPart.CFrame.Position - root.CFrame.Position).Magnitude <= reach,
+				"under the rider"
+			)
+			for _, part in ridden:GetDescendants() do
+				if part:IsA("BasePart") then
+					local away = (part.CFrame.Position - ridden.PrimaryPart.CFrame.Position).Magnitude
+					expect.truthy(away <= reach, `the pet's {part.Name} is {away} studs from it`)
+				end
+			end
 			expect.equal(humanoid.WalkSpeed, 30 + 4, "an Epic pet, plus Gold")
 			expect.truthy(humanoid.HipHeight > 2, "lifted onto its back")
 			expect.equal(data.Mount, "steed")

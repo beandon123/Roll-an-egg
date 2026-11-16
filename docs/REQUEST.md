@@ -93,14 +93,14 @@ Original theme, art, and creatures.
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
     Rarity     Size   Claim time  Roll speed  Duel (beats @ tempo)
-    Common     1.0x   5 s         12 st/s     6 @ 90 bpm
-    Uncommon   1.1x   7 s         13 st/s     6 @ 100 bpm
-    Rare       1.25x  9 s         14 st/s     8 @ 110 bpm
-    Epic       1.4x   12 s        16 st/s     8 @ 125 bpm
-    Legendary  1.6x   15 s        17 st/s     10 @ 135 bpm
-    Mythic     1.8x   18 s        19 st/s     10 @ 150 bpm
-    Secret     2.0x   22 s        20 st/s     12 @ 160 bpm
-    Eternal    2.3x   26 s        21 st/s     12 @ 170 bpm
+    Common     1.0x   5 s         18 st/s     6 @ 90 bpm
+    Uncommon   1.1x   7 s         20 st/s     6 @ 100 bpm
+    Rare       1.25x  9 s         21 st/s     8 @ 110 bpm
+    Epic       1.4x   12 s        24 st/s     8 @ 125 bpm
+    Legendary  1.6x   15 s        26 st/s     10 @ 135 bpm
+    Mythic     1.8x   18 s        28 st/s     10 @ 150 bpm
+    Secret     2.0x   22 s        30 st/s     12 @ 160 bpm
+    Eternal    2.3x   26 s        32 st/s     12 @ 170 bpm
 
 First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 500 decided, rest proposed):
 

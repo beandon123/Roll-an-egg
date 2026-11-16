@@ -88,6 +88,14 @@ local DISCS: { [number]: { { number } } } = {
 	[12] = { { 6, 3 }, { 5, 5 }, { 3, 6 } },
 }
 
+-- The furthest any corner of the shell is from the egg's long axis, in voxels: more than RADIUS, which is how far its
+-- flat sides are. (A rolling egg turns on those corners; see EggRig.rollHeight.)
+local cornerReach = 0
+for _, rect in DISCS[R * 2] do
+	cornerReach = math.max(cornerReach, math.sqrt(rect[1] * rect[1] + rect[2] * rect[2]))
+end
+EggModels.CORNER_REACH = cornerReach
+
 -- Layer widths from bottom to top.
 local PROFILES: { [string]: { number } } = {
 	Classic = { 6, 8, 10, 12, 12, 12, 12, 12, 12, 10, 10, 10, 8, 8, 6, 4 },

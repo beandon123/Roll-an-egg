@@ -268,6 +268,16 @@ roblox.implementMethod("Model", "PivotTo", function(self, cframe)
 	end
 end)
 
+-- Writes each part's CFrame, as Roblox does (in one go, without the usual property-changed events).
+roblox.implementMethod("Workspace", "BulkMoveTo", function(_, parts, cframes, mode)
+	assert(#parts == #cframes, "BulkMoveTo: one CFrame for each part")
+	assert(mode == nil or mode.EnumType == Enum.BulkMoveMode, "BulkMoveTo: the third argument is a BulkMoveMode")
+	for index, part in parts do
+		assert(part:IsDescendantOf(current.game:GetService("Workspace")), "BulkMoveTo: parts must be in the Workspace")
+		part.CFrame = cframes[index]
+	end
+end)
+
 roblox.implementMethod("Humanoid", "GetState", function(self)
 	return current.humanoidStates[self] or Enum.HumanoidStateType.Running
 end)

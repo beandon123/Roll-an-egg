@@ -21,7 +21,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that appear on the
   ground at the start of their zone and roll down the runway lap after lap; now and then an extra egg drops
-  mid-cycle. Rarity sets their size, speed and stamina requirement. Rolling eggs leave a small trail of dust.
+  mid-cycle. Rarity sets their size, speed (18 studs a second for a Common egg up to 32 for an Eternal one; walking
+  is 16) and stamina requirement. Rolling eggs leave a small trail of dust.
 - When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when (a lineup egg on
   its first lap of the day only). Other eggs spawn quietly.
 - Zone-themed obstacles on the runway. Eggs nobody is riding steer round them; riders have to steer clear

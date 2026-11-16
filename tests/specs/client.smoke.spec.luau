@@ -79,6 +79,7 @@ return function(harness)
 		local folder = session:service("ReplicatedStorage").Shared
 		return {
 			EggSpec = session:require(folder.EggSpec),
+			EggRig = session:require(folder.EggRig),
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
@@ -117,7 +118,8 @@ return function(harness)
 		session:service("Workspace").CurrentCamera.CFrame = roblox.CFrame.new(position + Vector3.new(0, 10, -20))
 	end
 
-	-- Where an egg is now: where its rider has it, or along its path round the obstacles.
+	-- Where the middle of an egg is drawn now: where its rider has it, or along its path round the obstacles, riding
+	-- at its rolling height above the ground.
 	local function eggCenter(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
@@ -132,7 +134,7 @@ return function(harness)
 			local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 			x = modules.Obstacles.lateralAt(path, z)
 		end
-		return Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z), spec
+		return Vector3.new(x, modules.Runway.surfaceY(z) + modules.EggRig.rollHeight(spec.radius), z), spec
 	end
 
 	-- Puts the character in the air right on top of an egg, as if it had just jumped there.
@@ -196,7 +198,7 @@ return function(harness)
 			)
 		end)
 
-		it("builds each egg from its blocky model, welded to the root", function()
+		it("builds each egg from its blocky model, every part anchored and none welded", function()
 			local session, parts = startClient()
 			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common"))
 			session:fromServer("EggSpawned", eggData(session, 3, 1, "Common", 5, 8))
@@ -211,11 +213,14 @@ return function(harness)
 				end
 			end
 			expect.equal(#blocks, #EggModels.get("Leafy").boxes, "one part per box")
+			-- Nothing holds an egg together but where its parts are put: no welds to go wrong, no physics to pull a
+			-- part away.
 			for _, block in blocks do
-				local weld = block:FindFirstChildOfClass("WeldConstraint")
-				expect.truthy(weld, block.Name .. " is welded")
-				expect.equal(block.Anchored, false)
+				expect.equal(block.Anchored, true, block.Name .. " is anchored")
 				expect.equal(block.CanCollide, false)
+			end
+			for _, descendant in common:GetDescendants() do
+				expect.falsy(descendant:IsA("JointInstance") or descendant:IsA("WeldConstraint"), "no welds")
 			end
 
 			-- A second egg of the same kind is a copy of the same model.
@@ -296,6 +301,77 @@ return function(harness)
 			position = parts.eggFolder.Egg1.Root.CFrame.Position
 			expect.near(position.X, expected.X, 1e-3, "x later")
 		end)
+
+		it("keeps every part of an egg in its place, where it appears and as it rolls", function()
+			local session, parts = startClient()
+			local EggRig = session:require(session:service("ReplicatedStorage").Shared.EggRig)
+			-- In the second zone, 600 studs from where egg models are built: a part left behind there, or carried
+			-- round the root at that distance, is nowhere near the egg.
+			local egg = eggData(session, 1, 2, "Common", 5, 6)
+			local center, spec = eggCenter(session, egg)
+			cameraAt(session, center)
+			session:fromServer("EggSpawned", egg)
+			local model = parts.eggFolder.Egg1
+
+			-- Where the design puts each block, measured from the root.
+			local reference = EggRig.build(egg.kind, spec)
+			local referenceRoot = reference.PrimaryPart
+			local function furthestOut(): (number, number)
+				local worst, count = 0, 0
+				for _, block in reference:GetChildren() do
+					if block:IsA("BasePart") and block ~= referenceRoot then
+						local drawn = model:FindFirstChild(block.Name)
+						local expected = model.Root.CFrame * referenceRoot.CFrame:ToObjectSpace(block.CFrame)
+						worst = math.max(
+							worst,
+							(drawn.CFrame.Position - expected.Position).Magnitude,
+							(drawn.CFrame.LookVector - expected.LookVector).Magnitude,
+							(drawn.CFrame.UpVector - expected.UpVector).Magnitude
+						)
+						count += 1
+					end
+				end
+				return worst, count
+			end
+
+			local worst, count = furthestOut()
+			expect.truthy(count > 10, "the egg has blocks")
+			expect.truthy(worst < 1e-2, `in one piece where it appears (a block is {worst} out)`)
+
+			local turnedBefore = model.Root.CFrame.UpVector
+			session:renderFrame(1 / 60, 45)
+			worst = furthestOut()
+			expect.truthy(worst < 1e-2, `in one piece as it rolls (a block is {worst} out)`)
+			expect.truthy((model.Root.CFrame.UpVector - turnedBefore).Magnitude > 0.1, "it turns as it rolls")
+			expect.near(model.Root.CFrame.Position.Z, eggCenter(session, egg).Z, 1e-3, "and moves down the runway")
+		end)
+
+		it(
+			"fades an egg that jumps to another copy of itself fully back in, even part-way through fading in",
+			function()
+				local session, parts = startClient()
+				local modules = shared(session)
+				local runway = modules.Runway
+				local rarity = firstRarity(session, 6)
+				local spec = modules.EggSpec.get(6, rarity)
+				-- For a player back at the hub, an egg one loop into the endless last zone is drawn back at the zone's
+				-- start. This one is a stud short of that.
+				local jumpZ = runway.FINAL_ZONE_START + runway.LOOP_LENGTH
+				local egg = eggData(session, 1, 6, rarity, (jumpZ - 1 - spec.startZ) / spec.rollSpeed, 0)
+				cameraAt(session, Vector3.new(0, 13, jumpZ))
+				session:fromServer("EggSpawned", egg)
+				local model = parts.eggFolder.Egg1
+				local block = model.Block1
+				local designed = block.Transparency
+				expect.truthy(model.Root.CFrame.Position.Z > jumpZ - 5, "not there yet")
+
+				-- Caught part-way through fading in when it jumps.
+				block.Transparency = 0.6
+				session:renderFrame(1 / 60, 30)
+				expect.truthy(model.Root.CFrame.Position.Z < jumpZ - 100, "drawn one loop back")
+				expect.equal(block.Transparency, designed, "faded all the way in, not left half see-through")
+			end
+		)
 
 		it("kicks up dust while rolling, coloured for the ground", function()
 			local session, parts = startClient()
@@ -642,20 +718,92 @@ return function(harness)
 				-- On the ground, its back just past the zone's start line, from the very first frame.
 				local back = modules.Runway.zoneStartZ(zone) + modules.Tuning.EGG_SPAWN_GAP
 				expect.near(position.Z - spec.radius, back, 1e-3, rarity .. " start")
-				expect.near(position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, rarity .. " height")
+				local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+				expect.near(position.Y, height, 1e-3, rarity .. " height")
 			end
-			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway.
-			local lastZ = {}
+			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway. (The ones far
+			-- from the camera are redrawn every few frames, so they do not move on every single frame.)
+			local firstZ, lastZ = {}, {}
 			for _ = 1, 120 do
 				session:renderFrame(1 / 60)
 				for zone = 1, 6 do
 					local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
 					local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
-					expect.near(position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, "on the ground")
-					expect.truthy(lastZ[zone] == nil or position.Z > lastZ[zone], "rolls forward")
+					local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+					expect.near(position.Y, height, 1e-3, "on the ground")
+					expect.truthy(lastZ[zone] == nil or position.Z >= lastZ[zone], "never rolls backwards")
+					firstZ[zone] = firstZ[zone] or position.Z
 					lastZ[zone] = position.Z
 				end
 			end
+			for zone = 1, 6 do
+				local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
+				expect.truthy(lastZ[zone] - firstZ[zone] > spec.rollSpeed * 1.5, "rolls forward")
+			end
+		end)
+
+		it("rides just high enough that the blocky shell neither floats nor digs into the ground", function()
+			local session = startClient()
+			local Shared = session:service("ReplicatedStorage").Shared
+			local EggModels = session:require(Shared.EggModels)
+			local EggRig = session:require(Shared.EggRig)
+			-- The shell's flat sides are RADIUS voxels from its long axis; its corners reach further.
+			expect.truthy(EggModels.CORNER_REACH > EggModels.RADIUS, "corners reach past the flat sides")
+			for _, radius in { 3, 6.9 } do
+				local height = EggRig.rollHeight(radius)
+				local corner = radius * EggModels.CORNER_REACH / EggModels.RADIUS
+				-- Lying on a flat side it hangs a little above the ground; on a corner it sinks in as little.
+				expect.truthy(height > radius and height < corner, "between the two")
+				expect.near(height - radius, corner - height, 1e-6, "evenly")
+				expect.truthy(height - radius < radius * 0.1, "by a small fraction of its size")
+			end
+		end)
+
+		it("redraws eggs near the camera every frame, and far-off ones every few frames", function()
+			local session, parts = startClient()
+			-- The camera is over the hub. One egg just down the runway, one a zone on, one at the far end.
+			cameraAt(session, Vector3.new(0, 13, 0))
+			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 1, 0))
+			session:fromServer("EggSpawned", eggData(session, 2, 2, "Common", 1, 0))
+			session:fromServer("EggSpawned", eggData(session, 3, 6, firstRarity(session, 6), 1, 0))
+			local roots = {
+				near = parts.eggFolder.Egg1.Root,
+				mid = parts.eggFolder.Egg2.Root,
+				far = parts.eggFolder.Egg3.Root,
+			}
+			local moved = { near = 0, mid = 0, far = 0 }
+			local last = {}
+			local frames = 120
+			for _ = 1, frames do
+				session:renderFrame(1 / 60)
+				for name, root in roots do
+					local z = root.CFrame.Position.Z
+					if last[name] and z ~= last[name] then
+						moved[name] += 1
+					end
+					last[name] = z
+				end
+			end
+			expect.equal(moved.near, frames - 1, "the near egg moves every frame")
+			expect.truthy(
+				moved.mid >= frames / 4 and moved.mid < frames * 0.75,
+				`the middle egg moved {moved.mid} times`
+			)
+			expect.truthy(moved.far >= frames / 15 and moved.far < moved.mid, `the far egg moved {moved.far} times`)
+
+			-- However rarely it is redrawn, each egg ends up where it should be, to within one redraw.
+			local modules = shared(session)
+			local farSpec = modules.EggSpec.get(6, firstRarity(session, 6))
+			local behind = farSpec.startZ + farSpec.rollSpeed * (1 + frames / 60) - roots.far.CFrame.Position.Z
+			expect.truthy(behind >= 0 and behind < farSpec.rollSpeed * 0.25, `the far egg is {behind} studs behind`)
+
+			-- An egg somebody is riding is redrawn every frame wherever it is, because its rider is held on it.
+			session:fromServer("EggMounted", 3, 999, session.clock)
+			local before = roots.far.CFrame.Position.Z
+			session:renderFrame(1 / 60)
+			local after = roots.far.CFrame.Position.Z
+			session:renderFrame(1 / 60)
+			expect.truthy(after > before and roots.far.CFrame.Position.Z > after, "a ridden egg moves every frame")
 		end)
 
 		it("keeps an egg on the ground, and its dust going, when its rider gets off", function()
@@ -674,7 +822,8 @@ return function(harness)
 			local spec = modules.EggSpec.get(1, "Rare")
 			for _ = 1, 60 do
 				session:renderFrame(1 / 60)
-				expect.near(root.CFrame.Position.Y, modules.Runway.BASE_Y + spec.radius, 1e-3, "no hop")
+				local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+				expect.near(root.CFrame.Position.Y, height, 1e-3, "no hop")
 				expect.equal(emitter.Enabled, true)
 			end
 		end)
@@ -694,7 +843,7 @@ return function(harness)
 			egg.rider = nil
 			session:renderFrame(modules.Tuning.CRACK_BOUNCE_TIME / 2)
 			local spec = modules.EggSpec.get(1, "Rare")
-			local lift = root.CFrame.Position.Y - (modules.Runway.BASE_Y + spec.radius)
+			local lift = root.CFrame.Position.Y - (modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius))
 			expect.near(lift, modules.Tuning.CRACK_BOUNCE_HEIGHT, 1e-2)
 			expect.truthy(lift < 4, "only a slight bounce")
 			expect.equal(emitter.Enabled, false, "no dust while it cracks")
@@ -881,7 +1030,7 @@ return function(harness)
 			local mine =
 				eggData(session, 1, 6, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / mineSpec.rollSpeed, lane)
 			mine.rider = LOCAL_USER_ID
-			-- Someone else's Epic egg (16 studs/s) has already been carried back, to just past the start of the loop.
+			-- Someone else's slower Epic egg has already been carried back, to just past the start of the loop.
 			local otherSpec = modules.EggSpec.get(6, "Epic")
 			local other =
 				eggData(session, 2, 6, "Epic", (runway.LOOP_END + 20 - otherSpec.startZ) / otherSpec.rollSpeed, 10)
@@ -910,7 +1059,12 @@ return function(harness)
 					expect.near(gap, lastGap - closing, 0.05)
 				end
 				lastGap = gap
-				expect.near(otherRoot.CFrame.Position.Y, runway.BASE_Y + otherSpec.radius, 1e-3, "on the ground")
+				expect.near(
+					otherRoot.CFrame.Position.Y,
+					runway.BASE_Y + modules.EggRig.rollHeight(otherSpec.radius),
+					1e-3,
+					"on the ground"
+				)
 				if rider.Z < runway.LOOP_START + 100 then
 					wrapped = true
 				elseif rider.Z > runway.LOOP_END - 60 then
@@ -1253,6 +1407,15 @@ return function(harness)
 			for _, model in pets do
 				expect.truthy(inside(model), model.Name .. " in the pen")
 				before[model] = model.PrimaryPart.CFrame.Position
+				-- All of it: every part arrives with the root (which is the size of the whole pet), not left behind
+				-- where pet models are built.
+				local reach = model.PrimaryPart.Size.Magnitude
+				for _, part in model:GetDescendants() do
+					if part:IsA("BasePart") then
+						local away = (part.CFrame.Position - before[model]).Magnitude
+						expect.truthy(away <= reach, `{model.Name}'s {part.Name} is {away} studs from it`)
+					end
+				end
 			end
 			session:renderFrame(1 / 10, 80)
 			local moved = 0

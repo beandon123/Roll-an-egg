@@ -107,10 +107,10 @@ return function(harness)
 						first = egg
 					end
 				end
-				-- Random numbers of 0.5 roll Forest Common eggs: 12 studs/s from the start of the zone to 750 (600 + 150).
+				-- Random numbers of 0.5 roll Forest Common eggs, which roll from the start of the zone to 750 (600 + 150).
 				expect.equal(first.rarity, "Common")
 				expect.equal(first.fadeZ, 750)
-				local lapTime = (750 - first.startZ) / 12
+				local lapTime = (750 - first.startZ) / first.spec.rollSpeed
 				sim:takeEvents()
 
 				sim:step(lapTime - 0.01)
@@ -162,7 +162,7 @@ return function(harness)
 			sim:requestDismount(ALICE, 20)
 			expect.falsy(sim:getEgg(first.id))
 
-			local lapTime = (750 - first.startZ) / 12
+			local lapTime = (750 - first.startZ) / first.spec.rollSpeed
 			sim:step(lapTime - 0.01)
 			local before = 0
 			for _, egg in sim.eggs do
@@ -750,13 +750,16 @@ return function(harness)
 		it("keeps a ridden egg going past its fade line, and fades it once nobody is on it", function()
 			local sim = quiet(newSim())
 			sim:addRider(ALICE, 1e6, 14, 0)
-			local egg = sim:spawnEgg(1, 0, "Mythic") -- 19 studs/s, 18 s to claim: at the line (750) after 38.8 s
-			sim:step(30)
-			sim:requestMount(ALICE, egg.id, 30, true)
-			sim:step(40)
+			-- A Mythic egg takes 18 s to claim. Alice gets on 5 s before it reaches its fade line (750) and is still
+			-- on it, unclaimed, when it gets there.
+			local egg = sim:spawnEgg(1, 0, "Mythic")
+			local atLine = (egg.fadeZ - egg.startZ) / egg.spec.rollSpeed
+			sim:step(atLine - 5)
+			sim:requestMount(ALICE, egg.id, atLine - 5, true)
+			sim:step(atLine + 2)
 			expect.truthy(sim:getEgg(egg.id), "carried past the line by its rider")
 			sim:takeEvents()
-			sim:requestDismount(ALICE, 41)
+			sim:requestDismount(ALICE, atLine + 3)
 			local events = sim:takeEvents()
 			expect.equal(firstOfType(events, "EggRemoved").reason, "Faded")
 			expect.equal(#eventsOfType(events, "EggLeft"), 0)

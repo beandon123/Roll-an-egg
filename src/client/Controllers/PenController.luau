@@ -72,9 +72,15 @@ local function pickTarget(roamer: Roamer)
 	roamer.targetZ = random:NextNumber(area[3], area[4])
 end
 
-local function place(roamer: Roamer)
+-- Where the pet's root goes: standing where it has walked to, facing the way it is heading.
+local function standing(roamer: Roamer): CFrame
 	local position = Vector3.new(roamer.x, FLOOR_Y + roamer.groundOffset, roamer.z)
-	roamer.root.CFrame = CFrame.lookAt(position, position + roamer.facing)
+	return CFrame.lookAt(position, position + roamer.facing)
+end
+
+-- Moves a pet that is in the Workspace: its joints carry the rest of it along with its root.
+local function place(roamer: Roamer)
+	roamer.root.CFrame = standing(roamer)
 end
 
 local function clearPen(index: number)
@@ -123,7 +129,9 @@ local function fillPen(index: number, key: string, pets: string, level: number)
 				walkMove = walkMove,
 			}
 			pickTarget(roamer)
-			place(roamer)
+			-- Joints only hold once the pet is in the Workspace, so until then every part is moved (PivotTo). Moving
+			-- just the root would leave the rest of the pet behind, to be dragged around at that distance.
+			model:PivotTo(standing(roamer))
 			model:SetAttribute("Move", roamer.idleMove)
 			model.Parent = folder
 			table.insert(pen.roamers, roamer)

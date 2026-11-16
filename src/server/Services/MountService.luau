@@ -108,8 +108,9 @@ local function summon(player: Player)
 	end
 	local seat = (model:GetAttribute("SeatOffset") or Vector3.zero) :: Vector3
 	local groundOffset = (model:GetAttribute("GroundOffset") or 0) :: number
-	-- The pet's seat just under the rider, facing the way they face.
-	petRoot.CFrame = root.CFrame * CFrame.new(-seat - Vector3.new(0, SEAT_RISE, 0))
+	-- The pet's seat just under the rider, facing the way they face. The pet is not in the Workspace yet, so its joints
+	-- do not hold: every part is moved (PivotTo), not just the root, or the rest of it would be left behind.
+	model:PivotTo(root.CFrame * CFrame.new(-seat - Vector3.new(0, SEAT_RISE, 0)))
 	local weld = Instance.new("WeldConstraint")
 	weld.Name = "MountWeld"
 	weld.Part0 = root
