@@ -100,23 +100,40 @@
 
   // Camera: from the address, or looking down a zone from just behind its gate.
   const target = new THREE.Vector3();
+  // Where the runway's centre line is, `distance` studs down it (the runway winds and climbs).
+  function onRunway(distance) {
+    const last = DATA.line.length - 1;
+    const at = Math.min(Math.max(distance / DATA.lineStep, 0), last);
+    const i = Math.min(Math.floor(at), last - 1), t = at - i;
+    const a = DATA.line[i], b = DATA.line[i + 1];
+    return new THREE.Vector3(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t);
+  }
+  // Looking down the runway from `distance` studs along it, `height` studs up.
+  let along = null;
+  function runwayView(distance, height) {
+    along = distance;
+    camera.position.copy(onRunway(distance)).add(new THREE.Vector3(0, height, 0));
+    target.copy(onRunway(distance + 190));
+  }
   function zoneView(id) {
     if (id === 0) {
       // The hub: the plaza with the plots down both sides.
+      along = null;
       camera.position.set(0, DATA.baseY + 130, -470);
       target.set(0, DATA.baseY, -190);
       return;
     }
-    const zone = DATA.zones[id - 1];
-    camera.position.set(0, DATA.baseY + 28, zone.startZ + 6);
-    target.set(0, DATA.baseY, zone.startZ + 190);
+    runwayView(DATA.zones[id - 1].startZ + 6, 28);
   }
   function fromHash() {
     const hash = new URLSearchParams(location.hash.slice(1));
     if (hash.get("cam")) {
       const c = hash.get("cam").split(",").map(Number);
+      along = null;
       camera.position.set(c[0], c[1], c[2]);
       target.set(c[3], c[4], c[5]);
+    } else if (hash.has("at")) {
+      runwayView(Number(hash.get("at")), Number(hash.get("up") || 28));
     } else {
       zoneView(Number(hash.has("zone") ? hash.get("zone") : 1));
     }
@@ -140,6 +157,13 @@
     buttons.appendChild(b);
   }
   if (new URLSearchParams(location.hash.slice(1)).get("clean")) buttons.style.display = "none";
+
+  // Left and right arrows: on down the runway, or back up it, 100 studs at a time.
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const from = along === null ? 0 : along;
+    location.hash = "at=" + Math.max(0, from + (e.key === "ArrowRight" ? 100 : -100));
+  });
 
   // Drag to turn, wheel to move forward and back.
   let dragging = null;

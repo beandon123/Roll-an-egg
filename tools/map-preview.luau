@@ -1,12 +1,13 @@
 --!nocheck
--- Builds a web page that shows the map in 3D (the runway, banks, backdrops, obstacles, and a few eggs rolling down
--- it), so the look of each zone can be checked without opening Studio.
+-- Builds a web page that shows the map in 3D (the winding runway, its walls, backdrops, obstacles, and a few eggs
+-- rolling down it), so the look of each zone can be checked without opening Studio.
 --
 -- From the repository root:
 --     lune run tools/map-preview
 -- writes tools/out/map-preview.html. Open it in a browser and drag to look round. Pass a path to write somewhere
--- else. The page reads its camera from the address: map-preview.html#zone=3 looks down the Snow zone, and
--- #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
+-- else. The page reads its camera from the address: map-preview.html#zone=3 looks down the Snow zone from its gate,
+-- #at=2500 looks down the runway from 2,500 studs along it (the left and right arrow keys move along it from
+-- there), and #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
 --
 -- It runs the game's own MapService in the Studio stand-in (tests/studio) and copies every part it builds, so the
 -- page shows exactly the parts the game makes. Lighting, particles and the client's animations are left out.
@@ -31,6 +32,7 @@ local EggRig = session:require(Shared.EggRig)
 local EggSpec = session:require(Shared.EggSpec)
 local Obstacles = session:require(Shared.Obstacles)
 local Runway = session:require(Shared.Runway)
+local RunwayFrame = session:require(Shared.RunwayFrame)
 local Zones = session:require(Shared.Config.Zones)
 
 MapService.Init()
@@ -53,12 +55,12 @@ for zoneId, zone in Zones.List do
 		local entry = zone.eggs[(index * 3) % #zone.eggs + 1]
 		local spec = EggSpec.get(zoneId, entry.rarity)
 		local startZ = Runway.zoneStartZ(zoneId) + 12
-		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength)
+		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength, startZ)
 		local path = Obstacles.planPath(lane, startZ, Runway.fadeZ(zoneId), spec.halfLength, spec.radius)
-		local z = startZ + 40 + random() * (Runway.ZONE_LENGTH - 60)
+		local z = startZ + 40 + random() * (Runway.zoneLength(zoneId) - 60)
 		local x = Obstacles.lateralAt(path, z)
 		local egg = EggRig.build(entry.egg, spec)
-		local target = roblox.CFrame.new(x, Runway.BASE_Y + spec.radius, z)
+		local target = RunwayFrame.at(x, z, spec.radius)
 			* roblox.CFrame.Angles(random() * 6, 0, 0)
 			* (if index % 2 == 0 then roblox.CFrame.Angles(0, math.pi, 0) else roblox.CFrame.identity)
 		local move = target * egg.PrimaryPart.CFrame:Inverse()
@@ -188,13 +190,20 @@ local zones = {}
 for _, zone in Zones.List do
 	table.insert(zones, { id = zone.id, name = zone.name, startZ = Runway.zoneStartZ(zone.id) })
 end
+-- The runway's centre line every LINE_STEP studs (world x, y, z), so the page can stand its camera anywhere along it.
+local LINE_STEP = 10
+local line = {}
+for z = 0, Runway.LENGTH + Runway.REPEATS * Runway.LOOP_LENGTH, LINE_STEP do
+	local point = RunwayFrame.point(0, z)
+	table.insert(line, { round(point.X), round(point.Y), round(point.Z) })
+end
 
 local data = serde.encode("json", {
 	parts = parts,
 	zones = zones,
-	width = Runway.WIDTH,
+	line = line,
+	lineStep = LINE_STEP,
 	baseY = Runway.BASE_Y,
-	zoneLength = Runway.ZONE_LENGTH,
 })
 local template = fs.readFile("tools/map-preview.html")
 local page = string.gsub(template, "/%*MAP_DATA%*/null", function()

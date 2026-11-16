@@ -1,16 +1,16 @@
 --!strict
 -- The rules of the runway: the egg lineup, riding, stamina, claiming, obstacles, cracking, the banks, closures.
 --
--- Eggs: at sunrise (the start of each cycle) every zone rolls a lineup of eggs. They appear on the ground at the
--- start of the zone a few seconds apart, roll down the runway, fade out a quarter of the way into the next zone, and
--- appear at the start again, lap after lap, until the runway closes. Now and then a zone also drops an extra,
+-- Eggs: at sunrise (the start of each cycle) every zone rolls a lineup of eggs, more of them the longer the zone is.
+-- They appear on the ground at the start of the zone a few seconds apart, roll down the runway, fade out a quarter
+-- of the way into the next zone, and appear at the start again, lap after lap, until the runway closes. Now and then a zone also drops an extra,
 -- mid-cycle egg, which rolls once; Secret and rarer eggs are much less likely mid-cycle than in the sunrise lineup.
 --
 -- What can happen to an egg while it rolls:
 --   * Its rider runs out of stamina: they lose their balance, and the egg makes one small bounce and cracks open.
 --     The same egg comes back at the start of its zone EGG_RESPAWN_DELAY later.
---   * Its rider steers it into a gap in the banks: egg and rider go over the edge; the egg comes back the same way.
---   * Its rider steers it into a bank: the rider dies, and the egg rolls on without them.
+--   * Its rider steers it into a gap in the walls: egg and rider go over the edge; the egg comes back the same way.
+--   * Its rider steers it into a wall: the rider dies, and the egg rolls on without them.
 --   * Its rider jumps off, is knocked off, or dies: it rolls on without them, free for anyone.
 --   * Its claim meter fills: it goes into the rider's inventory at once. The rider keeps rolling on it for as long
 --     as they like; when they get off, it disappears (a lineup egg comes back on its next lap).
@@ -18,6 +18,10 @@
 --
 -- Obstacles (Shared/Obstacles): an egg without a rider steers round them on its own. A ridden egg goes wherever
 -- its rider steers, and hitting one bumps it aside, throws the rider off, or kills the rider.
+--
+-- Everything here is in runway coordinates (Shared/Runway): how far down the runway, and how far across it. The
+-- rules never see its bends and hills; whoever draws an egg, or checks where a character is, turns runway
+-- coordinates into a place in the world (Shared/RunwayFrame).
 --
 -- This module holds the rules only. It never touches players, parts, or remotes: RunwayService feeds it the
 -- clock and player requests, then turns the events it emits into remotes and saved data. Keeping it free of
@@ -280,15 +284,16 @@ function RunwaySim.eggLateral(self: RunwaySim, egg: Egg, now: number): number
 	return self.obstacles.lateralAt(egg.path, self:_eggZ(egg, now))
 end
 
--- The centre of an egg resting on the runway: x, y, z.
+-- Where an egg resting on the runway is, in runway coordinates: how far across (x), how high its centre is above the
+-- runway's surface there, and how far down the runway (z).
 function RunwaySim.eggCenter(self: RunwaySim, egg: Egg, now: number): (number, number, number)
 	local z = self:_eggZ(egg, now)
-	return self:eggLateral(egg, now), Runway.surfaceY(z) + egg.spec.radius, z
+	return self:eggLateral(egg, now), egg.spec.radius, z
 end
 
 -- Sends a riderless egg on its way from where it is now (`lateral`, at `z`), steering round the obstacles ahead.
 function RunwaySim._setPath(self: RunwaySim, egg: Egg, lateral: number, z: number)
-	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength)
+	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength, z)
 	egg.pathZ = z
 	egg.path = self.obstacles.planPath(egg.lateral, z, egg.fadeZ, egg.spec.halfLength, egg.spec.radius)
 end
@@ -319,19 +324,18 @@ function RunwaySim._launch(
 		return nil
 	end
 	self.nextEggId += 1
-	-- Clear of the banks, so a rider who gets on is not straight against one.
-	local limit = math.max(0, Runway.maxLateral(spec.halfLength) - Tuning.EGG_SPAWN_EDGE_MARGIN)
 	local startZ = spec.startZ
+	local placedZ = if placement then placement.z else nil
+	-- On the runway, and far enough before the end of the loop to be worth riding.
+	if placedZ and placedZ == placedZ then
+		startZ = math.clamp(placedZ, 0, Runway.LOOP_END - spec.radius * 4)
+	end
+	-- Clear of the walls, so a rider who gets on is not straight against one.
+	local limit = math.max(0, Runway.maxLateral(spec.halfLength, startZ) - Tuning.EGG_SPAWN_EDGE_MARGIN)
 	local lateral = (self.random() * 2 - 1) * limit
-	if placement then
-		local z, x = placement.z, placement.lateral
-		-- On the runway, and far enough before the end of the loop to be worth riding.
-		if z and z == z then
-			startZ = math.clamp(z, 0, Runway.LOOP_END - spec.radius * 4)
-		end
-		if x and x == x then
-			lateral = Runway.clampLateral(x, spec.halfLength)
-		end
+	local placedX = if placement then placement.lateral else nil
+	if placedX and placedX == placedX then
+		lateral = Runway.clampLateral(placedX, spec.halfLength, startZ)
 	end
 	local egg: Egg = {
 		id = self.nextEggId,
@@ -341,9 +345,7 @@ function RunwaySim._launch(
 		spec = spec,
 		spawnTime = spawnTime,
 		startZ = startZ,
-		-- An egg dropped further down than its zone still gets a stretch of runway before it fades (but fades before
-		-- the end of the loop).
-		fadeZ = math.min(math.max(Runway.fadeZ(zoneId), startZ + Runway.ZONE_LENGTH), Runway.LOOP_END - 1),
+		fadeZ = EggSpec.fadeZ(zoneId, startZ),
 		lateral = 0,
 		pathZ = startZ,
 		path = nil :: any,
@@ -399,13 +401,13 @@ function RunwaySim.spawnEgg(
 	return self:_launch(zoneId, rarity, kind, now, true, placement)
 end
 
--- How many eggs each zone's lineup holds at the current egg rate.
-local function lineupSize(rate: number): number
-	return math.max(1, math.round(Tuning.EGGS_PER_ZONE * rate))
+-- How many eggs a zone's lineup holds at the current egg rate.
+local function lineupSize(zoneId: number, rate: number): number
+	return math.max(1, math.round(EggSpec.lineupSize(zoneId) * rate))
 end
 
--- Rolls `count` lineup eggs for a zone, leaving the chute LINEUP_LAUNCH_GAP seconds apart (less while eggs drop
--- faster) from `firstLaunch`.
+-- Rolls `count` lineup eggs for a zone, leaving the chute a few seconds apart (EggSpec.lineupGap; less while eggs
+-- drop faster) from `firstLaunch`.
 function RunwaySim._rollSlots(
 	self: RunwaySim,
 	zoneId: number,
@@ -415,6 +417,7 @@ function RunwaySim._rollSlots(
 	into: { Slot },
 	rolled: { any }
 )
+	local gap = EggSpec.lineupGap(zoneId, self.spawnRateMultiplier)
 	for index = 1, count do
 		local rarity = EggSpec.rollRarity(zoneId, self.random(), self.luck)
 		local kind = EggSpec.pickEgg(zoneId, rarity, self.random())
@@ -425,7 +428,7 @@ function RunwaySim._rollSlots(
 				zone = zoneId,
 				rarity = rarity,
 				kind = kind,
-				nextLaunch = firstLaunch + (index - 1) * Tuning.LINEUP_LAUNCH_GAP / self.spawnRateMultiplier,
+				nextLaunch = firstLaunch + (index - 1) * gap,
 				lapTime = (Runway.fadeZ(zoneId) - startZ) / spec.rollSpeed,
 				extra = if extra then true else nil,
 			})
@@ -439,7 +442,7 @@ function RunwaySim._rollLineup(self: RunwaySim, now: number)
 	local lineup: { Slot } = {}
 	local rolled = {}
 	for zoneId = 1, #Zones.List do
-		self:_rollSlots(zoneId, lineupSize(self.spawnRateMultiplier), now, false, lineup, rolled)
+		self:_rollSlots(zoneId, lineupSize(zoneId, self.spawnRateMultiplier), now, false, lineup, rolled)
 	end
 	self.lineup = lineup
 	self:_emit({ type = "LineupRolled", eggs = rolled })
@@ -473,7 +476,7 @@ function RunwaySim.setEggRate(self: RunwaySim, multiplier: number, now: number)
 				have += 1
 			end
 		end
-		local more = lineupSize(multiplier) - have
+		local more = lineupSize(zoneId, multiplier) - have
 		if more > 0 then
 			self:_rollSlots(zoneId, more, now, true, lineup, rolled)
 		end
@@ -535,7 +538,7 @@ function RunwaySim._leaveEgg(self: RunwaySim, egg: Egg, now: number, reason: Rid
 		return
 	end
 	if reason == "HitWall" then
-		local limit = Runway.maxLateral(egg.spec.halfLength)
+		local limit = Runway.maxLateral(egg.spec.halfLength, z)
 		egg.lateral = math.sign(egg.lateral) * math.max(0, limit - Tuning.WALL_KNOCKBACK)
 	end
 	self:_setPath(egg, egg.lateral, z)
@@ -694,7 +697,7 @@ function RunwaySim._claim(self: RunwaySim, rider: Rider, ride: Ride, now: number
 	})
 end
 
--- The egg is pressed against the side of the runway: a bank there kills the rider, a gap sends egg and rider over
+-- The egg is pressed against the side of the runway: a wall there kills the rider, a gap sends egg and rider over
 -- the edge.
 function RunwaySim._hitEdge(self: RunwaySim, rider: Rider, egg: Egg, now: number)
 	local side = if egg.lateral > 0 then 1 else -1
@@ -771,8 +774,8 @@ function RunwaySim.requestMount(
 		lastZ = self:_eggZ(egg, now),
 		claimed = false,
 	}
-	-- From here the rider steers, starting from wherever the egg's path had taken it (a little way in from a bank).
-	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength)
+	-- From here the rider steers, starting from wherever the egg's path had taken it (a little way in from a wall).
+	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength, ride.lastZ)
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
@@ -840,7 +843,7 @@ function RunwaySim.setLateral(self: RunwaySim, riderId: number, x: number, now: 
 	local ride = rider.ride
 	local elapsed = math.max(0, now - ride.lateralTime)
 	local maxMove = rider.agility * elapsed * 1.5 + 2
-	local target = Runway.clampLateral(x, egg.spec.halfLength)
+	local target = Runway.clampLateral(x, egg.spec.halfLength, self:_eggZ(egg, now))
 	egg.lateral += math.clamp(target - egg.lateral, -maxMove, maxMove)
 	ride.lateralTime = now
 	return egg
@@ -893,9 +896,10 @@ function RunwaySim.reportHit(self: RunwaySim, riderId: number, obstacleId: numbe
 	end
 	local slack = Tuning.HIT_REPORT_SLACK
 	local z = self:_eggZ(egg, now)
-	local reachZ = egg.spec.radius + egg.spec.rollSpeed * slack
+	-- (Both reaches along the runway are in runway distance, which is stretched round the inside of a bend.)
+	local reachZ = egg.spec.radius / Runway.stretch(egg.lateral, z) + egg.spec.rollSpeed * slack
 	local reachX = egg.spec.halfLength + rider.agility * slack + 3
-	if math.abs(z - obstacle.z) > obstacle.hz + reachZ or math.abs(egg.lateral - obstacle.x) > obstacle.hx + reachX then
+	if math.abs(z - obstacle.z) > obstacle.rz + reachZ or math.abs(egg.lateral - obstacle.x) > obstacle.hx + reachX then
 		return false
 	end
 	if not self.obstacles.activeAround(obstacle, now, slack) then
@@ -1041,7 +1045,7 @@ function RunwaySim.step(self: RunwaySim, now: number)
 				continue
 			end
 		end
-		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength) then
+		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength, self:_eggZ(egg, now)) then
 			self:_hitEdge(rider, egg, now)
 		end
 	end

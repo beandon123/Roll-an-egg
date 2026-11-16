@@ -1,11 +1,17 @@
 --!strict
 -- Where every obstacle on the runway is, and what that means for eggs:
---     * the layout: zone-themed obstacles in rows across the runway (kinds and sizes in Config/Obstacles)
+--     * the layout: zone-themed obstacles in rows across the runway (kinds and sizes in Config/Obstacles); the wider
+--       the runway, the more to a row, and now and then a rock comes up giant
 --     * paths: how an egg without a rider steers round them, so it never rolls through one
 --     * hits: whether a ridden egg, which goes wherever its rider steers, has run into one
 --     * timing: when obstacles that go off now and then (geysers, lava vents, clams) are dangerous
 -- The layout comes from a fixed seed per zone, so the server, every client and the map builder all get the same
 -- runway without sending it anywhere. Pure math (no Roblox APIs) so the test runner can load it outside Studio.
+--
+-- Everything here is in runway coordinates (Shared/Runway): z down the runway along its centre line, x across it.
+-- The runway bends, and round the inside of a bend a stud of runway distance covers less ground than it does along
+-- the centre line (Runway.stretch), so an obstacle standing there reaches further along the runway than its size
+-- says. Each obstacle's `rz` is that reach, and hits and paths use it.
 
 local Config = require(script.Parent.Config.Obstacles)
 local Runway = require(script.Parent.Runway)
@@ -20,9 +26,11 @@ export type Obstacle = {
 	-- Centre of its footprint.
 	x: number,
 	z: number,
-	-- Half its footprint: across the runway, and along it.
+	-- Half its footprint in studs: across the runway, and along it.
 	hx: number,
 	hz: number,
+	-- Half its footprint along the runway in runway distance: hz, stretched if it stands on the inside of a bend.
+	rz: number,
 	-- For obstacles that go off now and then: the timing, and where in its cycle this one starts.
 	timing: Config.Timing?,
 	offset: number,
@@ -36,6 +44,8 @@ export type Row = {
 	-- The front and back of the row's obstacles along the runway.
 	zMin: number,
 	zMax: number,
+	-- Half the runway's width at the row.
+	half: number,
 	obstacles: { Obstacle },
 }
 
@@ -95,19 +105,19 @@ local function newBag(weights: { [string]: number }, random: () -> number): () -
 	end
 end
 
--- The gaps between a row's obstacles (and the runway edges), widest first.
-local function widestGap(placed: { { lo: number, hi: number } }): number
+-- The widest of the gaps between a row's obstacles (and the runway edges, `half` from the centre line).
+local function widestGap(placed: { { lo: number, hi: number } }, half: number): number
 	local spans = table.clone(placed)
 	table.sort(spans, function(a, b)
 		return a.lo < b.lo
 	end)
 	local widest = 0
-	local edge = -Runway.WIDTH / 2
+	local edge = -half
 	for _, span in spans do
 		widest = math.max(widest, span.lo - edge)
 		edge = math.max(edge, span.hi)
 	end
-	return math.max(widest, Runway.WIDTH / 2 - edge)
+	return math.max(widest, half - edge)
 end
 
 local rows: { Row } = {}
@@ -121,20 +131,32 @@ local function layOutZone(zoneId: number)
 	local random = newRandom(7919 * zoneId + 104729)
 	local nextKind = newBag(mix.weights, random)
 	local zoneStart = Runway.zoneStartZ(zoneId)
+	local zoneEnd = zoneStart + Runway.zoneLength(zoneId)
 	local z = zoneStart + Config.FIRST_ROW
-	local half = Runway.WIDTH / 2
+	-- The back of the row before this one.
+	local lastBack = -math.huge
 
-	while z <= zoneStart + Runway.ZONE_LENGTH - Config.LAST_ROW do
-		-- One to three obstacles, usually two.
+	while z <= zoneEnd - Config.LAST_ROW do
+		-- The runway only widens, so it is at its narrowest at the back of the row.
+		local half = Runway.halfWidthAt(z - Config.ROW_JITTER)
+		-- One to three obstacles, usually two, for every ROW_WIDTH studs the runway is wide.
 		local roll = random()
-		local count = if roll < 0.3 then 1 elseif roll < 0.8 then 2 else 3
+		local share = (if roll < 0.3 then 1 elseif roll < 0.8 then 2 else 3) * half * 2 / Config.ROW_WIDTH
+		local count = math.floor(share)
+		if random() < share - count then
+			count += 1
+		end
 
 		local placed: { { lo: number, hi: number } } = {}
-		local row: Row = { zMin = math.huge, zMax = -math.huge, obstacles = {} }
-		for _ = 1, count do
+		local row: Row = { zMin = math.huge, zMax = -math.huge, half = half, obstacles = {} }
+		for _ = 1, math.max(1, count) do
 			local kindName = nextKind()
 			local kind = Config.Kinds[kindName]
 			local grow = 1 + (kind.grow - 1) * random()
+			-- Now and then a rock is a giant.
+			if kind.giant and random() < Config.GIANT_CHANCE then
+				grow *= 1 + (kind.giant - 1) * (0.5 + 0.5 * random())
+			end
 			local hx, hz = kind.hx * grow, kind.hz * grow
 			-- Try a few spots; give up on this obstacle if none leaves the row passable.
 			for _ = 1, 12 do
@@ -152,11 +174,26 @@ local function layOutZone(zoneId: number)
 					continue
 				end
 				table.insert(placed, span)
-				if widestGap(placed) < Config.MIN_GAP then
+				if widestGap(placed, half) < Config.MIN_GAP then
 					table.remove(placed)
 					continue
 				end
 				local obstacleZ = z + (random() * 2 - 1) * Config.ROW_JITTER
+				local rz = hz / Runway.stretch(x, obstacleZ)
+				-- A long rock (a giant, or one on the inside of a bend) stands further on if it has to, so that
+				-- there is always ROW_CLEAR studs of open runway between one row and the next for eggs to change
+				-- lanes in. One that would then crowd the end of the zone is left out.
+				if obstacleZ - rz < lastBack + Config.ROW_CLEAR then
+					-- (Its reach depends a little on where it stands, so settle the two together.)
+					for _ = 1, 3 do
+						obstacleZ = lastBack + Config.ROW_CLEAR + rz
+						rz = hz / Runway.stretch(x, obstacleZ)
+					end
+				end
+				if obstacleZ + rz > zoneEnd - Config.LAST_ROW / 2 then
+					table.remove(placed)
+					break
+				end
 				local obstacle: Obstacle = {
 					id = #byId + 1,
 					kind = kindName,
@@ -166,6 +203,7 @@ local function layOutZone(zoneId: number)
 					z = obstacleZ,
 					hx = hx,
 					hz = hz,
+					rz = rz,
 					timing = kind.timing,
 					offset = if kind.timing then random() * kind.timing.period else 0,
 					flat = kind.flat,
@@ -174,13 +212,14 @@ local function layOutZone(zoneId: number)
 				}
 				table.insert(byId, obstacle)
 				table.insert(row.obstacles, obstacle)
-				row.zMin = math.min(row.zMin, obstacleZ - hz)
-				row.zMax = math.max(row.zMax, obstacleZ + hz)
+				row.zMin = math.min(row.zMin, obstacleZ - rz)
+				row.zMax = math.max(row.zMax, obstacleZ + rz)
 				break
 			end
 		end
 		if #row.obstacles > 0 then
 			table.insert(rows, row)
+			lastBack = row.zMax
 		end
 		z += Config.ROW_GAP_MIN + (Config.ROW_GAP_MAX - Config.ROW_GAP_MIN) * random()
 	end
@@ -202,7 +241,7 @@ do
 	for copy = 1, Runway.REPEATS do
 		local shift = copy * Runway.LOOP_LENGTH
 		for _, row in finalRows do
-			local newRow: Row = { zMin = row.zMin + shift, zMax = row.zMax + shift, obstacles = {} }
+			local newRow: Row = { zMin = row.zMin + shift, zMax = row.zMax + shift, half = row.half, obstacles = {} }
 			for _, original in row.obstacles do
 				local obstacle = table.clone(original)
 				obstacle.id = #byId + 1
@@ -293,7 +332,7 @@ end
 -- The nearest spot to `x` where an egg of this half-length can pass a row without touching any of it.
 -- `beside` lists obstacles the egg is already level with: it cannot slide across those to get there.
 function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { Obstacle }?): number
-	local limit = Runway.maxLateral(halfLength)
+	local limit = math.max(0, row.half - halfLength - 1)
 	local margin = halfLength + Config.STEER_MARGIN
 	local function blocked(at: number): boolean
 		for _, obstacle in row.obstacles do
@@ -334,7 +373,7 @@ end
 -- The way an egg without a rider rolls from `fromZ` to `toZ`, starting at `lane`: whenever a row of obstacles is
 -- in its way, it slides over to the nearest gap in good time and carries on along its new lane.
 function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength: number, radius: number): Path
-	local current = Runway.clampLateral(lane, halfLength)
+	local current = Runway.clampLateral(lane, halfLength, fromZ)
 	local path: Path = { lane = current, fromZ = fromZ, moves = {} }
 	-- No lane change starts before the egg is clear of the last row it passed.
 	local readyFrom = fromZ
@@ -344,7 +383,8 @@ function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength
 		local touchZ = math.huge
 		local beside = {}
 		for _, obstacle in row.obstacles do
-			local front = obstacle.z - obstacle.hz - radius
+			-- (The egg's own reach is stretched round a bend just as the obstacle's is.)
+			local front = obstacle.z - obstacle.rz * (obstacle.hz + radius) / obstacle.hz
 			if front > fromZ then
 				touchZ = math.min(touchZ, front)
 			else
@@ -400,12 +440,13 @@ function Obstacles.hitAt(
 	inset: number
 ): Obstacle?
 	local reachX = math.max(0.5, halfLength - inset)
-	local reachZ = math.max(0.5, radius - inset)
+	-- The egg's reach along the runway, in runway distance where it is (see the header).
+	local reachZ = math.max(0.5, radius - inset) / Runway.stretch(x, z)
 	for _, row in Obstacles.rowsBetween(z - reachZ, z + reachZ) do
 		for _, obstacle in row.obstacles do
 			if
 				math.abs(x - obstacle.x) < obstacle.hx + reachX
-				and math.abs(z - obstacle.z) < obstacle.hz + reachZ
+				and math.abs(z - obstacle.z) < obstacle.rz + reachZ
 				and Obstacles.activity(obstacle, now) == "Active"
 			then
 				return obstacle
@@ -422,7 +463,7 @@ function Obstacles.lethalAt(x: number, z: number, now: number): Obstacle?
 			if
 				obstacle.tier == "Lethal"
 				and math.abs(x - obstacle.x) < obstacle.hx
-				and math.abs(z - obstacle.z) < obstacle.hz
+				and math.abs(z - obstacle.z) < obstacle.rz
 				and Obstacles.activity(obstacle, now) == "Active"
 			then
 				return obstacle

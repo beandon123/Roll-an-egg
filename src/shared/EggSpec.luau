@@ -64,6 +64,34 @@ function EggSpec.get(zoneId: number, rarity: string): Spec?
 	return spec
 end
 
+-- Where an egg of this zone that started at `startZ` fades out if nobody is riding it: a quarter of the way into the
+-- next zone. One dropped further down than its own zone still gets a zone's length of runway first (but fades before
+-- the end of the loop). The server and every client work it out from here, so they always agree.
+function EggSpec.fadeZ(zoneId: number, startZ: number): number
+	return math.min(math.max(Runway.fadeZ(zoneId), startZ + Runway.zoneLength(zoneId)), Runway.LOOP_END - 1)
+end
+
+-- How many eggs a zone rolls for its lineup at sunrise: one for every LINEUP_EGG_SPACING studs it is long, so the
+-- long zones are as full of eggs as the short ones.
+function EggSpec.lineupSize(zoneId: number): number
+	return math.max(1, math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING))
+end
+
+-- Seconds between a zone's lineup eggs leaving its start at sunrise, with eggs dropping at `rate` times the usual
+-- rate: LINEUP_LAUNCH_GAP, or less if the last egg would otherwise still be waiting when the first came round
+-- again (then they leave evenly over one lap of the zone's slowest egg).
+function EggSpec.lineupGap(zoneId: number, rate: number): number
+	local slowest = math.huge
+	for _, rarity in Rarities.Order do
+		local spec = EggSpec.get(zoneId, rarity)
+		if spec then
+			slowest = math.min(slowest, spec.rollSpeed)
+		end
+	end
+	local lap = (Runway.fadeZ(zoneId) - Runway.zoneStartZ(zoneId)) / slowest
+	return math.min(Tuning.LINEUP_LAUNCH_GAP, lap / EggSpec.lineupSize(zoneId)) / math.max(1, rate)
+end
+
 -- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights.
 -- `luck` (default 1) comes from server luck boosts (see Shared/LuckBoost): every rarity above Common is `luck` times
 -- as likely (compared with Common) as normal. `rareOdds`, if given, scales the weight of every rarity from

@@ -16,6 +16,7 @@ local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
+local RunwayFrame = require(Shared.RunwayFrame)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -74,8 +75,8 @@ local function updateFocusParts(time: number)
 		local rider = sim:getRider(player.UserId)
 		local egg = if rider and rider.eggId then sim:getEgg(rider.eggId) else nil
 		if egg then
-			local x, y, z = sim:eggCenter(egg, time)
-			part.Position = Vector3.new(x, y, z)
+			local x, height, z = sim:eggCenter(egg, time)
+			part.Position = RunwayFrame.point(x, z, height)
 		else
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -245,10 +246,11 @@ local function onRequestMount(player: Player, eggId: unknown)
 	-- The player must really be next to the egg, with some slack for network delay. In the endless last zone, the
 	-- egg's copy nearest the player is the one they see.
 	local time = now()
-	local x, y, z = sim:eggCenter(egg, time)
-	z = Runway.nearestImage(z, root.Position.Z)
+	local x, height, z = sim:eggCenter(egg, time)
+	local _, rootZ = RunwayFrame.locate(root.Position)
+	z = Runway.nearestImage(z, rootZ)
 	-- (A player riding a tall pet is held high above the ground, so is allowed to be further above the egg.)
-	local offset = root.Position - Vector3.new(x, y, z)
+	local offset = root.Position - RunwayFrame.point(x, z, height)
 	local across = Vector3.new(offset.X, 0, offset.Z).Magnitude
 	local above = if MountService.IsMounted(player) then MOUNTED_REACH else 0
 	local inReach = across <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
@@ -357,12 +359,14 @@ local function checkLeaps(time: number)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local x, z = 0, -1
+		if root and root:IsA("BasePart") then
+			x, z = RunwayFrame.locate(root.Position)
+		end
 		local onFoot = humanoid ~= nil
 			and humanoid.Health > 0
-			and root ~= nil
-			and root:IsA("BasePart")
-			and root.Position.Z >= 0
-			and math.abs(root.Position.X) <= Runway.WIDTH / 2
+			and z >= 0
+			and math.abs(x) <= Runway.halfWidthAt(z)
 			and not (rider and rider.eggId ~= nil)
 			and not MountService.IsMounted(player)
 			and player:GetAttribute(AdminTools.FLYING) ~= true
@@ -440,7 +444,8 @@ function RunwayService.GetZoneOf(player: Player): number
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
-		return Runway.zoneAt(root.Position.Z) or 1
+		local _, z = RunwayFrame.locate(root.Position)
+		return Runway.zoneAt(z) or 1
 	end
 	return 1
 end

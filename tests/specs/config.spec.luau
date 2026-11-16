@@ -197,7 +197,7 @@ return function(harness)
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
-					expect.truthy(Runway.maxLateral(spec.halfLength) > 10, rarity .. " steering room")
+					expect.truthy(Runway.maxLateral(spec.halfLength, spec.startZ) > 10, rarity .. " steering room")
 				end
 			end
 		end)
@@ -209,7 +209,7 @@ return function(harness)
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					local rideDistance = spec.rollSpeed * spec.claimTime
-					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 1.5, zone.name .. " " .. rarity)
+					expect.truthy(rideDistance < Runway.zoneLength(zone.id) * 1.5, zone.name .. " " .. rarity)
 				end
 			end
 		end)

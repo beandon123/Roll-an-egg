@@ -78,11 +78,26 @@ return function(harness)
 			sim:step(0)
 			local events = sim:takeEvents()
 			local rolled = firstOfType(events, "LineupRolled")
-			expect.equal(#rolled.eggs, Tuning.EGGS_PER_ZONE * Runway.ZONE_COUNT)
+			-- One egg for every LINEUP_EGG_SPACING studs of zone: the longer the zone, the more eggs it rolls.
+			local total, longestWait = 0, 0
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local size = EggSpec.lineupSize(zoneId)
+				expect.equal(size, math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING))
+				expect.truthy(zoneId == 1 or size > EggSpec.lineupSize(zoneId - 1), "more eggs in zone " .. zoneId)
+				total += size
+				-- A few seconds apart, and all out before the first of them comes round again.
+				local gap = EggSpec.lineupGap(zoneId, 1)
+				expect.truthy(gap > 1 and gap <= Tuning.LINEUP_LAUNCH_GAP, `zone {zoneId}: {gap} s apart`)
+				expect.near(EggSpec.lineupGap(zoneId, 2), gap / 2, 1e-9)
+				longestWait = math.max(longestWait, gap * (size - 1))
+			end
+			expect.equal(EggSpec.lineupSize(1), 11)
+			expect.equal(EggSpec.lineupSize(Runway.ZONE_COUNT), 35)
+			expect.equal(#rolled.eggs, total)
 			-- The first egg of every zone leaves straight away.
 			expect.equal(#eventsOfType(events, "EggSpawned"), Runway.ZONE_COUNT)
 
-			for second = 1, Tuning.LINEUP_LAUNCH_GAP * Tuning.EGGS_PER_ZONE do
+			for second = 1, math.ceil(longestWait) do
 				sim:step(second)
 			end
 			local perZone = {}
@@ -91,7 +106,7 @@ return function(harness)
 				expect.falsy(egg.wild)
 			end
 			for zoneId = 1, Runway.ZONE_COUNT do
-				expect.equal(perZone[zoneId], Tuning.EGGS_PER_ZONE, "zone " .. zoneId)
+				expect.equal(perZone[zoneId], EggSpec.lineupSize(zoneId), "zone " .. zoneId)
 			end
 		end)
 
@@ -107,10 +122,12 @@ return function(harness)
 						first = egg
 					end
 				end
-				-- Random numbers of 0.5 roll Forest Common eggs, which roll from the start of the zone to 750 (600 + 150).
+				-- Random numbers of 0.5 roll Forest Common eggs, which roll from the start of the zone to a quarter of
+				-- the way into the Desert.
+				local fadeZ = Runway.zoneStartZ(2) + Runway.zoneLength(2) / 4
 				expect.equal(first.rarity, "Common")
-				expect.equal(first.fadeZ, 750)
-				local lapTime = (750 - first.startZ) / first.spec.rollSpeed
+				expect.equal(first.fadeZ, fadeZ)
+				local lapTime = (fadeZ - first.startZ) / first.spec.rollSpeed
 				sim:takeEvents()
 
 				sim:step(lapTime - 0.01)
@@ -140,8 +157,12 @@ return function(harness)
 		)
 
 		it("fades the last zone's eggs a quarter of the way into its first copy (the runway has no end)", function()
-			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.ZONE_LENGTH / 4)
-			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.ZONE_LENGTH / 4)
+			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.zoneLength(6) / 4)
+			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.zoneLength(6) / 4)
+			-- An egg dropped further down than its own zone still gets a zone's length of runway before it fades.
+			expect.equal(EggSpec.fadeZ(1, EggSpec.get(1, "Common").startZ), Runway.fadeZ(1))
+			expect.equal(EggSpec.fadeZ(1, 3000), 3000 + Runway.zoneLength(1))
+			expect.equal(EggSpec.fadeZ(1, Runway.LOOP_END - 10), Runway.LOOP_END - 1)
 		end)
 
 		it("brings a claimed lineup egg back on its next lap", function()
@@ -162,7 +183,7 @@ return function(harness)
 			sim:requestDismount(ALICE, 20)
 			expect.falsy(sim:getEgg(first.id))
 
-			local lapTime = (750 - first.startZ) / first.spec.rollSpeed
+			local lapTime = (Runway.fadeZ(1) - first.startZ) / first.spec.rollSpeed
 			sim:step(lapTime - 0.01)
 			local before = 0
 			for _, egg in sim.eggs do
@@ -177,8 +198,8 @@ return function(harness)
 					after += 1
 				end
 			end
-			expect.equal(before, Tuning.EGGS_PER_ZONE - 1)
-			expect.equal(after, Tuning.EGGS_PER_ZONE, "the claimed egg's slot is back")
+			expect.equal(before, EggSpec.lineupSize(1) - 1)
+			expect.equal(after, EggSpec.lineupSize(1), "the claimed egg's slot is back")
 		end)
 
 		it("drops mid-cycle eggs that roll once", function()
@@ -229,11 +250,12 @@ return function(harness)
 		it("places a new egg on the ground at the start of its zone", function()
 			local sim = quiet(newSim())
 			local egg = sim:spawnEgg(3, 50, "Uncommon")
-			local x, y, z = sim:eggCenter(egg, 50)
+			-- In runway coordinates: on the centre line, resting on the ground, just down from the gate.
+			local x, height, z = sim:eggCenter(egg, 50)
 			expect.equal(x, 0)
 			-- The back of the egg sits just past the zone's start line.
 			expect.near(z - egg.spec.radius, Runway.zoneStartZ(3) + Tuning.EGG_SPAWN_GAP)
-			expect.near(y, Runway.surfaceY(z) + egg.spec.radius)
+			expect.near(height, egg.spec.radius)
 			expect.falsy(sim:spawnEgg(1, 50, "Eternal"), "Eternal cannot drop in the Forest")
 			expect.falsy(sim:spawnEgg(3, 50, "Common"), "Snow has no Common eggs")
 		end)
@@ -273,7 +295,11 @@ return function(harness)
 			local wide = sim:spawnEgg(1, 0, "Common", nil, { z = 1e6, lateral = -500 })
 			expect.truthy(wide.startZ < Runway.LOOP_END, "before the end of the loop")
 			expect.truthy(wide.fadeZ < Runway.LOOP_END, "and fades before it")
-			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength))
+			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength, wide.startZ))
+			-- Down where the runway is wider, there is more room to land in.
+			local deep = sim:spawnEgg(1, 0, "Common", nil, { z = Runway.FINAL_ZONE_START + 500, lateral = 110 })
+			expect.equal(deep.lateral, 110)
+			expect.truthy(110 > Runway.maxLateral(deep.spec.halfLength, 300), "wider than the Forest")
 			local common = EggSpec.get(1, "Common")
 			expect.equal(sim:spawnEgg(1, 0, "Common", nil, { z = 0 / 0 }).startZ, common.startZ, "nonsense is ignored")
 			-- Without a placement, eggs appear at the start of their zone, and say so.
@@ -644,7 +670,7 @@ return function(harness)
 			expect.equal(firstOfType(events, "RideEnded").reason, "HitWall")
 			local left = firstOfType(events, "EggLeft")
 			expect.equal(left.id, egg.id)
-			expect.near(left.lateral, Runway.maxLateral(egg.spec.halfLength) - Tuning.WALL_KNOCKBACK)
+			expect.near(left.lateral, Runway.maxLateral(egg.spec.halfLength, 60) - Tuning.WALL_KNOCKBACK)
 			expect.equal(left.cracking, false)
 			expect.truthy(sim:getEgg(egg.id), "it rolls on without her")
 		end)
@@ -668,7 +694,7 @@ return function(harness)
 			sim:addRider(ALICE, 1e6, 200, 0)
 			local egg = sim:spawnEgg(1, 0, "Common")
 			sim:requestMount(ALICE, egg.id, 2, true)
-			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength) - 0.5, 3)
+			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength, egg.startZ) - 0.5, 3)
 			sim:takeEvents()
 			sim:step(3)
 			expect.equal(#eventsOfType(sim:takeEvents(), "RideEnded"), 0)
@@ -682,14 +708,15 @@ return function(harness)
 			sim:takeEvents()
 			for second = 2, 600, 2 do
 				sim:step(second)
-				local _, y, z = sim:eggCenter(egg, second)
+				local _, height, z = sim:eggCenter(egg, second)
 				expect.truthy(z >= Runway.FINAL_ZONE_START and z < Runway.LOOP_END, "z " .. z)
-				expect.near(y, Runway.surfaceY(z) + egg.spec.radius)
+				expect.near(height, egg.spec.radius)
 			end
 			local events = sim:takeEvents()
 			expect.equal(#eventsOfType(events, "RideEnded"), 0, "nobody went over an end")
 			expect.equal(#eventsOfType(events, "EggRemoved"), 0)
-			expect.truthy(egg.startZ + egg.spec.rollSpeed * 600 > Runway.LENGTH * 3, "far past where it used to end")
+			local rolledTo = egg.startZ + egg.spec.rollSpeed * 600
+			expect.truthy(rolledTo > Runway.LENGTH + Runway.LOOP_LENGTH * 3, "many times round the loop")
 		end)
 	end)
 
@@ -795,7 +822,14 @@ return function(harness)
 				local fromStart = obstacle.z - Runway.zoneStartZ(obstacle.zone)
 				expect.truthy(fromStart >= Obstacles.Config.FIRST_ROW - Obstacles.Config.ROW_JITTER, `{obstacle.kind}`)
 				expect.truthy(Obstacles.Config.Zones[obstacle.zone].weights[obstacle.kind], obstacle.kind)
-				expect.truthy(math.abs(obstacle.x) + obstacle.hx <= Runway.WIDTH / 2 + 1e-6, "on the runway")
+				expect.truthy(
+					math.abs(obstacle.x) + obstacle.hx <= Runway.halfWidthAt(obstacle.z) + 1e-6,
+					"on the runway"
+				)
+				-- Round the inside of a bend it reaches further along the runway than its size says.
+				expect.near(obstacle.rz, obstacle.hz / Runway.stretch(obstacle.x, obstacle.z), 1e-9)
+				expect.truthy(obstacle.row.zMin <= obstacle.z - obstacle.rz + 1e-9, "inside its row")
+				expect.truthy(obstacle.row.zMax >= obstacle.z + obstacle.rz - 1e-9, "inside its row")
 				kindsPerZone[obstacle.zone] = kindsPerZone[obstacle.zone] or {}
 				kindsPerZone[obstacle.zone][obstacle.kind] = (kindsPerZone[obstacle.zone][obstacle.kind] or 0) + 1
 			end
@@ -808,6 +842,54 @@ return function(harness)
 				expect.truthy(kinds >= 3, `zone {zoneId} has {kinds} kinds of obstacle`)
 				expect.truthy(count >= 8, `zone {zoneId} has {count} obstacles`)
 			end
+		end)
+
+		it("puts more obstacles in a row where the runway is wider, and now and then a giant rock", function()
+			local rows, count = {}, {}
+			for _, row in Obstacles.rowsBetween(0, Runway.LENGTH) do
+				local zoneId = row.obstacles[1].zone
+				rows[zoneId] = (rows[zoneId] or 0) + 1
+				count[zoneId] = (count[zoneId] or 0) + #row.obstacles
+				expect.near(row.half, Runway.halfWidthAt(row.zMin), 12, "the runway's half-width at the row")
+			end
+			local first, last = count[1] / rows[1], count[Runway.ZONE_COUNT] / rows[Runway.ZONE_COUNT]
+			expect.truthy(last > first * 1.4, `{last} to a row in the last zone, {first} in the first`)
+			-- The longer the zone, the more rows.
+			for zoneId = 2, Runway.ZONE_COUNT do
+				expect.truthy(rows[zoneId] > rows[zoneId - 1], "rows in zone " .. zoneId)
+			end
+			local giants = 0
+			for _, obstacle in Obstacles.all() do
+				local kind = Obstacles.Config.Kinds[obstacle.kind]
+				if obstacle.hx > kind.hx * kind.grow + 1e-6 then
+					giants += 1
+					expect.truthy(kind.giant, obstacle.kind .. " has a giant size")
+					expect.truthy(obstacle.hx <= kind.hx * kind.grow * kind.giant + 1e-6, "not beyond it")
+				end
+			end
+			expect.truthy(giants >= 10, giants .. " giant rocks")
+		end)
+
+		it("always leaves open runway between one row and the next, however long their rocks are", function()
+			local last = -math.huge
+			local longest = 0
+			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
+				expect.truthy(row.zMin >= last + Obstacles.Config.ROW_CLEAR - 0.01, "rows too close at " .. row.zMin)
+				last = row.zMax
+				longest = math.max(longest, row.zMax - row.zMin)
+				-- Never crowding the end of the zone, where the next zone's eggs appear.
+				local zoneEnd = Runway.zoneStartZ(row.obstacles[1].zone + 1)
+				if row.zMax < Runway.LENGTH then
+					expect.truthy(
+						row.zMax <= zoneEnd - Obstacles.Config.LAST_ROW / 2 + 1e-6,
+						"row runs into the next zone"
+					)
+				end
+			end
+			expect.truthy(longest > 20, `some rows hold a giant rock (the longest is {longest})`)
+			-- Room for the biggest egg to roll clear of one row and be on its new lane before the next.
+			local biggest = EggSpec.get(6, "Eternal")
+			expect.truthy(Obstacles.Config.ROW_CLEAR - 2 * biggest.radius >= 25, "room to change lanes")
 		end)
 
 		it("leaves a gap in every row for the biggest egg", function()
@@ -833,20 +915,26 @@ return function(harness)
 				for _, spec in { smallest, biggest } do
 					local startZ = spec.startZ
 					local fadeZ = Runway.fadeZ(zoneId)
-					for _, fromZ in { startZ, startZ + 230, startZ + 470 } do
-						for lane = -60, 60, 4 do
+					local length = Runway.zoneLength(zoneId)
+					for _, fromZ in { startZ, startZ + length * 0.38, startZ + length * 0.78 } do
+						-- From every part of the runway's width, wall to wall.
+						local widest = Runway.maxLateral(spec.halfLength, fromZ)
+						for step = -8, 8 do
+							local lane = widest * step / 8
 							local path = Obstacles.planPath(lane, fromZ, fadeZ, spec.halfLength, spec.radius)
-							local limit = Runway.maxLateral(spec.halfLength)
 							local z = fromZ
 							while z <= fadeZ do
 								local x = Obstacles.lateralAt(path, z)
+								local limit = Runway.maxLateral(spec.halfLength, z)
 								expect.truthy(math.abs(x) <= limit + 1e-6, "stays on the runway")
-								for _, row in Obstacles.rowsBetween(z - spec.radius, z + spec.radius) do
+								for _, row in Obstacles.rowsBetween(z - spec.radius * 4, z + spec.radius * 4) do
 									for _, obstacle in row.obstacles do
+										-- How far along the runway the two reach between them (stretched round a bend).
+										local reach = obstacle.rz * (obstacle.hz + spec.radius) / obstacle.hz
 										local touching = math.abs(x - obstacle.x) < obstacle.hx + spec.halfLength
-											and math.abs(z - obstacle.z) < obstacle.hz + spec.radius
+											and math.abs(z - obstacle.z) < reach
 										-- An egg that starts beside an obstacle is left to roll on past it.
-										if touching and obstacle.z - obstacle.hz > fromZ + spec.radius then
+										if touching and obstacle.z - reach > fromZ then
 											error(
 												`zone {zoneId} {spec.rarity} egg from lane {lane} at {fromZ} hits {obstacle.kind} {obstacle.id} at z {z}`
 											)
@@ -990,7 +1078,7 @@ return function(harness)
 
 			-- Given time, the egg can reach the edge but not pass it.
 			sim:setLateral(ALICE, 999, 60)
-			expect.near(egg.lateral, Runway.maxLateral(egg.spec.halfLength))
+			expect.near(egg.lateral, Runway.maxLateral(egg.spec.halfLength, sim:_eggZ(egg, 60)))
 
 			-- Garbage is ignored.
 			local before = egg.lateral

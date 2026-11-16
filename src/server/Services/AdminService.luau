@@ -21,7 +21,7 @@ local PetModels = require(Shared.PetModels)
 local PetRig = require(Shared.PetRig)
 local NumberFormat = require(Shared.NumberFormat)
 local Rarities = require(Shared.Config.Rarities)
-local Runway = require(Shared.Runway)
+local RunwayFrame = require(Shared.RunwayFrame)
 local Shop = require(Shared.Config.Shop)
 local Zones = require(Shared.Config.Zones)
 
@@ -144,12 +144,12 @@ local function placementAhead(player: Player): { z: number, lateral: number }?
 	if root == nil then
 		return nil
 	end
-	local position = root.Position
-	local z = position.Z + DROP_AHEAD
-	if Runway.zoneAt(position.Z) == nil or Runway.zoneAt(z) == nil then
+	-- Where they are on the runway: how far across it, and how far down it (behind the start is not on it).
+	local x, z = RunwayFrame.locate(root.Position)
+	if z < 0 then
 		return nil
 	end
-	return { z = z, lateral = position.X }
+	return { z = z + DROP_AHEAD, lateral = x }
 end
 
 -- Drops eggs at the chute or "here". Returns the placement used, and a note to add if "here" was not possible.

@@ -66,6 +66,7 @@ return function(harness)
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
+			RunwayFrame = session:require(folder.RunwayFrame),
 			Tuning = session:require(folder.Config.Tuning),
 			Zones = session:require(folder.Config.Zones),
 		}
@@ -102,21 +103,30 @@ return function(harness)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
 		local startZ = egg.startZ or spec.startZ
-		local fadeZ = math.min(
-			math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
-			modules.Runway.LOOP_END - 1
-		)
+		local fadeZ = modules.EggSpec.fadeZ(egg.zone, startZ)
 		local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 		return path, spec, startZ
 	end
 
-	-- Where an egg (as described in an EggSpawned message) is right now, if nobody has steered it.
-	local function eggPosition(session, egg)
+	-- Where an egg (as described in an EggSpawned message) is right now on the runway, if nobody has steered it:
+	-- how far across it (x) and how far down it (z).
+	local function eggSpot(session, egg)
 		local modules = shared(session)
 		local path, spec, startZ = eggPath(session, egg)
 		local z = modules.Runway.wrapZ(modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock))
-		local x = modules.Obstacles.lateralAt(path, z)
-		return roblox.Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z)
+		return modules.Obstacles.lateralAt(path, z), z
+	end
+
+	-- The same as a place in the world: the egg's centre, wherever the winding runway has taken it.
+	local function eggPosition(session, egg)
+		local modules = shared(session)
+		local x, z = eggSpot(session, egg)
+		return modules.RunwayFrame.point(x, z, modules.EggSpec.get(egg.zone, egg.rarity).radius)
+	end
+
+	-- Where a place in the world is on the runway: how far across it, and how far down it.
+	local function spotOf(session, position)
+		return shared(session).Runway.fromWorld(position.X, position.Z)
 	end
 
 	-- Rides an egg for a while, steering it along the path it would have taken on its own (which misses every
@@ -155,7 +165,7 @@ return function(harness)
 	end
 
 	describe("Server: starting up", function()
-		it("builds the map: zones with banks and gates, and every obstacle", function()
+		it("builds the map: zones with walls and gates, and every obstacle", function()
 			local session = startServer()
 			local map = session:service("Workspace"):FindFirstChild("Map")
 			expect.truthy(map, "Workspace.Map")
@@ -163,21 +173,75 @@ return function(harness)
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
 			local runway = shared(session).Runway
-			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
-				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height.
-				local tiles = 0
+				-- A checkered runway of tiles about 20 studs square, every one lying on the runway's surface where it
+				-- is: on the runway, at its height, turned the way it bends and tipped the way it slopes.
+				local tiles, turned, tipped = 0, 0, 0
+				local startZ, endZ = runway.zoneStartZ(zoneId), runway.zoneStartZ(zoneId + 1)
 				for _, tile in zone.Ground:GetChildren() do
-					if tile.Size.X == 20 and tile.Size.Z == 20 then
+					if tile.Name == "Tile" then
 						tiles += 1
-						expect.near(tile.CFrame.Position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
+						local frame = tile.CFrame
+						local top = frame.Position + frame.UpVector * (tile.Size.Y / 2)
+						local x, z = runway.fromWorld(top.X, top.Z)
+						expect.truthy(z > startZ and z < endZ, zoneName .. " tile in its zone")
+						expect.truthy(math.abs(x) <= runway.halfWidthAt(z) + 1, zoneName .. " tile on the runway")
+						expect.near(top.Y, runway.surfaceY(z), 0.3, zoneName .. " tile height")
+						-- (Over a zone's last stretch the runway widens, and the tiles fan out with it.)
+						local heading = math.atan2(frame.ZVector.X, frame.ZVector.Z)
+						local fan = if z > endZ - runway.WIDTH_TAPER - 20 then 0.15 else 0
+						expect.near(heading, runway.heading(z), 0.08 + fan, zoneName .. " tile heading")
+						expect.near(frame.ZVector.Y, runway.slope(z), 0.03, zoneName .. " tile slope")
+						if math.abs(heading) > math.rad(12) then
+							turned += 1
+						end
+						if math.abs(frame.ZVector.Y) > 0.05 then
+							tipped += 1
+						end
 					end
 				end
-				expect.equal(tiles, (runway.WIDTH / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
+				expect.equal(
+					tiles,
+					(runway.zoneWidth(zoneId) / 20) * (runway.zoneLength(zoneId) / 20),
+					zoneName .. " tiles"
+				)
+				expect.truthy(turned > tiles / 5, zoneName .. " bends")
+				expect.truthy(tipped > tiles / 20, zoneName .. " slopes")
 				expect.truthy(#zone.Banks:GetChildren() > 50, zoneName .. " banks")
 				expect.truthy(#zone.Backdrop:GetChildren() > 0, zoneName .. " backdrop")
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
+				-- The gate hangs square across the start of the zone, as wide as the runway there.
+				local sign = zone.Sign
+				local signX, signZ = runway.fromWorld(sign.CFrame.Position.X, sign.CFrame.Position.Z)
+				expect.near(signX, 0, 0.05, zoneName .. " gate in the middle")
+				expect.near(signZ, startZ, 0.05, zoneName .. " gate at the start")
+				expect.truthy(sign.Size.X > runway.zoneWidth(zoneId), zoneName .. " gate spans the runway")
+
+				-- Massive walls up both sides: sheer faces rising straight from the kerb, far higher than a player
+				-- can jump, with more tiers stepping up behind. (The Ocean is a boardwalk over the sea instead.)
+				local faces, tallest = 0, 0
+				for _, part in zone.Banks:GetChildren() do
+					if part.Name == "WallTop" then
+						local top = part.CFrame.Position + roblox.Vector3.new(0, part.Size.Y / 2, 0)
+						local x, z = runway.fromWorld(top.X, top.Z)
+						local rise = top.Y - runway.surfaceY(z)
+						tallest = math.max(tallest, rise)
+						expect.truthy(rise >= 30, `{zoneName} wall only {rise} studs high`)
+						expect.truthy(math.abs(x) > runway.halfWidthAt(z), zoneName .. " wall off the runway")
+						faces += 1
+					end
+				end
+				if zoneName == "Ocean" then
+					expect.equal(faces, 0, "no walls round the boardwalk")
+					expect.truthy(zone.Banks:FindFirstChild("Water"), "the sea")
+					expect.truthy(zone.Banks:FindFirstChild("Seabed"), "the seabed")
+					expect.truthy(zone.Banks:FindFirstChild("SeaWall"), "railings")
+				else
+					expect.truthy(faces > runway.zoneLength(zoneId) / 20, zoneName .. " walls all the way down")
+					expect.truthy(tallest >= 80, `{zoneName} walls reach {tallest} studs`)
+				end
 			end
 			expect.equal(map.Desert.Sign.SurfaceGui.TextLabel.Text, "DESERT")
 			expect.near(map.Hub.CFrame.Position.Y, runway.BASE_Y - 2)
@@ -492,12 +556,62 @@ return function(harness)
 					break
 				end
 			end
-			root.Position = roblox.Vector3.new(lava.x + lava.hx + 4, modules.Runway.BASE_Y + 3, lava.z)
+			root.Position = modules.RunwayFrame.point(lava.x + lava.hx + 4, lava.z, 3)
 			task.wait(0.4)
 			expect.equal(humanoid.Health, 100, "safe beside it")
-			root.Position = roblox.Vector3.new(lava.x, modules.Runway.BASE_Y + 3, lava.z)
+			root.Position = modules.RunwayFrame.point(lava.x, lava.z, 3)
 			task.wait(0.4)
 			expect.equal(humanoid.Health, 0)
+		end)
+
+		it("drowns players who end up in the Ocean's sea, but not on its boardwalk", function()
+			local session = startServer()
+			local _, humanoid, root = session:addPlayer(1, "Tester")
+			local modules = shared(session)
+			-- On the boardwalk, at the top of its highest hump and where it is lowest.
+			local startZ = modules.Runway.zoneStartZ(4)
+			local highest = startZ
+			for z = startZ, startZ + modules.Runway.zoneLength(4) do
+				if modules.Runway.surfaceY(z) > modules.Runway.surfaceY(highest) then
+					highest = z
+				end
+			end
+			expect.truthy(modules.Runway.surfaceY(highest) > modules.Runway.surfaceY(startZ) + 5, "a real hump")
+			for _, z in { highest, startZ + 30 } do
+				root.Position = modules.RunwayFrame.point(20, z, 3)
+				task.wait(0.4)
+				expect.equal(humanoid.Health, 100, "dry on the boardwalk")
+			end
+			-- Off the side, standing on the seabed.
+			local half = modules.Runway.halfWidthAt(startZ + 300)
+			root.Position = modules.RunwayFrame.point(half + 20, startZ + 300, -4)
+			task.wait(0.4)
+			expect.equal(humanoid.Health, 0, "in the sea")
+		end)
+
+		it("does not mistake the hub or the Model Showroom for a fall off the runway", function()
+			local session = startServer()
+			local _, humanoid, root = session:addPlayer(1, "Tester")
+			local modules = shared(session)
+			-- The runway climbs and drops by more than the fall that kills; places beside it are judged by their
+			-- own ground, not by how high the runway happens to be level with them.
+			local lowest, highest = 0, 0
+			for z = 0, modules.Runway.LENGTH, 10 do
+				lowest = math.min(lowest, modules.Runway.surfaceY(z) - modules.Runway.BASE_Y)
+				highest = math.max(highest, modules.Runway.surfaceY(z) - modules.Runway.BASE_Y)
+			end
+			expect.truthy(highest - lowest > modules.Tuning.FALL_KILL_DEPTH, "hills bigger than the fatal fall")
+			for _, spot in { { 0, -200 }, { -3000, 100 }, { -3000, 600 }, { -2800, -300 } } do
+				root.Position = roblox.Vector3.new(spot[1], modules.Runway.BASE_Y + 3, spot[2])
+				task.wait(0.3)
+				expect.equal(humanoid.Health, 100, `alive at ({spot[1]}, {spot[2]})`)
+			end
+			-- And walking on the runway's own ground is never a fall, however low the valley.
+			for z = 100, modules.Runway.LENGTH, 900 do
+				root.Position = modules.RunwayFrame.point(0, z, 60)
+				task.wait(0.3)
+				expect.equal(humanoid.Health, 100, "alive above the runway at " .. z)
+			end
 		end)
 
 		it("frees the egg when its rider dies or hops off", function()
@@ -528,7 +642,7 @@ return function(harness)
 			local egg = dropEgg(session, 1, "Legendary")
 			local side = if egg.lateral >= 0 then 1 else -1
 			local startZ = pick(modules.Runway, side)
-			while eggPosition(session, egg).Z < startZ + 8 do
+			while select(2, eggSpot(session, egg)) < startZ + 8 do
 				session:heartbeat(0.1)
 			end
 			root.Position = eggPosition(session, egg) + roblox.Vector3.new(0, 2, 0)
@@ -586,39 +700,44 @@ return function(harness)
 			end
 		end)
 
-		it("keeps a rider going far past where the runway used to end", function()
+		it("keeps a rider going round the endless last zone, carried back a loop at a time", function()
 			local session = startServer()
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = mount(session, player, root, 6, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 60 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
-			-- path planned for the whole ride from where the egg is now. It is planned in distance rolled, not where
-			-- the egg is drawn: the last zone repeats, so the obstacles match.
+			-- Long enough on the fastest egg to reach the end of the loop and be carried back. Steer round the
+			-- obstacles along one path planned for the whole ride from where the egg is now. It is planned in
+			-- distance rolled, not where the egg is drawn: the last zone repeats, so the obstacles match.
 			local modules = shared(session)
 			local spec = modules.EggSpec.get(6, "Eternal")
 			local function rolledZ()
 				return modules.EggMotion.zAt(egg.spawnTime, egg.startZ, spec.rollSpeed, session.clock)
 			end
 			local fromZ = rolledZ()
-			local lane = modules.Runway.mountLateral(eggPosition(session, egg).X, spec.halfLength)
-			local rideLength = spec.rollSpeed * 60
-			expect.truthy(rideLength > modules.Runway.LOOP_LENGTH * 2, "more than twice round the loop")
+			local lane = modules.Runway.mountLateral((eggSpot(session, egg)), spec.halfLength, fromZ)
+			local seconds = math.ceil((modules.Runway.LOOP_END - fromZ) / spec.rollSpeed) + 15
+			local rideLength = spec.rollSpeed * seconds
 			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + rideLength + 100, spec.halfLength, spec.radius)
-			for _ = 1, 60 * 30 do
+			for _ = 1, seconds * 20 do
 				session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, rolledZ()))
-				session:heartbeat(1 / 30)
+				session:heartbeat(1 / 20)
 			end
+			expect.truthy(rolledZ() > modules.Runway.LOOP_END + 100, "rolled past the end of the loop")
 			local ended = session:lastSent("RideEnded", player)
 			expect.equal(ended, nil, if ended then "ride ended: " .. ended.args[1] else "")
 			expect.equal(humanoid.Health, 100)
 			local runway = shared(session).Runway
-			local z = player.ReplicationFocus.Position.Z
+			-- The part the map streams in around is on the egg: back near the start of the loop, on the runway.
+			local focus = player.ReplicationFocus.Position
+			local x, z = spotOf(session, focus)
 			expect.truthy(
-				z >= runway.FINAL_ZONE_START and z < runway.LOOP_END,
+				z >= runway.LOOP_START and z < runway.LOOP_START + 600,
 				"the focus follows the egg round the loop"
 			)
+			expect.near(x, modules.Obstacles.lateralAt(path, rolledZ()), 3, "and across the runway")
+			expect.near(focus.Y, runway.surfaceY(z) + spec.radius, 0.5, "and up and down its hills")
 			expect.equal(session:lastSent("EggClaimed", "all").args[1], egg.id, "claimed on the way")
 		end)
 
@@ -1176,16 +1295,18 @@ return function(harness)
 			expect.equal(egg.rarity, "Legendary")
 			expect.equal(egg.startZ, shared(session).EggSpec.get(1, "Legendary").startZ, "at the start of the Forest")
 
-			-- Standing in the Desert, a Snow egg lands just ahead and keeps its Snow rarity and size.
-			root.Position = roblox.Vector3.new(10, 0, 700)
+			-- Standing in the Desert, on one of its bends, a Snow egg lands just ahead (ahead down the runway, whichever
+			-- way that is there) and keeps its Snow rarity and size.
+			expect.truthy(math.abs(shared(session).Runway.heading(1300)) > 0.1, "on a bend")
+			root.Position = shared(session).RunwayFrame.point(10, 1300, 3)
 			session:clearSent()
 			ok, message = admin(session, player, "DropEgg", { egg = "Yeti", where = "Here" })
 			expect.truthy(ok, message)
 			egg = lastDropped(session, "Yeti")
 			expect.equal(egg.zone, 3)
 			expect.equal(egg.rarity, "Secret")
-			expect.equal(egg.startZ, 710)
-			expect.equal(egg.lateral, 10)
+			expect.near(egg.startZ, 1310, 0.05)
+			expect.near(egg.lateral, 10, 0.05)
 
 			-- Off the runway, "here" falls back to the chute and says so.
 			root.Position = roblox.Vector3.new(0, 13, -100)
@@ -1486,14 +1607,22 @@ return function(harness)
 			session:heartbeat(1 / 60)
 			local runway = shared(session).Runway
 
-			expect.truthy((admin(session, player, "Teleport", { to = "Zone", zone = 3 })))
-			local position = root.CFrame.Position
-			expect.near(position.Z, 1240, 1e-3)
-			expect.near(position.Y, runway.surfaceY(1240) + 3.5, 1e-3)
-			expect.near(position.X, 0, 1e-3)
+			-- Onto the middle of the runway a little way into the zone, standing on its ground, facing down it.
+			local frames = shared(session).RunwayFrame
+			for zone = 2, runway.ZONE_COUNT do
+				expect.truthy((admin(session, player, "Teleport", { to = "Zone", zone = zone })))
+				local landing = runway.zoneStartZ(zone) + 40
+				local expected = frames.point(0, landing, 3.5)
+				expect.truthy((root.CFrame.Position - expected).Magnitude < 1e-3, "landing in zone " .. zone)
+				local x, z = spotOf(session, root.CFrame.Position)
+				expect.near(x, 0, 0.05)
+				expect.near(z, landing, 0.05)
+				expect.truthy(root.CFrame.LookVector:Dot(frames.forward(landing)) > 0.999, "facing down the runway")
+			end
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Cliff" })))
-			expect.near(root.CFrame.Position.Z, runway.LENGTH - 90, 1e-3)
+			local nearEnd = frames.point(0, runway.LENGTH - 90, 3.5)
+			expect.truthy((root.CFrame.Position - nearEnd).Magnitude < 1e-3, "near the end of the last zone")
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Hub" })))
 			expect.near(root.CFrame.Position.Z, -runway.HUB_LENGTH / 2, 1e-3)
@@ -1816,37 +1945,71 @@ return function(harness)
 	end)
 
 	describe("Server: map", function()
-		it("breaks the runway's banks with gaps and paints the start zone", function()
+		it("breaks the runway's walls with gaps and paints the start zone", function()
 			local session = startServer()
 			local map = session:service("Workspace").Map
 			local runway = shared(session).Runway
 			for zoneId, zone in shared(session).Zones.List do
 				local folder = map[zone.key]
-				-- No kerb runs across a gap, and every gap has a warning strip along the runway's edge.
+				-- No kerb or wall runs across a gap, and every gap has a warning strip along the runway's edge. Each
+				-- part is checked where it is on the runway: how far across (x) and how far down it (z), and how much
+				-- of the runway's length it covers.
 				local gaps = runway.wallGaps(zoneId)
-				local strips, kerbLength = 0, 0
+				local function placeOf(part)
+					local x, z = runway.fromWorld(part.CFrame.Position.X, part.CFrame.Position.Z)
+					-- Its length in the world, as runway distance (less round the outside of a bend, and on a slope).
+					local reach = part.Size.Z / 2 / runway.stretch(x, z) / math.sqrt(1 + runway.slope(z) ^ 2)
+					return x, z, reach
+				end
+				local function inGap(side, z, reach)
+					for _, gap in gaps do
+						if gap.side == side and z + reach > gap.startZ + 0.5 and z - reach < gap.endZ - 0.5 then
+							return gap
+						end
+					end
+					return nil
+				end
+				local kerbLength = 0
+				local warned = {}
 				for _, part in folder.Ground:GetChildren() do
 					local side = if part.Name == "KerbLeft" then 1 elseif part.Name == "KerbRight" then -1 else nil
 					if side then
-						local center, half = part.CFrame.Position.Z, part.Size.Z / 2
-						kerbLength += half * 2
-						expect.truthy(side * part.CFrame.Position.X > runway.WIDTH / 2, `{zone.key} {part.Name} side`)
-						for _, gap in gaps do
-							if gap.side == side then
-								local overlaps = center + half > gap.startZ + 1e-3 and center - half < gap.endZ - 1e-3
-								expect.falsy(overlaps, `{zone.key} {part.Name} covers a gap`)
-							end
-						end
+						local x, z, reach = placeOf(part)
+						kerbLength += reach * 2
+						expect.truthy(side * x > runway.halfWidthAt(z), `{zone.key} {part.Name} side`)
+						expect.truthy(side * x < runway.halfWidthAt(z) + 2.5, `{zone.key} {part.Name} along the edge`)
+						expect.falsy(inGap(side, z, reach), `{zone.key} {part.Name} covers a gap`)
 					elseif part.Name == "GapWarning" then
-						strips += 1
+						local x, z, reach = placeOf(part)
+						local gap = inGap(if x > 0 then 1 else -1, z, reach)
+						expect.truthy(gap, `{zone.key} warning strip at {z} marks a gap`)
+						expect.truthy(math.abs(x) < runway.halfWidthAt(z), "just inside the edge")
+						warned[gap] = (warned[gap] or 0) + reach * 2
 					end
 				end
-				expect.equal(strips, #gaps, zone.key .. " warning strips")
 				local gapLength = 0
 				for _, gap in gaps do
-					gapLength += gap.endZ - gap.startZ
+					local length = gap.endZ - gap.startZ
+					gapLength += length
+					-- Marked from end to end.
+					expect.near(warned[gap] or 0, length, length * 0.03 + 1, zone.key .. " gap marked")
 				end
-				expect.near(kerbLength, 2 * runway.ZONE_LENGTH - gapLength, 1e-3)
+				local expected = 2 * runway.zoneLength(zoneId) - gapLength
+				expect.near(kerbLength, expected, expected * 0.02, zone.key .. " kerbs everywhere else")
+				-- The walls stop at the gaps too (the Ocean's railings and invisible sea walls likewise).
+				for _, part in folder.Banks:GetChildren() do
+					if part.Name == "Wall" or part.Name == "SeaWall" or part.Name == "Rope" then
+						local x, z, reach = placeOf(part)
+						-- (Give or take a few studs: where the runway is widening or bending, a wall's blocks stand a
+						-- little skew to it.)
+						if math.abs(x) < runway.halfWidthAt(z) + 30 then
+							expect.falsy(
+								inGap(if x > 0 then 1 else -1, z, reach - 4),
+								`{zone.key} {part.Name} blocks a gap`
+							)
+						end
+					end
+				end
 			end
 
 			-- No end cliff: the last zone goes on past the end of the runway, obstacles and all.
@@ -1857,7 +2020,17 @@ return function(harness)
 				expect.truthy(repeatFolder, "copy " .. copy)
 				local sign = repeatFolder:FindFirstChild("SignPost")
 				expect.truthy(sign, "copy " .. copy .. " has its gate")
-				expect.near(sign.CFrame.Position.Z, runway.FINAL_ZONE_START + copy * runway.LOOP_LENGTH, 1e-3)
+				local _, signZ = spotOf(session, sign.CFrame.Position)
+				expect.near(signZ, runway.FINAL_ZONE_START + copy * runway.LOOP_LENGTH, 0.05)
+				-- Every part of the copy is one loop on from the last zone's own.
+				local original = map[lastZone.key]
+				local shift = shared(session).RunwayFrame.loopShift() * copy
+				local moved = repeatFolder.Ground:GetChildren()
+				for index, part in original.Ground:GetChildren() do
+					if index % 50 == 1 then
+						expect.truthy((moved[index].CFrame.Position - part.CFrame.Position - shift).Magnitude < 1e-3)
+					end
+				end
 			end
 			local beyond = 0
 			for _, obstacle in shared(session).Obstacles.all() do

@@ -8,6 +8,9 @@
 -- and so does jumping off an egg; they have Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first,
 -- or running out of time, kills them, and they start again at the hub. (Riding a pet, or flying as an admin, is not
 -- walking. The server kills them too if this device does not; see RunwayService.)
+--
+-- The runway bends and climbs. Steering, leaps and tumbles all go by which way the runway points where the player
+-- is (Shared/RunwayFrame): "left" and "right" are across it, and a leap carries the player on down it.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -23,6 +26,7 @@ local NumberFormat = Load.shared("NumberFormat")
 local Obstacles = Load.shared("Obstacles")
 local Rarities = Load.shared("Config", "Rarities")
 local Runway = Load.shared("Runway")
+local RunwayFrame = Load.shared("RunwayFrame")
 local Tuning = Load.shared("Config", "Tuning")
 
 local EggController = require(script.Parent.EggController)
@@ -72,7 +76,7 @@ local leapForce: VectorForce? = nil
 -- A mount request is on its way: touching the runway does not count until the server has had time to answer.
 local mountPendingUntil = 0
 local MOUNT_PENDING_GRACE = 0.5
--- This character is about to die (it hit a bank, went over the edge, or missed its leap); nothing more to do.
+-- This character is about to die (it hit a wall, went over the edge, or missed its leap); nothing more to do.
 local doomed = false
 
 local function getCharacter(): (Humanoid?, BasePart?)
@@ -93,8 +97,8 @@ local function rgb(color: { number }): Color3
 end
 
 -- Left/right steering from -1 to 1, relative to the camera, from whatever the player is using
--- (keyboard, thumbstick, or gamepad).
-local function readSteer(): number
+-- (keyboard, thumbstick, or gamepad), for an egg `z` studs down the runway.
+local function readSteer(z: number): number
 	local move = Vector3.zero
 	if controls then
 		move = controls:GetMoveVector()
@@ -106,9 +110,9 @@ local function readSteer(): number
 	if camera == nil then
 		return 0
 	end
-	-- Side to side on the runway is the world X axis.
+	-- How much of the push is across the runway, whichever way the runway points there.
 	local world = camera.CFrame:VectorToWorldSpace(Vector3.new(move.X, 0, move.Z))
-	return math.clamp(world.X, -1, 1)
+	return math.clamp(world:Dot(RunwayFrame.across(z)), -1, 1)
 end
 
 -- Lighter gravity for the character while leaping.
@@ -162,13 +166,6 @@ local function missedLeap(humanoid: Humanoid, root: BasePart)
 	humanoid.Health = 0
 end
 
--- Whether a character root at `position` is standing on the runway (rather than in the air above it, or off the
--- side).
-local function isOnRunway(position: Vector3): boolean
-	return math.abs(position.X) <= Runway.WIDTH / 2
-		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
-end
-
 -- Whether the player is getting about some other way than on foot: riding a pet, or flying as an admin.
 local function isCarried(): boolean
 	return UiState.Fusion.peek(UiState.riddenPet) ~= "" or localPlayer:GetAttribute(AdminTools.FLYING) == true
@@ -185,26 +182,32 @@ local function updateLeap()
 		return
 	end
 
-	local position = root.Position
-	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isCarried() then
+	-- Where the character is on the runway: how far across it, how far down it, and how high above it.
+	local x, z, height = RunwayFrame.locate(root.Position)
+	local half = Runway.halfWidthAt(z)
+	if z < 0 or math.abs(x) > half + 4 or isCarried() then
 		-- Back over the hub, off the side (falling), or not on foot.
 		if leapEndsAt ~= nil then
 			endLeap(root)
 		end
 		return
 	end
-	if position.Z >= Runway.LOOP_END then
-		root.CFrame += Vector3.new(0, 0, -Runway.LOOP_LENGTH)
-		position = root.Position
+	if z >= Runway.LOOP_END then
+		-- Carried back one loop of the endless last zone, to a spot that looks just the same.
+		root.CFrame -= RunwayFrame.loopShift()
+		z -= Runway.LOOP_LENGTH
 	end
 
 	if leapEndsAt == nil then
-		-- Just stepped past the start zone onto the runway.
+		-- Just stepped past the start zone onto the runway: carried on down it, keeping any sideways speed.
 		local velocity = root.AssemblyLinearVelocity
+		local forward, across = RunwayFrame.forward(z), RunwayFrame.across(z)
 		startLeap(
 			humanoid,
 			root,
-			Vector3.new(velocity.X, Tuning.LEAP_UP_SPEED, math.max(velocity.Z, Tuning.LEAP_FORWARD_SPEED))
+			across * velocity:Dot(across)
+				+ Vector3.new(0, Tuning.LEAP_UP_SPEED, 0)
+				+ forward * math.max(velocity:Dot(forward), Tuning.LEAP_FORWARD_SPEED)
 		)
 		return
 	end
@@ -213,7 +216,9 @@ local function updateLeap()
 	if clock < mountPendingUntil then
 		return
 	end
-	if clock >= (leapEndsAt :: number) or isOnRunway(position) then
+	-- Standing on the runway (rather than in the air above it, or off the side) is touching it.
+	local onRunway = math.abs(x) <= half and height < Tuning.STANDING_HEIGHT
+	if clock >= (leapEndsAt :: number) or onRunway then
 		missedLeap(humanoid, root)
 	end
 end
@@ -240,16 +245,20 @@ local function release(reason: string)
 	root.Anchored = false
 	humanoid.Sit = false
 
-	local side = if root.Position.X >= 0 then 1 else -1
+	-- Which way is down the runway here, which way is across it, and which side of it the egg was on.
+	local x, z = RunwayFrame.locate(root.Position)
+	local forward, across = RunwayFrame.forward(z), RunwayFrame.across(z)
+	local up = Vector3.yAxis
+	local side = if x >= 0 then 1 else -1
 	if reason == "Dismount" then
 		-- Leap forward off the egg, toward the next one.
-		startLeap(humanoid, root, Vector3.new(0, Tuning.LEAP_UP_SPEED, eggSpeed + 4))
+		startLeap(humanoid, root, up * Tuning.LEAP_UP_SPEED + forward * (eggSpeed + 4))
 	elseif reason == "ThrownOff" or reason == "KnockedOff" then
 		-- Lost their balance (or knocked off): tumble off to one side, stunned. Only a lucky landing on another egg
 		-- saves them.
 		stunnedUntil = os.clock() + Tuning.STUN_TIME
 		humanoid.PlatformStand = true
-		startLeap(humanoid, root, Vector3.new(side * 16, Tuning.LEAP_UP_SPEED * 0.6, eggSpeed * 0.5))
+		startLeap(humanoid, root, across * (side * 16) + up * (Tuning.LEAP_UP_SPEED * 0.6) + forward * (eggSpeed * 0.5))
 		task.delay(Tuning.STUN_TIME, function()
 			if humanoid.Parent and humanoid.Health > 0 then
 				humanoid.PlatformStand = false
@@ -257,14 +266,14 @@ local function release(reason: string)
 			end
 		end)
 	elseif reason == "HitWall" then
-		-- Crashed into the bank. The server ends it.
+		-- Crashed into the wall. The server ends it.
 		doomed = true
-		root.AssemblyLinearVelocity = Vector3.new(-side * 10, 15, eggSpeed * 0.3)
+		root.AssemblyLinearVelocity = across * (-side * 10) + up * 15 + forward * (eggSpeed * 0.3)
 		humanoid.Health = 0
 	elseif reason == "FellOff" then
 		-- Over the edge through a gap; the fall kills them.
 		doomed = true
-		root.AssemblyLinearVelocity = Vector3.new(side * 14, 5, eggSpeed)
+		root.AssemblyLinearVelocity = across * (side * 14) + up * 5 + forward * eggSpeed
 		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 	elseif reason == "Hazard" then
 		-- Into lava or tar; the server ends it.
@@ -446,12 +455,12 @@ local function steer(deltaTime: number)
 		humanoid.Sit = true
 	end
 
-	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
+	local now = Workspace:GetServerTimeNow()
+	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	egg.lateral = Runway.clampLateral(egg.lateral + readSteer(z) * agility * deltaTime, egg.spec.halfLength, z)
 	egg.targetLateral = egg.lateral
 
 	-- Obstacles: report a hit straight away so the server can check it, and show it now.
-	local now = Workspace:GetServerTimeNow()
-	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
 	if rideLastZ and z < rideLastZ - Runway.LOOP_LENGTH / 2 then
 		-- Carried back one loop: the obstacles ahead can be hit again (as on the server).
 		rideHits = {}

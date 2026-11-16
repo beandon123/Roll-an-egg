@@ -70,7 +70,9 @@ local function update()
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
 		local position = root.Position
-		local zoneId = Runway.zoneAt(position.Z)
+		-- How far down the winding runway they are (behind its start is the hub).
+		local _, z = Runway.fromWorld(position.X, position.Z)
+		local zoneId = Runway.zoneAt(z)
 		if Showroom.contains(position.X, position.Z) then
 			UiState.zoneName:set("Model Showroom")
 		else

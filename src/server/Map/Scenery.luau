@@ -1,9 +1,11 @@
 -- Builds each zone's stretch of runway and everything around it, in the blocky style of the eggs and pets:
---     Ground    the level runway, checkered in the zone's colours, blending into the next zone over its last rows
---     Banks     stepped cliffs up both sides, walls players cannot climb, topped with the zone's plants and rocks
---               (the Ocean zone is a boardwalk over a reef instead, with railings along its edges)
+--     Ground    the runway itself, checkered in the zone's colours, winding and rolling over the hills, blending
+--               into the next zone over its last rows
+--     Walls     massive stepped walls up both sides, far too high to climb, topped with the zone's plants and rocks
+--               and broken by the gaps (the Ocean zone is a boardwalk over a reef instead, with railings along its
+--               edges)
 --     Backdrop  big blocky hills, mesas, mountains or volcanoes in the distance
---     Gate      an arch over the start of the zone with its name and the stamina its eggs need
+--     Gate      a sign hung across the start of the zone with its name and the stamina its eggs need
 --     Repeats   the last zone again past the end of the runway, which never ends (Shared/Runway)
 -- Nothing here affects play: eggs and obstacles are worked out from Shared/Runway and Shared/Obstacles.
 
@@ -13,6 +15,7 @@ local Shared = ReplicatedStorage.Shared
 local NumberFormat = require(Shared.NumberFormat)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
+local RunwayFrame = require(Shared.RunwayFrame)
 local Zones = require(Shared.Config.Zones)
 
 local Build = require(script.Parent.Build)
@@ -26,10 +29,19 @@ type Random = Build.Random
 
 local M = Enum.Material
 
+-- The ground is laid in rows of tiles about this long and wide, on a slab this thick.
 local TILE = 20
 local SLAB = 4
--- Where the banks begin: the runway's edge plus a kerb.
-local EDGE = Runway.WIDTH / 2 + 1
+-- A kerb this wide runs along each edge of the runway; the walls rise from behind it.
+local KERB = 2
+-- How high the wall beside the runway stands, give or take (the tiers behind it stand higher still), how thick the
+-- grass, sand or snow on top of every tier is, and how far below the runway the walls go on down, so that wherever
+-- a gap shows their ends the runway reads as the top of a plateau.
+local WALL_HEIGHT = 46
+local CAP = 3
+local WALL_FOOT = 40
+-- How far each tier behind the first stands into the one in front of it.
+local TIER_OVERLAP = 1.5
 
 export type Prop = { kind: string, weight: number, size: number? }
 
@@ -48,7 +60,7 @@ export type Palette = {
 	props: { Prop },
 	-- The Ocean zone's sea, in place of banks.
 	sea: boolean?,
-	-- Lava rivers along the Volcano's banks, and lava falling down its cliffs.
+	-- Lava rivers along the tops of the Volcano's walls, and lava falling down its cliffs.
 	lava: boolean?,
 }
 
@@ -347,10 +359,48 @@ local function pickProp(random: Random, props: { Prop }): Prop
 end
 
 ----------------------------------------------------------------------------------------------------------------
--- Gaps in the banks
+-- Following the runway
+--
+-- The runway bends and climbs (Shared/Runway), so nothing here is laid out in straight rows. Everything that runs
+-- alongside it (ground, kerbs, walls, railings) is built in short pieces, each laid along the line from one spot on
+-- the runway to another, so the pieces turn with the bends and step up and down the hills.
 
--- The stretches of one side of a zone (side = -1 or 1) with no gap in its bank, as { from z, to z }. A rider who
--- steers their egg into a gap (Shared/Runway.wallGaps) goes over the edge with it; one who steers into a bank dies.
+-- The same place and heading as `frame`, at a height in the world.
+local function atHeight(frame: CFrame, worldY: number): CFrame
+	return CFrame.new(frame.X, worldY, frame.Z) * frame.Rotation
+end
+
+-- A level frame for a piece that runs alongside the runway from (x0, z0) to (x1, z1): halfway between the two
+-- spots, at the height of the ground there, with +Z pointing from the first to the second and +X across the runway
+-- (toward +x). Also how far apart the two spots are, on the level.
+local function along(x0: number, z0: number, x1: number, z1: number): (CFrame, number)
+	local a, b = RunwayFrame.point(x0, z0), RunwayFrame.point(x1, z1)
+	local flat = Vector3.new(b.X - a.X, 0, b.Z - a.Z)
+	local forward = flat.Unit
+	return CFrame.fromMatrix((a + b) / 2, Vector3.new(forward.Z, 0, -forward.X), Vector3.yAxis, forward), flat.Magnitude
+end
+
+-- The same for a piece that lies on the ground: tipped to run up or down the slope from one spot to the other. Also
+-- how far apart the two spots are, along the slope.
+local function alongSlope(x0: number, z0: number, x1: number, z1: number): (CFrame, number)
+	local a, b = RunwayFrame.point(x0, z0), RunwayFrame.point(x1, z1)
+	local span = b - a
+	local forward = span.Unit
+	local across = Vector3.new(forward.Z, 0, -forward.X).Unit
+	return CFrame.fromMatrix((a + b) / 2, across, forward:Cross(across), forward), span.Magnitude
+end
+
+-- How far apart two spots on the runway are, on the level.
+local function distance(x0: number, z0: number, x1: number, z1: number): number
+	local a, b = RunwayFrame.point(x0, z0), RunwayFrame.point(x1, z1)
+	return Vector3.new(b.X - a.X, 0, b.Z - a.Z).Magnitude
+end
+
+----------------------------------------------------------------------------------------------------------------
+-- Gaps in the walls
+
+-- The stretches of one side of a zone (side = -1 or 1) with no gap in its wall, as { from z, to z }. A rider who
+-- steers their egg into a gap (Shared/Runway.wallGaps) goes over the edge with it; one who steers into a wall dies.
 local function stretchesOf(zoneId: number, side: number): { { number } }
 	local startZ = Runway.zoneStartZ(zoneId)
 	local list = {}
@@ -361,18 +411,18 @@ local function stretchesOf(zoneId: number, side: number): { { number } }
 			from = gap.endZ
 		end
 	end
-	table.insert(list, { from, startZ + Runway.ZONE_LENGTH })
+	table.insert(list, { from, startZ + Runway.zoneLength(zoneId) })
 	return list
 end
 
--- Splits each stretch into pieces no longer than `size`: { centre z, length }.
+-- Splits each stretch into pieces no longer than `size`: { from z, to z }.
 local function piecesOf(stretches: { { number } }, size: number): { { number } }
 	local pieces = {}
 	for _, stretch in stretches do
 		local z = stretch[1]
 		while z < stretch[2] - 0.01 do
 			local length = math.min(size, stretch[2] - z)
-			table.insert(pieces, { z + length / 2, length })
+			table.insert(pieces, { z, z + length })
 			z += length
 		end
 	end
@@ -387,41 +437,70 @@ local function buildGround(folder: Instance, zoneId: number, palette: Palette, n
 	ground.Name = "Ground"
 	ground.Parent = folder
 	local startZ = Runway.zoneStartZ(zoneId)
-	local rows = Runway.ZONE_LENGTH // TILE
-	local columns = Runway.WIDTH // TILE
+	local length = Runway.zoneLength(zoneId)
+	local rows = length // TILE
+	local columns = math.round(Runway.zoneWidth(zoneId) / TILE)
 	for row = 0, rows - 1 do
+		local z0, z1 = startZ + TILE * row, startZ + TILE * (row + 1)
+		-- The runway widens toward the next zone over the zone's last rows; the tiles widen with it.
+		local half0, half1 = Runway.halfWidthAt(z0), Runway.halfWidthAt(z1)
+		local width0, width1 = half0 * 2 / columns, half1 * 2 / columns
 		-- The last few rows blend into the next zone's colours.
 		local blend = if nextPalette then math.clamp((row - (rows - 5)) / 5, 0, 1) else 0
+		-- Tiles are rectangles, so round a bend the ends of one row do not quite meet the next. Every other row is
+		-- laid a hair lower and a little longer, tucked under its neighbours, so no crack ever shows; every other
+		-- tile across a row is a hair lower too, so tiles that overlap never flicker.
+		local tucked = row % 2 == 0
+		local turn = math.abs(Runway.heading(z1) - Runway.heading(z0))
 		for col = 0, columns - 1 do
 			local tone = palette.ground[(row + col) % 2 + 1]
 			if nextPalette and blend > 0 then
 				tone = Build.mix(tone, nextPalette.ground[(row + col) % 2 + 1], blend)
 			end
+			local width = math.max(width0, width1)
+			-- The outermost tiles run on under the kerb.
+			local shift = 0
+			if col == 0 then
+				width += 1
+				shift -= 0.5
+			end
+			if col == columns - 1 then
+				width += 1
+				shift += 0.5
+			end
+			local frame, span =
+				alongSlope(-half0 + width0 * (col + 0.5) + shift, z0, -half1 + width1 * (col + 0.5) + shift, z1)
+			local tuck = if tucked then width * turn / 2 + 0.15 else 0
+			local sink = (if tucked then 0.04 else 0) + (col % 2) * 0.02
 			block(
 				ground,
-				Vector3.new(TILE, SLAB, TILE),
-				CFrame.new(
-					-Runway.WIDTH / 2 + TILE * (col + 0.5),
-					Runway.BASE_Y - SLAB / 2,
-					startZ + TILE * (row + 0.5)
-				),
+				Vector3.new(width + 0.02, SLAB, span + tuck * 2),
+				frame * CFrame.new(0, -SLAB / 2 - sink, 0),
 				vary(random, tone, 0.015),
 				{
 					material = if blend > 0.5 and nextPalette
 						then nextPalette.groundMaterial
 						else palette.groundMaterial,
 				}
-			)
+			).Name =
+				"Tile"
 		end
 	end
 
-	-- A kerb along each edge, broken where the bank has a gap; a glowing red strip warns of each gap.
+	-- A kerb along each edge, broken where the wall has a gap; a glowing red strip warns of each gap.
 	for _, side in { -1, 1 } do
-		for _, stretch in stretchesOf(zoneId, side) do
+		for _, piece in piecesOf(stretchesOf(zoneId, side), TILE) do
+			local z0, z1 = piece[1], piece[2]
+			local frame, span = alongSlope(
+				side * (Runway.halfWidthAt(z0) + KERB / 2),
+				z0,
+				side * (Runway.halfWidthAt(z1) + KERB / 2),
+				z1
+			)
 			block(
 				ground,
-				Vector3.new(2, 1, stretch[2] - stretch[1]),
-				CFrame.new(side * (Runway.WIDTH / 2 + 1), Runway.BASE_Y + 0.5, (stretch[1] + stretch[2]) / 2),
+				Vector3.new(KERB, 1, span + 0.1),
+				frame * CFrame.new(0, 0.5, 0),
 				palette.kerb,
 				{ material = M.Concrete }
 			).Name = if side
@@ -431,27 +510,30 @@ local function buildGround(folder: Instance, zoneId: number, palette: Palette, n
 		end
 	end
 	for _, gap in Runway.wallGaps(zoneId) do
-		block(
-			ground,
-			Vector3.new(2, 0.2, gap.endZ - gap.startZ),
-			CFrame.new(gap.side * (Runway.WIDTH / 2 - 1), Runway.BASE_Y + 0.1, (gap.startZ + gap.endZ) / 2),
-			{ 255, 70, 60 },
-			{ material = M.Neon, collide = false }
-		).Name =
-			"GapWarning"
+		for _, piece in piecesOf({ { gap.startZ, gap.endZ } }, TILE) do
+			local z0, z1 = piece[1], piece[2]
+			local frame, span =
+				alongSlope(gap.side * (Runway.halfWidthAt(z0) - 1), z0, gap.side * (Runway.halfWidthAt(z1) - 1), z1)
+			block(
+				ground,
+				Vector3.new(2, 0.2, span + 0.1),
+				frame * CFrame.new(0, 0.1, 0),
+				{ 255, 70, 60 },
+				{ material = M.Neon, collide = false }
+			).Name =
+				"GapWarning"
+		end
 	end
 
 	-- The volcano's ground glows through cracks.
 	if zoneId == 5 then
-		for _ = 1, 40 do
+		for _ = 1, length // 15 do
+			local z = startZ + random() * length
 			block(
 				ground,
 				Vector3.new(between(random, 3, 9), 0.1, 0.35),
-				CFrame.new(
-					(random() - 0.5) * (Runway.WIDTH - 6),
-					Runway.BASE_Y + 0.03,
-					startZ + random() * Runway.ZONE_LENGTH
-				) * CFrame.Angles(0, random() * math.pi, 0),
+				RunwayFrame.onSlope((random() - 0.5) * (Runway.widthAt(z) - 6), z, 0.03)
+					* CFrame.Angles(0, random() * math.pi, 0),
 				{ 255, 110, 30 },
 				{ material = M.Neon, collide = false }
 			)
@@ -460,191 +542,294 @@ local function buildGround(folder: Instance, zoneId: number, palette: Palette, n
 end
 
 ----------------------------------------------------------------------------------------------------------------
--- Banks
+-- Walls
 
--- Stepped cliffs up one side of the runway (side = -1 or 1). Returns the steps' tops, for the props.
-local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random)
-	local phase = random() * 10
-	local tops = {}
-	for col, piece in piecesOf(stretchesOf(zoneId, side), TILE) do
-		local z, length = piece[1], piece[2]
-		local wave = math.sin(z / 85 + phase) + 0.5 * math.sin(z / 37 + phase * 2)
-		local steps = {
-			{ width = 18 + 6 * random(), height = 12 + 3 * wave + 3 * random() },
-			{ width = 22 + 10 * random(), height = 0 },
-			{ width = 40, height = 0 },
-		}
-		steps[2].height = steps[1].height + 8 + 6 * random()
-		steps[3].height = steps[2].height + 10 + 12 * random()
-		local inner = EDGE + 1
-		for index, step in steps do
-			local x = side * (inner + step.width / 2)
-			local bottom = Runway.BASE_Y - SLAB
-			local top = Runway.BASE_Y + step.height
-			local face = vary(random, palette.cliff, 0.05)
-			if palette.bands and index == 1 then
-				-- Sandstone stripes, a few studs each.
-				local y = bottom
-				local band = col % #palette.bands
-				while y < top - 1.5 do
-					local height = math.min(top - 1.5 - y, 3 + (band % 2) * 1.5)
-					block(
-						folder,
-						Vector3.new(step.width, height, length),
-						CFrame.new(x, y + height / 2, z),
-						palette.bands[band % #palette.bands + 1],
-						{ material = palette.cliffMaterial }
-					)
-					y += height
-					band += 1
-				end
-			else
-				block(
-					folder,
-					Vector3.new(step.width, top - 1.5 - bottom, length),
-					CFrame.new(x, (top - 1.5 + bottom) / 2, z),
-					shade(face, -0.04 * (index - 1)),
-					{ material = palette.cliffMaterial }
-				)
-			end
+-- Somewhere scenery can stand: a level patch `length` long (along the runway) reaching from x0 to x1 studs out
+-- from `frame` (a frame at the patch's height, on its edge nearest the runway, +Z along the runway), and the chance
+-- that something stands there.
+type Top = { frame: CFrame, x0: number, x1: number, length: number, chance: number }
+
+-- One block of a wall, on one side of the runway (side = -1 or 1), from z0 to z1 down it. Its near face stands
+-- `offset` studs out from the foot of the wall, it is `depth` studs deep, and its top is at `topY`. Returns a frame
+-- at the middle of the near edge of its top, and how long it is.
+local function wallBlock(
+	folder: Instance,
+	palette: Palette,
+	side: number,
+	z0: number,
+	z1: number,
+	offset: number,
+	depth: number,
+	topY: number,
+	tier: number,
+	stripe: number,
+	random: Random
+): (CFrame, number)
+	local near0 = Runway.halfWidthAt(z0) + KERB + offset
+	local near1 = Runway.halfWidthAt(z1) + KERB + offset
+	local frame, near = along(side * near0, z0, side * near1, z1)
+	-- Round the outside of a bend the far edge is longer than the near one: long enough for both, so the blocks
+	-- always close up.
+	local length = math.max(near, distance(side * (near0 + depth), z0, side * (near1 + depth), z1)) + 0.3
+	local bottom = math.min(Runway.surfaceY(z0), Runway.surfaceY(z1)) - WALL_FOOT
+	local faceTop = topY - CAP
+
+	local face = vary(random, palette.cliff, 0.05)
+	if palette.bands and tier == 1 then
+		-- Sandstone stripes, each a few studs thick, from the runway up.
+		local ground = math.min(Runway.surfaceY(z0), Runway.surfaceY(z1)) - SLAB
+		block(
+			folder,
+			Vector3.new(depth, ground - bottom, length),
+			atHeight(frame, (ground + bottom) / 2) * CFrame.new(side * depth / 2, 0, 0),
+			palette.bands[stripe % #palette.bands + 1],
+			{ material = palette.cliffMaterial }
+		)
+		local y = ground
+		local band = stripe
+		while y < faceTop - 0.01 do
+			band += 1
+			local height = math.min(faceTop - y, 6 + (band % 3) * 2.5)
 			block(
 				folder,
-				Vector3.new(step.width + 0.6, 1.5, length),
-				CFrame.new(x - side * 0.3, top - 0.75, z),
-				vary(random, palette.top, 0.03),
-				{ material = palette.topMaterial }
+				Vector3.new(depth, height, length),
+				atHeight(frame, y + height / 2) * CFrame.new(side * depth / 2, 0, 0),
+				palette.bands[band % #palette.bands + 1],
+				{ material = palette.cliffMaterial }
 			)
-			if palette.lava and index == 1 then
-				-- A lava river along the top of the first step, set into the rock.
+			y += height
+		end
+	else
+		block(
+			folder,
+			Vector3.new(depth, faceTop - bottom, length),
+			atHeight(frame, (faceTop + bottom) / 2) * CFrame.new(side * depth / 2, 0, 0),
+			shade(face, -0.04 * (tier - 1)),
+			{ material = palette.cliffMaterial }
+		).Name =
+			"Wall"
+	end
+	-- The top: a thick layer of the zone's grass, sand or snow, hanging out over the face a little.
+	block(
+		folder,
+		Vector3.new(depth + 0.8, CAP, length),
+		atHeight(frame, topY - CAP / 2) * CFrame.new(side * (depth / 2 - 0.4), 0, 0),
+		vary(random, palette.top, 0.03),
+		{ material = palette.topMaterial }
+	).Name =
+		"WallTop"
+	return atHeight(frame, topY), length
+end
+
+-- The massive walls up one side of the runway (side = -1 or 1): a sheer face rising straight from the kerb, and
+-- two more tiers stepping up and back behind it. Returns their tops, for the scenery that stands on them.
+local function buildWalls(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random): { Top }
+	local phase = random() * 10
+	local tops: { Top } = {}
+	for column, piece in piecesOf(stretchesOf(zoneId, side), TILE * 2) do
+		local z0, z1 = piece[1], piece[2]
+		local middle = (z0 + z1) / 2
+		local ground = Runway.surfaceY(middle)
+		-- The skyline rises and falls in long waves, with a little roughness block to block.
+		local wave = math.sin(middle / 85 + phase) + 0.5 * math.sin(middle / 37 + phase * 2)
+		local depths = { 22 + 8 * random(), 24 + 12 * random(), 44 }
+		local heights = { WALL_HEIGHT + 7 * wave + 5 * random(), 0, 0 }
+		heights[2] = heights[1] + 16 + 12 * random()
+		heights[3] = heights[2] + 18 + 16 * random()
+
+		-- The face beside the runway is built in short blocks, so it follows the bends closely.
+		local halves = if z1 - z0 > TILE + 0.01 then { { z0, middle }, { middle, z1 } } else { { z0, z1 } }
+		for index, half in halves do
+			local top = ground + heights[1] + (if index == 2 then (random() - 0.5) * 4 else 0)
+			local frame, length =
+				wallBlock(folder, palette, side, half[1], half[2], 0, depths[1], top, 1, column + index, random)
+			local riverEdge = 0
+			if palette.lava then
+				-- A lava river along the top of the wall, set into the rock.
+				riverEdge = depths[1] * 0.62 + 3
 				block(
 					folder,
 					Vector3.new(4, 0.4, length),
-					CFrame.new(side * (inner + step.width * 0.62), top - 0.1, z),
+					frame * CFrame.new(side * depths[1] * 0.62, -0.1, 0),
 					{ 255, 110, 26 },
 					{ material = M.Neon, collide = false }
 				)
-			elseif palette.lava and index == 2 and random() < 0.3 then
-				-- Lava pouring down the face of the second step into the river below.
+			end
+			table.insert(tops, { frame = frame, x0 = riverEdge, x1 = depths[1], length = length, chance = 0.3 })
+		end
+
+		-- The tiers behind stand a little way into the one in front, so no crack shows between them round a bend.
+		local offset = depths[1]
+		for tier = 2, 3 do
+			local frame, length = wallBlock(
+				folder,
+				palette,
+				side,
+				z0,
+				z1,
+				offset - TIER_OVERLAP,
+				depths[tier] + TIER_OVERLAP,
+				ground + heights[tier],
+				tier,
+				column,
+				random
+			)
+			if palette.lava and tier == 2 and random() < 0.45 then
+				-- Lava pouring down the face of the second tier into the river below.
+				local drop = heights[2] - heights[1]
 				block(
 					folder,
-					Vector3.new(0.6, step.height - steps[1].height, between(random, 3, 6)),
-					CFrame.new(side * (inner - 0.25), Runway.BASE_Y + (step.height + steps[1].height) / 2, z),
+					Vector3.new(0.6, drop, between(random, 3, 6)),
+					frame * CFrame.new(-side * 0.25, -CAP - drop / 2 + 1, (random() - 0.5) * length * 0.6),
 					{ 255, 130, 30 },
 					{ material = M.Neon, collide = false }
 				)
 			end
 			table.insert(tops, {
-				x0 = inner + (if palette.lava and index == 1 then step.width * 0.62 + 3 else 0),
-				x1 = inner + step.width,
-				y = top,
-				z = z,
-				step = index,
+				frame = frame,
+				x0 = TIER_OVERLAP,
+				x1 = depths[tier] + TIER_OVERLAP,
+				length = length,
+				chance = if tier == 2 then 0.45 else 0.35,
 			})
-			inner += step.width
+			offset += depths[tier]
 		end
 	end
 	return tops
 end
 
--- A boardwalk's edges: posts and ropes, and an invisible wall so nobody walks off into the sea.
-local function buildSea(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random)
+-- The world's X and Z from one end of a zone to the other, `reach` studs out from the runway on both sides:
+-- { minX, maxX, minZ, maxZ }. (A zone starts and ends square across the world's Z axis; see Shared/Runway.)
+local function zoneBounds(zoneId: number, reach: number): { number }
 	local startZ = Runway.zoneStartZ(zoneId)
-	local length = Runway.ZONE_LENGTH
-	local middleZ = startZ + length / 2
-	local seabedY = Runway.BASE_Y - 7
-	local waterY = Runway.BASE_Y - 1.5
-	local outer = 260
-	-- The seabed. Next to the boardwalk it is broken where the railing has a gap: a deep hole that swallows a
-	-- player who falls through.
-	local near = EDGE + 30
-	local stretches = stretchesOf(zoneId, side)
-	for _, stretch in stretches do
-		block(
-			folder,
-			Vector3.new(near - EDGE, 4, stretch[2] - stretch[1]),
-			CFrame.new(side * (EDGE + (near - EDGE) / 2), seabedY - 2, (stretch[1] + stretch[2]) / 2),
-			palette.cliff,
-			{ material = M.Sand }
-		)
+	local endZ = startZ + Runway.zoneLength(zoneId)
+	local minX, maxX = math.huge, -math.huge
+	for z = startZ, endZ, TILE do
+		local x = RunwayFrame.point(0, z).X
+		minX, maxX = math.min(minX, x), math.max(maxX, x)
 	end
+	return { minX - reach, maxX + reach, RunwayFrame.point(0, startZ).Z, RunwayFrame.point(0, endZ).Z }
+end
+
+-- How far the Ocean's sea and seabed lie below the boardwalk where the zone starts (the boardwalk humps up from
+-- there, never down), and how far the sea reaches out to each side.
+local WATER_DROP = 1.5
+local SEABED_DROP = 7
+local SEA_REACH = 300
+
+-- The sea round the Ocean's boardwalk, built once for both sides.
+local function buildSeaFloor(folder: Instance, zoneId: number, palette: Palette, random: Random)
+	local startZ = Runway.zoneStartZ(zoneId)
+	local base = Runway.surfaceY(startZ)
+	local seabedY = base - SEABED_DROP
+	local bounds = zoneBounds(zoneId, Runway.zoneWidth(zoneId) / 2 + SEA_REACH)
+	local size = Vector3.new(bounds[2] - bounds[1], 0, bounds[4] - bounds[3])
+	local center = Vector3.new((bounds[1] + bounds[2]) / 2, 0, (bounds[3] + bounds[4]) / 2)
+	-- The seabed and the water lie right under the boardwalk too. Anyone who ends up in the water drowns
+	-- (MapService), so nobody wanders off across the reef.
 	block(
 		folder,
-		Vector3.new(outer - near, 4, length),
-		CFrame.new(side * (near + (outer - near) / 2), seabedY - 2, middleZ),
+		Vector3.new(size.X, 4, size.Z),
+		CFrame.new(center.X, seabedY - 2, center.Z),
 		palette.cliff,
 		{ material = M.Sand }
-	)
+	).Name =
+		"Seabed"
 	block(
 		folder,
-		Vector3.new(outer - EDGE, 1, length),
-		CFrame.new(side * (EDGE + (outer - EDGE) / 2), waterY - 0.5, middleZ),
+		Vector3.new(size.X, 1, size.Z),
+		CFrame.new(center.X, base - WATER_DROP - 0.5, center.Z),
 		{ 56, 168, 214 },
 		{ material = M.Glass, transparency = 0.45, collide = false }
-	)
-	-- Posts with ropes between them, piles under the boardwalk, and an invisible wall so nobody wanders off into the
-	-- sea: all broken at the gaps.
-	for _, stretch in stretches do
-		local span = stretch[2] - stretch[1]
-		local mid = (stretch[1] + stretch[2]) / 2
-		block(folder, Vector3.new(1, 24, span), CFrame.new(side * (EDGE + 0.5), Runway.BASE_Y + 10, mid), {
-			255,
-			255,
-			255,
-		}, { transparency = 1 }).Name =
-			"SeaWall"
-		for _, height in { 2.4, 3.6 } do
-			block(
-				folder,
-				Vector3.new(0.3, 0.3, span),
-				CFrame.new(side * EDGE, Runway.BASE_Y + height, mid),
-				{ 214, 190, 140 },
-				{ material = M.Fabric, collide = false }
-			)
+	).Name =
+		"Water"
+	-- A lighthouse on a rock off one side.
+	local middleZ = startZ + Runway.zoneLength(zoneId) / 2 + 90
+	buildProp(folder, "Lighthouse", RunwayFrame.atHeight(Runway.halfWidthAt(middleZ) + 90, middleZ, seabedY), 5, random)
+end
+
+-- One edge of the Ocean's boardwalk (side = -1 or 1): posts and ropes, piles down to the seabed, and an invisible
+-- wall so nobody walks off into the sea, all broken at the gaps. Returns the seabed beside it, where the reef's
+-- scenery stands.
+local function buildSea(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random): { Top }
+	local seabedY = Runway.surfaceY(Runway.zoneStartZ(zoneId)) - SEABED_DROP
+	local tops: { Top } = {}
+	for _, stretch in stretchesOf(zoneId, side) do
+		for _, piece in piecesOf({ stretch }, TILE) do
+			local z0, z1 = piece[1], piece[2]
+			local edge0, edge1 = Runway.halfWidthAt(z0) + 1, Runway.halfWidthAt(z1) + 1
+			local frame, span = alongSlope(side * edge0, z0, side * edge1, z1)
+			block(folder, Vector3.new(1, 24, span + 0.1), frame * CFrame.new(side * 0.5, 10, 0), {
+				255,
+				255,
+				255,
+			}, { transparency = 1 }).Name =
+				"SeaWall"
+			for _, height in { 2.4, 3.6 } do
+				block(
+					folder,
+					Vector3.new(0.3, 0.3, span + 0.1),
+					frame * CFrame.new(0, height, 0),
+					{ 214, 190, 140 },
+					{ material = M.Fabric, collide = false }
+				).Name =
+					"Rope"
+			end
 		end
 		for z = stretch[1] + 0.6, stretch[2], 10 do
-			block(folder, Vector3.new(1.2, 4, 1.2), CFrame.new(side * EDGE, Runway.BASE_Y + 2, z), palette.kerb, {
+			local edge = Runway.halfWidthAt(z) + 1
+			block(folder, Vector3.new(1.2, 4, 1.2), RunwayFrame.at(side * edge, z, 2), palette.kerb, {
 				material = M.Wood,
-			})
-			column(folder, 1.6, 9, CFrame.new(side * (EDGE - 1), seabedY, z), shade(palette.kerb, -0.15), {
-				material = M.Wood,
-				collide = false,
-			})
+			}).Name =
+				"Post"
+			-- A pile under the boardwalk, as tall as the boardwalk is high over the seabed there.
+			local deck = Runway.surfaceY(z) - 1
+			column(
+				folder,
+				1.6,
+				deck - seabedY,
+				RunwayFrame.atHeight(side * (edge - 1), z, seabedY),
+				shade(palette.kerb, -0.15),
+				{ material = M.Wood, collide = false }
+			)
 		end
 	end
-	-- A lighthouse on a rock off one side.
-	if side > 0 then
-		buildProp(folder, "Lighthouse", CFrame.new(side * 150, seabedY, middleZ + 90), 5, random)
-	end
 	-- The seabed further out, where the scenery stands: twice over, for a busier reef.
-	local tops = {}
-	for col = 0, length // TILE - 1 do
+	local startZ = Runway.zoneStartZ(zoneId)
+	for z = startZ, startZ + Runway.zoneLength(zoneId) - TILE, TILE do
 		for _ = 1, 2 do
+			local at = z + TILE * 0.5 + (random() - 0.5) * 12
 			table.insert(tops, {
-				x0 = EDGE + 10,
-				x1 = EDGE + 130,
-				y = seabedY,
-				z = startZ + TILE * (col + 0.5) + (random() - 0.5) * 12,
-				step = 1,
+				frame = RunwayFrame.atHeight(side * (Runway.halfWidthAt(at) + 1), at, seabedY),
+				x0 = 10,
+				x1 = 130,
+				length = 8,
+				chance = 0.45,
 			})
 		end
 	end
 	return tops
 end
 
-local function dressBanks(folder: Instance, palette: Palette, tops, side: number, random: Random)
+-- Stands the zone's plants and rocks on the tops of the walls (or the reef).
+local function dressBanks(folder: Instance, palette: Palette, tops: { Top }, side: number, random: Random)
 	local props = Instance.new("Folder")
 	props.Name = "Props"
 	props.Parent = folder
-	-- How likely each step is to get a prop in each column.
-	local chance = { 0.55, 0.4, 0.25 }
 	for _, top in tops do
-		if random() < chance[top.step] then
+		if random() < top.chance then
 			local prop = pickProp(random, palette.props)
 			local size = (prop.size or 3) * between(random, 0.85, 1.2)
 			local margin = math.min(size + 1, (top.x1 - top.x0) / 2)
-			local x = side * between(random, top.x0 + margin, top.x1 - margin)
+			local out = between(random, top.x0 + margin, top.x1 - margin)
 			local turn = CFrame.Angles(0, (random() - 0.5) * 0.8, 0)
-			buildProp(props, prop.kind, CFrame.new(x, top.y, top.z + (random() - 0.5) * 8) * turn, size, random)
+			buildProp(
+				props,
+				prop.kind,
+				top.frame * CFrame.new(side * out, 0, (random() - 0.5) * top.length * 0.6) * turn,
+				size,
+				random
+			)
 		end
 	end
 end
@@ -652,53 +837,73 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- Backdrop
 
+-- How far a hill must stand from the runway's centre line, beyond the runway itself: clear of the walls.
+local BACKDROP_CLEARANCE = 170
+
 local function buildBackdrop(folder: Instance, zoneId: number, palette: Palette, random: Random)
 	local backdrop = Instance.new("Folder")
 	backdrop.Name = "Backdrop"
 	backdrop.Parent = folder
 	local startZ = Runway.zoneStartZ(zoneId)
+	local endZ = startZ + Runway.zoneLength(zoneId)
 	for _, side in { -1, 1 } do
 		local z = startZ + random() * 60
-		while z < startZ + Runway.ZONE_LENGTH do
-			local width = between(random, 70, 140)
-			local x = side * between(random, 200, 320)
-			local y = Runway.BASE_Y - 10
+		while z < endZ do
+			local width = between(random, 110, 220)
+			local out = Runway.halfWidthAt(z) + between(random, 250, 420)
+			local base = RunwayFrame.at(side * out, z)
 			local layers = if zoneId == 2 then 2 else 4
-			local size = width
 			local volcano = zoneId == 5 or (zoneId == 6 and random() < 0.3)
+			local heights, depths, turns = {}, {}, {}
 			for layer = 1, layers do
-				local height = if zoneId == 2 then between(random, 40, 70) else between(random, 18, 34)
-				local color = shade(palette.backdrop, (layer - 1) * 0.05)
-				if palette.backdropTop and layer == layers then
-					color = palette.backdropTop
-				end
-				block(
-					backdrop,
-					Vector3.new(size, height, size * between(random, 0.7, 1)),
-					CFrame.new(x, y + height / 2, z) * CFrame.Angles(0, (random() - 0.5) * 0.3, 0),
-					color,
-					{ material = if palette.backdropTop and layer == layers then M.Snow else palette.cliffMaterial }
-				)
-				y += height
-				size *= if zoneId == 2 then 0.85 else 0.66
+				heights[layer] = if zoneId == 2 then between(random, 80, 150) else between(random, 40, 75)
+				depths[layer] = between(random, 0.7, 1)
+				turns[layer] = (random() - 0.5) * 0.3
 			end
-			if volcano then
-				-- A glowing crater and a plume of smoke.
-				local crater = block(
-					backdrop,
-					Vector3.new(size * 0.8, 1, size * 0.8),
-					CFrame.new(x, y + 0.5, z),
-					{ 255, 110, 30 },
-					{ material = M.Neon }
-				)
-				ObstacleModels.emitter(crater, "Smoke", { 80, 74, 74 }, {
-					size = 12,
-					rate = 3,
-					speed = 8,
-					life = 8,
-					lift = 2,
-					spread = 15,
-				})
+			-- On the inside of a bend, that far out can be right across the bend, back beside the runway further
+			-- on. A hill is only built where it really is clear of the runway and its walls.
+			local x = Runway.fromWorld(base.X, base.Z)
+			if math.abs(x) >= Runway.halfWidthAt(z) + BACKDROP_CLEARANCE + width / 2 then
+				local y = base.Y - 30
+				local size = width
+				for layer = 1, layers do
+					local height = heights[layer]
+					local color = shade(palette.backdrop, (layer - 1) * 0.05)
+					if palette.backdropTop and layer == layers then
+						color = palette.backdropTop
+					end
+					block(
+						backdrop,
+						Vector3.new(size, height, size * depths[layer]),
+						atHeight(base, y + height / 2) * CFrame.Angles(0, turns[layer], 0),
+						color,
+						{
+							material = if palette.backdropTop and layer == layers
+								then M.Snow
+								else palette.cliffMaterial,
+						}
+					)
+					y += height
+					size *= if zoneId == 2 then 0.85 else 0.66
+				end
+				if volcano then
+					-- A glowing crater and a plume of smoke.
+					local crater = block(
+						backdrop,
+						Vector3.new(size * 0.8, 1, size * 0.8),
+						atHeight(base, y + 0.5),
+						{ 255, 110, 30 },
+						{ material = M.Neon }
+					)
+					ObstacleModels.emitter(crater, "Smoke", { 80, 74, 74 }, {
+						size = 18,
+						rate = 3,
+						speed = 10,
+						life = 9,
+						lift = 2,
+						spread = 15,
+					})
+				end
 			end
 			z += width * between(random, 0.8, 1.3)
 		end
@@ -750,41 +955,48 @@ local function staminaRange(zone): (number, number)
 	return low, high
 end
 
+-- How high the sign hangs over the runway, and how tall the posts that carry it are: taller than the walls beside
+-- them, so they stand out against the sky.
 local GATE_HEIGHT = 34
+local GATE_POST_HEIGHT = 78
+-- How far the posts go down below the runway (in the Ocean they stand in the sea).
+local GATE_POST_FOOT = 10
 
 local function buildGate(folder: Instance, zoneId: number)
 	local zone = Zones.List[zoneId]
 	local accent = zone.accent
 	local startZ = Runway.zoneStartZ(zoneId)
+	local width = Runway.widthAt(startZ)
+	local posts = width / 2 + KERB + 3
 	for _, side in { -1, 1 } do
 		local post = block(
 			folder,
-			Vector3.new(6, GATE_HEIGHT + 6, 6),
-			CFrame.new(side * (EDGE + 3), Runway.BASE_Y + (GATE_HEIGHT + 6) / 2 - 2, startZ),
+			Vector3.new(7, GATE_POST_HEIGHT + GATE_POST_FOOT, 7),
+			RunwayFrame.at(side * posts, startZ, (GATE_POST_HEIGHT - GATE_POST_FOOT) / 2),
 			accent,
 			{ material = M.Wood }
 		)
 		post.Name = "SignPost"
 		block(
 			folder,
-			Vector3.new(7.5, 2, 7.5),
-			CFrame.new(side * (EDGE + 3), Runway.BASE_Y + GATE_HEIGHT + 5, startZ),
+			Vector3.new(8.5, 2, 8.5),
+			RunwayFrame.at(side * posts, startZ, GATE_POST_HEIGHT + 1),
 			shade(accent, 0.2),
 			{ material = M.Wood }
 		)
 	end
 	local sign = block(
 		folder,
-		Vector3.new(Runway.WIDTH + 12, 10, 2),
-		CFrame.new(0, Runway.BASE_Y + GATE_HEIGHT, startZ),
+		Vector3.new(width + 12, 12, 2),
+		RunwayFrame.at(0, startZ, GATE_HEIGHT),
 		accent,
 		{ material = M.WoodPlanks }
 	)
 	sign.Name = "Sign"
 	block(
 		folder,
-		Vector3.new(Runway.WIDTH + 16, 1.2, 2.6),
-		CFrame.new(0, Runway.BASE_Y + GATE_HEIGHT + 5.6, startZ),
+		Vector3.new(width + 16, 1.2, 2.6),
+		RunwayFrame.at(0, startZ, GATE_HEIGHT + 6.6),
 		shade(accent, 0.25),
 		{ material = M.Wood }
 	)
@@ -805,6 +1017,15 @@ Scenery.PALETTES = PALETTES
 -- from the zones' palettes, or any runway obstacle.
 Scenery.buildProp = buildProp
 
+-- The height of the sea's surface in a zone that has a sea (the Ocean), or nil. Anyone below it has fallen in.
+function Scenery.seaLevel(zoneId: number): number?
+	local palette = PALETTES[zoneId]
+	if palette and palette.sea then
+		return Runway.surfaceY(Runway.zoneStartZ(zoneId)) - WATER_DROP
+	end
+	return nil
+end
+
 function Scenery.buildZone(map: Instance, zoneId: number)
 	local zone = Zones.List[zoneId]
 	local palette = PALETTES[zoneId]
@@ -819,10 +1040,13 @@ function Scenery.buildZone(map: Instance, zoneId: number)
 	local banks = Instance.new("Folder")
 	banks.Name = "Banks"
 	banks.Parent = folder
+	if palette.sea then
+		buildSeaFloor(banks, zoneId, palette, random)
+	end
 	for _, side in { -1, 1 } do
 		local tops = if palette.sea
 			then buildSea(banks, zoneId, palette, side, random)
-			else buildCliffs(banks, zoneId, palette, side, random)
+			else buildWalls(banks, zoneId, palette, side, random)
 		dressBanks(banks, palette, tops, side, random)
 	end
 	buildBackdrop(folder, zoneId, palette, random)
@@ -830,13 +1054,13 @@ function Scenery.buildZone(map: Instance, zoneId: number)
 end
 
 -- The runway has no end: past it, the last zone again, Runway.REPEATS times (see Shared/Runway). Every scenery part is
--- anchored, so each copy is the last zone's finished folder moved one loop further on. The copies' obstacles are
--- built with the rest (Shared/Obstacles lays them out).
+-- anchored, and the last zone ends heading the way it started, so each copy is the last zone's finished folder moved
+-- one loop further on. The copies' obstacles are built with the rest (Shared/Obstacles lays them out).
 function Scenery.buildRepeats(map: Instance, lastZone: Instance)
 	for copy = 1, Runway.REPEATS do
 		local folder = lastZone:Clone()
 		folder.Name = lastZone.Name .. "Repeat" .. copy
-		local shift = Vector3.new(0, 0, copy * Runway.LOOP_LENGTH)
+		local shift = RunwayFrame.loopShift() * copy
 		for _, descendant in folder:GetDescendants() do
 			if descendant:IsA("BasePart") then
 				descendant.CFrame += shift
@@ -846,20 +1070,18 @@ function Scenery.buildRepeats(map: Instance, lastZone: Instance)
 	end
 end
 
--- Builds one obstacle from Shared/Obstacles into `parent`, tagged with its id for the client.
+-- Builds one obstacle from Shared/Obstacles into `parent`, tagged with its id for the client. One that lies in the
+-- ground (a lava pool, a tar pit, a vent) is tipped to lie on the slope; one that stands on it stands upright, sunk
+-- just far enough that its downhill side still meets the ground.
 function Scenery.buildObstacle(parent: Instance, obstacle): Model
 	local model = Build.model(parent, obstacle.kind .. obstacle.id)
 	model:SetAttribute("ObstacleId", obstacle.id)
 	model:SetAttribute("Kind", obstacle.kind)
 	model:SetAttribute("Timed", obstacle.timing ~= nil)
-	ObstacleModels.build(
-		model,
-		obstacle.kind,
-		CFrame.new(obstacle.x, Runway.BASE_Y, obstacle.z),
-		obstacle.hx,
-		obstacle.hz,
-		obstacle.seed
-	)
+	local base = if obstacle.flat
+		then RunwayFrame.onSlope(obstacle.x, obstacle.z)
+		else RunwayFrame.at(obstacle.x, obstacle.z, -math.abs(Runway.slope(obstacle.z)) * obstacle.hz)
+	ObstacleModels.build(model, obstacle.kind, base, obstacle.hx, obstacle.hz, obstacle.seed)
 	return model
 end
 

@@ -7,7 +7,7 @@ Items marked (decided) were confirmed by the game's owner; items marked (propose
 Genre: Skill-based obstacle runner + collect-and-hatch plot tycoon, with light PvP.
 
 Core loop:
-1. One long straight runway passes through six zones in order: Forest, Desert, Snow, Ocean, Volcano, Prehistoric.
+1. One long winding runway passes through six zones in order: Forest, Desert, Snow, Ocean, Volcano, Prehistoric.
    Anyone can go anywhere; deeper zones drop rarer, bigger eggs that need more stamina to hold on to.
 2. The runway runs in 3-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
    rider disappears, every egg in a pen hatches 30x faster, and a fresh lineup of eggs starts.
@@ -38,16 +38,24 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight, level runway (~3,600 studs long, 120 wide; decided: flat and wide) holding six zones in order
-      (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
+- [ ] One long winding runway (~10,200 studs; decided, from the owner's reference screenshots, replacing the
+      straight, level, 3,600-stud one) holding six zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); more zones added later (decided)
+    - [ ] Every zone is longer and wider than the one before (decided; built): 800 studs long and 140 wide in the
+          Forest, then 1,160 / 160, 1,520 / 180, 1,880 / 200, 2,240 / 220, up to 2,600 / 240 in the Prehistoric zone
+    - [ ] The runway bends from side to side (up to ~34 degrees from dead ahead, never tighter than the zone's width
+          plus 90 studs in radius) and rolls over hills (slopes up to 15%); the zones keep their themes (decided;
+          built). The Ocean's boardwalk only humps up from the level of its sea. Eggs still roll at the speed their
+          rarity sets, uphill and down
+    - [ ] A rider's camera turns with the runway round its bends (built; needs a play test)
     - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
           repeat at a time, and the haze in the distance means the end is never visible
     - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
-    - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
-          (proposed, from the owner's reference screenshots)
-    - [ ] Natural, fairly large gaps in the walls (decided), each marked by a red strip: steering an egg into a wall
-          kills the rider; steering it into a gap sends egg and rider over the edge
+    - [ ] Massive walls down both sides (decided, from the owner's reference screenshots; built): a sheer face 35 to
+          60 studs high, and two more tiers stepping up behind it to 70 to 120 studs; and a painted "START ZONE"
+          where the runway leaves the hub
+    - [ ] Natural, large gaps in the walls (decided; 50 to 110 studs), each marked by a red strip: steering an egg
+          into a wall kills the rider; steering it into a gap sends egg and rider over the edge
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot (see Hub below)
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with dollars (decided)
@@ -56,9 +64,9 @@ Original theme, art, and creatures.
           (decided; exact prices set during economy tuning)
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
-    - [ ] Eggs appear on the ground at the start of their zone (no drop from above), roll straight down the strip,
-          and leave a small dust trail behind them; they never leave the ground, except for one small bounce before
-          cracking (decided)
+    - [ ] Eggs appear on the ground at the start of their zone (no drop from above), roll on down the runway (round
+          its bends and over its hills), and leave a small dust trail behind them; they never leave the ground,
+          except for one small bounce before cracking (decided)
 - [ ] 8 eggs per zone, one per pet (decided). Deeper zones start at a higher rarity (decided):
     - [ ] Forest: 2 Common, 2 Uncommon, Rare, Epic, Legendary, Mythic
     - [ ] Desert: Common, 2 Uncommon, Rare, Epic, Legendary, 2 Mythic
@@ -68,10 +76,16 @@ Original theme, art, and creatures.
     - [ ] Prehistoric: 2 Epic, 2 Legendary, Mythic, Secret, 2 Eternal (decided: one Mythic, one Secret, two Eternals)
     - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
 - [ ] Eggs: lineup rolled per zone at the start of each cycle, at sunrise; down-runway movement fixed by spawn time
-      (decided); 8 lineup eggs per zone (12 during Egg Avalanche)
-    - [ ] Lineup eggs appear at the start of their zone a few seconds apart, roll towards the end of their zone, fade
-          out a quarter of the way into the next zone, and appear at the start again, lap after lap, until the
-          closure (decided). One that is claimed comes back on its next lap (proposed)
+      (decided); one lineup egg for every 75 studs of zone (proposed with the bigger zones, to keep eggs as close
+      together as they were with 8 to a 600-stud zone): 11 in the Forest, 15, 20, 25, 30, then 35 in the
+      Prehistoric zone; more during an Egg Avalanche
+    - [ ] Lineup eggs appear at the start of their zone a few seconds apart (5 s, or less in the longest zones so
+          the whole lineup is out within one lap), roll towards the end of their zone, fade out a quarter of the way
+          into the next zone, and appear at the start again, lap after lap, until the closure (decided). One that is
+          claimed comes back on its next lap (proposed)
+    - [ ] Open question: an egg takes 80 to 110 seconds to cross the Prehistoric zone, most of a 3-minute cycle, so
+          the far end of a long zone has no eggs for the first part of every day. Options: let the lineup appear
+          spread along the zone at sunrise, lengthen the cycle, or leave it
     - [ ] Mid-cycle drops: now and then an extra egg drops and rolls once; Secret and rarer eggs are greatly reduced
           compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 30 s, proposed)
     - [ ] Rolling eggs leave a small cloud of dust in their wake (decided)
@@ -209,8 +223,9 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
     - [ ] The rider stays on and keeps rolling on the claimed egg, just for show (no stamina cost, can't be thrown off),
           until they jump off; it then disappears; nobody else can get on it (decided)
 - [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
-    - [ ] Zone-themed obstacles fitting each zone's terrain (decided), in rows across the runway, every row
-          leaving a gap for the biggest egg; eggs without a rider steer round them on their own. Built so far:
+    - [ ] Zone-themed obstacles fitting each zone's terrain (decided), in rows across the runway (more to a row
+          where the runway is wider, and now and then a giant rock), every row leaving a gap for the biggest egg;
+          eggs without a rider steer round them on their own. Built so far:
           Forest: fallen logs, stumps, bushes, toadstools (Bump), boulders, trees (Knock-off);
           Desert: cacti, tumbleweeds, skulls (Bump), sandstone rocks, sand geysers (Knock-off);
           Snow: snowdrifts, snowmen (Bump), pines, ice boulders (Knock-off);
@@ -448,13 +463,13 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Pet portraits rendered in Blender for inventory, shop, and collection book icons
     - [ ] Built in batches that follow the roadmap
 - [ ] Map: hub (plaza with the start zone, Trails stall, Sell stall, fuse machine, the 8 plots across its back and
-      down its sides, ringed by terraced cliffs; see Hub) and the teleport pads at the start -> one straight runway: Forest -> Desert -> Snow
+      down its sides, ringed by terraced cliffs; see Hub) and the teleport pads at the start -> one winding runway: Forest -> Desert -> Snow
       -> Ocean (a causeway over a shallow reef) -> Volcano -> Prehistoric (ferns, tar pits, giant bones), the last
       zone repeating forever; each zone has its own palette, props, lighting,
       and music, with a smooth blend where zones meet
     - [ ] Built from parts in code, in the blocky style of the eggs and pets (done for the runway: checkered
-          ground, stepped cliff banks, a railed boardwalk over a reef, zone plants and rocks, distant scenery,
-          gates; and the hub: its stations and the terraced cliffs round it)
+          ground that follows its bends and hills, massive stepped walls, a railed boardwalk over a reef, zone
+          plants and rocks, distant scenery, gates; and the hub: its stations and the terraced cliffs round it)
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, eggs in pens glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = dollars, stamina, inventory, growing eggs, shop, index, mount,
       Reset shortcut, runway-closing timer, next-event timer
@@ -491,7 +506,9 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - Structure:
     - ReplicatedStorage/Shared: Config (zones, rarity tuning, stamina requirements, spawn odds per zone, hatch times,
       upgrade and teleport costs, trails, sell prices, obstacles, pets, events), HubLayout (where every station and
-      cliff is), Types, EggMotion (down-runway position from time + the crack bounce), Obstacles (layout from a fixed
+      cliff is), Types, Runway (the runway's shape from a fixed seed: zone lengths and widths, bends, hills, wall
+      gaps, the endless last zone; and the way between runway coordinates and the world), RunwayFrame (the same as
+      CFrames), EggMotion (down-runway position from time + the crack bounce), Obstacles (layout from a fixed
       seed, riderless paths, hits, timing), DuelChart (beat pattern from a seed), NumberFormat (1.2K / 4.5M), Net
     - ServerScriptService/Server/Services: Data, Cycle, Runway, Zone, Teleport, Ride, Duel, Plot, Pen, Hatch, Pet,
       Fuse, Economy, Shop, Stations (trails + selling eggs), Quest, Event, Leaderboard, AntiCheat
@@ -506,6 +523,10 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   are told the result; never prices, dollars or stamina; per-player rate limit
 - Closure hatch boost: at each closure the server adds 290 s of bonus progress (29 x 10 s) to every hatching egg of players
   in that server; stored on the egg, so hatch math stays timestamp-based
+- Runway coordinates (decided with the winding runway): the rules, egg motion, obstacles and paths all work in runway
+  coordinates (distance down the runway along its centre line, and distance across it), in which the runway is a
+  straight strip; Shared/Runway bends that strip into the world (and back, for anything read off a character's
+  position), so only drawing, building and position checks ever see the bends and hills
 - Egg motion (decided): down-runway position = EggMotion(serverTime - spawnTime), fixed by time; side-to-side position is
   steered by the rider: the rider's client predicts it and sends updates ~10x/s, the server caps them at the rider's
   Agility speed and replicates them; riderless eggs follow a path round the obstacles from where they were left,

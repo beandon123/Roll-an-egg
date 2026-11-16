@@ -1,13 +1,14 @@
 -- Builds the map: the hub (PlotService adds the players' plots) with the painted START ZONE where the runway begins,
 -- its stations (the Trails and Sell stalls and the fuse machine, Map/Stations) and the terraced cliffs round it
--- (Map/Cliffs), then each zone's stretch of runway with its banks, backdrop and gate (Map/Scenery), copies of the
--- last zone past the end (the runway never ends; see Shared/Runway), and the
--- obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts
--- (it reads positions from Shared/Runway and Shared/Obstacles), so changing how the map looks never breaks the rules.
+-- (Map/Cliffs), then each zone's stretch of the winding runway with its walls, backdrop and gate (Map/Scenery),
+-- a copy of the last zone past the end (the runway never ends; see Shared/Runway), and the obstacles on the runway
+-- (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts (it
+-- reads positions from Shared/Runway and Shared/Obstacles), so changing how the map looks never breaks the rules.
 --
--- Also handles dying on the map: a character well below the runway has fallen through a gap in the banks, and one
--- standing in lava or tar (a Lethal obstacle that is going off) is burned up. An admin who is flying (the admin
--- panel) is spared both. (Players never walk on the runway itself; see the client's RideController.)
+-- Also handles dying on the map: a character well below the runway has fallen through a gap in the walls, one in
+-- the Ocean's sea has drowned, and one standing in lava or tar (a Lethal obstacle that is going off) is burned up.
+-- An admin who is flying (the admin panel) is spared all three. (Players never walk on the runway itself; see the
+-- client's RideController.)
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -18,6 +19,7 @@ local Shared = ReplicatedStorage.Shared
 local AdminTools = require(Shared.Config.AdminTools)
 local Obstacles = require(Shared.Obstacles)
 local Runway = require(Shared.Runway)
+local RunwayFrame = require(Shared.RunwayFrame)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -33,6 +35,11 @@ local HAZARD_HEIGHT = 5
 local START_ZONE_DEPTH = 26
 -- The invisible walls round the hub.
 local WALL_HEIGHT = 80
+-- Further than this from the runway's edge, "the ground" is the hub's level, not the runway's: the runway's hills
+-- say nothing about how high the Model Showroom or the hub's cliffs stand.
+local RUNWAY_REACH = 400
+-- A character whose root part is this far under the sea's surface has fallen in.
+local DROWN_DEPTH = 1.5
 
 local MapService = {}
 
@@ -189,7 +196,7 @@ local function setUpSky()
 	atmosphere.Parent = Lighting
 end
 
--- Kills characters that have fallen off the runway, or are standing in lava or tar.
+-- Kills characters that have fallen off the runway, fallen in the sea, or are standing in lava or tar.
 local function watchForDangers()
 	while true do
 		local now = Workspace:GetServerTimeNow()
@@ -200,13 +207,21 @@ local function watchForDangers()
 			local flying = player:GetAttribute(AdminTools.FLYING) == true
 			if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 and not flying then
 				local position = root.Position
-				local ground = Runway.surfaceY(position.Z)
-				local fell = position.Y < ground - Tuning.FALL_KILL_DEPTH
+				local x, z, height = RunwayFrame.locate(position)
+				local nearRunway = z >= 0 and math.abs(x) <= Runway.halfWidthAt(z) + RUNWAY_REACH
+				if not nearRunway then
+					height = position.Y - Runway.BASE_Y
+				end
+				local fell = height < -Tuning.FALL_KILL_DEPTH
 				-- A rider's character is on their egg, wherever the server last saw it on foot.
-				local burned = not RunwayService.IsRiding(player)
-					and position.Y < ground + HAZARD_HEIGHT
-					and Obstacles.lethalAt(position.X, position.Z, now) ~= nil
-				if fell or burned then
+				local riding = RunwayService.IsRiding(player)
+				local seaLevel = if nearRunway then Scenery.seaLevel(Runway.zoneAt(z) or 0) else nil
+				local drowned = seaLevel ~= nil and not riding and position.Y < seaLevel - DROWN_DEPTH
+				local burned = nearRunway
+					and not riding
+					and height < HAZARD_HEIGHT
+					and Obstacles.lethalAt(x, z, now) ~= nil
+				if fell or drowned or burned then
 					humanoid.Health = 0
 				end
 			end
