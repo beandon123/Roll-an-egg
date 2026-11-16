@@ -27,6 +27,7 @@ local EVENTS = {
 	"DollarsChanged", -- (dollars, incomePerSecond)
 	"Notice", -- (text, colorRgb?): a message for this player alone
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
+	"PetBucked", -- (petKind): the player's stamina ran out on their pet, and it bucked them off
 	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
 	"PurchaseResult", -- (itemId, ok, message)
 	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped

@@ -11,8 +11,8 @@ Core loop:
    Anyone can go anywhere; deeper zones drop rarer, bigger eggs that need more stamina to hold on to.
 2. The runway runs in 3-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
    rider disappears, every egg in a pen hatches 30x faster, and a fresh lineup of eggs starts.
-3. Players chase eggs on foot or riding a pet and jump on. While riding they steer to dodge obstacles as stamina drains,
-   staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
+3. Players run (or ride a pet) to the start of the runway and leap onto eggs. While riding they steer to dodge
+   obstacles as stamina drains, staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
    If a rider runs out of stamina, the egg bounces slightly and cracks, and comes back at the start of its zone.
 4. Another player can jump onto the same egg to challenge the rider -> a rhythm-tap duel graded Perfect / Great / Good / Poor;
    the better score wins. A winning challenger steals the egg and its progress, but must have the stamina to cover it.
@@ -225,8 +225,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
           progress starts from 0)
 - [ ] Players never walk on the runway (decided): walking past the start zone, or jumping off an egg, launches a
       floaty leap with a few seconds (3.5 s) to land on an egg; touching the runway first, or running out of time,
-      kills them. Riding a pet is not walking: a player on their pet can ride it down the runway and jump from it
-      onto an egg (proposed, keeping pet riding as built)
+      kills them. Pet riders too (decided): pets never go on the runway, so riding one past the start zone sends
+      it away and launches the same leap
 - [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost; they
       are leaping, so only a lucky landing on another egg saves them
 - [ ] Death (decided: crashing into a side wall, going over the side through a gap, missing an egg when leaping, a
@@ -278,7 +278,10 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] Mounts: equip one pet as your active mount; summon/unsummon from the HUD (built: Ride on a pet's card, then a
       RIDE / GET OFF button under the tabs)
     - [ ] Riding a pet sets your run speed to its Mount Speed
-    - [ ] Jump from your pet onto an egg; the pet unsummons; 3 s resummon cooldown after leaving the egg
+    - [ ] Riding a pet costs stamina (decided; 5 a second for now): stamina decides how long you can ride, and the
+          pet bucks you off when it runs out. Too tired to get on below 10 stamina
+    - [ ] Pets stay off the runway (decided): reaching the runway or getting on an egg sends the pet away until you
+          ride it again
     - [ ] The mounted pet keeps earning while you ride it (decided)
 - [ ] Starter pet (a Forest Common) given during the tutorial so new players learn mounting early
 - [ ] 8 pets per zone (decided), one per egg, themed to their zone, more fantastic deeper down -> 40 core pets at

@@ -30,7 +30,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated (see below).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
-  Riding a pet is not walking: a player on their pet can ride it down the runway and jump from it onto an egg.
+  That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
+  launches the same leap.
 - On an egg: steer left/right and stay on until the claim meter fills. Steering into a bank kills you; steering into
   a gap sends you and the egg over the edge.
 - A claimed egg goes into your inventory straight away, but you keep rolling on it (no stamina cost) until you jump
@@ -45,7 +46,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - The **Pets** tab shows the eggs hatching and every pet you have. Put pets in your pen or take them out, or
   **Equip best**. Pets in the pen roam it and earn dollars every second. Sell pets for dollars.
 - The green button at the front of your pen buys a bigger pen: room for more eggs at once and more pets.
-- Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
+- Ride any of your pets round the hub: it carries you faster than walking, but costs stamina while you ride, and
+  bucks you off when your stamina runs out.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
   saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
 - The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with
@@ -187,9 +189,12 @@ and 18 pets at level 9. The numbers are in `src/shared/Config/Economy.luau`.
 
 **Riding pets.** **Ride** on a pet's card brings it out under you; then the **RIDE** / **GET OFF** button below the
 tabs gets you on and off it. A pet carries you faster than walking (22 studs a second for a Common pet, up to 44
-for an Eternal one, plus a little for variants), round the hub and down the runway. Jump from it onto an egg as usual:
-the pet goes away while you ride the egg and comes back 3 seconds after you leave it
-(`src/server/Services/MountService.luau`).
+for an Eternal one, plus a little for variants) round the hub. Riding costs 5 stamina a second (20 seconds at the
+starting 100): when your stamina runs out, the pet bucks you off, and you have to rest until you have at least 10
+again before it will carry you. Your stamina comes back as usual once you are off. Pets never go on the runway:
+ride one past the start zone and it goes away and you leap like anyone else; getting on an egg sends it away too.
+Either way it stays away until you ride it again (`src/server/Services/MountService.luau`, the stamina rules in
+`src/server/Logic/RunwaySim.luau`).
 
 The rules are in `src/server/Logic/Hatchery.luau` and `src/shared/PetWorth.luau`, run by
 `src/server/Services/InventoryService.luau`.
