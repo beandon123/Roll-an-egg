@@ -138,9 +138,12 @@ Obstacles.ROW_GAP_MAX = 84
 Obstacles.ROW_JITTER = 4
 -- The least open runway between the back of one row and the front of the next, however long their obstacles are:
 -- room for the biggest egg to change lanes between them.
-Obstacles.ROW_CLEAR = 44
+Obstacles.ROW_CLEAR = 50
 -- Every row leaves at least one gap this wide, so the biggest egg can always get through.
 Obstacles.MIN_GAP = 28
+-- And no stretch of a row's width is blocked (by obstacles and the gaps between them too narrow to get through)
+-- for more than this many studs: however wide the runway, a way through is never far to either side.
+Obstacles.MAX_BLOCK = 60
 -- Room kept between an egg without a rider and an obstacle it steers round, in studs.
 Obstacles.STEER_MARGIN = 1.5
 

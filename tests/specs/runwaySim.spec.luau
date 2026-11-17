@@ -870,6 +870,95 @@ return function(harness)
 			expect.truthy(giants >= 10, giants .. " giant rocks")
 		end)
 
+		it("always leaves a way through within reach, however wide the row", function()
+			local config = Obstacles.Config
+			local widest = 0
+			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
+				local spans = {}
+				for _, obstacle in row.obstacles do
+					table.insert(spans, { lo = obstacle.x - obstacle.hx, hi = obstacle.x + obstacle.hx })
+				end
+				table.sort(spans, function(a, b)
+					return a.lo < b.lo
+				end)
+				-- Walk across the row from wall to wall: a stretch is blocked from the last gap wide enough for the
+				-- biggest egg to the next one.
+				local blockedFrom, edge = nil, -row.half
+				local function gapAt(nextEdge)
+					if nextEdge - edge >= config.MIN_GAP then
+						if blockedFrom then
+							widest = math.max(widest, edge - blockedFrom)
+							expect.truthy(
+								edge - blockedFrom <= config.MAX_BLOCK + 1e-6,
+								"blocked for " .. edge - blockedFrom
+							)
+						end
+						blockedFrom = nil
+					else
+						blockedFrom = blockedFrom or edge
+					end
+				end
+				for _, span in spans do
+					gapAt(span.lo)
+					blockedFrom = blockedFrom or span.lo
+					edge = math.max(edge, span.hi)
+				end
+				gapAt(row.half)
+				if blockedFrom then
+					expect.truthy(row.half - blockedFrom <= config.MAX_BLOCK + 1e-6, "blocked to the wall")
+				end
+			end
+			expect.truthy(widest > config.MAX_BLOCK / 2, "some rows are well blocked: " .. widest)
+			-- So an egg nobody is riding never has far to go to get round a row, even the biggest in the widest zone.
+			local biggest = EggSpec.get(6, "Eternal")
+			local limit = Runway.maxLateral(biggest.halfLength, biggest.startZ)
+			for lane = -limit, limit, 4 do
+				local path =
+					Obstacles.planPath(lane, biggest.startZ, Runway.fadeZ(6), biggest.halfLength, biggest.radius)
+				for _, move in path.moves do
+					local across = math.abs(move.to - move.from)
+					expect.truthy(across <= config.MAX_BLOCK, `a lane change of {across} studs`)
+					expect.truthy(across / (move.z1 - move.z0) < 1.5, "a lane change too sharp to follow")
+				end
+			end
+		end)
+
+		it("lets a careful rider follow the path an egg takes on its own past every obstacle, from any lane", function()
+			-- What the server's smoke test does from one lane, here from all of them: steering reports 20 times a
+			-- second, capped at the rider's Agility as the rules cap them, all the way down a zone (and for the last
+			-- zone, on round the loop).
+			for _, case in { { 1, "Common" }, { 3, "Secret" }, { 6, "Eternal" } } do
+				local zoneId, rarity = case[1], case[2]
+				local spec = EggSpec.get(zoneId, rarity)
+				local limit = Runway.maxLateral(spec.halfLength, spec.startZ) - Tuning.EGG_SPAWN_EDGE_MARGIN
+				for lane = -limit, limit, limit / 6 do
+					local sim = quiet(newSimWithObstacles())
+					sim:addRider(ALICE, 1e12, Tuning.BASE_AGILITY, 0)
+					local egg = sim:spawnEgg(zoneId, 0, rarity, nil, { lateral = lane })
+					sim:requestMount(ALICE, egg.id, 0.05, true)
+					local function rolledZ(time)
+						return egg.startZ + spec.rollSpeed * time
+					end
+					local toZ = if zoneId == Runway.ZONE_COUNT
+						then Runway.LOOP_END + 300
+						else Runway.zoneStartZ(zoneId + 1) + 200
+					local path = Obstacles.planPath(egg.lateral, rolledZ(0.05), toZ + 100, spec.halfLength, spec.radius)
+					sim:takeEvents()
+					local time = 0.05
+					while rolledZ(time) < toZ do
+						time += 1 / 20
+						sim:setLateral(ALICE, Obstacles.lateralAt(path, rolledZ(time)), time)
+						sim:step(time)
+					end
+					local events = sim:takeEvents()
+					local hit = firstOfType(events, "ObstacleHit")
+					local where = if hit then ` (hit obstacle {hit.obstacle} at {hit.time} s)` else ""
+					expect.equal(firstOfType(events, "RideEnded"), nil, `zone {zoneId} from lane {lane}{where}`)
+					expect.equal(hit, nil, `zone {zoneId} from lane {lane}: bumped`)
+				end
+			end
+		end)
+
 		it("always leaves open runway between one row and the next, however long their rocks are", function()
 			local last = -math.huge
 			local longest = 0

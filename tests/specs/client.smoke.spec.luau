@@ -83,8 +83,14 @@ return function(harness)
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
+			RunwayFrame = session:require(folder.RunwayFrame),
 			Tuning = session:require(folder.Config.Tuning),
 		}
+	end
+
+	-- Where a place in the world is on the winding runway: how far across it (x), and how far down it (z).
+	local function spotOf(session, position)
+		return shared(session).Runway.fromWorld(position.X, position.Z)
 	end
 
 	-- An egg as the server describes it, spawned `age` seconds ago. It is the zone's first egg of that rarity.
@@ -118,23 +124,53 @@ return function(harness)
 		session:service("Workspace").CurrentCamera.CFrame = roblox.CFrame.new(position + Vector3.new(0, 10, -20))
 	end
 
-	-- Where the middle of an egg is drawn now: where its rider has it, or along its path round the obstacles, riding
-	-- at its rolling height above the ground.
-	local function eggCenter(session, egg)
+	-- Where an egg is on the runway now: how far across it (where its rider has it, or along its path round the
+	-- obstacles) and how far down it. Also its spec.
+	local function eggSpot(session, egg)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
-		local startZ = spec.startZ
+		local startZ = egg.startZ or spec.startZ
 		local z = modules.Runway.wrapZ(modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock))
 		local x = egg.lateral
 		if egg.rider == nil then
-			local fadeZ = math.min(
-				math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
-				modules.Runway.LOOP_END - 1
-			)
+			local fadeZ = modules.EggSpec.fadeZ(egg.zone, startZ)
 			local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 			x = modules.Obstacles.lateralAt(path, z)
 		end
-		return Vector3.new(x, modules.Runway.surfaceY(z) + modules.EggRig.rollHeight(spec.radius), z), spec
+		return x, z, spec
+	end
+
+	-- Where the middle of an egg is drawn now, in the world: on the winding runway at its spot, riding at its
+	-- rolling height above the ground there.
+	local function eggCenter(session, egg)
+		local modules = shared(session)
+		local x, z, spec = eggSpot(session, egg)
+		return modules.RunwayFrame.point(x, z, modules.EggRig.rollHeight(spec.radius)), spec
+	end
+
+	-- A stretch of runway that an egg of this spec can roll straight down for `length` studs without touching an
+	-- obstacle (every row blocks a good part of the runway's width, so most lanes are not clear for long): the lane
+	-- (x) and where the stretch starts (z).
+	local function clearRun(session, spec, length)
+		local modules = shared(session)
+		local reach = spec.halfLength + 2.5
+		for fromZ = 150, modules.Runway.FINAL_ZONE_START - length, 40 do
+			local widest = modules.Runway.maxLateral(spec.halfLength, fromZ) - 6
+			for x = -widest, widest, 3 do
+				local clear = true
+				for _, row in modules.Obstacles.rowsBetween(fromZ - 25, fromZ + length + 25) do
+					for _, obstacle in row.obstacles do
+						if math.abs(x - obstacle.x) < obstacle.hx + reach then
+							clear = false
+						end
+					end
+				end
+				if clear then
+					return x, fromZ
+				end
+			end
+		end
+		error("no clear run of " .. length .. " studs")
 	end
 
 	-- Puts the character in the air right on top of an egg, as if it had just jumped there.
@@ -358,17 +394,19 @@ return function(harness)
 				-- start. This one is a stud short of that.
 				local jumpZ = runway.FINAL_ZONE_START + runway.LOOP_LENGTH
 				local egg = eggData(session, 1, 6, rarity, (jumpZ - 1 - spec.startZ) / spec.rollSpeed, 0)
-				cameraAt(session, Vector3.new(0, 13, jumpZ))
+				cameraAt(session, modules.RunwayFrame.point(0, jumpZ, 3))
 				session:fromServer("EggSpawned", egg)
 				local model = parts.eggFolder.Egg1
 				local block = model.Block1
 				local designed = block.Transparency
-				expect.truthy(model.Root.CFrame.Position.Z > jumpZ - 5, "not there yet")
+				local _, drawnAt = spotOf(session, model.Root.CFrame.Position)
+				expect.truthy(drawnAt > jumpZ - 5, "not there yet")
 
 				-- Caught part-way through fading in when it jumps.
 				block.Transparency = 0.6
 				session:renderFrame(1 / 60, 30)
-				expect.truthy(model.Root.CFrame.Position.Z < jumpZ - 100, "drawn one loop back")
+				_, drawnAt = spotOf(session, model.Root.CFrame.Position)
+				expect.near(drawnAt, runway.FINAL_ZONE_START + spec.rollSpeed * 0.5 - 1, 0.5, "drawn one loop back")
 				expect.equal(block.Transparency, designed, "faded all the way in, not left half see-through")
 			end
 		)
@@ -383,7 +421,18 @@ return function(harness)
 			local emitter = rolling:FindFirstChildOfClass("ParticleEmitter")
 			expect.truthy(emitter.Enabled, "dust while rolling")
 			expect.equal(emitter.Color.Keypoints[1].Value, roblox.Color3.fromRGB(236, 208, 152), "desert sand")
-			expect.near(rolling.CFrame.Position.Y, shared(session).Runway.BASE_Y + 0.2, 1e-3)
+			-- A strip lying across the runway just behind the egg, on the ground there, whichever way the runway points
+			-- and however high it has climbed; the dust drifts up and back up the runway.
+			local modules = shared(session)
+			local eggX, eggZ, desertSpec = eggSpot(session, desert)
+			local dustX, dustZ = spotOf(session, rolling.CFrame.Position)
+			expect.near(dustX, eggX, 0.05)
+			expect.near(dustZ, eggZ - desertSpec.radius * 0.6, 0.05)
+			expect.near(rolling.CFrame.Position.Y, modules.Runway.surfaceY(dustZ) + 0.2, 1e-3)
+			expect.truthy(rolling.CFrame.XVector:Dot(modules.RunwayFrame.across(dustZ)) > 0.999, "across the runway")
+			local drift = emitter.Acceleration
+			expect.truthy(drift.Y > 0, "up")
+			expect.near(Vector3.new(drift.X, 0, drift.Z).Unit:Dot(modules.RunwayFrame.forward(dustZ)), -1, 0.01)
 			expect.equal(session.emitted[emitter], nil, "already rolling when the player joined: no puff")
 
 			-- A brand-new egg appears with a puff of dust.
@@ -489,7 +538,7 @@ return function(harness)
 			expect.near(seat.LookVector.Z, 1, 1e-3, "facing +Z")
 
 			-- Pushing right on the stick moves the egg to the player's right. The camera looks down the
-			-- runway (+Z), so screen-right is -X.
+			-- runway (+Z here, where it leaves the hub), so screen-right is -X.
 			session.moveVector = Vector3.new(1, 0, 0)
 			session:renderFrame(1 / 60, 30)
 			task.wait(0.3)
@@ -499,11 +548,123 @@ return function(harness)
 			local report = session:lastSent("RideLateral", "server")
 			expect.truthy(report, "RideLateral")
 			expect.truthy(report.args[1] < 0)
+		end)
 
-			-- It cannot be steered off the side of the runway.
-			session:renderFrame(1, 30)
-			local limit = shared(session).Runway.maxLateral(spec.halfLength)
-			expect.near(model.Root.CFrame.Position.X, -limit, 1e-3)
+		it("cannot be steered off the side of the runway, however wide it is there", function()
+			local session = startClient()
+			local modules = shared(session)
+			local runway = modules.Runway
+			-- An egg a few studs from the right-hand edge, on open runway between two rows of obstacles: once in the
+			-- narrow Forest, once deep in the wide Prehistoric zone.
+			for id, zone in { 1, 6 } do
+				local rarity = firstRarity(session, zone)
+				local spec = modules.EggSpec.get(zone, rarity)
+				local fromZ
+				for _, row in modules.Obstacles.rowsBetween(runway.zoneStartZ(zone) + 300, runway.zoneStartZ(zone + 1)) do
+					fromZ = row.zMax + 12
+					break
+				end
+				local limit = runway.maxLateral(spec.halfLength, fromZ)
+				local egg = eggData(session, id, zone, rarity, 0, -(limit - 5))
+				egg.startZ = fromZ
+				session:fromServer("EggSpawned", egg)
+				startRide(session, egg)
+				-- The camera looks straight down the runway there, and the player pushes right for a second.
+				local camera = session:service("Workspace").CurrentCamera
+				camera.CFrame = roblox.CFrame.new(0, 50, 0)
+					* roblox.CFrame.Angles(0, runway.heading(fromZ) + math.pi, 0)
+				session.moveVector = Vector3.new(1, 0, 0)
+				session:renderFrame(1 / 60, 60)
+				local root = session:service("Workspace").Eggs["Egg" .. id].Root
+				local x, z = spotOf(session, root.CFrame.Position)
+				expect.near(x, -runway.maxLateral(spec.halfLength, z), 0.02, "stopped at the edge in zone " .. zone)
+				expect.truthy(zone == 1 or -x > runway.WIDTH / 2, "further out than the Forest is wide")
+				session.moveVector = Vector3.new(0, 0, 0)
+				session:fromServer("RideEnded", "Dismount", { eggId = id, zone = zone, rarity = rarity })
+				session:fromServer("EggRemoved", id, "Claimed")
+			end
+		end)
+
+		it("keeps a rider, and their camera, facing down the runway round its bends", function()
+			local session, parts = startClient()
+			local modules = shared(session)
+			local runway = modules.Runway
+			local camera = session:service("Workspace").CurrentCamera
+			camera.CameraType = Enum.CameraType.Custom
+			-- An egg on a clear stretch of the Desert, where the runway is turning.
+			local spec = modules.EggSpec.get(2, "Common")
+			local lane, fromZ = clearRun(session, spec, 200)
+			local egg = eggData(session, 1, 2, "Common", 0, lane)
+			egg.startZ = fromZ
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			session:renderFrame(1 / 60)
+			-- The player has swung their camera a little to one side of dead ahead, looking slightly down.
+			local swing = roblox.CFrame.Angles(0, 0.3, 0) * roblox.CFrame.Angles(-0.2, 0, 0)
+			local before = runway.heading(fromZ)
+			camera.CFrame = roblox.CFrame.new(0, 50, 0) * roblox.CFrame.Angles(0, before, 0) * swing
+			for _ = 1, 8 * 60 do
+				session:renderFrame(1 / 60)
+				-- (Roblox's own camera script would move the camera along with the rider here; it keeps facing the
+				-- way it was left.)
+			end
+			local _, z = eggSpot(session, egg)
+			local after = runway.heading(z)
+			expect.truthy(math.abs(after - before) > 0.1, `the runway turned {after - before} radians`)
+			-- The rider faces down the runway where the egg is now...
+			expect.truthy(
+				parts.root.CFrame.LookVector:Dot(modules.RunwayFrame.forward(z)) > 0.9999,
+				"rider faces ahead"
+			)
+			-- ...and the camera has turned exactly as far as the runway has, keeping the player's own swing and tilt.
+			local expected = roblox.CFrame.Angles(0, after, 0) * swing
+			expect.truthy(
+				(camera.CFrame.LookVector - expected.LookVector).Magnitude < 1e-3,
+				"camera turned with the runway"
+			)
+			expect.near(camera.CFrame.LookVector.Y, expected.LookVector.Y, 1e-4, "still tilted as the player left it")
+
+			-- Off the egg, the camera is the player's own again.
+			session:fromServer("RideEnded", "Dismount", { eggId = 1, zone = 2, rarity = "Common" })
+			local left = camera.CFrame
+			session:renderFrame(1 / 60, 30)
+			expect.truthy((camera.CFrame.LookVector - left.LookVector).Magnitude < 1e-6, "left alone on foot")
+		end)
+
+		it("steers across the runway whichever way it points", function()
+			local session = startClient()
+			local modules = shared(session)
+			local runway = modules.Runway
+			-- On a bend in the Desert, in the open runway between two rows of obstacles, the camera looking straight
+			-- down the runway there.
+			local spec = modules.EggSpec.get(2, "Common")
+			local lane, fromZ = 0, nil
+			for _, row in modules.Obstacles.rowsBetween(runway.zoneStartZ(2), runway.zoneStartZ(3)) do
+				if math.abs(runway.heading(row.zMax + 15)) > 0.2 then
+					fromZ = row.zMax + 10
+					break
+				end
+			end
+			expect.truthy(fromZ, "a bend")
+			local egg = eggData(session, 1, 2, "Common", 0, lane)
+			egg.startZ = fromZ
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			local camera = session:service("Workspace").CurrentCamera
+			local heading = runway.heading(fromZ)
+			-- (A camera looks along its own -Z, so it is turned half way round to look down the runway.)
+			camera.CFrame = roblox.CFrame.new(0, 50, 0) * roblox.CFrame.Angles(0, heading + math.pi, 0)
+			session:renderFrame(1 / 60)
+			local startX = spotOf(session, session:service("Workspace").Eggs.Egg1.Root.CFrame.Position)
+			expect.near(startX, lane, 0.05)
+
+			-- Pushing left on the stick moves the egg to the left of the runway (+x), at the rider's Agility (14 studs
+			-- a second in the snapshot these tests start from): all of it across the runway, none of it lost to the
+			-- runway pointing off to one side of the world's axes.
+			session.moveVector = Vector3.new(-1, 0, 0)
+			session:renderFrame(1 / 60, 30)
+			local x = spotOf(session, session:service("Workspace").Eggs.Egg1.Root.CFrame.Position)
+			expect.near(x - startX, 14 * 0.5, 0.1, "moved left across the runway")
 		end)
 
 		it("hops off on a fresh jump press", function()
@@ -541,7 +702,11 @@ return function(harness)
 
 		it("celebrates a claim and keeps the rider rolling on the egg until they jump off", function()
 			local session, parts = startClient()
-			local egg = eggData(session, 1, 1, "Common")
+			-- On a stretch of runway they can roll straight down for the next half minute.
+			local commonSpec = shared(session).EggSpec.get(1, "Common")
+			local lane, fromZ = clearRun(session, commonSpec, commonSpec.rollSpeed * 24)
+			local egg = eggData(session, 1, 1, "Common", 0, lane)
+			egg.startZ = fromZ
 			session:fromServer("EggSpawned", egg)
 			startRide(session, egg)
 
@@ -715,10 +880,13 @@ return function(harness)
 				session:fromServer("EggSpawned", eggData(session, zone, zone, rarity, 0, 0))
 				local spec = modules.EggSpec.get(zone, rarity)
 				local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
-				-- On the ground, its back just past the zone's start line, from the very first frame.
+				-- On the ground in the middle of the runway, its back just past the zone's start line, from the very
+				-- first frame, wherever the winding runway has got to by then.
 				local back = modules.Runway.zoneStartZ(zone) + modules.Tuning.EGG_SPAWN_GAP
-				expect.near(position.Z - spec.radius, back, 1e-3, rarity .. " start")
-				local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+				local x, z = spotOf(session, position)
+				expect.near(x, 0, 0.01, rarity .. " in the middle")
+				expect.near(z - spec.radius, back, 0.01, rarity .. " start")
+				local height = modules.Runway.surfaceY(z) + modules.EggRig.rollHeight(spec.radius)
 				expect.near(position.Y, height, 1e-3, rarity .. " height")
 			end
 			-- Two seconds of frames: every egg stays on the ground and only ever moves down the runway. (The ones far
@@ -729,11 +897,12 @@ return function(harness)
 				for zone = 1, 6 do
 					local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
 					local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
-					local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+					local _, z = spotOf(session, position)
+					local height = modules.Runway.surfaceY(z) + modules.EggRig.rollHeight(spec.radius)
 					expect.near(position.Y, height, 1e-3, "on the ground")
-					expect.truthy(lastZ[zone] == nil or position.Z >= lastZ[zone], "never rolls backwards")
-					firstZ[zone] = firstZ[zone] or position.Z
-					lastZ[zone] = position.Z
+					expect.truthy(lastZ[zone] == nil or z >= lastZ[zone] - 1e-3, "never rolls backwards")
+					firstZ[zone] = firstZ[zone] or z
+					lastZ[zone] = z
 				end
 			end
 			for zone = 1, 6 do
@@ -761,17 +930,20 @@ return function(harness)
 
 		it("redraws eggs near the camera every frame, and far-off ones every few frames", function()
 			local session, parts = startClient()
-			-- The camera is over the hub. One egg just down the runway, one a zone on, one at the far end.
+			-- The camera is over the hub. One egg just down the runway, one a zone on, one two zones on, and one right
+			-- at the far end, zones beyond anything the player can see.
 			cameraAt(session, Vector3.new(0, 13, 0))
 			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 1, 0))
 			session:fromServer("EggSpawned", eggData(session, 2, 2, "Common", 1, 0))
-			session:fromServer("EggSpawned", eggData(session, 3, 6, firstRarity(session, 6), 1, 0))
+			session:fromServer("EggSpawned", eggData(session, 3, 3, firstRarity(session, 3), 1, 0))
+			session:fromServer("EggSpawned", eggData(session, 4, 6, firstRarity(session, 6), 1, 0))
 			local roots = {
 				near = parts.eggFolder.Egg1.Root,
 				mid = parts.eggFolder.Egg2.Root,
 				far = parts.eggFolder.Egg3.Root,
+				distant = parts.eggFolder.Egg4.Root,
 			}
-			local moved = { near = 0, mid = 0, far = 0 }
+			local moved = { near = 0, mid = 0, far = 0, distant = 0 }
 			local last = {}
 			local frames = 120
 			for _ = 1, frames do
@@ -790,20 +962,31 @@ return function(harness)
 				`the middle egg moved {moved.mid} times`
 			)
 			expect.truthy(moved.far >= frames / 15 and moved.far < moved.mid, `the far egg moved {moved.far} times`)
+			expect.truthy(
+				moved.distant >= 1 and moved.distant < moved.far,
+				`the most distant egg moved {moved.distant} times`
+			)
 
 			-- However rarely it is redrawn, each egg ends up where it should be, to within one redraw.
 			local modules = shared(session)
-			local farSpec = modules.EggSpec.get(6, firstRarity(session, 6))
-			local behind = farSpec.startZ + farSpec.rollSpeed * (1 + frames / 60) - roots.far.CFrame.Position.Z
-			expect.truthy(behind >= 0 and behind < farSpec.rollSpeed * 0.25, `the far egg is {behind} studs behind`)
+			for name, zone in { far = 3, distant = 6 } do
+				local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
+				local _, z = spotOf(session, roots[name].CFrame.Position)
+				local behind = spec.startZ + spec.rollSpeed * (1 + frames / 60) - z
+				local redraw = if name == "far" then 0.25 else 0.6
+				expect.truthy(
+					behind >= -0.01 and behind < spec.rollSpeed * redraw,
+					`the {name} egg is {behind} studs behind`
+				)
+			end
 
 			-- An egg somebody is riding is redrawn every frame wherever it is, because its rider is held on it.
-			session:fromServer("EggMounted", 3, 999, session.clock)
-			local before = roots.far.CFrame.Position.Z
+			session:fromServer("EggMounted", 4, 999, session.clock)
+			local before = roots.distant.CFrame.Position.Z
 			session:renderFrame(1 / 60)
-			local after = roots.far.CFrame.Position.Z
+			local after = roots.distant.CFrame.Position.Z
 			session:renderFrame(1 / 60)
-			expect.truthy(after > before and roots.far.CFrame.Position.Z > after, "a ridden egg moves every frame")
+			expect.truthy(after > before and roots.distant.CFrame.Position.Z > after, "a ridden egg moves every frame")
 		end)
 
 		it("keeps an egg on the ground, and its dust going, when its rider gets off", function()
@@ -822,7 +1005,8 @@ return function(harness)
 			local spec = modules.EggSpec.get(1, "Rare")
 			for _ = 1, 60 do
 				session:renderFrame(1 / 60)
-				local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
+				local _, z = spotOf(session, root.CFrame.Position)
+				local height = modules.Runway.surfaceY(z) + modules.EggRig.rollHeight(spec.radius)
 				expect.near(root.CFrame.Position.Y, height, 1e-3, "no hop")
 				expect.equal(emitter.Enabled, true)
 			end
@@ -843,7 +1027,9 @@ return function(harness)
 			egg.rider = nil
 			session:renderFrame(modules.Tuning.CRACK_BOUNCE_TIME / 2)
 			local spec = modules.EggSpec.get(1, "Rare")
-			local lift = root.CFrame.Position.Y - (modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius))
+			local _, bounceZ = spotOf(session, root.CFrame.Position)
+			local ground = modules.Runway.surfaceY(bounceZ)
+			local lift = root.CFrame.Position.Y - (ground + modules.EggRig.rollHeight(spec.radius))
 			expect.near(lift, modules.Tuning.CRACK_BOUNCE_HEIGHT, 1e-2)
 			expect.truthy(lift < 4, "only a slight bounce")
 			expect.equal(emitter.Enabled, false, "no dust while it cracks")
@@ -994,14 +1180,20 @@ return function(harness)
 		it("carries a leaping player back one loop at the end", function()
 			local session, parts = startClient()
 			local runway = shared(session).Runway
+			local frames = shared(session).RunwayFrame
+			-- In the air 4 studs left of the middle of the runway, a stud past the end of the loop.
 			-- (The stand-in keeps Position and CFrame apart; Roblox keeps them in step.)
-			parts.root.Position = Vector3.new(4, 30, runway.LOOP_END + 1)
-			parts.root.CFrame = roblox.CFrame.new(parts.root.Position)
+			local from = frames.point(4, runway.LOOP_END + 1, 30)
+			parts.root.Position = from
+			parts.root.CFrame = roblox.CFrame.new(from)
 			session:heartbeat(1 / 60)
+			-- Moved one loop back, to the same spot over the copy of the runway there: nothing else about them changes.
 			local position = parts.root.CFrame.Position
-			expect.near(position.Z, runway.LOOP_START + 1, 1e-3)
-			expect.near(position.Y, 30, 1e-3)
-			expect.near(position.X, 4, 1e-3)
+			expect.truthy((position - (from - frames.loopShift())).Magnitude < 1e-3, "moved back by one loop")
+			local x, z = spotOf(session, position)
+			expect.near(z, runway.LOOP_START + 1, 0.02)
+			expect.near(x, 4, 0.02)
+			expect.near(position.Y - runway.surfaceY(z), 30, 1e-3)
 			expect.equal(parts.humanoid.Health, 100)
 		end)
 
@@ -1017,7 +1209,7 @@ return function(harness)
 				local path = modules.Obstacles.planPath(
 					x,
 					runway.LOOP_END - 15,
-					runway.LOOP_END + 15,
+					runway.LOOP_END + 50,
 					mineSpec.halfLength,
 					mineSpec.radius
 				)
@@ -1047,27 +1239,35 @@ return function(harness)
 			local echo = parts.eggFolder.Egg2.Echo:FindFirstChildOfClass("ParticleEmitter")
 			local closing = (mineSpec.rollSpeed - otherSpec.rollSpeed) / 60
 			local wrapped, lastGap = false, nil
+			local lastSeparation
 			for _ = 1, 60 do
 				camera.CFrame = roblox.CFrame.new(parts.root.CFrame.Position + Vector3.new(0, 10, -20))
 				session:renderFrame(1 / 60)
 				local rider = parts.root.CFrame.Position
-				local otherZ = otherRoot.CFrame.Position.Z
-				-- The other egg is always drawn just ahead of the rider, closing in steadily.
-				local gap = otherZ - rider.Z
+				local _, riderZ = spotOf(session, rider)
+				local _, otherZ = spotOf(session, otherRoot.CFrame.Position)
+				-- The other egg is always drawn just ahead of the rider down the runway, closing in steadily.
+				local gap = otherZ - riderZ
 				expect.truthy(gap > 0 and gap < 35, "gap " .. gap)
 				if lastGap then
 					expect.near(gap, lastGap - closing, 0.05)
 				end
 				lastGap = gap
+				-- Seen from the rider, it never jumps: not even on the frame they are both carried back.
+				local separation = otherRoot.CFrame.Position - rider
+				if lastSeparation then
+					expect.truthy((separation - lastSeparation).Magnitude < 1, "the other egg jumped")
+				end
+				lastSeparation = separation
 				expect.near(
 					otherRoot.CFrame.Position.Y,
-					runway.BASE_Y + modules.EggRig.rollHeight(otherSpec.radius),
+					runway.surfaceY(otherZ) + modules.EggRig.rollHeight(otherSpec.radius),
 					1e-3,
 					"on the ground"
 				)
-				if rider.Z < runway.LOOP_START + 100 then
+				if riderZ < runway.LOOP_START + 100 then
 					wrapped = true
-				elseif rider.Z > runway.LOOP_END - 60 then
+				elseif riderZ > runway.LOOP_END - 60 then
 					-- About to be carried back: the other egg's trail is also being laid one loop back.
 					expect.equal(echo.Enabled, true)
 				end
@@ -1635,7 +1835,9 @@ return function(harness)
 			local root = hud(parts)
 
 			session:fromServer("StaminaChanged", 40, session.clock, 0, 100)
-			parts.root.Position = Vector3.new(0, 0, 700)
+			-- Half way down the Desert, wherever the winding runway has got to by then.
+			local modules = shared(session)
+			parts.root.Position = modules.RunwayFrame.point(0, modules.Runway.zoneStartZ(2) + 500, 3)
 			session:renderFrame(1 / 60, 2)
 			expect.equal(labelOf(root.Meters.Stamina).Text, "Stamina  40 / 100")
 			expect.near(root.Meters.Stamina.Fill.Size.X.Scale, 0.4, 1e-6)

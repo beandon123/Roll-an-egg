@@ -138,6 +138,10 @@
       zoneView(Number(hash.has("zone") ? hash.get("zone") : 1));
     }
     if (hash.get("fov")) camera.fov = Number(hash.get("fov"));
+    // far=6000 pushes the haze back, to look at the whole runway from high above.
+    const far = Number(hash.get("far") || 900);
+    scene.fog.far = far;
+    camera.far = Math.max(3000, far * 1.5);
     camera.updateProjectionMatrix();
   }
   fromHash();

@@ -7,7 +7,8 @@
 -- writes tools/out/map-preview.html. Open it in a browser and drag to look round. Pass a path to write somewhere
 -- else. The page reads its camera from the address: map-preview.html#zone=3 looks down the Snow zone from its gate,
 -- #at=2500 looks down the runway from 2,500 studs along it (the left and right arrow keys move along it from
--- there), and #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
+-- there), and #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz. Add &far=6000 to push the haze back
+-- and see the whole runway from high above (for example #cam=-1500,2600,1500,0,0,3000&far=9000).
 --
 -- It runs the game's own MapService in the Studio stand-in (tests/studio) and copies every part it builds, so the
 -- page shows exactly the parts the game makes. Lighting, particles and the client's animations are left out.

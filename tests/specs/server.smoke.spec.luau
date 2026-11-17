@@ -193,7 +193,13 @@ return function(harness)
 						local heading = math.atan2(frame.ZVector.X, frame.ZVector.Z)
 						local fan = if z > endZ - runway.WIDTH_TAPER - 20 then 0.15 else 0
 						expect.near(heading, runway.heading(z), 0.08 + fan, zoneName .. " tile heading")
-						expect.near(frame.ZVector.Y, runway.slope(z), 0.03, zoneName .. " tile slope")
+						-- (Round the inside of a bend the same climb comes in fewer studs, so it is steeper there.)
+						expect.near(
+							frame.ZVector.Y,
+							runway.slope(z) / runway.stretch(x, z),
+							0.03,
+							zoneName .. " tile slope"
+						)
 						if math.abs(heading) > math.rad(12) then
 							turned += 1
 						end

@@ -1,7 +1,8 @@
 --!strict
 -- Where every obstacle on the runway is, and what that means for eggs:
 --     * the layout: zone-themed obstacles in rows across the runway (kinds and sizes in Config/Obstacles); the wider
---       the runway, the more to a row, and now and then a rock comes up giant
+--       the runway, the more to a row, and now and then a rock comes up giant. However wide the row, there is a gap
+--       the biggest egg fits through every so often across it, and open runway between it and the next row
 --     * paths: how an egg without a rider steers round them, so it never rolls through one
 --     * hits: whether a ridden egg, which goes wherever its rider steers, has run into one
 --     * timing: when obstacles that go off now and then (geysers, lava vents, clams) are dangerous
@@ -120,6 +121,35 @@ local function widestGap(placed: { { lo: number, hi: number } }, half: number): 
 	return math.max(widest, half - edge)
 end
 
+-- The longest stretch of a row's width with no way through for the biggest egg: obstacles, and any gaps between
+-- them (or between them and the walls) narrower than MIN_GAP. An egg in the middle of such a stretch has half of it
+-- to cross before it can get past the row.
+local function longestBlock(placed: { { lo: number, hi: number } }, half: number): number
+	local spans = table.clone(placed)
+	table.sort(spans, function(a, b)
+		return a.lo < b.lo
+	end)
+	local longest = 0
+	-- Where the stretch being measured began, if the last gap passed was too narrow to get through.
+	local blockedFrom: number? = nil
+	local edge = -half
+	for _, span in spans do
+		if span.lo - edge >= Config.MIN_GAP then
+			if blockedFrom then
+				longest = math.max(longest, edge - blockedFrom)
+			end
+			blockedFrom = span.lo
+		else
+			blockedFrom = blockedFrom or edge
+		end
+		edge = math.max(edge, span.hi)
+	end
+	if blockedFrom then
+		longest = math.max(longest, (if half - edge >= Config.MIN_GAP then edge else half) - blockedFrom)
+	end
+	return longest
+end
+
 local rows: { Row } = {}
 local byId: { Obstacle } = {}
 
@@ -174,7 +204,7 @@ local function layOutZone(zoneId: number)
 					continue
 				end
 				table.insert(placed, span)
-				if widestGap(placed, half) < Config.MIN_GAP then
+				if widestGap(placed, half) < Config.MIN_GAP or longestBlock(placed, half) > Config.MAX_BLOCK then
 					table.remove(placed)
 					continue
 				end

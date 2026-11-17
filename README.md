@@ -296,8 +296,9 @@ numbers are in `src/shared/Config/Tuning.luau`; the rules are in `src/server/Log
 server and player gets the same runway (`src/shared/Obstacles.luau`; kinds, sizes and mixes in
 `src/shared/Config/Obstacles.luau`). A row has one to three obstacles for every 120 studs the runway is wide, so
 the wide zones are as crowded as the narrow ones, and about one big rock in seven comes up giant, up to twice the
-size again. Every row leaves a gap wide enough for the biggest egg, and there are always at least 44 studs of open
-runway between one row and the next. What happens to the rider of an egg that hits one:
+size again. Every row leaves a gap wide enough for the biggest egg, and however wide the runway, no stretch of a row
+is blocked for more than 60 studs, so a way through is never far to either side. There are always at least 50 studs
+of open runway between one row and the next. What happens to the rider of an egg that hits one:
 
 | Zone | Bump (stamina lost, egg knocked aside) | Knock-off (thrown off, egg rolls on) | Lethal (rider dies) |
 | --- | --- | --- | --- |

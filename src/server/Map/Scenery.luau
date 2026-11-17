@@ -716,6 +716,9 @@ end
 local WATER_DROP = 1.5
 local SEABED_DROP = 7
 local SEA_REACH = 300
+-- The sea is laid in sections about this long down the zone, its water a sheet this thick.
+local SEA_SECTION = 400
+local WATER_SHEET = 0.1
 
 -- The sea round the Ocean's boardwalk, built once for both sides.
 local function buildSeaFloor(folder: Instance, zoneId: number, palette: Palette, random: Random)
@@ -723,26 +726,33 @@ local function buildSeaFloor(folder: Instance, zoneId: number, palette: Palette,
 	local base = Runway.surfaceY(startZ)
 	local seabedY = base - SEABED_DROP
 	local bounds = zoneBounds(zoneId, Runway.zoneWidth(zoneId) / 2 + SEA_REACH)
-	local size = Vector3.new(bounds[2] - bounds[1], 0, bounds[4] - bounds[3])
-	local center = Vector3.new((bounds[1] + bounds[2]) / 2, 0, (bounds[3] + bounds[4]) / 2)
+	local width = bounds[2] - bounds[1]
+	local centerX = (bounds[1] + bounds[2]) / 2
 	-- The seabed and the water lie right under the boardwalk too. Anyone who ends up in the water drowns
-	-- (MapService), so nobody wanders off across the reef.
-	block(
-		folder,
-		Vector3.new(size.X, 4, size.Z),
-		CFrame.new(center.X, seabedY - 2, center.Z),
-		palette.cliff,
-		{ material = M.Sand }
-	).Name =
-		"Seabed"
-	block(
-		folder,
-		Vector3.new(size.X, 1, size.Z),
-		CFrame.new(center.X, base - WATER_DROP - 0.5, center.Z),
-		{ 56, 168, 214 },
-		{ material = M.Glass, transparency = 0.45, collide = false }
-	).Name =
-		"Water"
+	-- (MapService), so nobody wanders off across the reef. Both are laid in sections side by side down the zone,
+	-- each small enough to stream in as players come near it.
+	local sections = math.ceil((bounds[4] - bounds[3]) / SEA_SECTION)
+	local depth = (bounds[4] - bounds[3]) / sections
+	for section = 1, sections do
+		local centerZ = bounds[3] + depth * (section - 0.5)
+		block(
+			folder,
+			Vector3.new(width, 4, depth),
+			CFrame.new(centerX, seabedY - 2, centerZ),
+			palette.cliff,
+			{ material = M.Sand }
+		).Name =
+			"Seabed"
+		-- (The water is a thin sheet, so no edge shows where one section meets the next.)
+		block(
+			folder,
+			Vector3.new(width, WATER_SHEET, depth),
+			CFrame.new(centerX, base - WATER_DROP - WATER_SHEET / 2, centerZ),
+			{ 56, 168, 214 },
+			{ material = M.Glass, transparency = 0.45, collide = false }
+		).Name =
+			"Water"
+	end
 	-- A lighthouse on a rock off one side.
 	local middleZ = startZ + Runway.zoneLength(zoneId) / 2 + 90
 	buildProp(folder, "Lighthouse", RunwayFrame.atHeight(Runway.halfWidthAt(middleZ) + 90, middleZ, seabedY), 5, random)
