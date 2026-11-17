@@ -47,8 +47,6 @@ Economy.MOUNT_SPEED = {
 	Secret = 40,
 	Eternal = 44,
 }
--- Seconds after leaving an egg before a ridden pet comes back.
-Economy.RESUMMON_DELAY = 3
 
 -- The pen. It starts at level 1; each level makes it wider and holds one more egg and one more pet.
 Economy.MAX_PEN_LEVEL = 9

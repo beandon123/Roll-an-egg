@@ -979,10 +979,8 @@ return function(harness)
 			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
 		end)
 
-		it("sends a ridden pet away while its rider is on an egg, and brings it back after", function()
-			local session = startServer()
-			local player, humanoid, root = session:addPlayer(1, "Tester")
-			session:heartbeat(1 / 60)
+		-- Gives the player a pet to ride.
+		local function giveSteed(session)
 			local data = session.profiles.Player_1.Data
 			table.insert(data.Pets, {
 				uid = "steed",
@@ -994,6 +992,14 @@ return function(harness)
 				inPen = true,
 				hatchedAt = 0,
 			})
+			return data
+		end
+
+		it("sends a ridden pet away when its rider gets on an egg, and it stays away", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = giveSteed(session)
 			session:fromClient("RidePet", player, "steed")
 			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
 			mount(session, player, root, 1, "Common")
@@ -1002,14 +1008,60 @@ return function(harness)
 			session:fromClient("RequestDismount", player)
 			session:heartbeat(1 / 60)
 			task.wait(3.3)
-			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1, "back after leaving the egg")
-			expect.equal(humanoid.WalkSpeed, 24)
+			session:heartbeat(1 / 60)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0, "pets never go on the runway")
+			expect.equal(humanoid.WalkSpeed, 16)
+			expect.equal(data.Mount, "steed", "still the pet they ride, for next time")
 
-			-- Selling the pet sends it away for good.
+			-- Selling the pet clears it.
 			session:heartbeat(0.3)
 			session:fromClient("SellPet", player, "steed")
-			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
 			expect.equal(data.Mount, "")
+		end)
+
+		it("costs stamina to ride a pet, and the pet bucks its rider off when it runs out", function()
+			local session = startServer()
+			local tuning = shared(session).Tuning
+			local player, humanoid = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			giveSteed(session)
+			humanoid.WalkSpeed = 16
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
+			-- (Stamina changes go out on the server's next frame.)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[3], -tuning.PET_RIDE_DRAIN, "draining")
+
+			-- 100 stamina lasts 20 s.
+			session:heartbeat(0.5, math.floor(100 / tuning.PET_RIDE_DRAIN * 2) - 1)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1, "still riding")
+			session:heartbeat(0.5, 2)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0, "bucked off")
+			expect.equal(session:lastSent("PetBucked", player).args[1], "Fox")
+			expect.equal(session:lastSent("MountChanged", player).args[1], "")
+			expect.equal(humanoid.WalkSpeed, 16)
+			expect.truthy(session:lastSent("StaminaChanged", player).args[3] > 0, "resting now")
+
+			-- Too tired to get straight back on.
+			session:clearSent()
+			session:heartbeat(0.3)
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			local notice = session:lastSent("Notice", player)
+			expect.truthy(notice and string.find(notice.args[1], "Too tired"), "told why")
+		end)
+
+		it("takes a pet rider off their pet as soon as they reach the runway", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			giveSteed(session)
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
+			root.Position = roblox.Vector3.new(0, 20, 30)
+			session:heartbeat(1 / 60)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			expect.equal(session:lastSent("MountChanged", player).args[1], "")
 		end)
 
 		it("can give eggs, pets and dollars and finish hatching from the admin panel", function()

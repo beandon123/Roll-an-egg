@@ -6,14 +6,18 @@
 -- and runs at the pet's speed (Humanoid.WalkSpeed). Clients make it walk when its rider moves and seat the rider
 -- (MountController).
 --
--- Jumping from a pet onto an egg sends the pet away; it comes back a few seconds after the player leaves the egg.
+-- Riding a pet costs stamina (Tuning.PET_RIDE_DRAIN a second, worked out by the runway rules: RunwayService), so the
+-- more Max Stamina a player has, the longer they can ride. When it runs out, the pet bucks them off. A player who is
+-- too tired cannot get on.
+--
+-- Pets never go on the runway: a rider who reaches it is taken off their pet (and leaps for an egg, like everyone),
+-- and getting on an egg sends the pet away. Either way they have to call it again at the hub.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
-local Economy = require(Shared.Config.Economy)
 local Net = require(Shared.Net)
 local PetRig = require(Shared.PetRig)
 local PetWorth = require(Shared.PetWorth)
@@ -23,14 +27,17 @@ local Hatchery = require(script.Parent.Parent.Logic.Hatchery)
 
 -- How far above the pet's seat the rider's root part sits.
 local SEAT_RISE = 1.5
+local TIRED_COLOR = { 255, 190, 90 }
 
 local MountService = {}
+
+-- Told when a player gets on (true) or off (false) their pet; returns false to keep them off (too tired). Set by
+-- RunwayService, which keeps everyone's stamina.
+local ridingChanged: ((Player, boolean) -> boolean)? = nil
 
 type Riding = {
 	-- The player wants to be on their pet (they pressed Ride and have not got off).
 	wants: boolean,
-	-- On an egg, so the pet is away for now.
-	onEgg: boolean,
 	model: Model?,
 	-- The humanoid's own numbers, put back when the pet goes.
 	hipHeight: number,
@@ -45,7 +52,7 @@ local folder: Folder
 local function stateOf(player: Player): Riding
 	local state = riding[player]
 	if state == nil then
-		state = { wants = false, onEgg = false, model = nil, hipHeight = 0, walkSpeed = 16, token = 0 }
+		state = { wants = false, model = nil, hipHeight = 0, walkSpeed = 16, token = 0 }
 		riding[player] = state
 	end
 	return state
@@ -77,6 +84,9 @@ local function unsummon(player: Player)
 			humanoid.HipHeight = state.hipHeight
 			humanoid.WalkSpeed = state.walkSpeed
 		end
+		if ridingChanged then
+			ridingChanged(player, false)
+		end
 	end
 	tell(player, "", 0)
 end
@@ -87,7 +97,7 @@ local function summon(player: Player)
 	local data = DataService.GetData(player)
 	local pet = data and Hatchery.mount(data)
 	local humanoid, root = humanoidAndRoot(player)
-	if pet == nil or humanoid == nil or root == nil or state.onEgg then
+	if pet == nil or humanoid == nil or root == nil then
 		return
 	end
 	if state.model then
@@ -95,6 +105,13 @@ local function summon(player: Player)
 	end
 	local model = PetRig.build(pet.kind, pet.variant)
 	if model == nil then
+		return
+	end
+	if ridingChanged and not ridingChanged(player, true) then
+		model:Destroy()
+		state.wants = false
+		tell(player, "", 0)
+		Net.Notice:FireClient(player, "Too tired to ride! Rest a moment first.", TIRED_COLOR)
 		return
 	end
 	local petRoot = model.PrimaryPart :: BasePart
@@ -163,42 +180,36 @@ function MountService.Refresh(player: Player)
 	end
 end
 
--- The player is busy with something they must be on foot for (riding an egg, rolling on their training stick): the
--- pet goes away until BringBack.
-function MountService.PutAway(player: Player)
+-- Called by RunwayService when the player gets on an egg: the pet goes away, and stays away until they call it
+-- again (pets never go on the runway).
+function MountService.OnRideStarted(player: Player)
+	MountService.GetOff(player)
+end
+
+-- Takes the player off their pet, as if they had pressed Get Off (RunwayService does this when a rider reaches the
+-- runway, and TrainingService when they get on their training stick).
+function MountService.GetOff(player: Player)
 	local state = stateOf(player)
-	state.onEgg = true
+	state.wants = false
 	if state.model then
-		state.model:Destroy()
-		state.model = nil
-		local humanoid = humanoidAndRoot(player)
-		if humanoid then
-			humanoid.HipHeight = state.hipHeight
-			humanoid.WalkSpeed = state.walkSpeed
-		end
-		tell(player, "", 0)
+		unsummon(player)
 	end
 end
 
--- The player is done with what PutAway was for: the pet they were riding comes back a few seconds later.
-function MountService.BringBack(player: Player)
+-- The player's stamina ran out while they rode their pet: it bucks them off. Their device tosses them and says why.
+function MountService.Buck(player: Player)
 	local state = stateOf(player)
-	state.onEgg = false
-	if not state.wants then
-		return
-	end
-	state.token += 1
-	local token = state.token
-	task.delay(Economy.RESUMMON_DELAY, function()
-		if riding[player] == state and state.token == token and state.wants and not state.onEgg then
-			summon(player)
-		end
-	end)
+	local kind = if state.model then state.model.Name else ""
+	state.wants = false
+	unsummon(player)
+	Net.PetBucked:FireClient(player, kind)
 end
 
--- Called by RunwayService when the player gets on an egg, and when their egg ride ends.
-MountService.OnRideStarted = MountService.PutAway
-MountService.OnRideEnded = MountService.BringBack
+-- Tells this service who to ask before a player gets on a pet, and to tell when they get off. `changed(player, on)`
+-- returns false to keep them off (too tired).
+function MountService.OnRidingChanged(changed: (Player, boolean) -> boolean)
+	ridingChanged = changed
+end
 
 function MountService.Init()
 	folder = Instance.new("Folder")
@@ -212,8 +223,10 @@ function MountService.Init()
 			if state.model then
 				state.model:Destroy()
 				state.model = nil
+				if ridingChanged then
+					ridingChanged(player, false)
+				end
 			end
-			state.onEgg = false
 			if state.wants then
 				state.token += 1
 				local token = state.token

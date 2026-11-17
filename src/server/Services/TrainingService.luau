@@ -178,7 +178,6 @@ function TrainingService.Stop(player: Player, reason: string)
 			root:SetNetworkOwner(player)
 		end)
 	end
-	MountService.BringBack(player)
 	if player.Parent == Players then
 		Net.TrainingEnded:FireClient(player, reason)
 	end
@@ -221,8 +220,8 @@ local function start(player: Player, index: number)
 		return
 	end
 
-	-- Off their pet first, so the character stands at its own height.
-	MountService.PutAway(player)
+	-- Off their pet first, so the character stands at its own height. (They call it again when they want it.)
+	MountService.GetOff(player)
 	local level = Training.levelOf(data)
 	local trainer: Trainer = {
 		index = index,

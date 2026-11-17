@@ -83,6 +83,14 @@ Tuning.LEAP_SERVER_GRACE = 1.5
 -- Seconds a rider who goes off the side through a gap falls before they die.
 Tuning.FALL_OFF_TIME = 0.8
 
+-- Riding a pet (in the hub; never on the runway) costs this much stamina a second, so the more Max Stamina a player
+-- has, the longer they can ride. When it runs out, the pet bucks them off. A player with less than
+-- PET_RIDE_MIN_STAMINA is too tired to get on.
+Tuning.PET_RIDE_DRAIN = 5
+Tuning.PET_RIDE_MIN_STAMINA = 10
+-- How long a player bucked off their pet staggers.
+Tuning.BUCKED_STAGGER_TIME = 0.8
+
 -- Obstacles (see Config/Obstacles)
 -- Stamina a Bump costs, as a fraction of the egg's stamina requirement.
 Tuning.BUMP_STAMINA = 0.1

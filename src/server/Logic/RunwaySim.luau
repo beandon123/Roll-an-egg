@@ -114,6 +114,9 @@ export type Rider = {
 	lastLeaveVoluntary: boolean,
 	lastLeftEggId: number?,
 	combo: number,
+	-- Riding a pet (not an egg): stamina drains at Tuning.PET_RIDE_DRAIN, and the pet bucks them off at `petEmptyAt`.
+	onPet: boolean,
+	petEmptyAt: number,
 }
 
 -- Why a ride ended.
@@ -181,6 +184,8 @@ export type Event =
 		time: number,
 	}
 	| { type: "Claimed", rider: number, id: number, zone: number, rarity: string, kind: string }
+	-- The rider's pet ran their stamina out and bucked them off.
+	| { type: "PetBucked", rider: number }
 
 local RunwaySim = {}
 RunwaySim.__index = RunwaySim
@@ -597,6 +602,8 @@ function RunwaySim.addRider(self: RunwaySim, riderId: number, maxStamina: number
 		lastLeaveVoluntary = false,
 		lastLeftEggId = nil,
 		combo = 0,
+		onPet = false,
+		petEmptyAt = math.huge,
 	}
 	self.riders[riderId] = rider
 	self:_setStamina(rider, maxStamina, now, self:_regenRate(rider))
@@ -617,14 +624,39 @@ function RunwaySim.setMaxStamina(self: RunwaySim, riderId: number, maxStamina: n
 	self:_restartStamina(rider, current, now)
 end
 
--- Sets a rider's stamina, draining it while they ride an unclaimed egg and refilling it otherwise.
+-- Sets a rider's stamina, draining it while they ride an unclaimed egg or a pet, and refilling it otherwise.
 function RunwaySim._restartStamina(self: RunwaySim, rider: Rider, value: number, now: number)
 	local ride = rider.ride
-	local draining = ride ~= nil and not ride.claimed
-	self:_setStamina(rider, value, now, if ride and draining then -ride.drain else self:_regenRate(rider))
-	if ride and draining then
+	local onEgg = ride ~= nil and not ride.claimed
+	local onPet = rider.onPet and rider.eggId == nil
+	local rate = if ride and onEgg then -ride.drain elseif onPet then -Tuning.PET_RIDE_DRAIN else self:_regenRate(rider)
+	self:_setStamina(rider, value, now, rate)
+	if ride and onEgg then
 		ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, ride.drain)
 	end
+	rider.petEmptyAt = if onPet
+		then now + StaminaMath.timeUntilEmpty(rider.staminaValue, Tuning.PET_RIDE_DRAIN)
+		else math.huge
+end
+
+-- The player gets on their pet (`onPet`), or off it. Riding a pet costs PET_RIDE_DRAIN stamina a second; when it
+-- runs out the pet bucks them off (a PetBucked event). Returns false, changing nothing, if they are too tired to get
+-- on (less than PET_RIDE_MIN_STAMINA) or are riding an egg.
+function RunwaySim.setOnPet(self: RunwaySim, riderId: number, onPet: boolean, now: number): boolean
+	local rider = self.riders[riderId]
+	if rider == nil then
+		return false
+	end
+	if onPet == rider.onPet then
+		return true
+	end
+	local stamina = self:getStamina(riderId, now)
+	if onPet and (rider.eggId ~= nil or stamina < Tuning.PET_RIDE_MIN_STAMINA) then
+		return false
+	end
+	rider.onPet = onPet
+	self:_restartStamina(rider, stamina, now)
+	return true
 end
 
 -- Fills a player's stamina to their Max Stamina. A ride in progress keeps draining from the new value.
@@ -776,6 +808,9 @@ function RunwaySim.requestMount(
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
+	-- Off their pet, if they were on one (RunwayService sends it away).
+	rider.onPet = false
+	rider.petEmptyAt = math.huge
 
 	self:_setStamina(rider, stamina, now, -spec.drain)
 	self:_emit({ type = "EggMounted", id = eggId, rider = riderId, time = now })
@@ -1025,6 +1060,15 @@ function RunwaySim.step(self: RunwaySim, now: number)
 	end
 
 	self:_checkObstacles(now)
+
+	-- Pets that have run their riders' stamina out buck them off.
+	for _, rider in self.riders do
+		if rider.onPet and rider.eggId == nil and now >= rider.petEmptyAt then
+			rider.onPet = false
+			self:_restartStamina(rider, 0, now)
+			self:_emit({ type = "PetBucked", rider = rider.id })
+		end
+	end
 
 	for _, rider in self.riders do
 		local ride = rider.ride

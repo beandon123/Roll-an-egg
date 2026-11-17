@@ -27,8 +27,6 @@ local Stats = require(script.Parent.Parent.Logic.Stats)
 
 -- Fastest a client may report steering; extra reports are dropped.
 local MIN_LATERAL_INTERVAL = 1 / 30
--- How much higher above an egg a player riding a pet may be when they jump onto it.
-local MOUNTED_REACH = 40
 
 local RunwayService = {}
 
@@ -192,7 +190,6 @@ local function dispatch(events)
 		elseif kind == "RideEnded" then
 			local player = playersByUserId[event.rider]
 			if player then
-				MountService.OnRideEnded(player)
 				Net.RideEnded:FireClient(player, event.reason, {
 					eggId = event.id,
 					zone = event.zone,
@@ -206,6 +203,11 @@ local function dispatch(events)
 					-- Over the edge through a gap in the banks: let them fall for a moment first.
 					killCharacterAfter(player, Tuning.FALL_OFF_TIME)
 				end
+			end
+		elseif kind == "PetBucked" then
+			local player = playersByUserId[event.rider]
+			if player then
+				MountService.Buck(player)
 			end
 		elseif kind == "StaminaChanged" then
 			local player = playersByUserId[event.rider]
@@ -247,12 +249,10 @@ local function onRequestMount(player: Player, eggId: unknown)
 	local time = now()
 	local x, y, z = sim:eggCenter(egg, time)
 	z = Runway.nearestImage(z, root.Position.Z)
-	-- (A player riding a tall pet is held high above the ground, so is allowed to be further above the egg.)
 	local offset = root.Position - Vector3.new(x, y, z)
 	local across = Vector3.new(offset.X, 0, offset.Z).Magnitude
-	local above = if MountService.IsMounted(player) then MOUNTED_REACH else 0
 	local inReach = across <= egg.spec.halfLength + Tuning.MOUNT_TOLERANCE
-		and offset.Y <= egg.spec.radius + Tuning.MOUNT_TOLERANCE + above
+		and offset.Y <= egg.spec.radius + Tuning.MOUNT_TOLERANCE
 		and offset.Y >= -Tuning.MOUNT_TOLERANCE
 
 	sim:requestMount(player.UserId, eggId, time, inReach)
@@ -348,9 +348,10 @@ local function onPlayerRemoving(player: Player)
 	end
 end
 
--- Players never walk on the runway: once past the start zone they must be on an egg, or leaping to one (riding a
--- pet, or flying as an admin, is not walking). Each player's own device kills them the moment they touch the
--- runway (see the client's RideController); this is the server's backstop, in case that does not happen.
+-- Players never walk on the runway: once past the start zone they must be on an egg, or leaping to one. Nor do
+-- pets: a player who rides one onto the runway is taken off it (their device has already started their leap).
+-- Each player's own device kills them the moment they touch the runway (see the client's RideController); this is
+-- the server's backstop, in case that does not happen. Only an admin flying (the admin panel) is spared.
 local function checkLeaps(time: number)
 	for _, player in playersByUserId do
 		local rider = sim:getRider(player.UserId)
@@ -364,8 +365,10 @@ local function checkLeaps(time: number)
 			and root.Position.Z >= 0
 			and math.abs(root.Position.X) <= Runway.WIDTH / 2
 			and not (rider and rider.eggId ~= nil)
-			and not MountService.IsMounted(player)
 			and player:GetAttribute(AdminTools.FLYING) ~= true
+		if onFoot and MountService.IsMounted(player) then
+			MountService.GetOff(player)
+		end
 		if not onFoot then
 			offEggSince[player] = nil
 		else
@@ -458,6 +461,11 @@ function RunwayService.Init()
 
 	DataService.OnLoaded(onDataLoaded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+	-- Riding a pet costs stamina, and a player too tired cannot get on.
+	MountService.OnRidingChanged(function(player, onPet)
+		return sim:setOnPet(player.UserId, onPet, now())
+	end)
 end
 
 function RunwayService.Start()

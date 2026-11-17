@@ -1,14 +1,21 @@
 -- Riding pets, on this device: every ridden pet (the server welds them under their riders, in Workspace.Mounts)
 -- walks while its rider is moving and stands still when they stop, and the local player sits on theirs, using the
 -- sitting pose from Roblox's own character animations. PetAnimationController plays the pets' moves.
+--
+-- Riding costs stamina; when it runs out the server takes the pet away (MountService.Buck) and this device tosses
+-- the player off it, staggering, and says why.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
+local Net = Load.shared("Net")
 local PetAnimations = Load.shared("PetAnimations")
 local PetModels = Load.shared("PetModels")
+local Tuning = Load.shared("Config", "Tuning")
+
+local UiState = require(script.Parent.Parent.Ui.UiState)
 
 local localPlayer = Players.LocalPlayer
 
@@ -91,11 +98,39 @@ local function update()
 	seat(mine)
 end
 
+local BUCKED_COLOR = Color3.fromRGB(255, 150, 90)
+
+-- The player's pet has bucked them off (their stamina ran out): up and backwards, staggering for a moment.
+local function bucked(kind: string)
+	seat(false)
+	local about = PetModels.describe(kind)
+	UiState.showToast(
+		`{if about then "Your " .. about.name else "Your pet"} bucked you off! Out of stamina.`,
+		BUCKED_COLOR,
+		3
+	)
+	local character = localPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if humanoid == nil or root == nil or not root:IsA("BasePart") or humanoid.Health <= 0 then
+		return
+	end
+	humanoid.PlatformStand = true
+	root.AssemblyLinearVelocity = root.CFrame.LookVector * -18 + Vector3.new(0, 38, 0)
+	task.delay(Tuning.BUCKED_STAGGER_TIME, function()
+		if humanoid.Parent and humanoid.Health > 0 then
+			humanoid.PlatformStand = false
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end)
+end
+
 function MountController.Init()
 	localPlayer.CharacterAdded:Connect(function()
 		-- A new character has no seat to stand up from.
 		sitTrack = nil
 	end)
+	Net.PetBucked.OnClientEvent:Connect(bucked)
 end
 
 function MountController.Start()

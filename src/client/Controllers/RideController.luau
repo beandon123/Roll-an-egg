@@ -4,10 +4,11 @@
 -- The server decides everything that matters (whether a mount counts, stamina, claims). This controller only
 -- asks, steers, and makes the result feel immediate.
 --
--- Players never walk on the runway. Stepping onto it past the start zone launches them into a long, floaty leap,
--- and so does jumping off an egg; they have Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first,
--- or running out of time, kills them, and they start again at the hub. (Riding a pet, or flying as an admin, is not
--- walking. The server kills them too if this device does not; see RunwayService.)
+-- Players never walk on the runway, and nor do their pets. Stepping onto it past the start zone (on foot or on a
+-- pet, which is sent away) launches them into a long, floaty leap, and so does jumping off an egg; they have
+-- Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first, or running out of time, kills them, and
+-- they start again at the hub. (Only an admin flying is spared. The server kills them too if this device does not;
+-- see RunwayService.)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -38,8 +39,6 @@ local SAME_EGG_IGNORE_TIME = 1
 -- A jump press only counts as "hop off" once the jump input that got the player onto the egg has been released.
 local JUMP_RELEASE_GAP = 0.15
 local MIN_RIDE_BEFORE_HOP = 0.3
--- How much higher above an egg a player riding a pet may be when they jump onto it (as on the server).
-local MOUNTED_REACH = 40
 
 local RideController = {}
 
@@ -169,9 +168,9 @@ local function isOnRunway(position: Vector3): boolean
 		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
 end
 
--- Whether the player is getting about some other way than on foot: riding a pet, or flying as an admin.
-local function isCarried(): boolean
-	return UiState.Fusion.peek(UiState.riddenPet) ~= "" or localPlayer:GetAttribute(AdminTools.FLYING) == true
+-- Whether the player is flying (the admin panel): the only way to be over the runway without an egg.
+local function isFlying(): boolean
+	return localPlayer:GetAttribute(AdminTools.FLYING) == true
 end
 
 -- Every frame while not riding an egg: start a leap when the player steps onto the runway, carry a leaping player
@@ -186,8 +185,8 @@ local function updateLeap()
 	end
 
 	local position = root.Position
-	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isCarried() then
-		-- Back over the hub, off the side (falling), or not on foot.
+	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isFlying() then
+		-- Back over the hub, off the side (falling), or flying.
 		if leapEndsAt ~= nil then
 			endLeap(root)
 		end
@@ -199,7 +198,10 @@ local function updateLeap()
 	end
 
 	if leapEndsAt == nil then
-		-- Just stepped past the start zone onto the runway.
+		-- Just stepped past the start zone onto the runway. A pet does not come too.
+		if UiState.Fusion.peek(UiState.riddenPet) ~= "" then
+			UiState.actions.ridePet("")
+		end
 		local velocity = root.AssemblyLinearVelocity
 		startLeap(
 			humanoid,
@@ -419,9 +421,7 @@ local function lookForEgg()
 	end
 
 	local ignore = if clock - lastLeftAt < SAME_EGG_IGNORE_TIME then lastLeftEggId else nil
-	-- Riding a pet holds the player high up, so they may reach further down to an egg.
-	local reach = if UiState.Fusion.peek(UiState.riddenPet) ~= "" then MOUNTED_REACH else 0
-	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore, reach)
+	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore)
 	if eggId then
 		lastMountRequestAt = clock
 		mountPendingUntil = clock + MOUNT_PENDING_GRACE
