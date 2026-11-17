@@ -1719,18 +1719,27 @@ return function(harness)
 			local session = startClient()
 			local Lighting = session:service("Lighting")
 			local CycleClock = session:require(session:service("ReplicatedStorage").Shared.CycleClock)
-			local cycleStart = math.floor(session.clock / 180) * 180 + 180
+			local cycle = CycleClock.CYCLE_LENGTH
+			local cycleStart = math.floor(session.clock / cycle) * cycle + cycle
 			session.clock = cycleStart - 1 / 60
 			session:renderFrame(1 / 60)
 			expect.near(Lighting.ClockTime, CycleClock.SUNRISE, 1e-3)
-			session.clock = cycleStart + 63 - 1 / 60
+			-- Noon is half way through the 4:50 day.
+			session.clock = cycleStart + 145 - 1 / 60
 			session:renderFrame(1 / 60)
 			expect.near(Lighting.ClockTime, 12, 1e-3)
 			local noonBrightness = Lighting.Brightness
-			session.clock = cycleStart + 126 + 27 - 1 / 60
+			-- The sun sets as the runway closes, 4:50 in; the afternoon light has already begun to fade.
+			session.clock = cycleStart + CycleClock.CLOSE_AT - 1 / 60
 			session:renderFrame(1 / 60)
-			expect.near(Lighting.ClockTime, 0, 1e-3)
-			expect.truthy(Lighting.Brightness < noonBrightness, "darker at night")
+			expect.near(Lighting.ClockTime, CycleClock.SUNSET, 1e-3)
+			local sunsetBrightness = Lighting.Brightness
+			expect.truthy(sunsetBrightness < noonBrightness, "dimmer at sunset")
+			-- Midnight is half way through the 10-second night.
+			session.clock = cycleStart + CycleClock.CLOSE_AT + 5 - 1 / 60
+			session:renderFrame(1 / 60)
+			expect.near(math.min(Lighting.ClockTime, 24 - Lighting.ClockTime), 0, 1e-3)
+			expect.truthy(Lighting.Brightness < sunsetBrightness, "darkest in the night")
 		end)
 	end)
 
@@ -1842,16 +1851,16 @@ return function(harness)
 			expect.equal(labelOf(root.Meters.Stamina).Text, "Stamina  40 / 100")
 			expect.near(root.Meters.Stamina.Fill.Size.X.Scale, 0.4, 1e-6)
 			expect.equal(root.Zone.Text, "Desert")
-			-- The stand-in clock starts 5 s into a cycle; the runway closes at 170 s.
-			expect.truthy(labelOf(root.Cycle).Text:match("^Runway closes in 2:4%d$"), labelOf(root.Cycle).Text)
+			-- The stand-in clock starts 5 s into a cycle; the runway closes at 290 s.
+			expect.truthy(labelOf(root.Cycle).Text:match("^Runway closes in 4:4%d$"), labelOf(root.Cycle).Text)
 
 			-- Stamina regenerating is followed without further messages.
 			session:fromServer("StaminaChanged", 40, session.clock, 10, 100)
 			session:renderFrame(1, 3)
 			expect.equal(labelOf(root.Meters.Stamina).Text, "Stamina  70 / 100")
 
-			-- Into the warning, then the closure.
-			session:renderFrame(1, 158)
+			-- Into the warning (the last 10 seconds before the runway closes, 4:50 into the cycle), then the closure.
+			session:renderFrame(1, 273)
 			expect.truthy(labelOf(root.Cycle).Text:match("^Runway closing in"), labelOf(root.Cycle).Text)
 			session:renderFrame(1, 10)
 			expect.truthy(labelOf(root.Cycle).Text:match("^Runway closed"), labelOf(root.Cycle).Text)
@@ -1884,18 +1893,23 @@ return function(harness)
 		it("counts down to nightfall by day, and to sunrise by night, at the bottom right", function()
 			local session, parts = startClient()
 			local dayNight = hud(parts).DayNight
-			-- The stand-in clock starts 5 s into a cycle; night falls 126 s in.
+			-- The stand-in clock starts 5 s into a cycle; night falls 290 s in, as the runway closes.
 			session:renderFrame(1 / 60)
 			expect.equal(dayNight.Icon.Text, "🌙")
-			expect.equal(dayNight.Label.Text, "in 2m 1s")
-			session:renderFrame(1, 61)
+			expect.equal(dayNight.Label.Text, "in 4m 45s")
+			session:renderFrame(1, 225)
 			expect.equal(dayNight.Label.Text, "in 1m")
 			session:renderFrame(1, 59)
 			expect.equal(dayNight.Label.Text, "in 1s")
-			-- Night: a sun and the time until the next sunrise, 54 s away.
+			-- Night: a sun and the time until the next sunrise, 10 s away.
 			session:renderFrame(1, 1)
 			expect.equal(dayNight.Icon.Text, "☀️")
-			expect.equal(dayNight.Label.Text, "in 54s")
+			expect.equal(dayNight.Label.Text, "in 10s")
+			expect.truthy(labelOf(hud(parts).Cycle).Text:match("^Runway closed"), "closed for the night")
+			-- And day again 10 seconds later, as the runway reopens.
+			session:renderFrame(1, 10)
+			expect.equal(dayNight.Icon.Text, "🌙")
+			expect.equal(dayNight.Label.Text, "in 4m 50s")
 		end)
 
 		it("shows a running event and follows the runway cycle when admins move it on", function()
@@ -1905,8 +1919,8 @@ return function(harness)
 			workspace:SetAttribute("ServerEvent", "Avalanche")
 			session:renderFrame(1 / 60)
 			expect.truthy(labelOf(cycle).Text:match("^Egg Avalanche!  Runway closes in"), labelOf(cycle).Text)
-			-- The stand-in clock starts 5 s into a cycle: 165 s on, the runway has closed.
-			workspace:SetAttribute("CycleOffset", 165.5)
+			-- The stand-in clock starts 5 s into a cycle: 285 s on, the runway has closed.
+			workspace:SetAttribute("CycleOffset", 285.5)
 			session:renderFrame(1 / 60)
 			expect.truthy(labelOf(cycle).Text:match("^Runway closed"), labelOf(cycle).Text)
 		end)

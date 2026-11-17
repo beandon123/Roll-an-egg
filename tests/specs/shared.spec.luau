@@ -13,62 +13,85 @@ return function(harness)
 	local StaminaMath = harness.load("src/shared/StaminaMath")
 
 	describe("CycleClock", function()
-		it("runs 3-minute cycles that end with a 10-second closure", function()
-			expect.equal(CycleClock.CYCLE_LENGTH, 180)
+		it("runs 5-minute cycles: open for 4 minutes 50 seconds, then a 10-second closure", function()
+			expect.equal(CycleClock.CYCLE_LENGTH, 300)
 			expect.equal(CycleClock.CLOSED_LENGTH, 10)
+			expect.equal(CycleClock.CLOSE_AT, 290)
 
-			local open = CycleClock.getState(180 * 7 + 30)
+			local open = CycleClock.getState(300 * 7 + 30)
 			expect.equal(open.index, 7)
 			expect.equal(open.phase, "Open")
-			expect.near(open.untilClose, 140)
-			expect.near(open.untilNextCycle, 150)
+			expect.near(open.untilClose, 260)
+			expect.near(open.untilNextCycle, 270)
 
-			expect.equal(CycleClock.getState(180 * 7 + 159.9).phase, "Open")
-			expect.equal(CycleClock.getState(180 * 7 + 160).phase, "Warning")
-			expect.equal(CycleClock.getState(180 * 7 + 169.9).phase, "Warning")
+			expect.equal(CycleClock.getState(300 * 7 + 279.9).phase, "Open")
+			expect.equal(CycleClock.getState(300 * 7 + 280).phase, "Warning")
+			expect.equal(CycleClock.getState(300 * 7 + 289.9).phase, "Warning")
 
-			local closed = CycleClock.getState(180 * 7 + 170)
+			local closed = CycleClock.getState(300 * 7 + 290)
 			expect.equal(closed.phase, "Closed")
 			expect.equal(closed.untilClose, 0)
 			expect.near(closed.untilNextCycle, 10)
 
-			expect.equal(CycleClock.getState(180 * 8).index, 8)
-			expect.equal(CycleClock.getState(180 * 8).phase, "Open")
+			expect.equal(CycleClock.getState(300 * 8).index, 8)
+			expect.equal(CycleClock.getState(300 * 8).phase, "Open")
 		end)
 
-		it("makes each cycle one day: sunrise as it begins, night before it ends", function()
-			local start = 180 * 12
+		it("makes each cycle one day and one night: a 4:50 day while the runway is open, a 10-second night", function()
+			local start = 300 * 12
+			local dayLength = CycleClock.CYCLE_LENGTH * CycleClock.DAY_FRACTION
+			local nightLength = CycleClock.CYCLE_LENGTH - dayLength
+			expect.near(dayLength, 290, 1e-9)
+			expect.near(nightLength, 10, 1e-9)
+			-- The sun rises as the cycle begins, is highest half way through the day, and sets as the runway closes.
 			expect.equal(CycleClock.clockTime(start), CycleClock.SUNRISE)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION / 2), 12)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION), CycleClock.SUNSET)
-			-- Midnight comes halfway through the night, and the runway closes before dawn.
-			local nightLength = 180 * (1 - CycleClock.DAY_FRACTION)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
-			expect.truthy(CycleClock.clockTime(start + CycleClock.CLOSE_AT) < CycleClock.SUNRISE)
-			expect.near(CycleClock.clockTime(start + 179.999), CycleClock.SUNRISE, 1e-3)
+			expect.near(CycleClock.clockTime(start + dayLength / 2), 12)
+			expect.near(CycleClock.clockTime(start + CycleClock.CLOSE_AT), CycleClock.SUNSET)
+			expect.near(CycleClock.clockTime(start + CycleClock.CLOSE_AT - 0.001), CycleClock.SUNSET, 1e-3)
+			-- Midnight comes halfway through the night (the clock runs 0 to 24, so a hair before midnight is nearly
+			-- 24), and the sun is back up as the next cycle begins.
+			local midnight = CycleClock.clockTime(start + dayLength + nightLength / 2)
+			expect.near(math.min(midnight, 24 - midnight), 0)
+			expect.truthy(CycleClock.clockTime(start + CycleClock.CLOSE_AT + 6) < CycleClock.SUNRISE)
+			-- (The whole night goes by in 10 seconds, so the clock is racing here.)
+			expect.near(CycleClock.clockTime(start + 299.999), CycleClock.SUNRISE, 0.01)
 
-			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION / 2), 1)
-			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
+			expect.equal(CycleClock.daylight(start + dayLength / 2), 1)
+			expect.equal(CycleClock.daylight(start + dayLength + nightLength / 2), 0)
 			expect.near(CycleClock.daylight(start), 0.5)
+			-- Broad daylight for most of the day: it only starts to fade in the last minute before the runway closes.
+			expect.equal(CycleClock.daylight(start + 60), 1)
+			expect.equal(CycleClock.daylight(start + CycleClock.CLOSE_AT - 60), 1)
+			expect.truthy(CycleClock.daylight(start + CycleClock.CLOSE_AT - 10) < 1)
 		end)
 
 		it("tells the HUD whether it is day, and how long until that changes", function()
-			local start = 180 * 12
-			local sunset = 180 * CycleClock.DAY_FRACTION
+			local start = 300 * 12
+			local sunset = CycleClock.CLOSE_AT
 			local isDay, untilChange = CycleClock.dayNight(start + 5)
 			expect.equal(isDay, true)
-			expect.near(untilChange, sunset - 5)
+			expect.near(untilChange, 285)
+			isDay, untilChange = CycleClock.dayNight(start + sunset - 0.5)
+			expect.equal(isDay, true, "day right up to the closure")
+			expect.near(untilChange, 0.5)
 			isDay, untilChange = CycleClock.dayNight(start + sunset)
-			expect.equal(isDay, false, "night falls at sunset")
-			expect.near(untilChange, 180 - sunset, 1e-9, "until the next sunrise")
+			expect.equal(isDay, false, "night falls as the runway closes")
+			expect.near(untilChange, 10, 1e-9, "until the next sunrise")
 			isDay, untilChange = CycleClock.dayNight(start + CycleClock.CLOSE_AT + 2)
-			expect.equal(isDay, false, "still night while the runway is closed")
+			expect.equal(isDay, false, "night while the runway is closed")
 			expect.near(untilChange, CycleClock.CLOSED_LENGTH - 2)
+			-- It is night exactly when the runway is closed.
+			for second = 0, 299 do
+				local closed = CycleClock.getState(start + second + 0.5).phase == "Closed"
+				expect.equal(CycleClock.dayNight(start + second + 0.5), not closed, "at " .. second)
+			end
 		end)
 
 		it("schedules each event once an hour, 30 minutes apart", function()
+			expect.equal(CycleClock.EVENT_PERIOD * CycleClock.CYCLE_LENGTH, 3600)
+			expect.equal((CycleClock.AVALANCHE_CYCLE - CycleClock.TITAN_CYCLE) * CycleClock.CYCLE_LENGTH, 1800)
 			local titans, avalanches = 0, 0
-			for index = 0, 39 do
+			for index = 0, 23 do
 				local event = CycleClock.eventForCycle(index)
 				if event == "Titan" then
 					titans += 1
@@ -76,21 +99,21 @@ return function(harness)
 					avalanches += 1
 				end
 			end
-			-- 40 cycles x 3 minutes = 2 hours.
+			-- 24 cycles x 5 minutes = 2 hours.
 			expect.equal(titans, 2)
 			expect.equal(avalanches, 2)
-			expect.equal(CycleClock.eventForCycle(20), "Titan")
-			expect.equal(CycleClock.eventForCycle(30), "Avalanche")
-			expect.equal(CycleClock.eventForCycle(25), nil)
+			expect.equal(CycleClock.eventForCycle(12), "Titan")
+			expect.equal(CycleClock.eventForCycle(18), "Avalanche")
+			expect.equal(CycleClock.eventForCycle(15), nil)
 		end)
 
 		it("can be moved ahead, for every device at once", function()
-			local time = 180 * 7 + 30
+			local time = 300 * 7 + 30
 			expect.equal(CycleClock.getOffset(), 0)
-			CycleClock.setOffset(140)
+			CycleClock.setOffset(260)
 			local moved = CycleClock.getState(time)
 			CycleClock.setOffset(0)
-			expect.equal(moved.phase, "Closed", "140 s on, the runway has closed")
+			expect.equal(moved.phase, "Closed", "260 s on, the runway has closed")
 			expect.equal(moved.index, 7)
 			expect.equal(CycleClock.getState(time).phase, "Open", "and back")
 		end)
