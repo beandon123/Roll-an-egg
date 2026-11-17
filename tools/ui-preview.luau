@@ -14,9 +14,9 @@
 -- The page draws a 1280 x 720 screen; add #w=844&h=390 to the address for a phone held sideways.
 --
 -- It runs the game's own client scripts in the Studio stand-in (tests/studio), then turns the HUD's GUI objects into
--- HTML: frames, text, corners, outlines, gradients, list layouts, padding and scaling, and the models in 3D previews
--- (ViewportFrames) as flat-shaded drawings. It is a close sketch, not Roblox's renderer: fonts are the nearest web
--- fonts, emoji are the browser's, and text sizes are approximate.
+-- HTML: frames, text, corners, outlines, gradients, list and grid layouts, padding, automatic sizes and scaling, and
+-- the models in 3D previews (ViewportFrames) as flat-shaded drawings. It is a close sketch, not Roblox's renderer:
+-- fonts are the nearest web fonts, emoji are the browser's, and text sizes are approximate.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -128,7 +128,12 @@ local function css(color, transparency: number?): string
 	)
 end
 
+-- Plain pixels when there is no Scale part: inside a box whose height comes from its contents, a height such as
+-- calc(0% + 70px) counts as auto, not 70px.
 local function udim(value): string
+	if value.Scale == 0 then
+		return string.format("%.2fpx", value.Offset)
+	end
 	return string.format("calc(%.4f%% + %.2fpx)", value.Scale * 100, value.Offset)
 end
 
@@ -347,10 +352,12 @@ local ALIGN_Y = { Top = "flex-start", Center = "center", Bottom = "flex-end" }
 
 local render
 
--- The children of a GUI object, inside a box inset by its UIPadding and laid out by its UIListLayout.
-local function renderChildren(object): string
+-- The children of a GUI object, inside a box inset by its UIPadding and laid out by its UIListLayout or
+-- UIGridLayout. `inFlow` is for an object sized by its children (AutomaticSize): their box then takes up room in it.
+local function renderChildren(object, inFlow: boolean?): string
 	local html = {}
 	local list = childOfClass(object, "UIListLayout")
+	local grid = childOfClass(object, "UIGridLayout")
 	local padding = childOfClass(object, "UIPadding")
 	local children = {}
 	for index, child in object:GetChildren() do
@@ -361,7 +368,7 @@ local function renderChildren(object): string
 	if #children == 0 then
 		return ""
 	end
-	if list then
+	if list or grid then
 		table.sort(children, function(a, b)
 			if a.child.LayoutOrder ~= b.child.LayoutOrder then
 				return a.child.LayoutOrder < b.child.LayoutOrder
@@ -369,17 +376,32 @@ local function renderChildren(object): string
 			return a.index < b.index
 		end)
 	end
+	local layout = if list then "list" elseif grid then "grid" else nil
 	for _, entry in children do
-		table.insert(html, render(entry.child, list ~= nil))
+		table.insert(html, render(entry.child, layout))
 	end
-	local style = { "position:absolute" }
-	if padding then
-		table.insert(style, `top:{udim(padding.PaddingTop)}`)
-		table.insert(style, `bottom:{udim(padding.PaddingBottom)}`)
-		table.insert(style, `left:{udim(padding.PaddingLeft)}`)
-		table.insert(style, `right:{udim(padding.PaddingRight)}`)
+	local style = {}
+	if inFlow then
+		-- In the flow, so the object grows to fit. The padding becomes margins rather than CSS padding, so children
+		-- placed by Position still measure from inside it, as they do in the inset box below.
+		table.insert(style, "position:relative")
+		if padding then
+			local sides = { padding.PaddingTop, padding.PaddingRight, padding.PaddingBottom, padding.PaddingLeft }
+			for index, side in sides do
+				sides[index] = udim(side)
+			end
+			table.insert(style, `margin:{table.concat(sides, " ")}`)
+		end
 	else
-		table.insert(style, "inset:0")
+		table.insert(style, "position:absolute")
+		if padding then
+			table.insert(style, `top:{udim(padding.PaddingTop)}`)
+			table.insert(style, `bottom:{udim(padding.PaddingBottom)}`)
+			table.insert(style, `left:{udim(padding.PaddingLeft)}`)
+			table.insert(style, `right:{udim(padding.PaddingRight)}`)
+		else
+			table.insert(style, "inset:0")
+		end
 	end
 	if list then
 		local row = list.FillDirection.Name == "Horizontal"
@@ -387,6 +409,23 @@ local function renderChildren(object): string
 		table.insert(style, `gap:{udim(list.Padding)}`)
 		local x, y = ALIGN_X[list.HorizontalAlignment.Name], ALIGN_Y[list.VerticalAlignment.Name]
 		table.insert(style, `justify-content:{if row then x else y};align-items:{if row then y else x}`)
+	elseif grid then
+		-- Cells of CellSize, CellPadding apart, filling a line before starting the next. auto-fit fits as many cells
+		-- on a line as there is room for and drops the unused ones, so the alignment centres the cells there are,
+		-- as Roblox does. StartCorner is always drawn as TopLeft.
+		local cell, gap = grid.CellSize, grid.CellPadding
+		local maxCells = grid.FillDirectionMaxCells
+		local count = if maxCells > 0 then tostring(math.min(maxCells, #children)) else "auto-fit"
+		table.insert(style, `display:grid;gap:{udim(gap.Y)} {udim(gap.X)}`)
+		if grid.FillDirection.Name == "Vertical" then
+			table.insert(style, `grid-auto-flow:column;grid-template-rows:repeat({count}, {udim(cell.Y)})`)
+			table.insert(style, `grid-auto-columns:{udim(cell.X)}`)
+		else
+			table.insert(style, `grid-template-columns:repeat({count}, {udim(cell.X)})`)
+			table.insert(style, `grid-auto-rows:{udim(cell.Y)}`)
+		end
+		local x, y = ALIGN_X[grid.HorizontalAlignment.Name], ALIGN_Y[grid.VerticalAlignment.Name]
+		table.insert(style, `justify-content:{x};align-content:{y}`)
 	end
 	if object:IsA("ScrollingFrame") then
 		local scroll = object.CanvasPosition
@@ -395,15 +434,19 @@ local function renderChildren(object): string
 	return `<div class="content" style="{table.concat(style, ";")}">{table.concat(html)}</div>`
 end
 
-function render(object, inList: boolean): string
+-- `layout` is "list" or "grid" when the object's parent has a UIListLayout or UIGridLayout, which places it instead
+-- of its Position (and, for a grid, sizes it instead of its Size).
+function render(object, layout: string?): string
 	if not object.Visible then
 		return ""
 	end
 	local style = {}
 	local size = object.Size
-	local automatic = object.AutomaticSize.Name
-	local width = if automatic == "X" or automatic == "XY" then "max-content" else udim(size.X)
-	local height = if automatic == "Y" or automatic == "XY" then "max-content" else udim(size.Y)
+	local automatic = if layout == "grid" then "None" else object.AutomaticSize.Name
+	local autoX = automatic == "X" or automatic == "XY"
+	local autoY = automatic == "Y" or automatic == "XY"
+	local width = if layout == "grid" then "100%" elseif autoX then "max-content" else udim(size.X)
+	local height = if layout == "grid" then "100%" elseif autoY then "max-content" else udim(size.Y)
 	local constraint = childOfClass(object, "UISizeConstraint")
 	if constraint then
 		if constraint.MaxSize.X < 1e9 then
@@ -414,12 +457,18 @@ function render(object, inList: boolean): string
 		end
 	end
 	table.insert(style, `width:{width};height:{height}`)
-	if automatic == "X" or automatic == "XY" then
+	-- An automatic size grows from Size, never shrinks below it.
+	if autoX then
 		table.insert(style, `min-width:{udim(size.X)}`)
 	end
+	if autoY then
+		table.insert(style, `min-height:{udim(size.Y)}`)
+	end
 	local transforms = {}
-	if inList then
+	if layout == "list" then
 		table.insert(style, "position:relative;flex-shrink:0")
+	elseif layout == "grid" then
+		table.insert(style, "position:relative")
 	else
 		table.insert(style, "position:absolute")
 		table.insert(style, `left:{udim(object.Position.X)};top:{udim(object.Position.Y)}`)
@@ -497,10 +546,10 @@ function render(object, inList: boolean): string
 		table.insert(style, `box-shadow:0 0 0 {stroke.Thickness}px {css(stroke.Color, stroke.Transparency)}`)
 	end
 
+	-- A frame sized by its children has them in its flow. (Text that sizes its label is already in the flow above.)
+	local children = renderChildren(object, (autoX or autoY) and not isText)
 	local drawing = if object:IsA("ViewportFrame") then viewportSvg(object) else ""
-	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{drawing}{textHtml}{renderChildren(
-		object
-	)}</div>`
+	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{drawing}{textHtml}{children}</div>`
 end
 
 local hud = playerGui:FindFirstChild("Hud")
