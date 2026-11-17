@@ -36,16 +36,17 @@ Economy.VARIANTS = {
 	{ name = "Rainbow", chance = 0.005, worth = 15, speedBonus = 6 },
 } :: { Variant }
 
--- How fast a pet carries its rider (studs per second; walking is 16), by rarity.
+-- How fast a pet carries its rider (studs per second; walking is 16), by rarity. Each is faster than an egg of its
+-- rarity rolls (Config/Rarities), so a player on a pet can catch one up.
 Economy.MOUNT_SPEED = {
-	Common = 22,
-	Uncommon = 24,
-	Rare = 27,
-	Epic = 30,
-	Legendary = 33,
-	Mythic = 36,
-	Secret = 40,
-	Eternal = 44,
+	Common = 33,
+	Uncommon = 36,
+	Rare = 41,
+	Epic = 45,
+	Legendary = 50,
+	Mythic = 54,
+	Secret = 60,
+	Eternal = 66,
 }
 -- Seconds after leaving an egg before a ridden pet comes back.
 Economy.RESUMMON_DELAY = 3

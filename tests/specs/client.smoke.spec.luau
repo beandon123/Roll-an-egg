@@ -472,6 +472,54 @@ return function(harness)
 			expect.equal(#session:sent("RequestMount"), 0)
 		end)
 
+		it("circles the egg a jumping player is heading for in red, and draws them onto it once close", function()
+			local session, parts = startClient()
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			local center, spec = eggCenter(session, egg)
+			local function ring()
+				return parts.playerGui:FindFirstChild("JumpTarget")
+			end
+
+			-- In the air, but nowhere near it: no circle.
+			parts.humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+			parts.root.Position = center + Vector3.new(0, 20, 60)
+			session:heartbeat(1 / 60)
+			expect.truthy(ring() == nil or not ring().Enabled, "no circle")
+
+			-- Close by, off to one side and a little above: the egg is circled, and the player is pulled toward its top
+			-- while moving on down the runway with it. Not on it yet, so no request to get on.
+			center = eggCenter(session, egg)
+			parts.root.Position = center + Vector3.new(spec.halfLength + 6, spec.radius + 6, 0)
+			parts.root.AssemblyLinearVelocity = Vector3.zero
+			session:heartbeat(1 / 60)
+			local circle = ring()
+			expect.truthy(circle and circle.Enabled, "circled")
+			expect.equal(circle.Adornee, parts.eggFolder.Egg1.Root)
+			expect.equal(circle.AlwaysOnTop, true)
+			expect.truthy(circle.Size.X.Scale > spec.halfLength * 2, "round the whole egg")
+			local stroke = circle.Ring.UIStroke
+			expect.truthy(stroke.Color.R > 0.9 and stroke.Color.G < 0.3, "red")
+			local velocity = parts.root.AssemblyLinearVelocity
+			expect.truthy(velocity.X < 0, "pulled toward the egg")
+			expect.truthy(velocity.Y < 0, "and down onto it")
+			expect.truthy(velocity.Z > 0, "rolling on with it")
+			expect.equal(#session:sent("RequestMount"), 0)
+
+			-- Drawn in on top of it: ask to get on it.
+			jumpOnto(session, parts, egg)
+			task.wait(0.3)
+			session:heartbeat(1 / 60)
+			local request = session:lastSent("RequestMount", "server")
+			expect.truthy(request, "RequestMount")
+			expect.equal(request.args[1], 1)
+
+			-- On it: the circle goes.
+			startRide(session, egg)
+			session:heartbeat(1 / 60)
+			expect.equal(ring().Enabled, false)
+		end)
+
 		it("holds the character on the egg and steers it", function()
 			local session, parts = startClient()
 			local egg = eggData(session, 1, 1, "Common")
@@ -502,7 +550,7 @@ return function(harness)
 
 			-- It cannot be steered off the side of the runway.
 			session:renderFrame(1, 30)
-			local limit = shared(session).Runway.maxLateral(spec.halfLength)
+			local limit = shared(session).Runway.maxLateral(spec.halfLength, model.Root.CFrame.Position.Z)
 			expect.near(model.Root.CFrame.Position.X, -limit, 1e-3)
 		end)
 

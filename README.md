@@ -7,7 +7,8 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level, 120-stud-wide runway through six
+- The map: the hub with a painted START ZONE where the runway begins, then a level runway (120 studs wide at the
+  start, 20 studs wider each zone) through six
   zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each with its own checkered ground, stepped cliffs (a
   boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
   [The runway](#the-runway)). The banks down both sides are broken by fairly large gaps (marked with red strips).
@@ -187,7 +188,7 @@ over it): the fence moves out 10 studs, and the pen hatches one more egg at once
 and 18 pets at level 9. The numbers are in `src/shared/Config/Economy.luau`.
 
 **Riding pets.** **Ride** on a pet's card brings it out under you; then the **RIDE** / **GET OFF** button below the
-tabs gets you on and off it. A pet carries you faster than walking (22 studs a second for a Common pet, up to 44
+tabs gets you on and off it. A pet carries you faster than walking (33 studs a second for a Common pet, up to 66
 for an Eternal one, plus a little for variants), round the hub and down the runway. Jump from it onto an egg as usual:
 the pet goes away while you ride the egg and comes back 3 seconds after you leave it
 (`src/server/Services/MountService.luau`).
@@ -237,15 +238,23 @@ The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max 
 
 ## The runway
 
-The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`). It has no end: whatever
+The runway is level, 600 studs per zone, and gets wider the further it goes: 120 studs across the Forest and 20 more
+each zone after it, up to 220 across the Prehistoric zone, the banks stepping out at each gate
+(`src/shared/Runway.luau`). Wider zones get more obstacles to a row, so they are no emptier. It has no end: whatever
 the last zone is, it repeats past the end of the runway (the map builds 3 copies of it, obstacles and all), and
 anything reaching the end of the loop is carried back one repeat to a spot that looks exactly the same. Each device
 draws the eggs there at their copy nearest the player, so nothing seems to move.
 
-**Banks and gaps.** Stepped cliffs run down both sides, broken by gaps of 40 to 80 studs at irregular spacing (none
-by a zone's gate). A rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge
-with it. Players never walk on the runway: walking past the start zone, or jumping off an egg, starts a floaty leap
-with 3.5 seconds to land on an egg, and touching the runway first kills them.
+**Banks and gaps.** Tall stepped cliffs run down both sides (the wall beside the runway is 19.5 to 32.5 studs high;
+the Ocean has a 7-stud boardwalk railing instead), broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's
+gate). The last zone keeps its width through all its repeats, so being carried back one loop is still seamless. A
+rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge with it. Players never
+walk on the runway: walking past the start zone, or jumping off an egg, starts a floaty leap with 3.5 seconds to land
+on an egg, and touching the runway first kills them.
+
+**Landing.** While a player is in the air, a red circle around an egg shows which one they are heading for: the egg
+nearest where their jump will come down (`src/shared/JumpAim.luau`). Once they are close to it, they are drawn onto
+it like a magnet, so a landing never has to be pixel-perfect; the circle tightens when it has hold of them.
 
 **Eggs.** Each runway cycle (3 minutes) is one day (`src/shared/CycleClock.luau`): the sun rises as a cycle
 begins, night falls 70% of the way through, and the runway closes for the last 10 seconds before dawn. At sunrise

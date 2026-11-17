@@ -38,7 +38,7 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight, level runway (~3,600 studs long, 120 wide; decided: flat and wide) holding six zones in order
+- [ ] One straight, level runway (~3,600 studs long, 120 wide at the start; decided: flat and wide) holding six zones in order
       (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); more zones added later (decided)
     - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
@@ -46,6 +46,11 @@ Original theme, art, and creatures.
     - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
           (proposed, from the owner's reference screenshots)
+    - [ ] The runway gets wider the further it goes (decided): each zone is 20 studs wider than the one before
+          (120, 140, 160, 180, 200, 220), the walls stepping out at its gate; the last zone stays at its width
+          through its endless repeats (decided)
+    - [ ] Tall walls (decided): the cliff wall beside the runway stands 19.5-32.5 studs high (it was 7.5-19.5), with
+          higher steps behind it; the Ocean's boardwalk railing is 7 studs tall (it was 4)
     - [ ] Natural, fairly large gaps in the walls (decided), each marked by a red strip: steering an egg into a wall
           kills the rider; steering it into a gap sends egg and rider over the edge
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot (see Hub below)
@@ -93,14 +98,19 @@ Original theme, art, and creatures.
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
     Rarity     Size   Claim time  Roll speed  Duel (beats @ tempo)
-    Common     1.0x   5 s         18 st/s     6 @ 90 bpm
-    Uncommon   1.1x   7 s         20 st/s     6 @ 100 bpm
-    Rare       1.25x  9 s         21 st/s     8 @ 110 bpm
-    Epic       1.4x   12 s        24 st/s     8 @ 125 bpm
-    Legendary  1.6x   15 s        26 st/s     10 @ 135 bpm
-    Mythic     1.8x   18 s        28 st/s     10 @ 150 bpm
-    Secret     2.0x   22 s        30 st/s     12 @ 160 bpm
-    Eternal    2.3x   26 s        32 st/s     12 @ 170 bpm
+    Common     1.0x   5 s         27 st/s     6 @ 90 bpm
+    Uncommon   1.1x   7 s         31 st/s     6 @ 100 bpm
+    Rare       1.25x  9 s         35 st/s     8 @ 110 bpm
+    Epic       1.4x   12 s        39 st/s     8 @ 125 bpm
+    Legendary  1.6x   15 s        42 st/s     10 @ 135 bpm
+    Mythic     1.8x   18 s        46 st/s     10 @ 150 bpm
+    Secret     2.0x   22 s        50 st/s     12 @ 160 bpm
+    Eternal    2.3x   26 s        54 st/s     12 @ 170 bpm
+
+    Roll speed (decided): depends only on rarity, never on the zone (every Mythic egg rolls at the same speed). The
+    base (Common) is 50% faster than the first pass (18 -> 27 st/s), and rarer eggs roll up to 100% faster than that
+    (Eternal 54 st/s), in even steps. Pets were sped up to match (Common 33 st/s up to Eternal 66), so a pet still
+    outruns an egg of its rarity, and so were the leap off the hub (40.5 st/s) and steering (Agility 32).
 
 First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 500 decided, rest proposed):
 
@@ -201,6 +211,10 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 ### Riding & Claiming
 - [ ] Mount: anyone can jump onto any egg (decided) -> riding pose; one rider per egg (Titan Egg excepted);
       the server decides who landed first
+    - [ ] While a player is in the air, a red circle around an egg shows which one they are going to land on
+          (decided); it follows where their jump is heading
+    - [ ] No pixel-perfect landings (decided): once a jumping player gets close to that egg they are drawn onto it,
+          like a magnet (no visible tether); the circle tightens when it has hold of them
     - [ ] The egg's stamina requirement is shown on it; below it, you'll fall off before claiming (decided)
 - [ ] Riding is steering only (decided): move left/right across the runway width to dodge obstacles; no taps while riding
     - [ ] Agility upgrade increases steering speed

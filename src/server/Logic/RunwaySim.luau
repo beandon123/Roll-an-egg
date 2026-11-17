@@ -288,7 +288,7 @@ end
 
 -- Sends a riderless egg on its way from where it is now (`lateral`, at `z`), steering round the obstacles ahead.
 function RunwaySim._setPath(self: RunwaySim, egg: Egg, lateral: number, z: number)
-	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength)
+	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength, z)
 	egg.pathZ = z
 	egg.path = self.obstacles.planPath(egg.lateral, z, egg.fadeZ, egg.spec.halfLength, egg.spec.radius)
 end
@@ -319,19 +319,18 @@ function RunwaySim._launch(
 		return nil
 	end
 	self.nextEggId += 1
-	-- Clear of the banks, so a rider who gets on is not straight against one.
-	local limit = math.max(0, Runway.maxLateral(spec.halfLength) - Tuning.EGG_SPAWN_EDGE_MARGIN)
 	local startZ = spec.startZ
+	local placedZ = placement and placement.z
+	-- On the runway, and far enough before the end of the loop to be worth riding.
+	if placedZ and placedZ == placedZ then
+		startZ = math.clamp(placedZ, 0, Runway.LOOP_END - spec.radius * 4)
+	end
+	-- Clear of the banks, so a rider who gets on is not straight against one.
+	local limit = math.max(0, Runway.maxLateral(spec.halfLength, startZ) - Tuning.EGG_SPAWN_EDGE_MARGIN)
 	local lateral = (self.random() * 2 - 1) * limit
-	if placement then
-		local z, x = placement.z, placement.lateral
-		-- On the runway, and far enough before the end of the loop to be worth riding.
-		if z and z == z then
-			startZ = math.clamp(z, 0, Runway.LOOP_END - spec.radius * 4)
-		end
-		if x and x == x then
-			lateral = Runway.clampLateral(x, spec.halfLength)
-		end
+	local placedX = placement and placement.lateral
+	if placedX and placedX == placedX then
+		lateral = Runway.clampLateral(placedX, spec.halfLength, startZ)
 	end
 	local egg: Egg = {
 		id = self.nextEggId,
@@ -535,7 +534,7 @@ function RunwaySim._leaveEgg(self: RunwaySim, egg: Egg, now: number, reason: Rid
 		return
 	end
 	if reason == "HitWall" then
-		local limit = Runway.maxLateral(egg.spec.halfLength)
+		local limit = Runway.maxLateral(egg.spec.halfLength, z)
 		egg.lateral = math.sign(egg.lateral) * math.max(0, limit - Tuning.WALL_KNOCKBACK)
 	end
 	self:_setPath(egg, egg.lateral, z)
@@ -772,7 +771,7 @@ function RunwaySim.requestMount(
 		claimed = false,
 	}
 	-- From here the rider steers, starting from wherever the egg's path had taken it (a little way in from a bank).
-	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength)
+	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength, self:_eggZ(egg, now))
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
@@ -840,7 +839,7 @@ function RunwaySim.setLateral(self: RunwaySim, riderId: number, x: number, now: 
 	local ride = rider.ride
 	local elapsed = math.max(0, now - ride.lateralTime)
 	local maxMove = rider.agility * elapsed * 1.5 + 2
-	local target = Runway.clampLateral(x, egg.spec.halfLength)
+	local target = Runway.clampLateral(x, egg.spec.halfLength, self:_eggZ(egg, now))
 	egg.lateral += math.clamp(target - egg.lateral, -maxMove, maxMove)
 	ride.lateralTime = now
 	return egg
@@ -1041,7 +1040,7 @@ function RunwaySim.step(self: RunwaySim, now: number)
 				continue
 			end
 		end
-		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength) then
+		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength, self:_eggZ(egg, now)) then
 			self:_hitEdge(rider, egg, now)
 		end
 	end

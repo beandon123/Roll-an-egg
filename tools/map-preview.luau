@@ -53,7 +53,7 @@ for zoneId, zone in Zones.List do
 		local entry = zone.eggs[(index * 3) % #zone.eggs + 1]
 		local spec = EggSpec.get(zoneId, entry.rarity)
 		local startZ = Runway.zoneStartZ(zoneId) + 12
-		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength)
+		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength, startZ)
 		local path = Obstacles.planPath(lane, startZ, Runway.fadeZ(zoneId), spec.halfLength, spec.radius)
 		local z = startZ + 40 + random() * (Runway.ZONE_LENGTH - 60)
 		local x = Obstacles.lateralAt(path, z)
@@ -192,7 +192,13 @@ end
 local data = serde.encode("json", {
 	parts = parts,
 	zones = zones,
-	width = Runway.WIDTH,
+	widths = (function()
+		local widths = {}
+		for zoneId = 1, Runway.ZONE_COUNT do
+			table.insert(widths, Runway.zoneWidth(zoneId))
+		end
+		return widths
+	end)(),
 	baseY = Runway.BASE_Y,
 	zoneLength = Runway.ZONE_LENGTH,
 })

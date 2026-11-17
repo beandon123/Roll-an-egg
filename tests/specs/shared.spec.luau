@@ -7,6 +7,7 @@ return function(harness)
 	local CycleClock = harness.load("src/shared/CycleClock")
 	local EggMotion = harness.load("src/shared/EggMotion")
 	local EggSpec = harness.load("src/shared/EggSpec")
+	local JumpAim = harness.load("src/shared/JumpAim")
 	local LuckBoost = harness.load("src/shared/LuckBoost")
 	local NumberFormat = harness.load("src/shared/NumberFormat")
 	local Runway = harness.load("src/shared/Runway")
@@ -118,7 +119,27 @@ return function(harness)
 			expect.equal(Runway.surfaceY(0), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(1800), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(Runway.LENGTH), Runway.BASE_Y)
-			expect.equal(Runway.WIDTH, 120)
+		end)
+
+		it("gets wider zone by zone, then keeps the last zone's width through its endless repeats", function()
+			expect.equal(Runway.START_WIDTH, 120)
+			expect.equal(Runway.widthAt(-10), Runway.START_WIDTH, "where it leaves the hub")
+			expect.equal(Runway.widthAt(0), Runway.START_WIDTH)
+			for zoneId = 2, Runway.ZONE_COUNT do
+				local start = Runway.zoneStartZ(zoneId)
+				expect.truthy(Runway.widthAt(start) > Runway.widthAt(start - 1), `zone {zoneId} is wider`)
+				expect.equal(Runway.widthAt(start), Runway.zoneWidth(zoneId))
+				expect.equal(Runway.widthAt(start + Runway.ZONE_LENGTH - 1), Runway.zoneWidth(zoneId), "all along it")
+				expect.equal(Runway.zoneWidth(zoneId) % 20, 0, "a whole number of ground tiles")
+			end
+			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT), Runway.MAX_WIDTH)
+			-- The last zone's copies, and everywhere an egg can be carried back to, are as wide as it.
+			for _, z in { Runway.FINAL_ZONE_START, Runway.LENGTH, Runway.LOOP_START, Runway.LOOP_END, 1e6 } do
+				expect.equal(Runway.widthAt(z), Runway.MAX_WIDTH, `at {z}`)
+			end
+			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT + 2), Runway.MAX_WIDTH)
+			-- Wider runway, more room to steer.
+			expect.truthy(Runway.maxLateral(4, Runway.LENGTH) > Runway.maxLateral(4, 0))
 		end)
 
 		it("knows which zone a position is in", function()
@@ -183,18 +204,24 @@ return function(harness)
 		)
 
 		it("knows when an egg is pressed against the side", function()
-			local limit = Runway.maxLateral(4)
-			expect.equal(Runway.isAtEdge(limit, 4), true)
-			expect.equal(Runway.isAtEdge(-limit, 4), true)
-			expect.equal(Runway.isAtEdge(limit - 1, 4), false)
+			for _, z in { 10, Runway.zoneStartZ(4) + 10, Runway.LOOP_END - 10 } do
+				local limit = Runway.maxLateral(4, z)
+				expect.equal(Runway.isAtEdge(limit, 4, z), true)
+				expect.equal(Runway.isAtEdge(-limit, 4, z), true)
+				expect.equal(Runway.isAtEdge(limit - 1, 4, z), false)
+			end
+			-- Pressed against the first zone's bank is well clear of the wider zone's.
+			expect.equal(Runway.isAtEdge(Runway.maxLateral(4, 10), 4, Runway.zoneStartZ(2) + 10), false)
 		end)
 
 		it("keeps eggs on the runway", function()
-			local limit = Runway.maxLateral(4)
-			expect.near(limit, Runway.WIDTH / 2 - 5)
-			expect.equal(Runway.clampLateral(999, 4), limit)
-			expect.equal(Runway.clampLateral(-999, 4), -limit)
-			expect.equal(Runway.clampLateral(3, 4), 3)
+			for _, z in { 10, Runway.zoneStartZ(3) + 10, Runway.LENGTH + 10 } do
+				local limit = Runway.maxLateral(4, z)
+				expect.near(limit, Runway.widthAt(z) / 2 - 5)
+				expect.equal(Runway.clampLateral(999, 4, z), limit)
+				expect.equal(Runway.clampLateral(-999, 4, z), -limit)
+				expect.equal(Runway.clampLateral(3, 4, z), 3)
+			end
 		end)
 	end)
 
@@ -394,6 +421,107 @@ return function(harness)
 			-- The gate's stretch has no gaps.
 			expect.equal(Runway.wallAt(1, Runway.zoneStartZ(3) + 10, 3), true)
 			expect.equal(Runway.wallAt(-1, Runway.zoneStartZ(3) + 10, 3), true)
+		end)
+	end)
+
+	describe("JumpAim", function()
+		-- A Common-sized egg at the middle of the runway, 100 studs down it, rolling at 27 studs a second.
+		local function egg(id, x, z, speed)
+			return { id = id, x = x, z = z, seatY = 18, speed = speed or 0, halfLength = 3.9, radius = 3 }
+		end
+		local function jumper(x, y, z, vx, vy, vz, gravity)
+			return { x = x, y = y, z = z, vx = vx or 0, vy = vy or 0, vz = vz or 0, gravity = gravity or 0 }
+		end
+
+		it("works out when a jump comes back down to a height", function()
+			-- Dropped from 20 studs up with gravity 10: sqrt(2 * 20 / 10) = 2 s.
+			expect.near(JumpAim.timeToHeight(20, 0, 10, 0), 2)
+			-- Thrown up at 10 from the ground: back down after 2 s.
+			expect.near(JumpAim.timeToHeight(0, 10, 10, 0), 2)
+			-- Below the height and never rising to it, or no gravity: where it is now.
+			expect.equal(JumpAim.timeToHeight(0, 1, 10, 5), 0)
+			expect.equal(JumpAim.timeToHeight(5, -3, 0, 0), 0)
+		end)
+
+		it("measures how far outside an egg's footprint a spot is", function()
+			expect.equal(JumpAim.footprintGap(0, 0, 4, 3), 0)
+			expect.equal(JumpAim.footprintGap(3.9, -2.9, 4, 3), 0, "inside, near a corner")
+			expect.near(JumpAim.footprintGap(10, 0, 4, 3), 6, 1e-9)
+			expect.near(JumpAim.footprintGap(0, -8, 4, 3), 5, 1e-9)
+			expect.near(JumpAim.footprintGap(7, 7, 4, 3), 5, 1e-9)
+		end)
+
+		it("picks the egg a jump will come down on, allowing for the eggs rolling on meanwhile", function()
+			-- Falling straight down from 38 studs with gravity 10: lands at the seat height after 2 s. The egg 40 studs
+			-- behind rolls under them at 20 studs a second; the one right below now has rolled 40 studs on by then.
+			local falling = jumper(0, 38, 100, 0, 0, 0, 10)
+			local below = egg(1, 0, 100, 20)
+			local behind = egg(2, 0, 60, 20)
+			expect.equal(JumpAim.pick(falling, { below, behind }, nil, 14, 3, 3), 2)
+			expect.near(JumpAim.miss(falling, behind, 3), 0, 1e-9)
+			-- Moving forward with the eggs, the one below stays below.
+			local riding = jumper(0, 38, 100, 0, 0, 20, 10)
+			expect.equal(JumpAim.pick(riding, { below, behind }, nil, 14, 3, 3), 1)
+			-- Nothing near where the jump comes down: no egg.
+			expect.equal(JumpAim.pick(jumper(0, 38, 100, 40, 0, 0, 10), { below, behind }, nil, 14, 3, 3), nil)
+			-- Judged from where they are now when there is no gravity (a player on a pet).
+			expect.equal(JumpAim.pick(jumper(10, 40, 100), { egg(1, 0, 100), egg(2, 0, 60) }, nil, 14, 3, 3), 1)
+		end)
+
+		it("keeps the egg it picked unless another is clearly nearer", function()
+			local here = jumper(0, 18, 100)
+			local left = egg(1, -9, 100)
+			local right = egg(2, 10, 100)
+			-- Left is 1 stud nearer than right: it wins from scratch, but does not take over from right.
+			expect.equal(JumpAim.pick(here, { left, right }, nil, 14, 3, 3), 1)
+			expect.equal(JumpAim.pick(here, { left, right }, 2, 14, 3, 3), 2)
+			-- Clearly nearer: it takes over.
+			expect.equal(JumpAim.pick(here, { egg(1, -5, 100), right }, 2, 14, 3, 3), 1)
+			-- An egg picked last frame that has gone (or is out of range) is dropped.
+			expect.equal(JumpAim.pick(here, { left }, 2, 14, 3, 3), 1)
+			expect.equal(JumpAim.pick(here, { left, egg(2, 40, 100) }, 2, 14, 3, 3), 1)
+		end)
+
+		it("takes hold of a jumper close to the egg, not far off, far above it, or below its middle", function()
+			local target = egg(1, 0, 100)
+			expect.truthy(JumpAim.inMagnetRange(jumper(0, 18, 100), target, 10, 20), "on top")
+			expect.truthy(JumpAim.inMagnetRange(jumper(12, 30, 100), target, 10, 20), "close by, above")
+			expect.falsy(JumpAim.inMagnetRange(jumper(16, 18, 100), target, 10, 20), "too far across")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 18, 115), target, 10, 20), "too far ahead")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 39, 100), target, 10, 20), "too high")
+			-- The seat is 18; the egg's middle is 18 - radius - 2 = 13.
+			expect.truthy(JumpAim.inMagnetRange(jumper(0, 13.5, 100), target, 10, 20), "level with it")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 12, 100), target, 10, 20), "below its middle")
+		end)
+
+		it("draws the jumper onto the egg's top, moving with it", function()
+			local target = egg(1, 0, 100, 27)
+			-- Right on the seat: just roll along with the egg.
+			local x, y, z = JumpAim.pull(jumper(0, 18, 100), target, 9, 70)
+			expect.near(x, 0, 1e-9)
+			expect.near(y, 0, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- A little way off: pulled toward the seat in proportion.
+			x, y, z = JumpAim.pull(jumper(2, 19, 100), target, 9, 70)
+			expect.near(x, -18, 1e-9)
+			expect.near(y, -9, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- Far off: the pull is capped, but the egg's own speed is always added.
+			x, y, z = JumpAim.pull(jumper(30, 18, 100), target, 9, 70)
+			expect.near(x, -70, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- Following the pull closes in on the seat within a fraction of a second.
+			local at = jumper(8, 26, 96)
+			local eggZ = 100
+			for _ = 1, 20 do
+				local vx, vy, vz = JumpAim.pull(at, egg(1, 0, eggZ, 27), 9, 70)
+				at.x += vx / 60
+				at.y += vy / 60
+				at.z += vz / 60
+				eggZ += 27 / 60
+			end
+			expect.truthy(JumpAim.footprintGap(at.x, at.z - eggZ, 0, 0) < 1, "within a stud after a third of a second")
+			expect.truthy(math.abs(at.y - 18) < 1, "and at the seat's height")
 		end)
 	end)
 end

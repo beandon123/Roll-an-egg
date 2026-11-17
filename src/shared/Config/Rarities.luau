@@ -8,8 +8,9 @@ export type RarityInfo = {
 	size: number,
 	-- Seconds of riding needed to claim the egg.
 	claimTime: number,
-	-- Studs per second the egg rolls down the runway (walking is 16). Every egg is faster than walking, and slower than
-	-- a pet of its own rarity runs (Config/Economy MOUNT_SPEED), so a player on a pet can catch it up.
+	-- Studs per second the egg rolls down the runway (walking is 16): see rollSpeedOf below. Every egg is faster than
+	-- walking, and slower than a pet of its own rarity runs (Config/Economy MOUNT_SPEED), so a player on a pet can
+	-- catch it up.
 	rollSpeed: number,
 	-- Rhythm duel length and tempo (beats per minute).
 	duelBeats: number,
@@ -26,12 +27,24 @@ local Rarities = {}
 
 Rarities.Order = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Secret", "Eternal" }
 
+-- How fast eggs roll. It depends only on rarity, never on the zone: every Mythic egg rolls at the same speed wherever
+-- it is. A Common egg rolls at BASE_ROLL_SPEED studs per second, and each rarity up adds an equal share of
+-- TOP_ROLL_BONUS, so the rarest (Eternal) rolls that much faster again: twice as fast as a Common.
+Rarities.BASE_ROLL_SPEED = 27
+Rarities.TOP_ROLL_BONUS = 1
+
+-- The roll speed of the rarity at this place in Order (1 = Common), to the nearest stud per second.
+function Rarities.rollSpeedOf(order: number): number
+	local share = (order - 1) / (#Rarities.Order - 1)
+	return math.round(Rarities.BASE_ROLL_SPEED * (1 + Rarities.TOP_ROLL_BONUS * share))
+end
+
 local info: { [string]: RarityInfo } = {
 	Common = {
 		order = 1,
 		size = 1.0,
 		claimTime = 5,
-		rollSpeed = 18,
+		rollSpeed = Rarities.rollSpeedOf(1),
 		duelBeats = 6,
 		duelTempo = 90,
 		hatchTime = 30,
@@ -42,7 +55,7 @@ local info: { [string]: RarityInfo } = {
 		order = 2,
 		size = 1.1,
 		claimTime = 7,
-		rollSpeed = 20,
+		rollSpeed = Rarities.rollSpeedOf(2),
 		duelBeats = 6,
 		duelTempo = 100,
 		hatchTime = 2 * 60,
@@ -53,7 +66,7 @@ local info: { [string]: RarityInfo } = {
 		order = 3,
 		size = 1.25,
 		claimTime = 9,
-		rollSpeed = 21,
+		rollSpeed = Rarities.rollSpeedOf(3),
 		duelBeats = 8,
 		duelTempo = 110,
 		hatchTime = 5 * 60,
@@ -64,7 +77,7 @@ local info: { [string]: RarityInfo } = {
 		order = 4,
 		size = 1.4,
 		claimTime = 12,
-		rollSpeed = 24,
+		rollSpeed = Rarities.rollSpeedOf(4),
 		duelBeats = 8,
 		duelTempo = 125,
 		hatchTime = 15 * 60,
@@ -75,7 +88,7 @@ local info: { [string]: RarityInfo } = {
 		order = 5,
 		size = 1.6,
 		claimTime = 15,
-		rollSpeed = 26,
+		rollSpeed = Rarities.rollSpeedOf(5),
 		duelBeats = 10,
 		duelTempo = 135,
 		hatchTime = 45 * 60,
@@ -86,7 +99,7 @@ local info: { [string]: RarityInfo } = {
 		order = 6,
 		size = 1.8,
 		claimTime = 18,
-		rollSpeed = 28,
+		rollSpeed = Rarities.rollSpeedOf(6),
 		duelBeats = 10,
 		duelTempo = 150,
 		hatchTime = 2 * 60 * 60,
@@ -97,7 +110,7 @@ local info: { [string]: RarityInfo } = {
 		order = 7,
 		size = 2.0,
 		claimTime = 22,
-		rollSpeed = 30,
+		rollSpeed = Rarities.rollSpeedOf(7),
 		duelBeats = 12,
 		duelTempo = 160,
 		hatchTime = 4 * 60 * 60,
@@ -108,7 +121,7 @@ local info: { [string]: RarityInfo } = {
 		order = 8,
 		size = 2.3,
 		claimTime = 26,
-		rollSpeed = 32,
+		rollSpeed = Rarities.rollSpeedOf(8),
 		duelBeats = 12,
 		duelTempo = 170,
 		hatchTime = 6 * 60 * 60,
