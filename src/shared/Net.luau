@@ -27,9 +27,14 @@ local EVENTS = {
 	"DollarsChanged", -- (dollars, incomePerSecond)
 	"Notice", -- (text, colorRgb?): a message for this player alone
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
-	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
+	"PlayerStateUpdated", -- ({ dollars, penLevel, stickLevel, passes }): sent whenever any of them changes
 	"PurchaseResult", -- (itemId, ok, message)
 	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
+	"TrainingStarted", -- ({ level, plot }): the player is rolling on their training stick (Config/Sticks)
+	"TrainingEnded", -- (reason): Stopped, Died, Left, Moved
+	"TrainingRep", -- (gain, boosted): one rep; gain is the Max Stamina it added, multipliers and all
+	"TrainingBubble", -- (bubbleId, endsAt): a "2x" bubble to tap before endsAt (server time)
+	"TrainingBoost", -- (endsAt): the bubble was tapped in time; reps count double until endsAt
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
@@ -40,8 +45,10 @@ local EVENTS = {
 	"SellPet", -- (petUid)
 	"RidePet", -- (petUid or ""): ride a pet, or get off
 	"RequestPurchase", -- (itemId) a Robux item from Config/Shop; the server shows Roblox's purchase prompt
-	"BuyWithDollars", -- (itemId) an item with a dollar price
+	"BuyWithDollars", -- (itemId) an item with a dollar price: the next pen level or training stick tier
 	"SaveSettings", -- ({ [key]: value }) see Config/Settings
+	"StopTraining", -- (): get off the training stick
+	"ClaimTrainingBoost", -- (bubbleId): the player tapped a "2x" bubble
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.
@@ -52,7 +59,7 @@ local UNRELIABLE_EVENTS = {
 
 local FUNCTIONS = {
 	"GetSnapshot", -- player -> server: () -> { eggs, inventory, ... }
-	"GetShopState", -- player -> server: () -> { dollars, penLevel, passes, luck }
+	"GetShopState", -- player -> server: () -> { dollars, penLevel, stickLevel, passes, luck }
 	"GetSettings", -- player -> server: () -> { [key]: value }
 	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
 	"GetTrails", -- player -> server: () -> { owned, equipped }

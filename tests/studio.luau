@@ -104,6 +104,7 @@ end
 
 fakeEvent("RunService", "Heartbeat")
 fakeEvent("RunService", "RenderStepped")
+fakeEvent("RunService", "Stepped")
 fakeEvent("Players", "PlayerAdded")
 fakeEvent("Players", "PlayerRemoving")
 fakeEvent("Player", "CharacterAdded")
@@ -514,16 +515,19 @@ function Session:heartbeat(deltaTime: number, count: number?)
 	end
 end
 
--- Advances the clock and runs one rendered frame: render steps in priority order, then RenderStepped.
+-- Advances the clock and runs one rendered frame: render steps in priority order, then RenderStepped, then Stepped
+-- (which in Roblox comes after the character animations have run).
 function Session:renderFrame(deltaTime: number, count: number?)
 	current = self
 	local renderStepped = signalOf(self:service("RunService"), "RenderStepped")
+	local stepped = signalOf(self:service("RunService"), "Stepped")
 	for _ = 1, count or 1 do
 		self.clock += deltaTime
 		for _, step in table.clone(self.renderSteps) do
 			step.callback(deltaTime)
 		end
 		renderStepped:Fire(deltaTime)
+		stepped:Fire(self.clock, deltaTime)
 	end
 end
 

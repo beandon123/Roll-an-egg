@@ -13,6 +13,7 @@ local Runway = require(Shared.Runway)
 local Zones = require(Shared.Config.Zones)
 
 local RunwayService = require(script.Parent.RunwayService)
+local TrainingService = require(script.Parent.TrainingService)
 
 -- How high above the ground a character's HumanoidRootPart stands (R6 and R15 both stand about 3 studs up); a
 -- teleport puts it a little higher and lets it drop.
@@ -39,13 +40,15 @@ local function getCharacter(player: Player): (Model?, BasePart?)
 end
 
 -- Stands a player's character with its feet at `feet`, facing `facing` (a direction; only its heading counts).
--- Takes them off any egg they are riding first. Returns whether there was a living character to move.
+-- Takes them off any egg they are riding, or their training stick, first. Returns whether there was a living
+-- character to move.
 function TeleportService.To(player: Player, feet: Vector3, facing: Vector3?): boolean
 	local character, root = getCharacter(player)
 	if character == nil or root == nil then
 		return false
 	end
 	RunwayService.Dismount(player)
+	TrainingService.Stop(player, "Moved")
 
 	-- Not every place streams (and the test stand-in has no streaming at all), so a failure here is not fatal.
 	pcall(function()

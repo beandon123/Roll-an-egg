@@ -163,8 +163,9 @@ function MountService.Refresh(player: Player)
 	end
 end
 
--- Called by RunwayService when the player gets on an egg: the pet goes away while they ride it.
-function MountService.OnRideStarted(player: Player)
+-- The player is busy with something they must be on foot for (riding an egg, rolling on their training stick): the
+-- pet goes away until BringBack.
+function MountService.PutAway(player: Player)
 	local state = stateOf(player)
 	state.onEgg = true
 	if state.model then
@@ -179,8 +180,8 @@ function MountService.OnRideStarted(player: Player)
 	end
 end
 
--- Called by RunwayService when the player's egg ride ends: the pet comes back a few seconds later.
-function MountService.OnRideEnded(player: Player)
+-- The player is done with what PutAway was for: the pet they were riding comes back a few seconds later.
+function MountService.BringBack(player: Player)
 	local state = stateOf(player)
 	state.onEgg = false
 	if not state.wants then
@@ -194,6 +195,10 @@ function MountService.OnRideEnded(player: Player)
 		end
 	end)
 end
+
+-- Called by RunwayService when the player gets on an egg, and when their egg ride ends.
+MountService.OnRideStarted = MountService.PutAway
+MountService.OnRideEnded = MountService.BringBack
 
 function MountService.Init()
 	folder = Instance.new("Folder")

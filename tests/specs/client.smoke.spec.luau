@@ -2374,4 +2374,260 @@ return function(harness)
 			expect.equal(saves[1].args[1].ShowOthersPets, false)
 		end)
 	end)
+	describe("Client: training stick", function()
+		local CFrame = roblox.CFrame
+		local ROBUX = utf8.char(0xE002)
+
+		-- Builds plots on this device as the server would: plot 1 is the local player's, plot 2 someone else's.
+		local function buildPlots(session)
+			local PlotModels = session:require(session:service("ServerScriptService").Server.Map.PlotModels)
+			local map = roblox.Instance.new("Folder")
+			map.Name = "Map"
+			local plots = roblox.Instance.new("Folder")
+			plots.Name = "Plots"
+			plots.Parent = map
+			map.Parent = session:service("Workspace")
+			local mine = PlotModels.buildPlot(plots, 1)
+			mine:SetAttribute("Owner", LOCAL_USER_ID)
+			local theirs = PlotModels.buildPlot(plots, 2)
+			theirs:SetAttribute("Owner", 99)
+			return mine.TrainingStick, theirs.TrainingStick
+		end
+
+		local function modules(session)
+			local folder = session:service("ReplicatedStorage").Shared
+			return {
+				Plots = session:require(folder.Plots),
+				StickModels = session:require(folder.StickModels),
+			}
+		end
+
+		local function start(session, level)
+			session:fromServer("TrainingStarted", { level = level or 1, plot = 1, startedAt = session.clock })
+			session:renderFrame(1 / 60)
+		end
+
+		local function popupTexts(parts)
+			local texts = {}
+			for _, gui in parts.playerGui.TrainingPopups:GetChildren() do
+				table.insert(texts, gui.Amount.Text)
+			end
+			return texts
+		end
+
+		it(
+			"shows the stick's prompts only on the player's own plot, and opens the upgrade panel from the sign",
+			function()
+				local session, parts = startClient()
+				local mine, theirs = buildPlots(session)
+				session:renderFrame(1 / 60)
+				expect.equal(mine.Seat.Train.Enabled, true)
+				expect.equal(mine.Sign.Board.Upgrade.Enabled, true)
+				expect.equal(theirs.Seat.Train.Enabled, false)
+				expect.equal(theirs.Sign.Board.Upgrade.Enabled, false)
+
+				local m = modules(session)
+				local x, z = m.Plots.point(1, m.Plots.STICK_SIGN_SPOT[1] - 3, m.Plots.STICK_SIGN_SPOT[2])
+				parts.root.CFrame = CFrame.new(x, 13, z)
+				session:fire(
+					session:service("ProximityPromptService"),
+					"PromptTriggered",
+					mine.Sign.Board.Upgrade,
+					parts.player
+				)
+				session:heartbeat(1 / 60)
+				session:renderFrame(1 / 60)
+				expect.equal(hud(parts).Stick.Visible, true)
+				-- All eight tiers, in a row under the card.
+				local chips = 0
+				for _, child in hud(parts).Stick.Body.Scroll.Ladder:GetChildren() do
+					if child:IsA("Frame") then
+						chips += 1
+					end
+				end
+				expect.equal(chips, 8)
+
+				-- Walking away closes it.
+				parts.root.CFrame = CFrame.new(0, 13, 0)
+				session:heartbeat(1 / 60)
+				expect.equal(hud(parts).Stick.Visible, false)
+			end
+		)
+
+		it("shows the training card while rolling, floats a +1 over the player for each rep, and stops", function()
+			local session, parts = startClient()
+			local mine = buildPlots(session)
+			local card = hud(parts).Training.Card
+			expect.equal(hud(parts).Training.Visible, false)
+
+			start(session)
+			expect.equal(hud(parts).Training.Visible, true)
+			expect.equal(card.TierName.Text, "STICK")
+			expect.equal(card.Rate.Text, "⚡ +1 a roll  •  +4/s")
+			expect.equal(mine.Seat.Train.Enabled, false, "no prompt while rolling")
+
+			session:fromServer("TrainingRep", 1, false)
+			session:fromServer("TrainingRep", 1, false)
+			session:renderFrame(1 / 60)
+			expect.equal(table.concat(popupTexts(parts), ","), "+1,+1")
+			expect.equal(card.Gained.Text, "+2 Max Stamina so far")
+			-- They float up and are gone within a second.
+			session:renderFrame(0.1, 12)
+			expect.equal(#popupTexts(parts), 0)
+
+			-- The Stop button, or a jump, gets off (asking once).
+			session:fire(card.Stop, "Activated")
+			expect.equal(#session:sent("StopTraining", "server"), 1)
+			session:fire(card.Stop, "Activated")
+			expect.equal(#session:sent("StopTraining", "server"), 1)
+			session:fromServer("TrainingEnded", "Stopped")
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Training.Visible, false)
+			expect.equal(mine.Seat.Train.Enabled, true)
+
+			start(session)
+			session:fire(session:service("UserInputService"), "JumpRequest")
+			expect.equal(#session:sent("StopTraining", "server"), 1, "the jump that got them on is ignored")
+			task.wait(0.45)
+			session:fire(session:service("UserInputService"), "JumpRequest")
+			expect.equal(#session:sent("StopTraining", "server"), 2)
+		end)
+
+		it("puts up 2x bubbles to tap, and shows the boost", function()
+			local session, parts = startClient()
+			buildPlots(session)
+			start(session)
+			local training = hud(parts).Training
+
+			session:fromServer("TrainingBubble", 1, session.clock + 2.5)
+			session:renderFrame(1 / 60)
+			expect.equal(training.Bubble.Visible, true)
+			session:fire(training.Bubble.Tap, "Activated")
+			expect.equal(session:lastSent("ClaimTrainingBoost", "server").args[1], 1)
+			session:fire(training.Bubble.Tap, "Activated")
+			expect.equal(#session:sent("ClaimTrainingBoost", "server"), 1, "tapped once")
+			session:renderFrame(0.1, 4)
+			expect.equal(training.Bubble.Visible, false, "popped")
+
+			session:fromServer("TrainingBoost", session.clock + 1.5)
+			session:renderFrame(1 / 60)
+			expect.equal(training.Card.Boost.Visible, true)
+			expect.equal(training.Card.Rate.Text, "⚡ +2 a roll  •  +8/s")
+			expect.equal(hud(parts).Toast.Text, "2x STAMINA!")
+			session:fromServer("TrainingRep", 2, true)
+			session:renderFrame(1 / 60)
+			expect.equal(popupTexts(parts)[1], "2x +2")
+			session:renderFrame(0.1, 16)
+			expect.equal(training.Card.Boost.Visible, false, "the boost runs out")
+
+			-- A bubble nobody taps goes when its time is up.
+			session:fromServer("TrainingBubble", 2, session.clock + 0.5)
+			session:renderFrame(1 / 60)
+			expect.equal(training.Bubble.Visible, true)
+			session:renderFrame(0.1, 6)
+			expect.equal(training.Bubble.Visible, false)
+		end)
+
+		it("spins the roller under a rider and poses them birling, then lets them go", function()
+			local session, parts = startClient()
+			local mine, theirs = buildPlots(session)
+			local m = modules(session)
+
+			-- An R15 character: a joint for each part the pose turns.
+			local motors = {}
+			for _, name in
+				{
+					"Root",
+					"Waist",
+					"Neck",
+					"LeftHip",
+					"RightHip",
+					"LeftKnee",
+					"RightKnee",
+					"LeftAnkle",
+					"RightAnkle",
+					"LeftShoulder",
+					"RightShoulder",
+					"LeftElbow",
+					"RightElbow",
+				}
+			do
+				local motor = roblox.Instance.new("Motor6D")
+				motor.Name = name
+				motor.Parent = parts.root.Parent
+				motors[name] = motor
+			end
+			local rest = mine.Roller.PrimaryPart.CFrame
+			local theirRest = theirs.Roller.PrimaryPart.CFrame
+			-- Splashes and other riders' reps only show near the camera.
+			cameraAt(session, m.StickModels.standCFrame(1).Position)
+			mine:SetAttribute("Rider", LOCAL_USER_ID)
+			start(session)
+			session:renderFrame(1 / 30, 15)
+			local turned = mine.Roller.PrimaryPart.CFrame
+			expect.near((turned.Position - m.StickModels.axleCFrame(1, 1).Position).Magnitude, 0, 1e-3)
+			expect.truthy(turned.UpVector:Dot(rest.UpVector) < 0.999, "the roller turns")
+			-- Arms held out to the sides, and the legs running.
+			local rightArm = motors.RightShoulder.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+			local leftArm = motors.LeftShoulder.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+			expect.truthy(rightArm.X > 0.6, "right arm out")
+			expect.truthy(leftArm.X < -0.6, "left arm out")
+			expect.truthy(motors.LeftKnee.Transform ~= CFrame.identity, "knees bend")
+			expect.equal(mine.SplashFx.Splash.Enabled, true, "splashing")
+			expect.equal(theirs.Roller.PrimaryPart.CFrame, theirRest, "nobody on theirs, so it stays still")
+
+			-- Another player rolling on their own stick: their "+5"s show here too, worked out on this device.
+			local other = session:addPlayer(99, "Other")
+			other.Character.HumanoidRootPart.CFrame = m.StickModels.riderCFrame(2, 1, 3)
+			theirs:SetAttribute("Rider", 99)
+			theirs:SetAttribute("RepGain", 5)
+			cameraAt(session, m.StickModels.standCFrame(2).Position)
+			session:renderFrame(0.13, 4)
+			local fives = 0
+			for _, text in popupTexts(parts) do
+				if text == "+5" then
+					fives += 1
+				end
+			end
+			expect.truthy(fives >= 1, "the other rider's reps")
+
+			-- Off the stick: the joints are handed back to the character's own animations.
+			mine:SetAttribute("Rider", 0)
+			session:renderFrame(1 / 30)
+			expect.equal(motors.RightShoulder.Transform, CFrame.identity)
+			expect.equal(mine.SplashFx.Splash.Enabled, false)
+		end)
+
+		it("offers the next tier in the shop, for Robux or dollars, until the stick is maxed", function()
+			local session, parts = startClient()
+			local card = shopBody(parts).Featured.StickUpgrade
+			expect.equal(card.Current.TierName.Text, "Stick")
+			expect.equal(card.Next.TierName.Text, "Plank")
+			expect.truthy(card.Current.Preview:FindFirstChild("Stick"), "the stick in 3D")
+			expect.truthy(card.Next.Preview:FindFirstChild("Plank"), "the plank in 3D")
+			expect.equal(card.Gain.Text, "+2 STAMINA\nPER ROLL")
+			expect.equal(buttonText(card.Buttons.BuyDollars), "$500")
+			expect.equal(buttonText(card.Buttons.BuyRobux), ROBUX .. " 29")
+			session:fire(card.Buttons.BuyDollars, "Activated")
+			expect.equal(session:lastSent("BuyWithDollars", "server").args[1], "StickUpgrade")
+			session:fire(card.Buttons.BuyRobux, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "StickUpgrade")
+
+			-- The pen upgrade is still there, after it.
+			expect.truthy(shopBody(parts).Featured.PenUpgrade.LayoutOrder > card.LayoutOrder, "stick first")
+
+			session:fromServer("PlayerStateUpdated", { stickLevel = 4 })
+			session:renderFrame(1 / 60)
+			expect.equal(card.Current.TierName.Text, "Tree Trunk")
+			expect.equal(card.Next.TierName.Text, "Metal Pipe")
+			expect.truthy(card.Next.Preview:FindFirstChild("MetalPipe"), "the new preview")
+			expect.equal(buttonText(card.Buttons.BuyDollars), "$500K")
+
+			session:fromServer("PlayerStateUpdated", { stickLevel = 8 })
+			expect.equal(card.Headline.Text, "STICK MAXED OUT!")
+			expect.equal(card.Buttons.Visible, false)
+			expect.equal(card.Next.Visible, false)
+			expect.equal(card.Maxed.Visible, true)
+		end)
+	end)
 end

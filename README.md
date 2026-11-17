@@ -49,13 +49,18 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
   saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
+- A **training stick** in front of every pen: a roller over a trough of water. Step up and roll on it (birling) for
+  as long as you like: every quarter of a second adds Max Stamina for good, with a "+1" floating over your head, and
+  "2x" bubbles pop up to tap for a burst of double stamina. Eight tiers, from a twig to a rainbow crystal, bought with
+  dollars or Robux. See [The training stick](#the-training-stick).
 - The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with
   what your pen earns a second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop
   at that section), the Eggs, Pets and Ride tabs on the right edge, the day and night clock at the bottom right (a
   moon and "in 1m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck
   boost runs, the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the
   banner for Secret and rarer eggs.
-- **Shop** ("Coop Shop"): the next pen level for Robux or dollars (the same upgrade as the green button), x2 / x4
+- **Shop** ("Coop Shop"): the next tier of the training stick and the next pen level, each for Robux or dollars (the
+  same upgrades as the stick's sign and the pen's green button), x2 / x4
   server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
   Max Stamina, from x2 up to x1024), dollar packs, and the x2 Dollars pass (every pet in your pen earns double).
   Robux purchases are granted exactly once, and only reported to Roblox once saved.
@@ -112,13 +117,17 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Eggs and pets | Click the **Eggs** / **Pets** tabs on the right | Tap them | Select them |
 | Ride / get off your pet | **Ride** on its card, then the **RIDE** / **GET OFF** button | Tap them | Select them |
 | Buy a bigger pen | Walk up to the green button by your gate, hold E | Hold its prompt | Hold X |
+| Roll on your training stick | Walk up to it, E | Tap its prompt | X |
+| Tap a "2x" bubble | Click it | Tap it | Select it |
+| Get off the training stick | Jump, or **STOP** | Jump button, or **STOP** | A |
+| Upgrade the training stick | E at the sign beside it, or the shop | Tap the sign's prompt | X |
 
 ### Selling things for Robux
 
 Every price and amount is in `src/shared/Config/Shop.luau`. Each Robux item needs its ID from the Creator
 Dashboard (*Monetization > Developer Products* or *Passes*), pasted into its `productId` / `gamePassId`. There is
-one developer product per pen level and one per stamina doubling (x1 to x2, x2 to x4 ...), because a product's
-price is fixed.
+one developer product per pen level, one per training stick tier, and one per stamina doubling (x1 to x2, x2 to x4
+...), because a product's price is fixed.
 
 While an ID is `0`, the item cannot be bought in a live game ("This isn't for sale yet"). In Studio, buying it grants
 it straight away, so the whole shop can be tried before the products exist. The price shown comes from Roblox once an
@@ -134,7 +143,7 @@ is listed in `src/server/Config/Admins.luau`. The server checks every command, s
 | --- | --- |
 | Eggs | Pick a zone, then **Drop** any of its eggs on the runway or **Give** it to your inventory. Eggs drop in front of you (on the runway) or at the start of their zone. Drop a random egg, every egg of the zone, or clear the runway. |
 | Pets | Pick a zone, then **Spawn** any of its pets next to you or **Give** it to your inventory. Stand all of the zone's pets in front of you, or remove the ones you spawned. |
-| Me | **Fly** (move to fly where the camera looks; Space or E to rise, Q or Ctrl to sink) at 40 to 320 studs a second. Walk speed. Stamina: Max x5, 10M, refill, and reset (back to 100 plus what you bought in the shop). Dollars: add $1K, $1M or $1B, or reset to 0. What is in your inventory, clearing it, and **Hatch eggs now** (finishes every egg hatching in your pen). |
+| Me | **Fly** (move to fly where the camera looks; Space or E to rise, Q or Ctrl to sink) at 40 to 320 studs a second. Walk speed. Stamina: Max x5, 10M, refill, and reset (back to 100 plus what you bought in the shop and trained). Dollars: add $1K, $1M or $1B, or reset to 0. Training stick: a tier down or up, the last tier, or clear the Max Stamina trained on it. What is in your inventory, clearing it, and **Hatch eggs now** (finishes every egg hatching in your pen). |
 | Events | Start or stop an **Egg Avalanche**. Close the runway now, or open it now (skipping the rest of a closure). |
 | Teleport | The hub, the **Model Showroom**, the end of the last zone, the start of any zone, or any other player. |
 
@@ -194,6 +203,64 @@ the pet goes away while you ride the egg and comes back 3 seconds after you leav
 
 The rules are in `src/server/Logic/Hatchery.luau` and `src/shared/PetWorth.luau`, run by
 `src/server/Services/InventoryService.luau`.
+
+## The training stick
+
+Every plot has a training stick in the plaza in front of its pen, on the other side of the gate from the green
+button: a roller held between two posts over a wooden trough of water (with a lily pad and a rubber duck), a glowing
+strip round its foot in the tier's colour, the tier's name floating above, and a sign at its front corner.
+
+**Rolling.** Walk up to your stick and use its prompt (**Start rolling**): you are stood on top of the roller,
+facing the plaza, and run on the spot while it spins under your feet, leaning forward with your arms held out wide,
+see-sawing for balance (birling). Stay as long as you like; jump, or press **STOP**, to step off. Only the plot's
+owner can use its stick, so nobody else sees its prompts.
+
+- Every quarter of a second is a **rep**: 4 a second. Each rep adds Max Stamina for good, and the amount floats up
+  over your head ("+1" on the first tier). Other players see your numbers too.
+- What a rep adds goes through your multipliers like the rest of your Max Stamina: (base + bought + trained) x
+  doublings x trail. With the x1.5 Leaf Trail, a first-tier rep shows "+1.5".
+- Every few seconds (2.5 to 5) a **"2x" bubble** pops up somewhere round the middle of the screen, its ring
+  shrinking as its 2.5 seconds run out. Tap it in time and every rep for the next 1.5 seconds counts double: the
+  numbers turn gold, the roller spins faster, sparkles and a warm light burst from it, and a "2x STAMINA!" bar drains
+  over the card at the bottom of the screen.
+- While rolling, a card above the stamina bar shows the tier, what each roll and each second gives, the Max Stamina
+  gained so far, and the **STOP** button. The water splashes under the roller, and a plank or a girder rocks its rider
+  up and down as it turns.
+
+**Upgrading.** Eight tiers, each dearer, stronger and better-looking than the one before. Upgrade one tier at a time
+with dollars or Robux: from the sign beside the stick (its prompt opens the upgrade panel: the stick now and the
+next tier turning in 3D, what it gives, the two prices, and all eight tiers in a row) or from the shop's Featured
+section. The sign itself shows the next tier, the stamina a second now and after, and both prices. A stick that
+upgrades bursts with sparkles; if you are rolling at the time, you carry on, on top of the new one.
+
+| Lvl | Tier | Rarity | Per rep | Per second | Dollars | Robux | Looks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Stick | Common | +1 | +4 | free | | a crooked twig with knots, two shoots and leaves |
+| 2 | Plank | Uncommon | +2 | +8 | $500 | 29 | three nailed boards with iron bands |
+| 3 | Short Log | Rare | +5 | +20 | $5K | 59 | a stubby log with ridged bark, tree rings and a toadstool |
+| 4 | Tree Trunk | Epic | +12 | +48 | $50K | 99 | a long, mossy trunk with bark plates, branch stubs and a sapling |
+| 5 | Metal Pipe | Legendary | +30 | +120 | $500K | 179 | a steel pipe with bolted flanges, gold bands and rivets |
+| 6 | Steel Girder | Mythic | +75 | +300 | $5M | 299 | a riveted red I-beam with holes, end plates and a stencil |
+| 7 | Marble Column | Secret | +200 | +800 | $50M | 499 | a fluted marble column with gold bands, capitals and gems |
+| 8 | Rainbow Crystal | Eternal | +500 | +2K | $500M | 799 | rainbow glass facets round a glowing core, with sparkles |
+
+The posts change with the tier too: timber for the wooden rollers, steel for the pipe and girder, marble for the
+column, dark crystal for the last. Per rep and per second are before multipliers. The tiers, gains and timings are in
+`src/shared/Config/Sticks.luau` (first-pass numbers, to tune with the economy), the Robux prices in
+`src/shared/Config/Shop.luau`.
+
+How it is built:
+
+- The rules (reps, the bubbles, upgrades) are in `src/server/Logic/Training.luau`, run by
+  `src/server/Services/TrainingService.luau`. The server decides everything: reps come from its clock alone, a bubble
+  only counts if it is the one it put up and is still in time, and it holds the rider's character in place.
+  Max Stamina trained is saved as `TrainedStamina`, the tier as `StickLevel`.
+- The rollers are built from parts in `src/shared/StickModels.luau` (shared, so the upgrade panel can show them in
+  3D); the stand round them in `src/server/Map/TrainingStand.luau`; where it stands in `src/shared/Plots.luau`.
+- Each device spins the rollers, poses the riders and floats the numbers (`src/client/Controllers/TrainingController`).
+  The pose (`src/shared/BirlingPose.luau`) is set on each character's joints every frame after Roblox's own
+  animations, so it needs no uploaded animation and works for R15 and R6 characters alike. The screens are in
+  `src/client/Ui/TrainingUi.luau`.
 
 ## Hub stations
 
@@ -293,7 +360,8 @@ To look at the map without opening Studio:
 lune run tools/map-preview
 ```
 
-Then open `tools/out/map-preview.html` in a browser: buttons along the top jump to each zone, drag to look round.
+Then open `tools/out/map-preview.html` in a browser: buttons along the top jump to each zone, drag to look round. Each
+plot's training stick shows a different tier (plot 1 the first, plot 8 the last), some with a player rolling on it.
 
 To look at the on-screen UI without opening Studio:
 
@@ -302,8 +370,9 @@ lune run tools/ui-preview trails
 ```
 
 Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
-trails), `sell` and `shop`. It runs the game's own client scripts and draws their GUI objects in HTML: a close sketch,
-not Roblox's renderer (fonts and emoji are the browser's).
+trails), `sell`, `shop`, `stick` (the training stick's upgrade panel) and `training` (rolling on the stick, with a 2x
+boost and a bubble). It runs the game's own client scripts and draws their GUI objects in HTML, and the models in 3D
+previews as flat-shaded drawings: a close sketch, not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models
 
@@ -434,7 +503,8 @@ lune run tests/run
 There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
-  stamina, cracking, the banks, the endless last zone, closures, shop prices, settings, luck boosts), and that every
+  stamina, cracking, the banks, the endless last zone, closures, shop prices, settings, luck boosts, the training
+  stick's reps, bubbles, upgrades and rider's pose), and that every
   egg and pet model exists, is unique and has nothing floating loose, and that every egg stays within its part
   budget. Pets have none. They are also checked for the limbs their skeleton needs, and for differently coloured
   blocks sharing a face (which flicker in Roblox).

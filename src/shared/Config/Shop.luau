@@ -13,6 +13,7 @@ export type Grant =
 	| { kind: "MaxStamina", amount: number }
 	| { kind: "Luck", multiplier: number, duration: number }
 	| { kind: "PenLevel" }
+	| { kind: "StickLevel" }
 	| { kind: "StaminaDoubling" }
 
 -- A developer product: bought with Robux, can be bought again.
@@ -50,6 +51,15 @@ export type PenLevel = {
 	robux: number,
 }
 
+-- One tier of the training stick (Config/Sticks): buy it with dollars, or with Robux (one developer product per
+-- tier, like the pen levels).
+export type StickLevel = {
+	level: number,
+	dollars: number,
+	productId: number,
+	robux: number,
+}
+
 -- One step of "Double your Max Stamina": from one multiplier to twice it. One developer product per step, so each
 -- step can have its own price.
 export type StaminaDoubling = {
@@ -60,6 +70,7 @@ export type StaminaDoubling = {
 }
 
 local Economy = require(script.Parent.Economy)
+local Sticks = require(script.Parent.Sticks)
 
 local Shop = {}
 
@@ -202,9 +213,25 @@ for level = 2, Shop.MAX_PEN_LEVEL do
 	}
 end
 
+-- The training stick's tiers: the dollar prices are Config/Sticks', so the sign by the stick and the shop always
+-- agree; these are the Robux prices, to skip saving up.
+Shop.MAX_STICK_LEVEL = Sticks.MAX_LEVEL
+local STICK_ROBUX = { [2] = 29, [3] = 59, [4] = 99, [5] = 179, [6] = 299, [7] = 499, [8] = 799 }
+
+local stickLevels: { [number]: StickLevel } = {}
+for level = 2, Shop.MAX_STICK_LEVEL do
+	stickLevels[level] = {
+		level = level,
+		dollars = Sticks.tier(level).price,
+		productId = 0,
+		robux = STICK_ROBUX[level],
+	}
+end
+
 Shop.Products = products
 Shop.Passes = passes
 Shop.PenLevels = penLevels
+Shop.StickLevels = stickLevels
 Shop.StaminaDoublings = staminaDoublings
 
 local productsById: { [string]: Product } = {}
@@ -220,6 +247,8 @@ Shop.PassesById = passesById
 
 -- The id the client sends to buy the next pen level.
 Shop.PEN_UPGRADE_ID = "PenUpgrade"
+-- The id the client sends to buy the next tier of the training stick.
+Shop.STICK_UPGRADE_ID = "StickUpgrade"
 
 function Shop.penCapacity(level: number): number
 	return Shop.PEN_BASE_CAPACITY + (level - 1)
@@ -255,6 +284,11 @@ function Shop.rewardForProductId(productId: number): (Grant?, string?)
 			return { kind = "PenLevel" }, Shop.PEN_UPGRADE_ID
 		end
 	end
+	for _, stickLevel in stickLevels do
+		if stickLevel.productId == productId then
+			return { kind = "StickLevel" }, Shop.STICK_UPGRADE_ID
+		end
+	end
 	for _, doubling in staminaDoublings do
 		if doubling.productId == productId then
 			return { kind = "StaminaDoubling" }, Shop.STAMINA_DOUBLING_ID
@@ -263,8 +297,8 @@ function Shop.rewardForProductId(productId: number): (Grant?, string?)
 	return nil, nil
 end
 
--- Max Stamina from what the player owns: the base plus Max Stamina bought, times the doubling multiplier.
--- Later, stamina upgrades bought with dollars add to `bonus` too.
+-- Max Stamina from what the player owns: the base plus Max Stamina bought or trained on the training stick (`bonus`),
+-- times the doubling multiplier.
 function Shop.maxStamina(baseStamina: number, bonus: number, multiplier: number): number
 	return (baseStamina + bonus) * multiplier
 end

@@ -72,7 +72,7 @@ local UiState = {
 	clock = scope:Value(0),
 
 	-- Which panel is open in the middle: "Shop" or "Settings" (the tabs on the left), a hub station's ("Trails",
-	-- "Sell", "Fuse"), or nil. Opening one closes the Eggs or Pets panel on the right, and back.
+	-- "Sell", "Fuse"), the training stick's upgrade panel ("Stick", from the sign beside it), or nil. Opening one closes the Eggs or Pets panel on the right, and back.
 	openPanel = scope:Value(nil :: string?),
 	-- A shop section to scroll to when the shop opens (the "+" buttons next to dollars and stamina set this).
 	shopSection = scope:Value(nil :: string?),
@@ -82,7 +82,7 @@ local UiState = {
 	staminaMultiplier = scope:Value(1),
 	-- passId -> true
 	ownedPasses = scope:Value({} :: { [string]: boolean }),
-	-- itemId (or "PenLevel<n>", "StaminaDoubling<n>") -> Robux price, once loaded from Roblox. Until then the shop
+	-- itemId (or "PenLevel<n>", "StickLevel<n>", "StaminaDoubling<n>") -> Robux price, once loaded from Roblox. Until then the shop
 	-- shows Config/Shop's.
 	prices = scope:Value({} :: { [string]: number }),
 	-- The server luck in effect, and whole seconds until it ends (0 when none).
@@ -92,6 +92,22 @@ local UiState = {
 	-- Trails from the Trails stall: owned is a set of trail ids; equipped is a trail id or "".
 	trailsOwned = scope:Value({} :: { [string]: boolean }),
 	trailEquipped = scope:Value(""),
+
+	-- The training stick (Config/Sticks): the tier the player has, and, while they roll on it, the session.
+	stickLevel = scope:Value(1),
+	training = scope:Value(false),
+	-- Max Stamina gained since they got on, and the last rep's gain (multipliers and boost included).
+	trainingGained = scope:Value(0),
+	trainingLastGain = scope:Value(0),
+	-- The "2x" bubble on screen ({ id, endsAt, x, y }, x and y as fractions of the screen), or nil; how much of its
+	-- time is left (1 to 0), and how far through popping it is once tapped (0 to 1, or 0 when not popping).
+	trainingBubble = scope:Value(nil :: { id: number, endsAt: number, x: number, y: number }?),
+	bubbleLeft = scope:Value(1),
+	bubblePop = scope:Value(0),
+	-- How much of a running 2x boost is left (1 to 0; 0 when none is running).
+	boostLeft = scope:Value(0),
+	-- A gentle beat (-1 to 1) the bubble and boost bar pulse with.
+	pulse = scope:Value(0),
 
 	-- settingKey -> Value. See Config/Settings.
 	settings = settings,
@@ -114,8 +130,10 @@ local UiState = {
 	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain, claimed }
 	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number, claimed: boolean }?,
 
-	-- What the panels' buttons do, set by InventoryController and StationController.
+	-- What the panels' buttons do, set by InventoryController, StationController and TrainingController.
 	actions = {
+		stopTraining = function() end,
+		claimBubble = function(_id: number) end,
 		buyTrail = function(_trailId: string) end,
 		equipTrail = function(_trailId: string) end,
 		sellEggs = function(_kind: string, _count: number) end,

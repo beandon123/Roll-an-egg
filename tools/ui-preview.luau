@@ -9,17 +9,22 @@
 --     trails   the Trails stall's panel open, a few trails owned (trails-end: scrolled to the last trails)
 --     sell     the Sell stall's panel open
 --     shop     the shop open
+--     stick    the training stick's upgrade panel (from the sign beside the stick), the stick at its third tier
+--     training rolling on the training stick: its card, a 2x boost running and a "2x" bubble to tap
 -- The page draws a 1280 x 720 screen; add #w=844&h=390 to the address for a phone held sideways.
 --
 -- It runs the game's own client scripts in the Studio stand-in (tests/studio), then turns the HUD's GUI objects into
--- HTML: frames, text, corners, outlines, gradients, list layouts, padding and scaling. It is a close sketch, not
--- Roblox's renderer: fonts are the nearest web fonts, emoji are the browser's, and text sizes are approximate.
+-- HTML: frames, text, corners, outlines, gradients, list layouts, padding and scaling, and the models in 3D previews
+-- (ViewportFrames) as flat-shaded drawings. It is a close sketch, not Roblox's renderer: fonts are the nearest web
+-- fonts, emoji are the browser's, and text sizes are approximate.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
 local Vector2 = roblox.Vector2
+local Vector3new = roblox.Vector3.new
+local Vector3zero = roblox.Vector3.zero
 
 local Studio = require("../tests/studio")
 
@@ -77,9 +82,27 @@ elseif scene == "sell" then
 	UiState.openPanel:set("Sell")
 elseif scene == "shop" then
 	UiState.openPanel:set("Shop")
+elseif scene == "stick" then
+	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
+	UiState.openPanel:set("Stick")
+elseif scene == "training" then
+	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
+	session:fromServer("TrainingStarted", { level = 3, plot = 1, startedAt = session.clock })
+	for _ = 1, 37 do
+		session:fromServer("TrainingRep", 7.5, false)
+	end
+	session:fromServer("TrainingBoost", session.clock + 60)
 end
 -- Long enough for the panels' springs to settle.
 session:renderFrame(1 / 30, 90)
+if scene == "training" then
+	-- A bubble that has just finished popping in, up and to the left of the player.
+	session:fromServer("TrainingBubble", 1, session.clock + 60)
+	session:renderFrame(1 / 30, 30)
+	UiState.trainingBubble:set({ id = 1, endsAt = session.clock + 60, x = 0.33, y = 0.36 })
+	UiState.bubbleLeft:set(0.7)
+	session:renderFrame(1 / 30)
+end
 if scene == "trails-end" then
 	-- Scrolled along to the fanciest trails.
 	playerGui.Hud.Root.Trails.Body.Scroll.CanvasPosition = Vector2.new(1100, 0)
@@ -182,6 +205,141 @@ local function textShadow(stroke): string
 		table.insert(parts, string.format("%.2fpx %.2fpx 0 %s", math.cos(angle) * t, math.sin(angle) * t, color))
 	end
 	return table.concat(parts, ", ")
+end
+
+-- A ViewportFrame's models, drawn from its camera as an SVG of flat-shaded faces, furthest first. Blocks are boxes;
+-- cylinders and balls are twelve-sided prisms.
+local SIDES = 12
+local function viewportSvg(viewport): string
+	-- (Lune cannot read CurrentCamera back; the previews keep their camera inside them.)
+	local camera = viewport:FindFirstChildOfClass("Camera")
+	if camera == nil then
+		return ""
+	end
+	local width = if viewport.Size.X.Scale == 0 then viewport.Size.X.Offset else 68
+	local height = viewport.Size.Y.Offset
+	if width <= 0 or height <= 0 then
+		return ""
+	end
+	local view = camera.CFrame
+	local eye = view.Position
+	local tanHalf = math.tan(math.rad(camera.FieldOfView) / 2)
+	local light = viewport.LightDirection.Unit
+	local tint = viewport.ImageColor3
+	local faces = {}
+	local function project(point)
+		local p = view:PointToObjectSpace(point)
+		local depth = -p.Z
+		if depth <= 0.05 then
+			return nil, depth
+		end
+		local x = p.X / (depth * tanHalf * width / height)
+		local y = p.Y / (depth * tanHalf)
+		return string.format("%.1f,%.1f", (x * 0.5 + 0.5) * width, (-y * 0.5 + 0.5) * height), depth
+	end
+	local function addFace(part, corners)
+		local a, b, c = corners[1], corners[2], corners[3]
+		local normal = (b - a):Cross(c - a)
+		if normal.Magnitude < 1e-6 then
+			return
+		end
+		normal = normal.Unit
+		local middle = Vector3zero
+		for _, corner in corners do
+			middle += corner
+		end
+		middle /= #corners
+		if normal:Dot(middle - eye) >= 0 then
+			return
+		end
+		local points, depth = {}, 0
+		for _, corner in corners do
+			local point, d = project(corner)
+			if point == nil then
+				return
+			end
+			table.insert(points, point)
+			depth += d
+		end
+		local shade = if part.Material.Name == "Neon" then 1 else 0.55 + 0.5 * math.max(0, -normal:Dot(light))
+		local color = part.Color
+		table.insert(faces, {
+			depth = depth / #corners,
+			svg = string.format(
+				'<polygon points="%s" fill="rgb(%d,%d,%d)" fill-opacity="%.2f"/>',
+				table.concat(points, " "),
+				math.min(255, math.round(color.R * tint.R * shade * 255)),
+				math.min(255, math.round(color.G * tint.G * shade * 255)),
+				math.min(255, math.round(color.B * tint.B * shade * 255)),
+				1 - part.Transparency * 0.6
+			),
+		})
+	end
+	for _, part in viewport:GetDescendants() do
+		if part:IsA("BasePart") and part.Transparency < 1 then
+			local frame, size = part.CFrame, part.Size
+			local shape = if part:IsA("Part") then part.Shape.Name else "Block"
+			if shape == "Block" then
+				local h = size / 2
+				local function corner(x, y, z)
+					return frame * Vector3new(x * h.X, y * h.Y, z * h.Z)
+				end
+				for _, face in
+					{
+						{ { 1, -1, -1 }, { 1, 1, -1 }, { 1, 1, 1 }, { 1, -1, 1 } },
+						{ { -1, -1, 1 }, { -1, 1, 1 }, { -1, 1, -1 }, { -1, -1, -1 } },
+						{ { -1, 1, -1 }, { -1, 1, 1 }, { 1, 1, 1 }, { 1, 1, -1 } },
+						{ { -1, -1, 1 }, { -1, -1, -1 }, { 1, -1, -1 }, { 1, -1, 1 } },
+						{ { -1, -1, 1 }, { 1, -1, 1 }, { 1, 1, 1 }, { -1, 1, 1 } },
+						{ { 1, -1, -1 }, { -1, -1, -1 }, { -1, 1, -1 }, { 1, 1, -1 } },
+					}
+				do
+					local corners = {}
+					for _, c in face do
+						table.insert(corners, corner(c[1], c[2], c[3]))
+					end
+					addFace(part, corners)
+				end
+			else
+				-- Along the part's X axis; a ball is as long as it is wide.
+				local radius = math.min(size.Y, size.Z) / 2
+				local half = if shape == "Ball" then radius else size.X / 2
+				local function ring(x)
+					local points = {}
+					for step = 0, SIDES - 1 do
+						local angle = step / SIDES * math.pi * 2
+						table.insert(points, frame * Vector3new(x, math.cos(angle) * radius, math.sin(angle) * radius))
+					end
+					return points
+				end
+				local near, far = ring(half), ring(-half)
+				for step = 1, SIDES do
+					local nextStep = step % SIDES + 1
+					addFace(part, { near[step], far[step], far[nextStep], near[nextStep] })
+				end
+				addFace(part, near)
+				local reversed = {}
+				for index = SIDES, 1, -1 do
+					table.insert(reversed, far[index])
+				end
+				addFace(part, reversed)
+			end
+		end
+	end
+	table.sort(faces, function(a, b)
+		return a.depth > b.depth
+	end)
+	local svg = {}
+	for _, face in faces do
+		table.insert(svg, face.svg)
+	end
+	return string.format(
+		'<svg viewBox="0 0 %d %d" preserveAspectRatio="xMidYMid meet" '
+			.. 'style="position:absolute;inset:0;width:100%%;height:100%%;pointer-events:none">%s</svg>',
+		width,
+		height,
+		table.concat(svg)
+	)
 end
 
 local ALIGN_X = { Left = "flex-start", Center = "center", Right = "flex-end" }
@@ -339,7 +497,10 @@ function render(object, inList: boolean): string
 		table.insert(style, `box-shadow:0 0 0 {stroke.Thickness}px {css(stroke.Color, stroke.Transparency)}`)
 	end
 
-	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{textHtml}{renderChildren(object)}</div>`
+	local drawing = if object:IsA("ViewportFrame") then viewportSvg(object) else ""
+	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{drawing}{textHtml}{renderChildren(
+		object
+	)}</div>`
 end
 
 local hud = playerGui:FindFirstChild("Hud")

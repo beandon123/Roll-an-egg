@@ -6,7 +6,8 @@
 --           pairs, comma-separated; the clients draw and walk them: PenController)
 --     Egg   Uid, EggKind, EggName, Rarity, PlacedAt, Bonus, and HatchedAt once it hatches (it is removed a moment
 --           later, so clients can burst it open)
--- The green button at the front of each pen buys its owner a bigger pen (InventoryService does the buying).
+-- The green button at the front of each pen buys its owner a bigger pen (InventoryService does the buying). The
+-- training stick in front of each pen (Map/TrainingStand) is the owner's to roll on (TrainingService runs it).
 --
 -- Players appear at their own plot when they respawn.
 
@@ -23,6 +24,7 @@ local Runway = require(Shared.Runway)
 local DataService = require(script.Parent.DataService)
 local Hatchery = require(script.Parent.Parent.Logic.Hatchery)
 local PlotModels = require(script.Parent.Parent.Map.PlotModels)
+local TrainingStand = require(script.Parent.Parent.Map.TrainingStand)
 
 local PlotService = {}
 
@@ -34,6 +36,7 @@ local plotModels: { [number]: Model } = {}
 local owners: { [number]: Player } = {}
 local plotOf: { [Player]: number } = {}
 local upgradeHandler: ((Player) -> ())? = nil
+local trainHandler: ((Player, number) -> ())? = nil
 
 -- Puts the plot's eggs in step with the owner's hatching eggs: new ones are built, gone ones removed (unless they
 -- have just hatched, and are bursting open).
@@ -126,6 +129,25 @@ function PlotService.OnUpgradePressed(handler: (Player) -> ())
 	upgradeHandler = handler
 end
 
+-- Who uses the "Start rolling" prompt on their own training stick is handed to `handler`, with their plot's index
+-- (TrainingService puts them on it).
+function PlotService.OnTrainPressed(handler: (Player, number) -> ())
+	trainHandler = handler
+end
+
+-- A plot's model (Workspace.Map.Plots.PlotN).
+function PlotService.GetModel(index: number): Model?
+	return plotModels[index]
+end
+
+-- The training stick stand on a player's plot, and the plot's index, or nil if they have no plot.
+function PlotService.GetStand(player: Player): (Model?, number?)
+	local index = plotOf[player]
+	local plot = index and plotModels[index]
+	local stand = plot and plot:FindFirstChild(TrainingStand.NAME)
+	return stand :: Model?, index
+end
+
 local function spawnAtPlot(player: Player, character: Model)
 	local index = plotOf[player]
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -188,6 +210,7 @@ local function release(player: Player)
 	for _, egg in (model:FindFirstChild("Eggs") :: Folder):GetChildren() do
 		egg:Destroy()
 	end
+	TrainingStand.reset(model:FindFirstChild(TrainingStand.NAME) :: Model, index)
 end
 
 function PlotService.Init()
@@ -204,6 +227,13 @@ function PlotService.Init()
 			-- Only the plot's owner can buy its upgrade.
 			if owners[index] == player and upgradeHandler then
 				upgradeHandler(player)
+			end
+		end)
+		local train = (plot :: any)[TrainingStand.NAME].Seat.Train :: ProximityPrompt
+		train.Triggered:Connect(function(player: Player)
+			-- Only the plot's owner can roll on its stick.
+			if owners[index] == player and trainHandler then
+				trainHandler(player, index)
 			end
 		end)
 	end

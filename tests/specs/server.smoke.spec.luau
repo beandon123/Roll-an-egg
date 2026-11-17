@@ -2508,4 +2508,290 @@ return function(harness)
 			expect.equal(values.Vibration, true)
 		end)
 	end)
+	describe("Server: training stick", function()
+		local CFrame = roblox.CFrame
+
+		local function modules(session)
+			local folder = session:service("ReplicatedStorage").Shared
+			return {
+				Plots = session:require(folder.Plots),
+				Sticks = session:require(folder.Config.Sticks),
+				StickModels = session:require(folder.StickModels),
+				Runway = session:require(folder.Runway),
+			}
+		end
+
+		local function standOf(session, index)
+			return session:service("Workspace").Map.Plots["Plot" .. index].TrainingStick
+		end
+
+		local function signOf(stand)
+			return stand.Sign.Board.Face.Card
+		end
+
+		-- Stands the character in front of its plot's stand and uses the "Start rolling" prompt.
+		local function getOn(session, player, root, index)
+			local spot = modules(session).StickModels.standCFrame(index)
+			root.CFrame = spot * CFrame.new(-8, 3, 0)
+			session:fire(standOf(session, index).Seat.Train, "Triggered", player)
+			session:heartbeat(1 / 60)
+		end
+
+		local function sentCount(session, name, player)
+			return #session:sent(name, player)
+		end
+
+		it("builds a stick in front of every plot: a roller over a trough of water, a sign and a prompt", function()
+			local session = startServer()
+			local m = modules(session)
+			for index = 1, m.Plots.COUNT do
+				local stand = standOf(session, index)
+				expect.truthy(stand, "stand " .. index)
+				expect.equal(stand:GetAttribute("Level"), 1)
+				expect.equal(stand:GetAttribute("Rider"), 0)
+				local x, z = m.Plots.stickSpot(index)
+				local at = stand.Base.Plinth.CFrame.Position
+				expect.near(at.X, x, 1e-3)
+				expect.near(at.Z, z, 1e-3)
+				expect.truthy(stand.Base.Water.Transparency > 0, "water")
+				-- The roller turns on its Root: everything else is welded to it.
+				local roller = stand.Roller
+				expect.equal(roller:GetAttribute("Level"), 1)
+				expect.equal(roller.PrimaryPart.Name, "Root")
+				expect.equal(roller.PrimaryPart.Anchored, true)
+				for _, part in roller:GetDescendants() do
+					if part:IsA("BasePart") and part ~= roller.PrimaryPart then
+						expect.equal(part.Anchored, false, part.Name)
+						expect.truthy(part:FindFirstChildOfClass("WeldConstraint"), part.Name .. " welded")
+					end
+				end
+				local axle = m.StickModels.axleCFrame(index, 1).Position
+				expect.near((roller.PrimaryPart.CFrame.Position - axle).Magnitude, 0, 1e-3)
+				expect.truthy(stand.Seat.Train:IsA("ProximityPrompt"), "Start rolling prompt")
+				expect.equal(stand.Sign.Board.Upgrade:GetAttribute("StickSign"), true)
+				-- Nobody owns these plots yet.
+				expect.equal(signOf(stand).Title.Text, "TRAINING STICK")
+				expect.equal(signOf(stand).Rates.Text, "Free plot")
+			end
+		end)
+
+		it("builds every tier's roller, each its own model", function()
+			local session = startServer()
+			local m = modules(session)
+			local seen = {}
+			for level = 1, m.Sticks.MAX_LEVEL do
+				local roller = m.StickModels.buildRoller(level)
+				expect.equal(roller.Name, m.Sticks.tier(level).id)
+				expect.truthy(roller:FindFirstChild("Axle"), "axle")
+				local parts = 0
+				for _, part in roller:GetDescendants() do
+					if part:IsA("BasePart") then
+						parts += 1
+						expect.equal(part.CanCollide, false, part.Name)
+					end
+				end
+				expect.truthy(parts >= 12, `{roller.Name} has {parts} parts`)
+				expect.falsy(seen[parts .. roller.Name], "unique")
+				seen[parts .. roller.Name] = true
+			end
+		end)
+
+		it("puts the owner on their stick, and builds Max Stamina four times a second", function()
+			local session = startServer()
+			local m = modules(session)
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local stand = standOf(session, 1)
+			expect.equal(signOf(stand).Title.Text, "UPGRADE STICK")
+			expect.equal(signOf(stand).Next.TierName.Text, "Plank")
+			expect.equal(signOf(stand).Rates.Text, "+4/s  ➜  +8/s Stamina")
+			expect.equal(signOf(stand).Buttons.Dollars.Price.Text, "$500")
+
+			-- From far away, nothing happens.
+			session:fire(stand.Seat.Train, "Triggered", player)
+			session:heartbeat(1 / 60)
+			expect.equal(sentCount(session, "TrainingStarted", player), 0)
+
+			getOn(session, player, root, 1)
+			expect.equal(root.Anchored, true)
+			expect.equal(stand:GetAttribute("Rider"), 1)
+			local started = session:lastSent("TrainingStarted", player).args[1]
+			expect.equal(started.level, 1)
+			expect.equal(started.plot, 1)
+			-- Standing on top of the roller, facing the plaza.
+			local spot = m.StickModels.riderCFrame(1, 1, root.Size.Y / 2 + 2)
+			expect.near((root.CFrame.Position - spot.Position).Magnitude, 0, 1e-3)
+			expect.truthy(root.CFrame.LookVector:Dot(spot.LookVector) > 0.999, "facing the plaza")
+
+			-- Four reps in a second, each +1, kept in the save.
+			session:clearSent()
+			session:heartbeat(0.05, 20)
+			local reps = session:sent("TrainingRep", player)
+			expect.equal(#reps, 4)
+			expect.equal(reps[1].args[1], 1)
+			expect.equal(reps[1].args[2], false)
+			expect.equal(dataOf(session, 1).TrainedStamina, 4)
+			-- (The runway sends stamina changes on its next frame.)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 104)
+
+			-- A 2x bubble a moment later; a wrong tap does nothing, the right one doubles the next reps.
+			session:heartbeat(0.05, 22)
+			local bubble = session:lastSent("TrainingBubble", player)
+			expect.truthy(bubble, "a bubble")
+			session:fromClient("ClaimTrainingBoost", player, bubble.args[1] + 1)
+			session:fromClient("ClaimTrainingBoost", player, "junk")
+			expect.equal(sentCount(session, "TrainingBoost", player), 0)
+			session:fromClient("ClaimTrainingBoost", player, bubble.args[1])
+			expect.equal(sentCount(session, "TrainingBoost", player), 1)
+			expect.truthy(stand:GetAttribute("BoostUntil") > session.clock, "others see the boost")
+			session:clearSent()
+			session:heartbeat(0.05, 10)
+			local boosted = session:sent("TrainingRep", player)
+			expect.truthy(#boosted >= 2, "reps")
+			for _, entry in boosted do
+				expect.equal(entry.args[1], 2)
+				expect.equal(entry.args[2], true)
+			end
+
+			-- Getting off: let go, put down in front of the trough, told so.
+			session:fromClient("StopTraining", player)
+			expect.equal(root.Anchored, false)
+			expect.equal(stand:GetAttribute("Rider"), 0)
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Stopped")
+			local position = root.CFrame.Position
+			local inward = m.Plots.toLocal(1, position.X, position.Z)
+			expect.truthy(inward < m.Plots.STICK_SPOT[1] - 4, "in front of the trough")
+			local trained = dataOf(session, 1).TrainedStamina
+			session:heartbeat(0.05, 20)
+			expect.equal(dataOf(session, 1).TrainedStamina, trained, "no reps once off")
+		end)
+
+		it("only lets the owner on, and lets go of riders who die or are teleported", function()
+			local session = startServer({ admins = { 1 } })
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			local other, _, otherRoot = session:addPlayer(2, "Visitor")
+			session:heartbeat(1 / 60)
+
+			-- Plot 1 is the first player's; the visitor cannot get on it.
+			getOn(session, other, otherRoot, 1)
+			expect.equal(sentCount(session, "TrainingStarted", other), 0)
+			expect.equal(otherRoot.Anchored, false)
+
+			getOn(session, player, root, 1)
+			session:fire(humanoid, "Died")
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Died")
+			expect.equal(standOf(session, 1):GetAttribute("Rider"), 0)
+
+			getOn(session, player, root, 1)
+			expect.equal(root.Anchored, true)
+			local ok = admin(session, player, "Teleport", { to = "Hub" })
+			expect.truthy(ok, "teleported")
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Moved")
+			expect.equal(root.Anchored, false)
+		end)
+
+		it("upgrades the stick with dollars or Robux, even mid-roll, up to the last tier", function()
+			local session = startServer()
+			local m = modules(session)
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = dataOf(session, 1)
+			local stand = standOf(session, 1)
+
+			data.Dollars = 300
+			session:fromClient("BuyWithDollars", player, "StickUpgrade")
+			local result = purchaseResult(session, player)
+			expect.equal(result[2], false)
+			expect.equal(result[3], "The Plank costs $500: you have $300")
+			expect.equal(data.StickLevel, 1)
+
+			getOn(session, player, root, 1)
+			local lowY = root.CFrame.Position.Y
+			data.Dollars = 600
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("BuyWithDollars", player, "StickUpgrade")
+			result = purchaseResult(session, player)
+			expect.equal(result[2], true)
+			expect.equal(result[3], "Your stick is now a Plank! +2 Stamina a roll")
+			expect.equal(data.StickLevel, 2)
+			expect.equal(data.Dollars, 100)
+			expect.equal(stand:GetAttribute("Level"), 2)
+			expect.equal(stand.Roller:GetAttribute("Level"), 2)
+			expect.equal(signOf(stand).Next.TierName.Text, "Short Log")
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].stickLevel, 2)
+			-- Still rolling, now on top of the plank (a little higher), and told the new tier.
+			expect.equal(root.Anchored, true)
+			expect.truthy(root.CFrame.Position.Y > lowY, "stood on the plank")
+			expect.equal(session:lastSent("TrainingStarted", player).args[1].level, 2)
+			session:clearSent()
+			session:heartbeat(0.05, 20)
+			expect.equal(session:lastSent("TrainingRep", player).args[1], 2)
+
+			-- With Robux: granted straight away in Studio while there is no product ID...
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(data.StickLevel, 3)
+			expect.truthy(string.find(purchaseResult(session, player)[3], "Short Log", 1, true), "message")
+
+			-- ...and through Roblox's prompt and receipt once it has one, granted once.
+			local shop = shopConfig(session)
+			shop.StickLevels[4].productId = 4004
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(session.prompts[#session.prompts].id, 4004)
+			local receipt = { PlayerId = 1, ProductId = 4004, PurchaseId = "stick-1" }
+			processReceipt(session, receipt)
+			processReceipt(session, receipt)
+			expect.equal(data.StickLevel, 4)
+
+			data.StickLevel = m.Sticks.MAX_LEVEL
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(purchaseResult(session, player)[3], "Your stick is as good as it gets!")
+			session:heartbeat(1.1)
+			expect.equal(signOf(stand).Title.Text, "MAX LEVEL!")
+			expect.equal(signOf(stand).Buttons.Dollars.Visible, false)
+		end)
+
+		it("puts the stick back to the first tier when its owner leaves, and keeps what they trained", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			dataOf(session, 1).StickLevel = 5
+			session:heartbeat(1.1)
+			local stand = standOf(session, 1)
+			expect.equal(stand:GetAttribute("Level"), 5)
+			getOn(session, player, root, 1)
+			session:heartbeat(0.05, 20)
+			session:fire(session:service("Players"), "PlayerRemoving", player)
+			player.Parent = nil
+			expect.equal(stand:GetAttribute("Level"), 1)
+			expect.equal(stand:GetAttribute("Rider"), 0)
+			expect.equal(signOf(stand).Rates.Text, "Free plot")
+			local saved = session.saved["Player_1"]
+			expect.equal(saved.StickLevel, 5)
+			expect.equal(saved.TrainedStamina, 4 * 30)
+		end)
+
+		it("lets admins change the stick's tier and clear what was trained", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = dataOf(session, 1)
+			local ok, message = admin(session, player, "Stick", { action = "Max" })
+			expect.truthy(ok)
+			expect.equal(message, "Stick: level 8, Rainbow Crystal.")
+			expect.equal(standOf(session, 1):GetAttribute("Level"), 8)
+			admin(session, player, "Stick", { action = "Down" })
+			expect.equal(data.StickLevel, 7)
+			admin(session, player, "Stick", { action = "Up" })
+			admin(session, player, "Stick", { action = "Up" })
+			expect.equal(data.StickLevel, 8)
+			data.TrainedStamina = 5000
+			admin(session, player, "Stick", { action = "ClearTrained" })
+			expect.equal(data.TrainedStamina, 0)
+			expect.equal((admin(session, player, "Stick", { action = "Nope" })), false)
+		end)
+	end)
 end

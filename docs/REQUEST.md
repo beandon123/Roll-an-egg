@@ -188,6 +188,34 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
     - [ ] Not switched on yet: the rules are in `Logic/Fuse` (tested) and the machine's panel explains them; fusing
           needs pet sizes first (below)
 
+### Training Stick (decided; built)
+- [ ] Every player has a training stick in front of their plot, like the owner's reference "machine" (decided): they
+      walk up to it and roll on it to build stamina, as long as they like (decided). Placed in the plaza on the other
+      side of the gate from the green button, with a sign at its front corner (proposed)
+- [ ] Rolling is birling (decided): the player runs on the spot on top of the roller while it spins under them,
+      leaning in with arms out for balance; the roller sits over a wooden trough of water (proposed); jump or a Stop
+      button to get off (proposed)
+- [ ] 1 stamina 4 times a second at the first tier, with a "+1" over the player's head (decided); it adds to Max
+      Stamina for good, through the player's doublings and trail like the rest of it (proposed: the number shown is
+      what was really added)
+- [ ] A "2x" bubble pops up every few seconds; tapping it gives a 1.5 s boost of double stamina (decided). Every 2.5
+      to 5 s, up for 2.5 s (proposed)
+- [ ] Upgradeable with dollars, and with Robux in the shop as well (decided); also from the sign beside it
+      (proposed)
+- [ ] Eight tiers to start, each dearer, stronger and better-looking (decided): Stick, Plank, Short Log, Tree Trunk,
+      Metal Pipe, Steel Girder, Marble Column (decided), Rainbow Crystal (proposed). First-pass numbers (proposed;
+      tune with the economy):
+
+          Lvl  Tier             Rarity     Per rep  Price    Robux
+          1    Stick            Common     +1       free     -
+          2    Plank            Uncommon   +2       $500     29
+          3    Short Log        Rare       +5       $5K      59
+          4    Tree Trunk       Epic       +12      $50K     99
+          5    Metal Pipe       Legendary  +30      $500K    179
+          6    Steel Girder     Mythic     +75      $5M      299
+          7    Marble Column    Secret     +200     $50M     499
+          8    Rainbow Crystal  Eternal    +500     $500M    799
+
 ### Runway Cycle (decided)
 - [ ] Every 3 min the runway closes for 10 s, then a new cycle starts with a fresh egg lineup
 - [ ] Each cycle is one day and night (decided): sunrise as the cycle and its lineup begin, night for the last ~30%,
@@ -345,8 +373,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 
 ### Progression
 - [ ] Single soft currency: Dollars (decided; built): earned every second by pets in the pen and by selling pets
-- [ ] Upgrades: Max Stamina (main progression stat: lets you hold on to bigger eggs deeper down), Stamina Regen,
-      Agility, Run Speed, Jump, Pen Level, Hatch Speed
+- [ ] Upgrades: Max Stamina (main progression stat: lets you hold on to bigger eggs deeper down; built so far through
+      the training stick, the shop and trails), Stamina Regen, Agility, Run Speed, Jump, Pen Level, Hatch Speed
     - [ ] Max Stamina has no cap (decided): it can be upgraded forever, at rising cost, so future zones can ask for more
     - [ ] Costs rise steeply; big numbers shown abbreviated (1.2K, 30K, 4.5M)
 - [ ] Zone teleport pads bought with dollars, in order (decided)
@@ -395,7 +423,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Odds shown before purchase; hidden where PolicyService reports paid random items are restricted
 - [ ] Game passes: VIP (tag + x1.5 dollars), x2 Dollars, +2 egg spots, Auto-Collect, Faster Hatch, Lucky (better Golden/Rainbow
       chance on hatches)
-- [ ] Developer products: Next Pen Level (decided), Skip Growth (below), Server Luck boost (helps everyone),
+- [ ] Developer products: Next Pen Level (decided), Next Training Stick tier (decided; one product per tier), Skip
+      Growth (below), Server Luck boost (helps everyone),
       Call the Titan (an extra Titan Egg for the server, limited frequency), dollar packs
     - [ ] Server Luck: x2 and x4 for 15 minutes; every rarity above Common becomes that many times as likely; boosts
           stack by adding time, and the strongest running one applies (proposed)
