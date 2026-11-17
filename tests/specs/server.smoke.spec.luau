@@ -65,6 +65,7 @@ return function(harness)
 			EggSpec = session:require(folder.EggSpec),
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
+			CycleClock = session:require(folder.CycleClock),
 			Runway = session:require(folder.Runway),
 			Tuning = session:require(folder.Config.Tuning),
 			Zones = session:require(folder.Config.Zones),
@@ -241,8 +242,8 @@ return function(harness)
 			local session = startServer()
 			session:heartbeat(0.1, 300)
 			session:clearSent()
-			-- The session starts 5 s into a cycle and the runway closes at 170 s.
-			session:heartbeat(0.5, 280)
+			-- The session starts 5 s into a cycle and the runway closes at 290 s.
+			session:heartbeat(0.5, 520)
 			local closures = 0
 			for _, entry in session:sent("EggRemoved", "all") do
 				if entry.args[2] == "Closure" then
@@ -837,7 +838,8 @@ return function(harness)
 			local data = session.profiles.Player_1.Data
 			standInPen(session, root, 1, 30, 0)
 			-- Put down shortly before the runway closes, then through to the next cycle.
-			local cycleStart = (math.floor(session.clock / 180) + 1) * 180
+			local cycleLength = shared(session).CycleClock.CYCLE_LENGTH
+			local cycleStart = (math.floor(session.clock / cycleLength) + 1) * cycleLength
 			session.clock = cycleStart - 25
 			session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
 			session.clock = cycleStart + 1
@@ -1664,12 +1666,12 @@ return function(harness)
 		end)
 
 		it("runs the Egg Avalanche on its own once an hour", function()
-			-- Cycle 1010 is an Avalanche cycle (10 of every 20).
-			local session = startServer({ clock = 180 * 1010 + 5 })
+			-- Cycle 1014 is an Avalanche cycle (6 of every 12; a cycle is 5 minutes).
+			local session = startServer({ clock = 300 * 1014 + 5 })
 			session:heartbeat(1 / 60)
 			expect.equal(session:service("Workspace"):GetAttribute("ServerEvent"), "Avalanche")
 			-- It ends when the runway closes and does not start again in the next cycle.
-			session:heartbeat(1, 180)
+			session:heartbeat(1, 300)
 			expect.equal(session:service("Workspace"):GetAttribute("ServerEvent"), nil)
 		end)
 	end)

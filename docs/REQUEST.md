@@ -9,7 +9,7 @@ Genre: Skill-based obstacle runner + collect-and-hatch plot tycoon, with light P
 Core loop:
 1. One long straight runway passes through six zones in order: Forest, Desert, Snow, Ocean, Volcano, Prehistoric.
    Anyone can go anywhere; deeper zones drop rarer, bigger eggs that need more stamina to hold on to.
-2. The runway runs in 3-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
+2. The runway runs in 5-minute cycles: eggs drop and roll, then the runway closes for 10 seconds. Every egg without a
    rider disappears, every egg in a pen hatches 30x faster, and a fresh lineup of eggs starts.
 3. Players run (or ride a pet) to the start of the runway and leap onto eggs. While riding they steer to dodge
    obstacles as stamina drains, staying on to fill the Claim meter. If their stamina is below the egg's requirement, they'll fall off before claiming it.
@@ -73,10 +73,16 @@ Original theme, art, and creatures.
     - [ ] Prehistoric: 2 Epic, 2 Legendary, Mythic, Secret, 2 Eternal (decided: one Mythic, one Secret, two Eternals)
     - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
 - [ ] Eggs: lineup rolled per zone at the start of each cycle, at sunrise; down-runway movement fixed by spawn time
-      (decided); 8 lineup eggs per zone (12 during Egg Avalanche)
-    - [ ] Lineup eggs appear at the start of their zone a few seconds apart, roll towards the end of their zone, fade
-          out a quarter of the way into the next zone, and appear at the start again, lap after lap, until the
-          closure (decided). One that is claimed comes back on its next lap (proposed)
+      (decided); one lineup egg for every 75 studs of zone (proposed with the bigger zones, to keep eggs as close
+      together as they were with 8 to a 600-stud zone): 11 in the Forest, 15, 20, 25, 30, then 35 in the
+      Prehistoric zone; more during an Egg Avalanche
+    - [ ] Lineup eggs appear at the start of their zone a few seconds apart (5 s, or less in the longest zones so
+          the whole lineup is out within one lap), roll towards the end of their zone, fade out a quarter of the way
+          into the next zone, and appear at the start again, lap after lap, until the closure (decided). One that is
+          claimed comes back on its next lap (proposed)
+    - [ ] An egg takes 80 to 110 seconds to cross the Prehistoric zone, so the far end of a long zone has no eggs
+          for the first part of every day. The cycle was lengthened from 3 to 5 minutes for this (decided): the
+          lineup now gets right through even the longest zone twice a day
     - [ ] Mid-cycle drops: now and then an extra egg drops and rolls once; Secret and rarer eggs are greatly reduced
           compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 30 s, proposed)
     - [ ] Rolling eggs leave a small cloud of dust in their wake (decided)
@@ -227,9 +233,11 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
           8    Rainbow Crystal  Eternal    +500     $500M    799
 
 ### Runway Cycle (decided)
-- [ ] Every 3 min the runway closes for 10 s, then a new cycle starts with a fresh egg lineup
-- [ ] Each cycle is one day and night (decided): sunrise as the cycle and its lineup begin, night for the last ~30%,
-      the closure just before dawn; moonlit rather than dark, so the runway stays playable
+- [ ] Every 5 min the runway closes for 10 s, then a new cycle starts with a fresh egg lineup (decided: 5 minutes,
+      up from 3, with the bigger zones)
+- [ ] Each cycle is one day and night (decided): a day of 4 min 50 s, from sunrise as the cycle and its lineup begin
+      to sunset as the runway closes, then a night of 10 s, which is the closure (decided; night used to be the
+      last ~30% of the cycle); moonlit rather than dark
 - [ ] 10 s on-screen warning before each closure (proposed)
 - [ ] At closing: every egg without a rider disappears; anyone riding stays on and keeps going; players stay on the track
     - [ ] An egg that loses its rider during the closure disappears too (proposed)
@@ -419,7 +427,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 
 ### Server Events (decided: Titan Egg + Egg Avalanche; Shiny Hour on hold)
 - [ ] Rotation (decided): each event happens once an hour, alternating every 30 min
-      (Titan Egg on cycle 0 of every 20, Egg Avalanche on cycle 10); HUD shows the next event's countdown
+      (Titan Egg on cycle 0 of every 12, Egg Avalanche on cycle 6); HUD shows the next event's countdown
 - [ ] Titan Egg: a much larger egg that can land in any zone, with an equal chance per zone (decided)
     - [ ] Announced 60 s ahead with a map marker showing where it will land; zone-themed giant shell
     - [ ] Up to 4 players ride it together and share one claim meter; no duels
@@ -508,7 +516,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
           outlined numbers on dark bands that fade out across the screen, green "+" buttons that open the shop, and
           what the pen earns a second under the dollars
     - [ ] Day and night clock at the bottom right, like the owner's reference (decided, built): by day a moon and the
-          time until night ("in 1m 20s"), by night a sun and the time until sunrise
+          time until night ("in 3m 20s"), by night a sun and the time until sunrise
     - [ ] Growing Eggs menu (decided): a scrolling list of every egg in your pen, each with its egg icon and either a
           progress bar with the time left or, once ready, an Open button; opens from a HUD button (today the Pets tab
           lists the eggs hatching, and they hatch on their own when the timer ends)
@@ -569,7 +577,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
   totals the points itself, so connection speed doesn't decide the winner; ties go to the defender; on takeover the server
   charges the inherited-progress stamina; accounts with inhumanly perfect timing across many duels get flagged
 - Teleport pads: purchase checked and recorded on the server; the server performs the teleport only for owned pads
-- Events: EventService schedules the Titan Egg on cycle 0 of every 20 and Egg Avalanche on cycle 10 (each once an hour);
+- Events: EventService schedules the Titan Egg on cycle 0 of every 12 and Egg Avalanche on cycle 6 (each once an hour);
   the server picks the Titan's zone and drop spot and announces them ahead of time
 - Movement checks: Roblox lets each client move its own character, so the server samples positions ~4x/s and pulls back
   anything faster than the current mount/egg speed + tolerance (lag-aware to avoid false positives)

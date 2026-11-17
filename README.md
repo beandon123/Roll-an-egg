@@ -41,8 +41,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Stamina drains while riding. If it runs out first, you lose your balance and tumble off, and the egg bounces
   slightly and cracks. A cracked egg, or one that went over the edge, comes back at the start of its zone a few
   seconds later. Jumping off an unclaimed egg (or being knocked off, or dying on it) leaves it rolling for anyone.
-- The 3-minute runway cycle: a warning, then a 10-second closure before dawn that clears every egg without a
-  rider.
+- The 5-minute runway cycle: the runway is open all day (4 minutes 50 seconds), then, after a warning, closes for
+  the 10-second night, which clears every egg without a rider.
 - Claimed eggs go into your inventory (the **Eggs** tab on the right). Stand anywhere in your pen and **Place** one:
   it hatches there on a timer, faster while the runway is closed, sometimes into a Silver, Gold or Rainbow pet.
 - The **Pets** tab shows the eggs hatching and every pet you have. Put pets in your pen or take them out, or
@@ -59,7 +59,7 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with
   what your pen earns a second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop
   at that section), the Eggs, Pets and Ride tabs on the right edge, the day and night clock at the bottom right (a
-  moon and "in 1m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck
+  moon and "in 3m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck
   boost runs, the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the
   banner for Secret and rarer eggs.
 - **Shop** ("Coop Shop"): the next tier of the training stick and the next pen level, each for Robux or dollars (the
@@ -328,11 +328,15 @@ on an egg, and touching the runway first kills them.
 nearest where their jump will come down (`src/shared/JumpAim.luau`). Once they are close to it, they are drawn onto
 it like a magnet, so a landing never has to be pixel-perfect; the circle tightens when it has hold of them.
 
-**Eggs.** Each runway cycle (3 minutes) is one day (`src/shared/CycleClock.luau`): the sun rises as a cycle
-begins, night falls 70% of the way through, and the runway closes for the last 10 seconds before dawn. At sunrise
-every zone rolls a lineup of 8 eggs with its usual odds. They appear on the ground at the start of the zone 5
-seconds apart, roll to a quarter of the way into the next zone (the last zone's into its first copy), fade out, and
-appear at the start again, lap after lap, until the runway closes. A lineup egg that is claimed comes back on its
+**Eggs.** Each runway cycle (5 minutes) is one day and one night (`src/shared/CycleClock.luau`): the sun rises as
+a cycle begins, the day lasts the 4 minutes 50 seconds the runway is open (long enough for an egg to roll right
+through the longest zone twice), and night falls as the runway closes, for the last 10 seconds before the next
+sunrise. At sunrise
+every zone rolls a lineup of eggs with its usual odds: one egg for every 75 studs the zone is long (the table
+above), so the long zones are as full of eggs as the short ones. They appear on the ground at the start of the zone
+a few seconds apart (5 seconds, or less in the longest zones, so that the whole lineup is out within one lap), roll
+to a quarter of the way into the next zone (the last zone's into its first copy), fade out, and appear at the start
+again, lap after lap, until the runway closes. A lineup egg that is claimed comes back on its
 next lap; one that cracks (only when its rider runs out of stamina) or goes over the edge comes back 5 seconds
 later.
 About every 30 seconds a zone also drops an extra, mid-cycle egg that rolls once; Secret and Eternal eggs are 10

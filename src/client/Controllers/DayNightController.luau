@@ -1,5 +1,6 @@
 -- Runs the day and night: each runway cycle is one day (Shared/CycleClock), so the sun rises as each zone sends
--- out its fresh lineup of eggs, sets later in the cycle, and the runway closes in the dark before the next dawn.
+-- out its fresh lineup of eggs, sinks through the last of the day, and sets as the runway closes; the short night
+-- passes while it is closed, and the sun is up again as it reopens.
 -- Worked out from the shared clock on this device, so everyone sees the same sky without the server sending it.
 -- Nights are moonlit rather than black, so the runway stays playable (and glowing eggs stand out).
 

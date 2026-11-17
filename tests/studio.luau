@@ -683,8 +683,8 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		game = roblox.deserializePlace(fs.readFile(placePath)),
 		isServer = options.isServer,
 		isStudio = if options.isStudio == nil then true else options.isStudio,
-		-- The shared server clock, in seconds. Starts partway through a runway cycle, well before it closes.
-		clock = 180 * 1000 + 5,
+		-- The shared server clock, in seconds. Starts 5 seconds into a (5-minute) runway cycle, well before it closes.
+		clock = 300 * 600 + 5,
 		signals = {},
 		values = {},
 		messages = {},
