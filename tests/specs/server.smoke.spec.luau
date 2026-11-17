@@ -163,7 +163,7 @@ return function(harness)
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
 			local runway = shared(session).Runway
-			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
 				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height.
@@ -174,7 +174,7 @@ return function(harness)
 						expect.near(tile.CFrame.Position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
 					end
 				end
-				expect.equal(tiles, (runway.WIDTH / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
+				expect.equal(tiles, (runway.zoneWidth(zoneId) / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
 				expect.truthy(#zone.Banks:GetChildren() > 50, zoneName .. " banks")
 				expect.truthy(#zone.Backdrop:GetChildren() > 0, zoneName .. " backdrop")
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
@@ -437,12 +437,18 @@ return function(harness)
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local modules = shared(session)
+			-- A lava pool well into the Volcano zone, with a row of obstacles before it.
 			local lava
 			for _, obstacle in modules.Obstacles.all() do
-				if obstacle.kind == "LavaPool" then
+				if obstacle.kind == "LavaPool" and obstacle.z > modules.Runway.zoneStartZ(5) + 200 then
 					lava = obstacle
 					break
 				end
+			end
+			local rowsBefore = modules.Obstacles.rowsBetween(lava.z - 200, lava.row.zMin - 0.01)
+			local before = rowsBefore[#rowsBefore]
+			if before == lava.row then
+				before = rowsBefore[#rowsBefore - 1]
 			end
 
 			-- Get on a Volcano egg a few seconds before it reaches the lava pool.
@@ -465,10 +471,11 @@ return function(harness)
 
 			-- Steer into the pool once past the row before it (the server only lets the egg move as fast as the
 			-- rider's Agility allows), and report the hit as soon as the egg touches it.
-			while session.clock < arrive - 0.6 do
+			local clearZ = before.zMax + spec.radius + 0.5
+			while session.clock < arrive - 0.3 do
 				session:heartbeat(1 / 30)
 				local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
-				local steer = if session.clock > arrive - 2.2 then lava.x else modules.Obstacles.lateralAt(path, z)
+				local steer = if z > clearZ then lava.x else modules.Obstacles.lateralAt(path, z)
 				session:fromClient("RideLateral", player, steer)
 			end
 			session:fromClient("ReportHit", player, lava.id)
@@ -593,20 +600,27 @@ return function(harness)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = mount(session, player, root, 6, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 60 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
+			-- 40 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
 			-- path planned for the whole ride from where the egg is now. It is planned in distance rolled, not where
-			-- the egg is drawn: the last zone repeats, so the obstacles match.
+			-- the egg is drawn: the last zone repeats, so the obstacles match (as far as the map's copies of it go,
+			-- which is why the ride is no longer).
+			local seconds = 40
 			local modules = shared(session)
 			local spec = modules.EggSpec.get(6, "Eternal")
 			local function rolledZ()
 				return modules.EggMotion.zAt(egg.spawnTime, egg.startZ, spec.rollSpeed, session.clock)
 			end
 			local fromZ = rolledZ()
-			local lane = modules.Runway.mountLateral(eggPosition(session, egg).X, spec.halfLength)
-			local rideLength = spec.rollSpeed * 60
+			local at = eggPosition(session, egg)
+			local lane = modules.Runway.mountLateral(at.X, spec.halfLength, at.Z)
+			local rideLength = spec.rollSpeed * seconds
 			expect.truthy(rideLength > modules.Runway.LOOP_LENGTH * 2, "more than twice round the loop")
+			expect.truthy(
+				fromZ + rideLength + 100 < modules.Runway.LENGTH + modules.Runway.REPEATS * modules.Runway.LOOP_LENGTH,
+				"within the copies"
+			)
 			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + rideLength + 100, spec.halfLength, spec.radius)
-			for _ = 1, 60 * 30 do
+			for _ = 1, seconds * 30 do
 				session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, rolledZ()))
 				session:heartbeat(1 / 30)
 			end
@@ -961,7 +975,7 @@ return function(harness)
 					expect.truthy(away <= reach, `the pet's {part.Name} is {away} studs from it`)
 				end
 			end
-			expect.equal(humanoid.WalkSpeed, 30 + 4, "an Epic pet, plus Gold")
+			expect.equal(humanoid.WalkSpeed, 45 + 4, "an Epic pet, plus Gold")
 			expect.truthy(humanoid.HipHeight > 2, "lifted onto its back")
 			expect.equal(data.Mount, "steed")
 			expect.equal(session:lastSent("MountChanged", player).args[1], "steed")
@@ -1882,7 +1896,8 @@ return function(harness)
 					if side then
 						local center, half = part.CFrame.Position.Z, part.Size.Z / 2
 						kerbLength += half * 2
-						expect.truthy(side * part.CFrame.Position.X > runway.WIDTH / 2, `{zone.key} {part.Name} side`)
+						local edge = runway.zoneWidth(zoneId) / 2
+						expect.truthy(side * part.CFrame.Position.X > edge, `{zone.key} {part.Name} side`)
 						for _, gap in gaps do
 							if gap.side == side then
 								local overlaps = center + half > gap.startZ + 1e-3 and center - half < gap.endZ - 1e-3
@@ -2268,6 +2283,58 @@ return function(harness)
 			expect.truthy(stations.Sell.Counter.CFrame.LookVector.X < -0.99, "Sell faces the middle")
 		end)
 
+		it("lines the runway with tall banks that step out as it widens, zone by zone", function()
+			local session = startServer()
+			local map = session:service("Workspace").Map
+			local runway = shared(session).Runway
+			for zoneId, zone in shared(session).Zones.List do
+				local banks = map[zone.key].Banks
+				local half = runway.zoneWidth(zoneId) / 2
+				if zone.key == "Ocean" then
+					-- A boardwalk: tall railing posts, and a tall invisible wall behind them.
+					local posts, walls = 0, 0
+					for _, part in banks:GetChildren() do
+						if
+							part:IsA("BasePart")
+							and math.abs(part.Size.Y - 7) < 1e-3
+							and math.abs(part.Size.X - 1.2) < 1e-3
+						then
+							posts += 1
+							expect.near(math.abs(part.CFrame.Position.X), half + 1, 1e-6)
+						elseif part.Name == "SeaWall" then
+							walls += 1
+							expect.truthy(part.Size.Y >= 40, "sea wall height")
+						end
+					end
+					expect.truthy(posts > 20, "railing posts")
+					expect.truthy(walls > 0, "sea walls")
+				else
+					-- The grassy (sandy, snowy...) top of the wall beside the runway, which starts at its edge (plus a kerb).
+					local caps = 0
+					for _, part in banks:GetChildren() do
+						if part:IsA("BasePart") and part.Size.Y == 1.5 then
+							local inner = math.abs(part.CFrame.Position.X) - part.Size.X / 2
+							if math.abs(inner - (half + 1.4)) < 1e-3 then
+								caps += 1
+								local top = part.CFrame.Position.Y + part.Size.Y / 2
+								expect.truthy(
+									top >= runway.BASE_Y + 19.5 - 1e-3,
+									`{zone.key} wall {top - runway.BASE_Y} high`
+								)
+								expect.truthy(
+									top <= runway.BASE_Y + 32.5 + 1e-3,
+									`{zone.key} wall {top - runway.BASE_Y} high`
+								)
+							end
+						end
+					end
+					expect.truthy(caps > 20, `{zone.key} has a wall beside its runway ({caps})`)
+				end
+				-- The gate spans the zone's width.
+				expect.near(map[zone.key].Sign.Size.X, runway.zoneWidth(zoneId) + 12, 1e-6)
+			end
+		end)
+
 		it("walls in the hub, leaving only the runway open", function()
 			local session = startServer()
 			local walls = session:service("Workspace").Map.HubWalls
@@ -2278,7 +2345,7 @@ return function(harness)
 			end
 			local left, right = walls.FrontLeft.CFrame.Position, walls.FrontRight.CFrame.Position
 			local gap = (right.X - walls.FrontRight.Size.X / 2) - (left.X + walls.FrontLeft.Size.X / 2)
-			expect.near(gap, shared(session).Runway.WIDTH, 1e-6)
+			expect.near(gap, shared(session).Runway.START_WIDTH, 1e-6)
 		end)
 
 		it("rings the hub with terraced cliffs, a column of solid steps at a time", function()

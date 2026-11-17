@@ -1,6 +1,9 @@
 -- The local player's side of riding: asking to jump onto eggs, steering, hopping off, being thrown off, and
 -- running into obstacles (spotted here at once and reported; the server has the final say and checks on its own).
 --
+-- While the player is in the air, a red circle shows the egg they are heading for, and once they get close to it they
+-- are drawn onto it like a magnet, so landing never takes pixel-perfect timing (Shared/JumpAim).
+--
 -- The server decides everything that matters (whether a mount counts, stamina, claims). This controller only
 -- asks, steers, and makes the result feel immediate.
 --
@@ -55,6 +58,15 @@ local awaitingJumpRelease = false
 
 local lastLeftEggId: number? = nil
 local lastLeftAt = 0
+
+-- While in the air: the egg the player is heading for (circled in red), and the one the magnet has hold of, if any.
+local targetEggId: number? = nil
+local magnetEggId: number? = nil
+
+local function clearAim()
+	targetEggId, magnetEggId = nil, nil
+	EggController.ShowTarget(nil, false)
+end
 
 -- Obstacles this ride has hit, so each one counts once, and whether a hit has already ended the ride here.
 local rideHits: { [number]: boolean } = {}
@@ -164,7 +176,7 @@ end
 -- Whether a character root at `position` is standing on the runway (rather than in the air above it, or off the
 -- side).
 local function isOnRunway(position: Vector3): boolean
-	return math.abs(position.X) <= Runway.WIDTH / 2
+	return math.abs(position.X) <= Runway.halfWidthAt(position.Z)
 		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
 end
 
@@ -185,7 +197,7 @@ local function updateLeap()
 	end
 
 	local position = root.Position
-	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isFlying() then
+	if position.Z < 0 or math.abs(position.X) > Runway.halfWidthAt(position.Z) + 4 or isFlying() then
 		-- Back over the hub, off the side (falling), or flying.
 		if leapEndsAt ~= nil then
 			endLeap(root)
@@ -206,7 +218,9 @@ local function updateLeap()
 		startLeap(
 			humanoid,
 			root,
-			Vector3.new(velocity.X, Tuning.LEAP_UP_SPEED, math.max(velocity.Z, Tuning.LEAP_FORWARD_SPEED))
+			if magnetEggId
+				then velocity
+				else Vector3.new(velocity.X, Tuning.LEAP_UP_SPEED, math.max(velocity.Z, Tuning.LEAP_FORWARD_SPEED))
 		)
 		return
 	end
@@ -306,6 +320,7 @@ local function onRideStarted(eggId: number, info)
 	endedByHit = false
 	mountPendingUntil = 0
 	endLeap(root)
+	clearAim()
 
 	-- Hold the character still; EggController places it on top of the egg every frame.
 	root.AssemblyLinearVelocity = Vector3.zero
@@ -402,6 +417,72 @@ local function onHit(obstacleId: number, lateral: number?)
 	end
 end
 
+-- The egg the player just jumped off, which they cannot land straight back on.
+local function ignoredEgg(clock: number): number?
+	return if clock - lastLeftAt < SAME_EGG_IGNORE_TIME then lastLeftEggId else nil
+end
+
+-- How much higher above an egg the player may be and still get on: riding a pet holds them high up.
+-- Every frame while in the air: pick the egg the player is heading for and circle it, and once they are close enough,
+-- draw them onto it. (A flying admin is not pulled about.)
+local function aim()
+	if UiState.ride ~= nil or doomed then
+		clearAim()
+		return
+	end
+	local humanoid, root = getCharacter()
+	if humanoid == nil or root == nil or humanoid.Health <= 0 then
+		clearAim()
+		return
+	end
+	local clock = os.clock()
+	local state = humanoid:GetState()
+	if
+		clock < stunnedUntil or (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping)
+	then
+		clearAim()
+		return
+	end
+
+	local now = Workspace:GetServerTimeNow()
+	local ignore = ignoredEgg(clock)
+	local carried = isFlying()
+	local position = root.Position
+	local velocity = root.AssemblyLinearVelocity
+	-- On foot, judged by where the jump is heading (the leap is floaty). On a pet, by where they are now: the pet
+	-- holds them up, so they do not fall the way a jump does.
+	local jumper = {
+		x = position.X,
+		y = position.Y,
+		z = position.Z,
+		vx = if carried then 0 else velocity.X,
+		vy = if carried then 0 else velocity.Y,
+		vz = if carried then 0 else velocity.Z,
+		gravity = if carried then 0 else Workspace.Gravity * (if leapEndsAt then Tuning.LEAP_GRAVITY else 1),
+	}
+
+	if magnetEggId and not EggController.IsLandable(magnetEggId, ignore) then
+		-- Someone else got there first.
+		magnetEggId = nil
+	end
+	if magnetEggId == nil then
+		targetEggId = EggController.FindTarget(jumper, now, ignore, targetEggId)
+		if targetEggId and EggController.InMagnetRange(targetEggId, jumper, now) then
+			magnetEggId = targetEggId
+		end
+	else
+		targetEggId = magnetEggId
+	end
+
+	if magnetEggId and not carried then
+		local pull = EggController.MagnetVelocity(magnetEggId, jumper, now)
+		if pull then
+			root.AssemblyLinearVelocity = pull
+		end
+	end
+	EggController.ShowTarget(targetEggId, magnetEggId ~= nil)
+end
+
 -- While leaping next to an egg, ask the server to put us on it.
 local function lookForEgg()
 	if UiState.ride ~= nil then
@@ -420,8 +501,13 @@ local function lookForEgg()
 		return
 	end
 
-	local ignore = if clock - lastLeftAt < SAME_EGG_IGNORE_TIME then lastLeftEggId else nil
-	local eggId = EggController.FindMountable(root.Position, Workspace:GetServerTimeNow(), ignore)
+	local ignore = ignoredEgg(clock)
+	local now = Workspace:GetServerTimeNow()
+	-- The egg the magnet has hold of, once it has drawn them onto it; else whichever egg they are touching.
+	local eggId = magnetEggId
+	if eggId == nil or not EggController.CanMountFrom(eggId, root.Position, now) then
+		eggId = EggController.FindMountable(root.Position, now, ignore)
+	end
 	if eggId then
 		lastMountRequestAt = clock
 		mountPendingUntil = clock + MOUNT_PENDING_GRACE
@@ -446,12 +532,12 @@ local function steer(deltaTime: number)
 		humanoid.Sit = true
 	end
 
-	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
+	local now = Workspace:GetServerTimeNow()
+	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength, z)
 	egg.targetLateral = egg.lateral
 
 	-- Obstacles: report a hit straight away so the server can check it, and show it now.
-	local now = Workspace:GetServerTimeNow()
-	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
 	if rideLastZ and z < rideLastZ - Runway.LOOP_LENGTH / 2 then
 		-- Carried back one loop: the obstacles ahead can be hit again (as on the server).
 		rideHits = {}
@@ -483,6 +569,7 @@ local function onCharacterAdded(character: Model)
 	doomed = false
 	leapForce = nil
 	endLeap(nil)
+	clearAim()
 
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if humanoid and humanoid:IsA("Humanoid") then
@@ -534,6 +621,7 @@ function RideController.Init()
 		if awaitingJumpRelease and os.clock() - lastJumpRequestAt > JUMP_RELEASE_GAP then
 			awaitingJumpRelease = false
 		end
+		aim()
 		lookForEgg()
 		updateLeap()
 	end)

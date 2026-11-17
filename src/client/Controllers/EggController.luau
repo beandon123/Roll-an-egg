@@ -18,7 +18,8 @@
 -- seems to move. Dust is the one thing that cannot be moved once made, so near the end of a loop each egg also lays
 -- its trail one loop back ("echo" dust), ready for when the player arrives there.
 --
--- Also shows the on-screen message when a Secret or rarer egg spawns.
+-- Also shows the on-screen message when a Secret or rarer egg spawns, and the red circle round the egg a jumping
+-- local player is heading for (RideController decides which, with Shared/JumpAim).
 --
 -- Each egg's look comes from Shared/EggModels (a blocky model, different for every zone and rarity), built into parts
 -- by Shared/EggRig. Every part is anchored, and this controller writes where every one of them goes, each at its own
@@ -36,6 +37,7 @@ local Load = require(script.Parent.Parent.Load)
 local EggRig = Load.shared("EggRig")
 local EggMotion = Load.shared("EggMotion")
 local EggSpec = Load.shared("EggSpec")
+local JumpAim = Load.shared("JumpAim")
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
 local Obstacles = Load.shared("Obstacles")
@@ -66,8 +68,9 @@ local APPEAR_PUFFS = 12
 -- An egg drawn this many studs from where it was drawn last frame has jumped to another copy of itself (it just
 -- rolled into the endless last zone). Unless the local player jumped too, it fades in as if new.
 local POP_DISTANCE = 50
--- Within this many studs of the end of a loop, eggs also lay their dust one loop back (see the header).
-local ECHO_RANGE = 60
+-- Within this many studs of the end of a loop, eggs also lay their dust one loop back (see the header): about as far
+-- as the fastest egg rolls while its dust lasts.
+local ECHO_RANGE = 80
 -- No dust for eggs this far from the camera.
 local DUST_MAX_DISTANCE = 250
 -- Seconds an egg that goes off the side takes to fall out of sight.
@@ -98,6 +101,21 @@ local DUST_COLORS = {
 local DUST_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
 -- How long a bumped egg wobbles.
 local WOBBLE_TIME = 0.6
+
+-- The red circle round the egg a jumping local player is heading for: how far it runs outside the egg's ends, and
+-- how much closer it draws in once the magnet has hold of them. Until then it gently swells and shrinks, by
+-- TARGET_PULSE of its size, TARGET_PULSE_RATE times a second.
+local TARGET_COLOR = Color3.fromRGB(255, 40, 40)
+local TARGET_OUTLINE_COLOR = Color3.fromRGB(70, 0, 0)
+local TARGET_PAD = 2
+local TARGET_LOCKED_PAD = 0.6
+local TARGET_PULSE = 0.08
+local TARGET_PULSE_RATE = 1.5
+-- Pixels: the ring's thickness, thicker once the magnet has hold, and the dark edge round it that keeps it readable
+-- on any ground.
+local TARGET_THICKNESS = 4
+local TARGET_LOCKED_THICKNESS = 6
+local TARGET_OUTLINE = 3
 
 export type ClientEgg = {
 	id: number,
@@ -155,6 +173,10 @@ export type ClientEgg = {
 	drawnFrame: number,
 }
 
+-- A player in the air, as Shared/JumpAim describes one: where they are, how fast they are going, and how hard
+-- gravity pulls them down.
+export type Jumper = { x: number, y: number, z: number, vx: number, vy: number, vz: number, gravity: number }
+
 local EggController = {}
 
 local eggs: { [number]: ClientEgg } = {}
@@ -168,6 +190,10 @@ local lastReferenceZ: number? = nil
 -- carried back one loop (or respawned).
 local frame = 0
 local lastJumpFrame = 0
+-- The red circle (built the first time it is needed), and its ring and dark edge.
+local targetRing: BillboardGui? = nil
+local targetStroke: UIStroke? = nil
+local targetOutline: UIStroke? = nil
 
 local function rgb(color: { number }): Color3
 	return Color3.fromRGB(color[1], color[2], color[3])
@@ -716,7 +742,8 @@ function EggController.SetRider(eggId: number, userId: number)
 		return
 	end
 	-- A little way in from a bank, as on the server (Runway.mountLateral).
-	local lateral = Runway.mountLateral(currentLateral(egg, Workspace:GetServerTimeNow()), egg.spec.halfLength)
+	local now = Workspace:GetServerTimeNow()
+	local lateral = Runway.mountLateral(currentLateral(egg, now), egg.spec.halfLength, eggZ(egg, now))
 	egg.riderUserId = userId
 	egg.lateral = lateral
 	egg.targetLateral = lateral
@@ -732,33 +759,182 @@ function EggController.Wobble(eggId: number)
 	end
 end
 
+-- Whether the local player could land on this egg: nobody is riding it, nobody has claimed it, it is not cracking,
+-- and it is not `ignoreEggId` (the one they just jumped off).
+local function landable(egg: ClientEgg, ignoreEggId: number?): boolean
+	return egg.riderUserId == nil and egg.ownerUserId == nil and not egg.cracking and egg.id ~= ignoreEggId
+end
+
+-- Whether a player at `position` is close enough to an egg to ask to get on it. Returns how far they are from its
+-- middle across the ground (squared), or nil if out of reach.
+local function mountDistance(egg: ClientEgg, position: Vector3, now: number): number?
+	local x, y, z = eggPosition(egg, now, position.Z)
+	local dx, dz = position.X - x, position.Z - z
+	-- The egg's footprint is an oval: long side to side, short front to back.
+	local nx = dx / (egg.spec.halfLength + Tuning.MOUNT_REACH)
+	local nz = dz / (egg.spec.radius + Tuning.MOUNT_REACH)
+	if nx * nx + nz * nz > 1 then
+		return nil
+	end
+	-- The player must be at least level with the middle of the egg.
+	if position.Y < y - 1 or position.Y > y + egg.spec.radius + 9 then
+		return nil
+	end
+	return dx * dx + dz * dz
+end
+
+-- An egg as Shared/JumpAim sees it: where it is drawn now (its copy nearest `referenceZ`), and the height a rider sits
+-- at on top of it.
+local function aimTarget(egg: ClientEgg, now: number, referenceZ: number)
+	local x, y, z = eggPosition(egg, now, referenceZ)
+	return {
+		id = egg.id,
+		x = x,
+		z = z,
+		seatY = y + egg.spec.radius + SEAT_HEIGHT,
+		speed = egg.spec.rollSpeed,
+		halfLength = egg.spec.halfLength,
+		radius = egg.spec.radius,
+	}
+end
+
 -- The closest egg a leaping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
 -- player just jumped off). Eggs that are taken, claimed, or cracking are skipped.
 function EggController.FindMountable(position: Vector3, now: number, ignoreEggId: number?): number?
 	local bestId: number? = nil
 	local bestDistance = math.huge
 	for eggId, egg in eggs do
-		if egg.riderUserId ~= nil or egg.ownerUserId ~= nil or egg.cracking or eggId == ignoreEggId then
+		if not landable(egg, ignoreEggId) then
 			continue
 		end
-		local x, y, z = eggPosition(egg, now, position.Z)
-		local dx, dz = position.X - x, position.Z - z
-		-- The egg's footprint is an oval: long side to side, short front to back.
-		local nx = dx / (egg.spec.halfLength + Tuning.MOUNT_REACH)
-		local nz = dz / (egg.spec.radius + Tuning.MOUNT_REACH)
-		if nx * nx + nz * nz > 1 then
-			continue
-		end
-		-- The player must be at least level with the middle of the egg.
-		if position.Y < y - 1 or position.Y > y + egg.spec.radius + 9 then
-			continue
-		end
-		local distance = dx * dx + dz * dz
-		if distance < bestDistance then
+		local distance = mountDistance(egg, position, now)
+		if distance and distance < bestDistance then
 			bestId, bestDistance = eggId, distance
 		end
 	end
 	return bestId
+end
+
+-- Whether a player at `position` is close enough to this particular egg to ask to get on it (as FindMountable).
+function EggController.CanMountFrom(eggId: number, position: Vector3, now: number): boolean
+	local egg = eggs[eggId]
+	return egg ~= nil and mountDistance(egg, position, now) ~= nil
+end
+
+-- Whether the local player could still land on this egg (see FindMountable).
+function EggController.IsLandable(eggId: number, ignoreEggId: number?): boolean
+	local egg = eggs[eggId]
+	return egg ~= nil and landable(egg, ignoreEggId)
+end
+
+-- The egg a player in the air is heading for, if any (Shared/JumpAim.pick). `currentId` is the one picked last frame.
+function EggController.FindTarget(jumper: Jumper, now: number, ignoreEggId: number?, currentId: number?): number?
+	local targets = {}
+	for _, egg in eggs do
+		if landable(egg, ignoreEggId) then
+			table.insert(targets, aimTarget(egg, now, jumper.z))
+		end
+	end
+	return JumpAim.pick(
+		jumper,
+		targets,
+		currentId,
+		Tuning.JUMP_AIM_RANGE,
+		Tuning.JUMP_AIM_SWITCH,
+		Tuning.JUMP_AIM_LOOKAHEAD
+	)
+end
+
+-- Whether the jumper is close enough to the egg for the magnet to take hold (Shared/JumpAim.inMagnetRange).
+function EggController.InMagnetRange(eggId: number, jumper: Jumper, now: number): boolean
+	local egg = eggs[eggId]
+	if egg == nil then
+		return false
+	end
+	return JumpAim.inMagnetRange(
+		jumper,
+		aimTarget(egg, now, jumper.z),
+		Tuning.JUMP_MAGNET_RANGE,
+		Tuning.JUMP_MAGNET_HEIGHT
+	)
+end
+
+-- The velocity that draws the jumper onto the egg's top (Shared/JumpAim.pull), or nil if the egg is gone.
+function EggController.MagnetVelocity(eggId: number, jumper: Jumper, now: number): Vector3?
+	local egg = eggs[eggId]
+	if egg == nil then
+		return nil
+	end
+	local x, y, z =
+		JumpAim.pull(jumper, aimTarget(egg, now, jumper.z), Tuning.JUMP_MAGNET_PULL, Tuning.JUMP_MAGNET_SPEED)
+	return Vector3.new(x, y, z)
+end
+
+-- The red circle: a ring with a dark edge, facing the camera and drawn over everything, so it shows from any angle.
+local function buildTargetRing(): BillboardGui?
+	local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui == nil then
+		return nil
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "JumpTarget"
+	billboard.AlwaysOnTop = true
+	billboard.LightInfluence = 0
+	billboard.ResetOnSpawn = false
+	billboard.Enabled = false
+
+	local function ring(name: string, color: Color3, thickness: number, zIndex: number): UIStroke
+		local circle = Instance.new("Frame")
+		circle.Name = name
+		circle.BackgroundTransparency = 1
+		circle.Size = UDim2.fromScale(1, 1)
+		circle.ZIndex = zIndex
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.5, 0)
+		corner.Parent = circle
+		local stroke = Instance.new("UIStroke")
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Color = color
+		stroke.Thickness = thickness
+		stroke.Parent = circle
+		circle.Parent = billboard
+		return stroke
+	end
+	targetOutline = ring("Outline", TARGET_OUTLINE_COLOR, TARGET_THICKNESS + TARGET_OUTLINE, 1)
+	targetStroke = ring("Ring", TARGET_COLOR, TARGET_THICKNESS, 2)
+	billboard.Parent = playerGui
+	return billboard
+end
+
+-- Puts the red circle round the egg the local player is heading for, or hides it (`eggId` nil). `locked`: the magnet
+-- has hold of them, so the circle draws in tight and stops pulsing.
+function EggController.ShowTarget(eggId: number?, locked: boolean)
+	local egg = if eggId then eggs[eggId] else nil
+	if egg == nil then
+		if targetRing then
+			targetRing.Enabled = false
+		end
+		return
+	end
+	if targetRing == nil or targetRing.Parent == nil then
+		targetRing = buildTargetRing()
+	end
+	local ring = targetRing
+	if ring == nil then
+		return
+	end
+	local pulse = if locked then 1 else 1 + TARGET_PULSE * math.sin(os.clock() * TARGET_PULSE_RATE * 2 * math.pi)
+	local diameter = 2 * (egg.spec.halfLength + (if locked then TARGET_LOCKED_PAD else TARGET_PAD)) * pulse
+	ring.Size = UDim2.fromScale(diameter, diameter)
+	ring.Adornee = egg.root
+	ring.Enabled = true
+	local thickness = if locked then TARGET_LOCKED_THICKNESS else TARGET_THICKNESS
+	if targetStroke then
+		targetStroke.Thickness = thickness
+	end
+	if targetOutline then
+		targetOutline.Thickness = thickness + TARGET_OUTLINE
+	end
 end
 
 -- Tells the egg labels how much stamina the local player has, for the green/red "Needs" text.

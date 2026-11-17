@@ -58,7 +58,7 @@ local function buildHub(map: Instance)
 
 	-- A paved path up the middle of the plaza to the runway.
 	local path = newPart("Path", map)
-	path.Size = Vector3.new(Runway.WIDTH * 0.6, 0.2, Runway.HUB_LENGTH)
+	path.Size = Vector3.new(Runway.START_WIDTH * 0.6, 0.2, Runway.HUB_LENGTH)
 	path.CFrame = CFrame.new(0, Runway.BASE_Y + 0.1, -Runway.HUB_LENGTH / 2)
 	path.Color = Color3.fromRGB(196, 178, 140)
 	path.Material = Enum.Material.Brick
@@ -88,7 +88,7 @@ local function buildHub(map: Instance)
 	walls.Name = "HubWalls"
 	walls.Parent = map
 	local half, length = Runway.HUB_WIDTH / 2, Runway.HUB_LENGTH
-	local gap = Runway.WIDTH / 2
+	local gap = Runway.START_WIDTH / 2
 	local wallY = Runway.BASE_Y + WALL_HEIGHT / 2
 	local pieces = {
 		Left = { Vector3.new(2, WALL_HEIGHT, length), Vector3.new(-half - 1, wallY, -length / 2) },
@@ -153,15 +153,15 @@ local function buildStartZone(map: Instance)
 		return part
 	end
 
-	flat("Border", Vector2.new(Runway.WIDTH + 4, START_ZONE_DEPTH + 4), 0.05, Color3.fromRGB(255, 255, 255))
-	local strip = flat("Strip", Vector2.new(Runway.WIDTH, START_ZONE_DEPTH), 0.12, Color3.fromRGB(238, 214, 160))
+	flat("Border", Vector2.new(Runway.START_WIDTH + 4, START_ZONE_DEPTH + 4), 0.05, Color3.fromRGB(255, 255, 255))
+	local strip = flat("Strip", Vector2.new(Runway.START_WIDTH, START_ZONE_DEPTH), 0.12, Color3.fromRGB(238, 214, 160))
 	addFloorText(strip, "START ZONE")
 
 	-- Two yolk-yellow lane marks either side of the words.
 	for _, side in { -1, 1 } do
 		local mark =
 			flat(if side < 0 then "MarkRight" else "MarkLeft", Vector2.new(14, 5), 0.2, Color3.fromRGB(255, 196, 40))
-		local center = Vector3.new(side * Runway.WIDTH * 0.4, Runway.BASE_Y + 0.4, centerZ)
+		local center = Vector3.new(side * Runway.START_WIDTH * 0.4, Runway.BASE_Y + 0.4, centerZ)
 		mark.CFrame = CFrame.lookAt(center, center + Vector3.yAxis, Vector3.zAxis)
 	end
 end

@@ -162,23 +162,21 @@ return function(harness)
 			sim:requestDismount(ALICE, 20)
 			expect.falsy(sim:getEgg(first.id))
 
+			-- (Eggs roll fast enough that some of the lineup is still waiting to set off by then, so look for this
+			-- egg's own slot.)
+			local function slotFilled()
+				for _, egg in sim.eggs do
+					if egg.slot == first.slot then
+						return true
+					end
+				end
+				return false
+			end
 			local lapTime = (750 - first.startZ) / first.spec.rollSpeed
 			sim:step(lapTime - 0.01)
-			local before = 0
-			for _, egg in sim.eggs do
-				if egg.zone == 1 then
-					before += 1
-				end
-			end
+			expect.falsy(slotFilled(), "gone until its next lap")
 			sim:step(lapTime)
-			local after = 0
-			for _, egg in sim.eggs do
-				if egg.zone == 1 then
-					after += 1
-				end
-			end
-			expect.equal(before, Tuning.EGGS_PER_ZONE - 1)
-			expect.equal(after, Tuning.EGGS_PER_ZONE, "the claimed egg's slot is back")
+			expect.truthy(slotFilled(), "the claimed egg's slot is back")
 		end)
 
 		it("drops mid-cycle eggs that roll once", function()
@@ -273,7 +271,7 @@ return function(harness)
 			local wide = sim:spawnEgg(1, 0, "Common", nil, { z = 1e6, lateral = -500 })
 			expect.truthy(wide.startZ < Runway.LOOP_END, "before the end of the loop")
 			expect.truthy(wide.fadeZ < Runway.LOOP_END, "and fades before it")
-			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength))
+			expect.equal(wide.lateral, -Runway.maxLateral(wide.spec.halfLength, wide.startZ))
 			local common = EggSpec.get(1, "Common")
 			expect.equal(sim:spawnEgg(1, 0, "Common", nil, { z = 0 / 0 }).startZ, common.startZ, "nonsense is ignored")
 			-- Without a placement, eggs appear at the start of their zone, and say so.
@@ -644,7 +642,8 @@ return function(harness)
 			expect.equal(firstOfType(events, "RideEnded").reason, "HitWall")
 			local left = firstOfType(events, "EggLeft")
 			expect.equal(left.id, egg.id)
-			expect.near(left.lateral, Runway.maxLateral(egg.spec.halfLength) - Tuning.WALL_KNOCKBACK)
+			local _, _, leftZ = sim:eggCenter(egg, left.time)
+			expect.near(left.lateral, Runway.maxLateral(egg.spec.halfLength, leftZ) - Tuning.WALL_KNOCKBACK)
 			expect.equal(left.cracking, false)
 			expect.truthy(sim:getEgg(egg.id), "it rolls on without her")
 		end)
@@ -668,7 +667,8 @@ return function(harness)
 			sim:addRider(ALICE, 1e6, 200, 0)
 			local egg = sim:spawnEgg(1, 0, "Common")
 			sim:requestMount(ALICE, egg.id, 2, true)
-			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength) - 0.5, 3)
+			local _, _, z = sim:eggCenter(egg, 3)
+			sim:setLateral(ALICE, Runway.maxLateral(egg.spec.halfLength, z) - 0.5, 3)
 			sim:takeEvents()
 			sim:step(3)
 			expect.equal(#eventsOfType(sim:takeEvents(), "RideEnded"), 0)
@@ -795,7 +795,8 @@ return function(harness)
 				local fromStart = obstacle.z - Runway.zoneStartZ(obstacle.zone)
 				expect.truthy(fromStart >= Obstacles.Config.FIRST_ROW - Obstacles.Config.ROW_JITTER, `{obstacle.kind}`)
 				expect.truthy(Obstacles.Config.Zones[obstacle.zone].weights[obstacle.kind], obstacle.kind)
-				expect.truthy(math.abs(obstacle.x) + obstacle.hx <= Runway.WIDTH / 2 + 1e-6, "on the runway")
+				local half = Runway.zoneWidth(obstacle.zone) / 2
+				expect.truthy(math.abs(obstacle.x) + obstacle.hx <= half + 1e-6, "on the runway")
 				kindsPerZone[obstacle.zone] = kindsPerZone[obstacle.zone] or {}
 				kindsPerZone[obstacle.zone][obstacle.kind] = (kindsPerZone[obstacle.zone][obstacle.kind] or 0) + 1
 			end
@@ -836,10 +837,10 @@ return function(harness)
 					for _, fromZ in { startZ, startZ + 230, startZ + 470 } do
 						for lane = -60, 60, 4 do
 							local path = Obstacles.planPath(lane, fromZ, fadeZ, spec.halfLength, spec.radius)
-							local limit = Runway.maxLateral(spec.halfLength)
 							local z = fromZ
 							while z <= fadeZ do
 								local x = Obstacles.lateralAt(path, z)
+								local limit = Runway.maxLateral(spec.halfLength, z)
 								expect.truthy(math.abs(x) <= limit + 1e-6, "stays on the runway")
 								for _, row in Obstacles.rowsBetween(z - spec.radius, z + spec.radius) do
 									for _, obstacle in row.obstacles do
@@ -990,7 +991,8 @@ return function(harness)
 
 			-- Given time, the egg can reach the edge but not pass it.
 			sim:setLateral(ALICE, 999, 60)
-			expect.near(egg.lateral, Runway.maxLateral(egg.spec.halfLength))
+			local _, _, z = sim:eggCenter(egg, 60)
+			expect.near(egg.lateral, Runway.maxLateral(egg.spec.halfLength, z))
 
 			-- Garbage is ignored.
 			local before = egg.lateral

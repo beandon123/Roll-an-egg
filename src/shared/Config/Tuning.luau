@@ -48,13 +48,27 @@ Tuning.WALL_KNOCKBACK = 6
 -- Riding
 -- Studs per second a rider can steer the egg sideways before upgrades. Tuned with the eggs' roll speeds
 -- (Config/Rarities): the faster eggs roll, the sooner the next row of obstacles arrives, so the quicker a rider has to
--- be able to move over.
-Tuning.BASE_AGILITY = 21
+-- be able to move over. (Scaled up with the Common egg's speed, so the rarer, faster eggs are harder to steer through.)
+Tuning.BASE_AGILITY = 32
 -- How close (studs beyond the egg's radius) a jumping player must be for the client to ask to mount.
 Tuning.MOUNT_REACH = 2.5
 -- How far (studs beyond the egg's radius) the server lets the player be from the egg when it checks a mount.
--- Looser than MOUNT_REACH to forgive network delay.
-Tuning.MOUNT_TOLERANCE = 16
+-- Looser than MOUNT_REACH to forgive network delay (the fastest eggs roll over 50 studs a second) and the reach of
+-- the jump magnet (JUMP_MAGNET_RANGE).
+Tuning.MOUNT_TOLERANCE = 24
+-- Landing on an egg (Shared/JumpAim). While a player is in the air, the egg they will come down nearest gets a red
+-- circle round it, if it is within JUMP_AIM_RANGE studs of its footprint (looking up to JUMP_AIM_LOOKAHEAD seconds
+-- ahead). Another egg takes over only if it is JUMP_AIM_SWITCH studs nearer, so the circle does not flicker.
+Tuning.JUMP_AIM_RANGE = 14
+Tuning.JUMP_AIM_LOOKAHEAD = 3
+Tuning.JUMP_AIM_SWITCH = 3
+-- The magnet: within JUMP_MAGNET_RANGE studs of that egg's footprint across the ground, and no more than
+-- JUMP_MAGNET_HEIGHT studs above where they would sit on it, a jumping player is drawn onto it: they move with the egg,
+-- plus a pull toward its top of JUMP_MAGNET_PULL times the distance per second, at most JUMP_MAGNET_SPEED.
+Tuning.JUMP_MAGNET_RANGE = 10
+Tuning.JUMP_MAGNET_HEIGHT = 20
+Tuning.JUMP_MAGNET_PULL = 9
+Tuning.JUMP_MAGNET_SPEED = 70
 -- Minimum seconds between mount requests the server will accept from one player.
 Tuning.MOUNT_REQUEST_COOLDOWN = 0.2
 -- Seconds a player cannot mount after being thrown off.
@@ -74,7 +88,7 @@ Tuning.LEAP_UP_SPEED = 45
 Tuning.LEAP_GRAVITY = 0.2
 -- Forward speed when leaping off the hub onto the runway: half as fast again as the slowest egg rolls
 -- (Config/Rarities), so the leap carries a player in among the eggs rolling away from the start.
-Tuning.LEAP_FORWARD_SPEED = 27
+Tuning.LEAP_FORWARD_SPEED = 40.5
 -- A character whose root part is lower than this above the runway is standing on it.
 Tuning.STANDING_HEIGHT = 3.4
 -- Extra seconds the server allows before it kills a player who is still on the runway without an egg (the
