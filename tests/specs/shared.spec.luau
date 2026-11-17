@@ -152,7 +152,11 @@ return function(harness)
 				local start = Runway.zoneStartZ(zoneId)
 				expect.truthy(Runway.widthAt(start) > Runway.widthAt(start - 1), `zone {zoneId} is wider`)
 				expect.equal(Runway.widthAt(start), Runway.zoneWidth(zoneId))
-				expect.equal(Runway.widthAt(start + Runway.ZONE_LENGTH - 1), Runway.zoneWidth(zoneId), "all along it")
+				expect.equal(
+					Runway.widthAt(start + Runway.zoneLength(zoneId) - 1),
+					Runway.zoneWidth(zoneId),
+					"all along it"
+				)
 				expect.equal(Runway.zoneWidth(zoneId) % 20, 0, "a whole number of ground tiles")
 			end
 			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT), Runway.MAX_WIDTH)
@@ -168,20 +172,20 @@ return function(harness)
 		it("knows which zone a position is in", function()
 			expect.equal(Runway.zoneAt(-1), nil)
 			expect.equal(Runway.zoneAt(0), 1)
-			expect.equal(Runway.zoneAt(599.9), 1)
-			expect.equal(Runway.zoneAt(600), 2)
-			expect.equal(Runway.zoneAt(2999), 5)
-			expect.equal(Runway.zoneAt(3000), 6)
-			expect.equal(Runway.zoneAt(3599), 6)
+			expect.equal(Runway.zoneAt(799.9), 1)
+			expect.equal(Runway.zoneAt(800), 2)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6) - 1), 5)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6)), 6)
+			expect.equal(Runway.zoneAt(Runway.LENGTH - 1), 6)
 			-- The last zone never ends.
-			expect.equal(Runway.zoneAt(3600), 6)
+			expect.equal(Runway.zoneAt(Runway.LENGTH), 6)
 			expect.equal(Runway.zoneAt(50000), 6)
-			expect.equal(Runway.zoneStartZ(3), 1200)
+			expect.equal(Runway.zoneStartZ(3), 1960)
 		end)
 
 		it("loops the last zone: anything reaching the end of the loop is carried back one loop", function()
 			expect.equal(Runway.FINAL_ZONE_START, Runway.zoneStartZ(Runway.ZONE_COUNT))
-			expect.equal(Runway.LOOP_LENGTH, Runway.ZONE_LENGTH)
+			expect.equal(Runway.LOOP_LENGTH, Runway.zoneLength(Runway.ZONE_COUNT))
 			expect.equal(Runway.LOOP_END - Runway.LOOP_START, Runway.LOOP_LENGTH)
 			expect.truthy(Runway.LOOP_START > Runway.FINAL_ZONE_START, "the loop starts inside the last zone")
 			expect.truthy(Runway.LOOP_END < Runway.LENGTH + Runway.REPEATS * Runway.LOOP_LENGTH, "built that far")
@@ -191,7 +195,7 @@ return function(harness)
 			expect.near(Runway.wrapZ(Runway.LOOP_END), Runway.LOOP_START)
 			expect.near(Runway.wrapZ(Runway.LOOP_END + 10), Runway.LOOP_START + 10)
 			expect.near(Runway.wrapZ(Runway.LOOP_END + 5 * Runway.LOOP_LENGTH + 10), Runway.LOOP_START + 10)
-			for _, z in { 5000, 12345.6, 1e6 } do
+			for _, z in { Runway.LOOP_END + 1, 23456.7, 1e6 } do
 				local wrapped = Runway.wrapZ(z)
 				expect.truthy(wrapped >= Runway.LOOP_START and wrapped < Runway.LOOP_END, tostring(z))
 			end
@@ -219,9 +223,10 @@ return function(harness)
 		it(
 			"fades the last zone's riderless eggs a quarter of the way into its first copy, before the loop ends",
 			function()
-				expect.equal(Runway.fadeZ(1), 750)
+				-- A quarter of the way into the Desert.
+				expect.equal(Runway.fadeZ(1), 800 + 1160 / 4)
 				local last = Runway.fadeZ(Runway.ZONE_COUNT)
-				expect.equal(last, Runway.LENGTH + Runway.ZONE_LENGTH / 4)
+				expect.equal(last, Runway.LENGTH + Runway.zoneLength(Runway.ZONE_COUNT) / 4)
 				expect.truthy(last < Runway.LOOP_END)
 			end
 		)
@@ -404,7 +409,7 @@ return function(harness)
 						"clear of the gate and where eggs appear"
 					)
 					expect.truthy(
-						gap.endZ <= startZ + Runway.ZONE_LENGTH - Runway.GAPLESS_END,
+						gap.endZ <= startZ + Runway.zoneLength(zoneId) - Runway.GAPLESS_END,
 						"clear of the next zone"
 					)
 					expect.truthy(gap.startZ >= lastEnd[gap.side] + Runway.BANK_MIN_LENGTH - 1e-9, "bank between gaps")
@@ -444,6 +449,114 @@ return function(harness)
 			-- The gate's stretch has no gaps.
 			expect.equal(Runway.wallAt(1, Runway.zoneStartZ(3) + 10, 3), true)
 			expect.equal(Runway.wallAt(-1, Runway.zoneStartZ(3) + 10, 3), true)
+		end)
+	end)
+
+	describe("Runway wall bends", function()
+		local Obstacles = harness.load("src/shared/Obstacles")
+		local Rarities = harness.load("src/shared/Config/Rarities")
+		local Tuning = harness.load("src/shared/Config/Tuning")
+
+		-- Every bend, in every zone and the last zone's first copy.
+		local function allBends()
+			local list = {}
+			for zoneId = 1, Runway.ZONE_COUNT + 1 do
+				for _, bend in Runway.wallBends(zoneId) do
+					bend.zone = zoneId
+					table.insert(list, bend)
+				end
+			end
+			return list
+		end
+
+		it("winds the walls of every zone but the Ocean, on both sides", function()
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local sides = {}
+				for _, bend in Runway.wallBends(zoneId) do
+					sides[bend.side] = true
+				end
+				if Runway.STRAIGHT_ZONES[zoneId] then
+					expect.equal(#Runway.wallBends(zoneId), 0, "the Ocean's boardwalk runs straight")
+				else
+					expect.truthy(sides[1] and sides[-1], `zone {zoneId} bends on both sides`)
+				end
+			end
+		end)
+
+		it("bends in smoothly and gently, never near a gate or a gap, and never past halfway", function()
+			-- The fastest egg anywhere: a bend must never close in faster than a rider can steer away from it.
+			local fastest = 0
+			for _, rarity in Rarities.Order do
+				fastest = math.max(fastest, Rarities.Info[rarity].rollSpeed)
+			end
+			expect.truthy(fastest > 40, "the fastest egg rolls at " .. fastest)
+			for _, bend in allBends() do
+				local zoneStart = Runway.zoneStartZ(bend.zone)
+				local width = Runway.zoneWidth(bend.zone)
+				local length = bend.endZ - bend.startZ
+				local label = `zone {bend.zone} bend at {math.floor(bend.startZ)}`
+				expect.truthy(bend.startZ >= zoneStart + Runway.BEND_GATE_CLEAR - 1e-9, label .. ": clear of the gate")
+				expect.truthy(
+					bend.endZ <= zoneStart + Runway.zoneLength(bend.zone) - Runway.BEND_END_CLEAR + 1e-9,
+					label .. ": clear of the next gate"
+				)
+				expect.truthy(bend.depth <= Runway.BEND_DEPTH * width + 1e-9, label .. ": not too deep")
+				expect.truthy(length >= Runway.BEND_SLOPE * bend.depth - 1e-9, label .. ": gentle")
+				-- Steepest where the curve turns: pi * depth / length studs in for each stud down the runway.
+				local closing = math.pi * bend.depth / length * fastest
+				expect.truthy(closing < Tuning.BASE_AGILITY, `{label}: closes in at {closing} studs/s`)
+				for _, gap in Runway.wallGaps(bend.zone) do
+					if gap.side == bend.side then
+						local apart = math.max(gap.startZ - bend.endZ, bend.startZ - gap.endZ)
+						expect.truthy(apart >= Runway.BEND_GAP_CLEAR - 1e-9, label .. ": clear of its side's gaps")
+					end
+				end
+				-- Straight at both ends, deepest in the middle.
+				expect.near(Runway.wallInset(bend.side, bend.startZ + 0.001), 0, 1e-3)
+				expect.near(Runway.wallInset(bend.side, (bend.startZ + bend.endZ) / 2), bend.depth, 1e-6)
+				expect.near(Runway.wallInset(bend.side, bend.endZ - 0.001), 0, 1e-3)
+			end
+		end)
+
+		it("keeps eggs between the walls where they bend in, on each side separately", function()
+			for _, bend in allBends() do
+				local middle = (bend.startZ + bend.endZ) / 2
+				local low, high = Runway.lateralRange(4, middle)
+				local edge = Runway.edgeAt(bend.side, middle)
+				expect.near(math.abs(edge), Runway.halfWidthAt(middle) - bend.depth, 1e-6)
+				if bend.side == 1 then
+					expect.near(high, edge - 5, 1e-6)
+				else
+					expect.near(low, edge + 5, 1e-6)
+				end
+				expect.near(Runway.clampLateral(1e6 * bend.side, 4, middle), if bend.side == 1 then high else low)
+				expect.truthy(Runway.isAtEdge(if bend.side == 1 then high else low, 4, middle), "at the wall")
+				-- A rider who gets on there starts a little way in from it.
+				local mounted = Runway.mountLateral(1e6 * bend.side, 4, middle)
+				expect.near(math.abs(mounted), math.abs(if bend.side == 1 then high else low) - 1.5, 1e-6)
+			end
+		end)
+
+		it("never stands an obstacle in a wall where it bends in", function()
+			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
+				for _, obstacle in row.obstacles do
+					for z = obstacle.z - obstacle.hz, obstacle.z + obstacle.hz, 1 do
+						expect.truthy(
+							obstacle.x + obstacle.hx <= Runway.edgeAt(1, z) + 1e-6
+								and obstacle.x - obstacle.hx >= Runway.edgeAt(-1, z) - 1e-6,
+							`{obstacle.kind} #{obstacle.id} in the wall`
+						)
+					end
+				end
+			end
+		end)
+
+		it("repeats the last zone's bends in its copy, so the loop is seamless", function()
+			for _, side in { -1, 1 } do
+				for z = Runway.FINAL_ZONE_START, Runway.LENGTH, 7 do
+					expect.near(Runway.wallInset(side, z), Runway.wallInset(side, z + Runway.LOOP_LENGTH), 1e-9)
+				end
+			end
 		end)
 	end)
 

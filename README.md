@@ -7,11 +7,12 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level runway (120 studs wide at the
-  start, 20 studs wider each zone) through six
-  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each with its own checkered ground, stepped cliffs (a
-  boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
-  [The runway](#the-runway)). The banks down both sides are broken by fairly large gaps (marked with red strips).
+- The map: the hub with a painted START ZONE where the runway begins, then a straight, level runway through six
+  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each longer and wider than the one before (800 studs
+  long and 120 wide in the Forest, up to 2,600 by 220 in the Prehistoric zone), each with its own checkered ground,
+  tall stepped cliffs (a boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the
+  zone's name (see [The runway](#the-runway)). The walls wind, bending in over the runway and back out, and are
+  broken by fairly large gaps (marked with red strips).
 - The runway never ends. The last zone repeats seamlessly past the end (ground, banks, gate and obstacles), and
   riders are quietly carried back one repeat at a time, so nobody ever reaches an end or sees one.
 - The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
@@ -22,7 +23,7 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that appear on the
   ground at the start of their zone and roll down the runway lap after lap; now and then an extra egg drops
-  mid-cycle. Rarity sets their size, speed (18 studs a second for a Common egg up to 32 for an Eternal one; walking
+  mid-cycle. Rarity sets their size, speed (27 studs a second for a Common egg up to 54 for an Eternal one; walking
   is 16) and stamina requirement. Rolling eggs leave a small trail of dust.
 - When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when (a lineup egg on
   its first lap of the day only). Other eggs spawn quietly.
@@ -310,17 +311,36 @@ The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max 
 
 ## The runway
 
-The runway is level, 600 studs per zone, and gets wider the further it goes: 120 studs across the Forest and 20 more
-each zone after it, up to 220 across the Prehistoric zone, the banks stepping out at each gate
-(`src/shared/Runway.luau`). Wider zones get more obstacles to a row, so they are no emptier. It has no end: whatever
-the last zone is, it repeats past the end of the runway (the map builds 3 copies of it, obstacles and all), and
-anything reaching the end of the loop is carried back one repeat to a spot that looks exactly the same. Each device
-draws the eggs there at their copy nearest the player, so nothing seems to move.
+The runway is straight and level, and gets longer and wider the further it goes, the banks stepping out at each
+gate (`src/shared/Runway.luau`):
+
+| Zone | Length | Width | Eggs in its lineup |
+| --- | --- | --- | --- |
+| Forest | 800 | 120 | 11 |
+| Desert | 1,160 | 140 | 15 |
+| Snow | 1,520 | 160 | 20 |
+| Ocean | 1,880 | 180 | 25 |
+| Volcano | 2,240 | 200 | 30 |
+| Prehistoric | 2,600 | 220 | 35 |
+
+Wider zones get more obstacles to a row, and longer ones more rows, so none is emptier than the first. It has no
+end: whatever the last zone is, it repeats past the end of the runway (the map builds a copy of it, obstacles and
+all), and anything reaching the end of the loop is carried back one repeat to a spot that looks exactly the same.
+Each device draws the eggs there at their copy nearest the player, so nothing seems to move.
 
 **Banks and gaps.** Tall stepped cliffs run down both sides (the wall beside the runway is 19.5 to 32.5 studs high;
-the Ocean has a 7-stud boardwalk railing instead), broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's
-gate). The last zone keeps its width through all its repeats, so being carried back one loop is still seamless. A
-rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge with it. Players never
+the Ocean has a 7-stud boardwalk railing instead), broken by gaps of 40 to 80 studs at irregular spacing (none by a
+zone's gate). The last zone keeps its width through all its repeats, so being carried back one loop is still
+seamless. A rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge with it
+(in the Ocean, into the sea).
+
+**Winding walls.** The runway runs straight, but its walls wind. Along most stretches of bank between gaps, the wall
+swings in over the runway in a long, smooth curve and back out again, up to 15% of the zone's width, each side in its
+own places, so the open runway snakes between them. A rider has to steer round each bend in time (a bend never comes
+in faster than a rider can steer away, even on the fastest egg); eggs nobody is riding slide along it, and no
+obstacle ever stands in one. The walls run straight again at every gate and every gap, and all through the Ocean,
+whose boardwalk is straight. The bends come from a fixed seed, so every server has the same ones, and the last
+zone's copy has its bends too (`Runway.wallBends`, `Runway.wallInset`). Players never
 walk on the runway: walking past the start zone, or jumping off an egg, starts a floaty leap with 3.5 seconds to land
 on an egg, and touching the runway first kills them.
 

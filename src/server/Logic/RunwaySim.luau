@@ -331,8 +331,10 @@ function RunwaySim._launch(
 		startZ = math.clamp(placedZ, 0, Runway.LOOP_END - spec.radius * 4)
 	end
 	-- Clear of the banks, so a rider who gets on is not straight against one.
-	local limit = math.max(0, Runway.maxLateral(spec.halfLength, startZ) - Tuning.EGG_SPAWN_EDGE_MARGIN)
-	local lateral = (self.random() * 2 - 1) * limit
+	local low, high = Runway.lateralRange(spec.halfLength, startZ)
+	low = math.min(0, low + Tuning.EGG_SPAWN_EDGE_MARGIN)
+	high = math.max(0, high - Tuning.EGG_SPAWN_EDGE_MARGIN)
+	local lateral = low + self.random() * (high - low)
 	local placedX = placement and placement.lateral
 	if placedX and placedX == placedX then
 		lateral = Runway.clampLateral(placedX, spec.halfLength, startZ)
@@ -347,7 +349,7 @@ function RunwaySim._launch(
 		startZ = startZ,
 		-- An egg dropped further down than its zone still gets a stretch of runway before it fades (but fades before
 		-- the end of the loop).
-		fadeZ = math.min(math.max(Runway.fadeZ(zoneId), startZ + Runway.ZONE_LENGTH), Runway.LOOP_END - 1),
+		fadeZ = EggSpec.fadeZ(zoneId, startZ),
 		lateral = 0,
 		pathZ = startZ,
 		path = nil :: any,
@@ -403,12 +405,12 @@ function RunwaySim.spawnEgg(
 	return self:_launch(zoneId, rarity, kind, now, true, placement)
 end
 
--- How many eggs each zone's lineup holds at the current egg rate.
-local function lineupSize(rate: number): number
-	return math.max(1, math.round(Tuning.EGGS_PER_ZONE * rate))
+-- How many eggs a zone's lineup holds at the current egg rate (EggSpec.lineupSize at the usual rate).
+local function lineupSize(zoneId: number, rate: number): number
+	return math.max(1, math.round(EggSpec.lineupSize(zoneId) * rate))
 end
 
--- Rolls `count` lineup eggs for a zone, leaving the chute LINEUP_LAUNCH_GAP seconds apart (less while eggs drop
+-- Rolls `count` lineup eggs for a zone, leaving the chute EggSpec.lineupGap seconds apart (less while eggs drop
 -- faster) from `firstLaunch`.
 function RunwaySim._rollSlots(
 	self: RunwaySim,
@@ -419,6 +421,7 @@ function RunwaySim._rollSlots(
 	into: { Slot },
 	rolled: { any }
 )
+	local gap = EggSpec.lineupGap(zoneId, self.spawnRateMultiplier)
 	for index = 1, count do
 		local rarity = EggSpec.rollRarity(zoneId, self.random(), self.luck)
 		local kind = EggSpec.pickEgg(zoneId, rarity, self.random())
@@ -429,7 +432,7 @@ function RunwaySim._rollSlots(
 				zone = zoneId,
 				rarity = rarity,
 				kind = kind,
-				nextLaunch = firstLaunch + (index - 1) * Tuning.LINEUP_LAUNCH_GAP / self.spawnRateMultiplier,
+				nextLaunch = firstLaunch + (index - 1) * gap,
 				lapTime = (Runway.fadeZ(zoneId) - startZ) / spec.rollSpeed,
 				extra = if extra then true else nil,
 			})
@@ -443,7 +446,7 @@ function RunwaySim._rollLineup(self: RunwaySim, now: number)
 	local lineup: { Slot } = {}
 	local rolled = {}
 	for zoneId = 1, #Zones.List do
-		self:_rollSlots(zoneId, lineupSize(self.spawnRateMultiplier), now, false, lineup, rolled)
+		self:_rollSlots(zoneId, lineupSize(zoneId, self.spawnRateMultiplier), now, false, lineup, rolled)
 	end
 	self.lineup = lineup
 	self:_emit({ type = "LineupRolled", eggs = rolled })
@@ -477,7 +480,7 @@ function RunwaySim.setEggRate(self: RunwaySim, multiplier: number, now: number)
 				have += 1
 			end
 		end
-		local more = lineupSize(multiplier) - have
+		local more = lineupSize(zoneId, multiplier) - have
 		if more > 0 then
 			self:_rollSlots(zoneId, more, now, true, lineup, rolled)
 		end
@@ -539,8 +542,9 @@ function RunwaySim._leaveEgg(self: RunwaySim, egg: Egg, now: number, reason: Rid
 		return
 	end
 	if reason == "HitWall" then
-		local limit = Runway.maxLateral(egg.spec.halfLength, z)
-		egg.lateral = math.sign(egg.lateral) * math.max(0, limit - Tuning.WALL_KNOCKBACK)
+		local side = if egg.lateral > 0 then 1 else -1
+		local limit = Runway.maxLateral(egg.spec.halfLength, z, side)
+		egg.lateral = side * math.max(0, limit - Tuning.WALL_KNOCKBACK)
 	end
 	self:_setPath(egg, egg.lateral, z)
 	-- Only running out of stamina cracks an egg: the rider lost their balance, so it bounces and cracks open.

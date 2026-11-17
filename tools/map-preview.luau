@@ -55,9 +55,10 @@ for zoneId, zone in Zones.List do
 		local entry = zone.eggs[(index * 3) % #zone.eggs + 1]
 		local spec = EggSpec.get(zoneId, entry.rarity)
 		local startZ = Runway.zoneStartZ(zoneId) + 12
-		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength, startZ)
+		local low, high = Runway.lateralRange(spec.halfLength, startZ)
+		local lane = low + random() * (high - low)
 		local path = Obstacles.planPath(lane, startZ, Runway.fadeZ(zoneId), spec.halfLength, spec.radius)
-		local z = startZ + 40 + random() * (Runway.ZONE_LENGTH - 60)
+		local z = startZ + 40 + random() * (Runway.zoneLength(zoneId) - 60)
 		local x = Obstacles.lateralAt(path, z)
 		local egg = EggRig.build(entry.egg, spec)
 		local target = roblox.CFrame.new(x, Runway.BASE_Y + spec.radius, z)
@@ -265,7 +266,7 @@ local data = serde.encode("json", {
 		return widths
 	end)(),
 	baseY = Runway.BASE_Y,
-	zoneLength = Runway.ZONE_LENGTH,
+	zoneLengths = Runway.ZONE_LENGTHS,
 })
 local template = fs.readFile("tools/map-preview.html")
 local page = string.gsub(template, "/%*MAP_DATA%*/null", function()

@@ -544,7 +544,7 @@ local function addEgg(data): ClientEgg?
 	-- Eggs appear at the start of their zone unless an admin dropped one somewhere else (the server worked out its
 	-- fade line the same way: Logic/RunwaySim).
 	local startZ = if typeof(data.startZ) == "number" then data.startZ else spec.startZ
-	local fadeZ = math.min(math.max(Runway.fadeZ(data.zone), startZ + Runway.ZONE_LENGTH), Runway.LOOP_END - 1)
+	local fadeZ = EggSpec.fadeZ(data.zone, startZ)
 	local pathZ = if typeof(data.pathZ) == "number" then data.pathZ else startZ
 	local egg: ClientEgg = {
 		id = data.id,

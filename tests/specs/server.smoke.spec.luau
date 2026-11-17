@@ -103,10 +103,7 @@ return function(harness)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
 		local startZ = egg.startZ or spec.startZ
-		local fadeZ = math.min(
-			math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
-			modules.Runway.LOOP_END - 1
-		)
+		local fadeZ = modules.EggSpec.fadeZ(egg.zone, startZ)
 		local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 		return path, spec, startZ
 	end
@@ -175,7 +172,11 @@ return function(harness)
 						expect.near(tile.CFrame.Position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
 					end
 				end
-				expect.equal(tiles, (runway.zoneWidth(zoneId) / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
+				expect.equal(
+					tiles,
+					(runway.zoneWidth(zoneId) / 20) * (runway.zoneLength(zoneId) / 20),
+					zoneName .. " tiles"
+				)
 				expect.truthy(#zone.Banks:GetChildren() > 50, zoneName .. " banks")
 				expect.truthy(#zone.Backdrop:GetChildren() > 0, zoneName .. " backdrop")
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
@@ -601,12 +602,18 @@ return function(harness)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = mount(session, player, root, 6, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 40 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
-			-- path planned for the whole ride from where the egg is now. It is planned in distance rolled, not where
-			-- the egg is drawn: the last zone repeats, so the obstacles match (as far as the map's copies of it go,
-			-- which is why the ride is no longer).
-			local seconds = 40
+			-- 80 s on the fastest egg: from the start of the last zone right through it and past the end of the loop,
+			-- where the rider is carried back. This test is about the loop, so the obstacles are moved out of the way
+			-- (dodging them is tested elsewhere: a path planned for an egg nobody rides swerves faster than a rider
+			-- can steer); the rider just holds their lane, keeping well clear of the walls where they bend in.
+			local seconds = 80
 			local modules = shared(session)
+			modules.Obstacles.hitAt = function()
+				return nil
+			end
+			modules.Obstacles.activeAround = function()
+				return false
+			end
 			local spec = modules.EggSpec.get(6, "Eternal")
 			local function rolledZ()
 				return modules.EggMotion.zAt(egg.spawnTime, egg.startZ, spec.rollSpeed, session.clock)
@@ -614,17 +621,18 @@ return function(harness)
 			local fromZ = rolledZ()
 			local at = eggPosition(session, egg)
 			local lane = modules.Runway.mountLateral(at.X, spec.halfLength, at.Z)
-			local rideLength = spec.rollSpeed * seconds
-			expect.truthy(rideLength > modules.Runway.LOOP_LENGTH * 2, "more than twice round the loop")
-			expect.truthy(
-				fromZ + rideLength + 100 < modules.Runway.LENGTH + modules.Runway.REPEATS * modules.Runway.LOOP_LENGTH,
-				"within the copies"
-			)
-			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + rideLength + 100, spec.halfLength, spec.radius)
+			expect.truthy(fromZ + spec.rollSpeed * seconds > modules.Runway.LOOP_END, "past the end of the loop")
+			local carriedBack = false
+			local lastZ = fromZ
 			for _ = 1, seconds * 30 do
-				session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, rolledZ()))
+				local z = modules.Runway.wrapZ(rolledZ())
+				carriedBack = carriedBack or z < lastZ
+				lastZ = z
+				local low, high = modules.Runway.lateralRange(spec.halfLength, z)
+				session:fromClient("RideLateral", player, math.clamp(lane, low + 3, high - 3))
 				session:heartbeat(1 / 30)
 			end
+			expect.truthy(carriedBack, "carried back one loop")
 			local ended = session:lastSent("RideEnded", player)
 			expect.equal(ended, nil, if ended then "ride ended: " .. ended.args[1] else "")
 			expect.equal(humanoid.Health, 100)
@@ -1556,8 +1564,9 @@ return function(harness)
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Zone", zone = 3 })))
 			local position = root.CFrame.Position
-			expect.near(position.Z, 1240, 1e-3)
-			expect.near(position.Y, runway.surfaceY(1240) + 3.5, 1e-3)
+			local landing = runway.zoneStartZ(3) + 40
+			expect.near(position.Z, landing, 1e-3)
+			expect.near(position.Y, runway.surfaceY(landing) + 3.5, 1e-3)
 			expect.near(position.X, 0, 1e-3)
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Cliff" })))
@@ -1890,16 +1899,19 @@ return function(harness)
 			local runway = shared(session).Runway
 			for zoneId, zone in shared(session).Zones.List do
 				local folder = map[zone.key]
-				-- No kerb runs across a gap, and every gap has a warning strip along the runway's edge.
+				-- No kerb runs across a gap, every gap has a warning strip along the runway's edge, and the kerbs run
+				-- along the foot of the walls, following them where they bend in.
 				local gaps = runway.wallGaps(zoneId)
 				local strips, kerbLength = 0, 0
 				for _, part in folder.Ground:GetChildren() do
 					local side = if part.Name == "KerbLeft" then 1 elseif part.Name == "KerbRight" then -1 else nil
 					if side then
-						local center, half = part.CFrame.Position.Z, part.Size.Z / 2
+						-- How far the kerb reaches down the runway (a piece on a bend lies at an angle).
+						local center = part.CFrame.Position.Z
+						local half = part.Size.Z / 2 * math.abs(part.CFrame.LookVector.Z)
 						kerbLength += half * 2
-						local edge = runway.zoneWidth(zoneId) / 2
-						expect.truthy(side * part.CFrame.Position.X > edge, `{zone.key} {part.Name} side`)
+						local edge = math.abs(runway.edgeAt(side, center))
+						expect.near(side * part.CFrame.Position.X, edge + 1, 0.5, `{zone.key} {part.Name} at the wall`)
 						for _, gap in gaps do
 							if gap.side == side then
 								local overlaps = center + half > gap.startZ + 1e-3 and center - half < gap.endZ - 1e-3
@@ -1915,7 +1927,7 @@ return function(harness)
 				for _, gap in gaps do
 					gapLength += gap.endZ - gap.startZ
 				end
-				expect.near(kerbLength, 2 * runway.ZONE_LENGTH - gapLength, 1e-3)
+				expect.near(kerbLength, 2 * runway.zoneLength(zoneId) - gapLength, 0.05)
 			end
 
 			-- No end cliff: the last zone goes on past the end of the runway, obstacles and all.

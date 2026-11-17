@@ -78,11 +78,23 @@ return function(harness)
 			sim:step(0)
 			local events = sim:takeEvents()
 			local rolled = firstOfType(events, "LineupRolled")
-			expect.equal(#rolled.eggs, Tuning.EGGS_PER_ZONE * Runway.ZONE_COUNT)
+			-- One egg for every LINEUP_EGG_SPACING studs of zone: more in the longer zones.
+			local total, longest = 0, 0
+			for zoneId = 1, Runway.ZONE_COUNT do
+				local size = EggSpec.lineupSize(zoneId)
+				expect.equal(size, math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING))
+				total += size
+				longest = math.max(longest, (size - 1) * EggSpec.lineupGap(zoneId, 1))
+				-- Out within a lap, a few seconds apart.
+				expect.truthy(EggSpec.lineupGap(zoneId, 1) <= Tuning.LINEUP_LAUNCH_GAP, "gap")
+			end
+			expect.equal(EggSpec.lineupSize(1), 11)
+			expect.equal(EggSpec.lineupSize(Runway.ZONE_COUNT), 35)
+			expect.equal(#rolled.eggs, total)
 			-- The first egg of every zone leaves straight away.
 			expect.equal(#eventsOfType(events, "EggSpawned"), Runway.ZONE_COUNT)
 
-			for second = 1, Tuning.LINEUP_LAUNCH_GAP * Tuning.EGGS_PER_ZONE do
+			for second = 1, math.ceil(longest) + 1 do
 				sim:step(second)
 			end
 			local perZone = {}
@@ -91,7 +103,7 @@ return function(harness)
 				expect.falsy(egg.wild)
 			end
 			for zoneId = 1, Runway.ZONE_COUNT do
-				expect.equal(perZone[zoneId], Tuning.EGGS_PER_ZONE, "zone " .. zoneId)
+				expect.equal(perZone[zoneId], EggSpec.lineupSize(zoneId), "zone " .. zoneId)
 			end
 		end)
 
@@ -107,10 +119,11 @@ return function(harness)
 						first = egg
 					end
 				end
-				-- Random numbers of 0.5 roll Forest Common eggs, which roll from the start of the zone to 750 (600 + 150).
+				-- Random numbers of 0.5 roll Forest Common eggs, which roll from the start of the zone to a quarter of
+				-- the way into the Desert.
 				expect.equal(first.rarity, "Common")
-				expect.equal(first.fadeZ, 750)
-				local lapTime = (750 - first.startZ) / first.spec.rollSpeed
+				expect.equal(first.fadeZ, Runway.fadeZ(1))
+				local lapTime = (Runway.fadeZ(1) - first.startZ) / first.spec.rollSpeed
 				sim:takeEvents()
 
 				sim:step(lapTime - 0.01)
@@ -140,8 +153,8 @@ return function(harness)
 		)
 
 		it("fades the last zone's eggs a quarter of the way into its first copy (the runway has no end)", function()
-			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.ZONE_LENGTH / 4)
-			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.ZONE_LENGTH / 4)
+			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.zoneLength(6) / 4)
+			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.zoneLength(6) / 4)
 		end)
 
 		it("brings a claimed lineup egg back on its next lap", function()
@@ -172,7 +185,7 @@ return function(harness)
 				end
 				return false
 			end
-			local lapTime = (750 - first.startZ) / first.spec.rollSpeed
+			local lapTime = (Runway.fadeZ(1) - first.startZ) / first.spec.rollSpeed
 			sim:step(lapTime - 0.01)
 			expect.falsy(slotFilled(), "gone until its next lap")
 			sim:step(lapTime)
@@ -840,8 +853,8 @@ return function(harness)
 							local z = fromZ
 							while z <= fadeZ do
 								local x = Obstacles.lateralAt(path, z)
-								local limit = Runway.maxLateral(spec.halfLength, z)
-								expect.truthy(math.abs(x) <= limit + 1e-6, "stays on the runway")
+								local low, high = Runway.lateralRange(spec.halfLength, z)
+								expect.truthy(x >= low - 1e-6 and x <= high + 1e-6, "stays on the runway")
 								for _, row in Obstacles.rowsBetween(z - spec.radius, z + spec.radius) do
 									for _, obstacle in row.obstacles do
 										local touching = math.abs(x - obstacle.x) < obstacle.hx + spec.halfLength

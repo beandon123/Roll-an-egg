@@ -231,7 +231,7 @@ return function(harness)
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					local rideDistance = spec.rollSpeed * spec.claimTime
-					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 2.5, zone.name .. " " .. rarity)
+					expect.truthy(rideDistance < Runway.zoneLength(zone.id) * 2.5, zone.name .. " " .. rarity)
 				end
 			end
 		end)

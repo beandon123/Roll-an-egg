@@ -127,10 +127,7 @@ return function(harness)
 		local z = modules.Runway.wrapZ(modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock))
 		local x = egg.lateral
 		if egg.rider == nil then
-			local fadeZ = math.min(
-				math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
-				modules.Runway.LOOP_END - 1
-			)
+			local fadeZ = modules.EggSpec.fadeZ(egg.zone, startZ)
 			local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 			x = modules.Obstacles.lateralAt(path, z)
 		end
@@ -589,9 +586,18 @@ return function(harness)
 
 		it("celebrates a claim and keeps the rider rolling on the egg until they jump off", function()
 			local session, parts = startClient()
-			local egg = eggData(session, 1, 1, "Common")
+			-- Just out of its chute, short of the zone's first row of obstacles, with stamina that would run out in a
+			-- second if the egg were not claimed.
+			local egg = eggData(session, 1, 1, "Common", 0.5)
 			session:fromServer("EggSpawned", egg)
-			startRide(session, egg)
+			session:fromServer("EggMounted", egg.id, LOCAL_USER_ID, session.clock)
+			session:fromServer("RideStarted", egg.id, {
+				startTime = session.clock,
+				startStamina = 100,
+				drain = 100,
+				claimTime = 5,
+				combo = 0,
+			})
 
 			session:fromServer("EggClaimed", 1, LOCAL_USER_ID, "Common", "Leafy")
 			session:fromServer("InventoryChanged", {
@@ -621,7 +627,7 @@ return function(harness)
 			expect.near(meters.Claim.Fill.Size.X.Scale, 1, 1e-6)
 			expect.truthy(string.find(labelOf(meters.Claim).Text, "claimed!$"), labelOf(meters.Claim).Text)
 			expect.equal(meters.RideHint.Text, "In your inventory  -  keep rolling, or jump to leap off")
-			session:renderFrame(1, 20)
+			session:renderFrame(0.25, 8)
 			expect.truthy(string.find(labelOf(meters.Claim).Text, "claimed!$"), "still claimed")
 			expect.equal(parts.root.Anchored, true)
 
@@ -1714,7 +1720,8 @@ return function(harness)
 			local root = hud(parts)
 
 			session:fromServer("StaminaChanged", 40, session.clock, 0, 100)
-			parts.root.Position = Vector3.new(0, 0, 700)
+			-- (Partway down the Desert, the second zone.)
+			parts.root.Position = Vector3.new(0, 0, 900)
 			session:renderFrame(1 / 60, 2)
 			expect.equal(labelOf(root.Meters.Stamina).Text, "Stamina  40 / 100")
 			expect.near(root.Meters.Stamina.Fill.Size.X.Scale, 0.4, 1e-6)

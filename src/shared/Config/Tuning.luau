@@ -17,12 +17,15 @@ Tuning.DRAIN_FRACTION = 0.8
 Tuning.EGG_BASE_RADIUS = 3
 -- How much longer the egg is (side to side) than its rolling diameter.
 Tuning.EGG_LENGTH_RATIO = 1.3
--- How many eggs each zone rolls for its lineup at sunrise (the start of each cycle). Each lineup egg rolls from
--- the start of its zone to a quarter of the way into the next zone (Runway.fadeZ), fades out, and appears at the
--- start of its zone again, over and over until the runway closes. One that is claimed comes back on its next lap;
--- one that cracks or goes off the side comes back EGG_RESPAWN_DELAY later.
-Tuning.EGGS_PER_ZONE = 8
--- Seconds between lineup eggs leaving the start of their zone at sunrise.
+-- Each zone rolls a lineup of eggs at sunrise (the start of each cycle): one egg for every LINEUP_EGG_SPACING studs
+-- the zone is long (Shared/Runway), so the long zones are as full of eggs as the short ones: 11 in the Forest, up to
+-- 35 in the Prehistoric zone (EggSpec.lineupSize). Each lineup egg rolls from the start of its zone to a quarter of
+-- the way into the next zone (Runway.fadeZ), fades out, and appears at the start of its zone again, over and over
+-- until the runway closes. One that is claimed comes back on its next lap; one that cracks or goes off the side
+-- comes back EGG_RESPAWN_DELAY later.
+Tuning.LINEUP_EGG_SPACING = 75
+-- Seconds between lineup eggs leaving the start of their zone at sunrise. (Less in a zone with so many eggs that
+-- the first would be round again before the last had left: EggSpec.lineupGap.)
 Tuning.LINEUP_LAUNCH_GAP = 5
 -- Mid-cycle drops: now and then a zone drops an extra egg that rolls once and fades. It is rolled like a lineup egg,
 -- except that every rarity from WILD_RARE_FROM up is WILD_RARE_ODDS times as likely.

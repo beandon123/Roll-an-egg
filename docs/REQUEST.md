@@ -38,8 +38,8 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight, level runway (~3,600 studs long, 120 wide at the start; decided: flat and wide) holding six zones in order
-      (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
+- [ ] One straight, level runway (10,200 studs long, 120 wide at the start; decided: flat, wide and straight) holding
+      six zones in order (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); more zones added later (decided)
     - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
           repeat at a time, and the haze in the distance means the end is never visible
@@ -49,6 +49,14 @@ Original theme, art, and creatures.
     - [ ] The runway gets wider the further it goes (decided): each zone is 20 studs wider than the one before
           (120, 140, 160, 180, 200, 220), the walls stepping out at its gate; the last zone stays at its width
           through its endless repeats (decided)
+    - [ ] The runway gets longer the further it goes (decided): zones of 800, 1,160, 1,520, 1,880, 2,240 and 2,600
+          studs (the owner chose these from the winding-runway design, keeping the runway itself straight)
+    - [ ] Winding walls along a straight runway (decided): the walls bend in over the runway in long, smooth curves
+          and back out, each side in its own places, so the open runway snakes between them; a rider must steer
+          round each bend, and touching the wall kills as usual. Up to 15% of the zone's width deep, gentle enough
+          that a rider can always steer away in time; straight at gates, at gaps and through the Ocean (proposed)
+    - [ ] The Ocean stays a boardwalk over the sea (decided): falling into the sea through a gap kills, like any
+          other gap; no swimming or drowning (decided)
     - [ ] Tall walls (decided): the cliff wall beside the runway stands 19.5-32.5 studs high (it was 7.5-19.5), with
           higher steps behind it; the Ocean's boardwalk railing is 7 studs tall (it was 4)
     - [ ] Natural, fairly large gaps in the walls (decided), each marked by a red strip: steering an egg into a wall
