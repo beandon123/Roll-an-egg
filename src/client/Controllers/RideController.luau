@@ -27,6 +27,7 @@ local Tuning = Load.shared("Config", "Tuning")
 
 local EggController = require(script.Parent.EggController)
 local InventoryController = require(script.Parent.InventoryController)
+local RiderAnimationController = require(script.Parent.RiderAnimationController)
 local UiState = require(script.Parent.Parent.Ui.UiState)
 
 local localPlayer = Players.LocalPlayer
@@ -241,6 +242,9 @@ local function release(reason: string)
 	humanoid.Sit = false
 
 	local side = if root.Position.X >= 0 then 1 else -1
+	if reason == "ThrownOff" or reason == "KnockedOff" or reason == "FellOff" then
+		RiderAnimationController.Tumble(localPlayer.UserId)
+	end
 	if reason == "Dismount" then
 		-- Leap forward off the egg, toward the next one.
 		startLeap(humanoid, root, Vector3.new(0, Tuning.LEAP_UP_SPEED, eggSpeed + 4))
@@ -305,7 +309,8 @@ local function onRideStarted(eggId: number, info)
 	mountPendingUntil = 0
 	endLeap(root)
 
-	-- Hold the character still; EggController places it on top of the egg every frame.
+	-- Hold the character still; EggController stands it on top of the egg every frame. Seated, so the Humanoid
+	-- does not try to walk or jump; RiderAnimationController makes it run on the egg instead of sitting.
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.Anchored = true
 	humanoid.PlatformStand = false

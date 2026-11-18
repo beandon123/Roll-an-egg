@@ -9,6 +9,7 @@ return function(harness)
 	local EggSpec = harness.load("src/shared/EggSpec")
 	local LuckBoost = harness.load("src/shared/LuckBoost")
 	local NumberFormat = harness.load("src/shared/NumberFormat")
+	local RiderPose = harness.load("src/shared/RiderPose")
 	local Runway = harness.load("src/shared/Runway")
 	local StaminaMath = harness.load("src/shared/StaminaMath")
 
@@ -232,6 +233,120 @@ return function(harness)
 			expect.near(StaminaMath.drainRate(50, 5, 0.8), 8)
 			expect.near(StaminaMath.timeUntilEmpty(100, 8), 12.5)
 			expect.equal(StaminaMath.timeUntilEmpty(100, 0), math.huge)
+			-- When it runs out: only while running down.
+			expect.near(StaminaMath.runsOutAt(100, 20, -8), 32.5)
+			expect.near(StaminaMath.runsOutAt(-5, 20, -8), 20)
+			expect.equal(StaminaMath.runsOutAt(100, 20, 0), nil)
+			expect.equal(StaminaMath.runsOutAt(100, 20, 12), nil)
+		end)
+	end)
+
+	describe("RiderPose", function()
+		local function riding(extra)
+			local state = { phase = 0, time = 0, speed = 21, steer = 0, tired = 0, cheer = 0 }
+			for key, value in extra or {} do
+				state[key] = value
+			end
+			return state
+		end
+
+		local function finite(pose, names, label)
+			for _, name in names do
+				local joint = pose[name]
+				expect.truthy(joint, label .. ": " .. name)
+				expect.equal(#joint, 6, label .. ": " .. name)
+				for _, value in joint do
+					expect.truthy(value == value and math.abs(value) < 10, `{label}: {name} = {value}`)
+				end
+			end
+		end
+
+		it("poses every joint, whatever is going on", function()
+			local states = {
+				riding(),
+				riding({ phase = 2, time = 7, speed = 32, steer = 1, tired = 1, cheer = 1, landed = 0, bumped = 0 }),
+				riding({ phase = 5, time = 3, speed = 18, steer = -1, tired = 0.5, landed = 0.1, bumped = 0.3 }),
+				riding({ speed = 500, steer = 9, tired = 4, cheer = -2, landed = -1, bumped = -1 }),
+			}
+			for index, state in states do
+				local pose = RiderPose.pose(state)
+				finite(pose, RiderPose.JOINTS, "state " .. index)
+				finite(RiderPose.toR6(pose), RiderPose.R6_JOINTS, "R6 state " .. index)
+			end
+			finite(RiderPose.tumble(3, 0.4), RiderPose.JOINTS, "tumble")
+
+			-- A pose can be reused from frame to frame.
+			local reused = RiderPose.pose(riding({ phase = 1 }))
+			local again = RiderPose.pose(riding({ phase = 1 }), RiderPose.tumble(3, 0.4))
+			for _, name in RiderPose.JOINTS do
+				for channel = 1, 6 do
+					expect.near(again[name][channel], reused[name][channel], 1e-9, name)
+				end
+			end
+		end)
+
+		it("runs with quicker feet on faster eggs, the legs taking turns", function()
+			expect.truthy(RiderPose.strideRate(18) < RiderPose.strideRate(32))
+			expect.truthy(RiderPose.strideRate(18) >= 2 and RiderPose.strideRate(32) <= 3.5)
+			expect.near(RiderPose.advance(0, 18, 1 / RiderPose.strideRate(18)), 0, 1e-9, "one stride a turn")
+
+			local quarter = RiderPose.pose(riding({ phase = math.pi / 2 }))
+			local threeQuarters = RiderPose.pose(riding({ phase = 3 * math.pi / 2 }))
+			expect.truthy(quarter.LeftHip[1] > quarter.RightHip[1] + 0.8, "left leg forward")
+			expect.truthy(threeQuarters.RightHip[1] > threeQuarters.LeftHip[1] + 0.8, "right leg forward")
+			-- Each arm swings against the leg on its side.
+			expect.truthy(quarter.RightShoulder[1] > quarter.LeftShoulder[1], "right arm forward")
+			-- Leaning into the run, bobbing up between steps.
+			expect.truthy(quarter.Root[1] < -0.1, "leaning forward")
+			expect.truthy(quarter.Root[5] > RiderPose.pose(riding({ phase = 0 })).Root[5], "bobs up between steps")
+		end)
+
+		it("leans into a turn, with the outside arm out", function()
+			local right = RiderPose.pose(riding({ steer = 1 }))
+			local left = RiderPose.pose(riding({ steer = -1 }))
+			expect.truthy(right.Root[3] < -0.2, "tips to the right")
+			expect.truthy(left.Root[3] > 0.2, "tips to the left")
+			-- The left arm swings out to the left (negative turn about z) in a right turn.
+			expect.truthy(-right.LeftShoulder[3] > -left.LeftShoulder[3] + 0.3)
+			expect.truthy(right.RightShoulder[3] >= 0.05 and left.LeftShoulder[3] <= -0.05, "never across the body")
+		end)
+
+		it("wobbles and windmills when tired, punches the air when the egg is theirs", function()
+			local calm, tired = 0, 0
+			for step = 0, 59 do
+				local t = step / 30
+				calm = math.max(calm, math.abs(RiderPose.pose(riding({ time = t, phase = t * 15 })).Root[3]))
+				local pose = RiderPose.pose(riding({ time = t, phase = t * 15, tired = 1 }))
+				tired = math.max(tired, math.abs(pose.Root[3]))
+				expect.truthy(pose.LeftShoulder[3] < -0.3 and pose.RightShoulder[3] > 0.3, "arms out wide")
+			end
+			expect.truthy(tired > calm + 0.1, `sways more: {tired} vs {calm}`)
+
+			local cheering = RiderPose.pose(riding({ cheer = 1 }))
+			expect.truthy(cheering.RightShoulder[1] > 2.5, "right arm up")
+		end)
+
+		it("squashes on landing and is jolted by a bump, then runs on", function()
+			local plain = RiderPose.pose(riding())
+			local landing = RiderPose.pose(riding({ landed = 0 }))
+			expect.truthy(landing.Root[5] < plain.Root[5] - 0.3, "crouches")
+			expect.truthy(landing.LeftKnee[1] < -1 and landing.RightKnee[1] < -1, "both knees bend")
+			local landed = RiderPose.pose(riding({ landed = RiderPose.LANDING_TIME }))
+			expect.near(landed.Root[5], plain.Root[5], 1e-9)
+
+			local bumped = RiderPose.pose(riding({ bumped = 0.05 }))
+			expect.truthy(-bumped.LeftShoulder[3] > -plain.LeftShoulder[3] + 0.5, "arms thrown out")
+			local over = RiderPose.pose(riding({ bumped = RiderPose.STUMBLE_TIME }))
+			expect.near(over.LeftShoulder[3], plain.LeftShoulder[3], 1e-9)
+		end)
+
+		it("folds onto R6 joints", function()
+			local pose = RiderPose.pose(riding({ phase = 1, steer = 0.5 }))
+			local r6 = RiderPose.toR6(pose)
+			expect.near(r6.RootJoint[1], pose.Root[1] + pose.Waist[1], 1e-9)
+			expect.near(r6.Neck[1], pose.Neck[1], 1e-9)
+			expect.near(r6["Left Hip"][1], pose.LeftHip[1] + 0.3 * pose.LeftKnee[1], 1e-9)
+			expect.near(r6["Right Shoulder"][3], pose.RightShoulder[3], 1e-9)
 		end)
 	end)
 

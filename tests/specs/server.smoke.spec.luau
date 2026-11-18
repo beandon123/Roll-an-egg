@@ -66,6 +66,7 @@ return function(harness)
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
 			Runway = session:require(folder.Runway),
+			StaminaMath = session:require(folder.StaminaMath),
 			Tuning = session:require(folder.Config.Tuning),
 			Zones = session:require(folder.Config.Zones),
 		}
@@ -322,9 +323,10 @@ return function(harness)
 			expect.equal(claimed.args[3], "Common")
 			expect.equal(claimed.args[4], egg.kind)
 
-			-- The player is still on the egg, rolling, and pays no stamina for it.
+			-- The player is still on the egg, rolling, and pays no stamina for it, so they do not look tired.
 			expect.equal(#session:sent("RideEnded", player), 0)
 			expect.truthy(session:lastSent("StaminaChanged", player).args[3] > 0, "stamina regenerates")
+			expect.equal(player:GetAttribute(shared(session).StaminaMath.RUNS_OUT_AT), nil)
 			rideAlongPath(session, player, egg, 3)
 			expect.equal(#session:sent("RideEnded", player), 0)
 
@@ -387,9 +389,18 @@ return function(harness)
 			local egg = mount(session, player, root, 1, "Epic") -- needs 200 stamina; the player has 100
 			expect.truthy(session:lastSent("RideStarted", player), "RideStarted")
 
+			-- Every device is told when the stamina will run out, to show the rider tiring.
+			local runsOutAt = shared(session).StaminaMath.RUNS_OUT_AT
+			expect.near(
+				player:GetAttribute(runsOutAt),
+				session:lastSent("RideStarted", player).args[2].startTime + 7.5,
+				1e-6
+			)
+
 			-- Steering clear of the obstacles, the stamina runs out after 7.5 s.
 			rideAlongPath(session, player, egg, 8)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "ThrownOff")
+			expect.equal(player:GetAttribute(runsOutAt), nil)
 			local left = session:lastSent("EggLeft", "all")
 			expect.equal(left.args[1], egg.id)
 			expect.equal(left.args[4], true, "cracking")

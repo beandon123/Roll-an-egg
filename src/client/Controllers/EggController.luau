@@ -1,4 +1,4 @@
--- Draws every egg on the runway and keeps riders sitting on them.
+-- Draws every egg on the runway and keeps riders standing on them (RiderAnimationController makes them run).
 --
 -- Eggs are not sent from the server as parts. The server only says "an egg appeared / was mounted / was left /
 -- is gone", and each device works out where every egg is from the shared clock (Shared/EggMotion). That keeps
@@ -48,8 +48,6 @@ local UiState = require(script.Parent.Parent.Ui.UiState)
 
 local localPlayer = Players.LocalPlayer
 
--- How far above the top of the egg a seated rider's root part sits.
-local SEAT_HEIGHT = 2
 -- Riders face down the runway (+Z).
 local FACE_FORWARD = CFrame.Angles(0, math.pi, 0)
 -- How quickly another rider's egg catches up with their reported steering.
@@ -451,13 +449,24 @@ local function announce(egg: ClientEgg)
 	)
 end
 
--- Holds a rider's character on top of an egg.
+-- How high a character's root part is above its feet when it stands: R15 characters say so (HipHeight is up to
+-- the bottom of the root part); R6 characters stand on legs 2 studs long.
+local function standHeight(character: Model, root: BasePart): number
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
+		return humanoid.HipHeight + root.Size.Y / 2
+	end
+	local leg = character:FindFirstChild("Left Leg")
+	return (if leg and leg:IsA("BasePart") then leg.Size.Y else 2) + root.Size.Y / 2
+end
+
+-- Holds a rider's character on top of an egg, standing on it.
 local function pinRider(userId: number, x: number, y: number, z: number, radius: number)
 	local player = Players:GetPlayerByUserId(userId)
 	local character = player and player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") then
-		root.CFrame = CFrame.new(x, y + radius + SEAT_HEIGHT, z) * FACE_FORWARD
+	if character and root and root:IsA("BasePart") then
+		root.CFrame = CFrame.new(x, y + radius + standHeight(character, root), z) * FACE_FORWARD
 	end
 end
 
@@ -722,6 +731,15 @@ function EggController.SetRider(eggId: number, userId: number)
 	egg.targetLateral = lateral
 	egg.offset = 0
 	refreshLabel(egg)
+end
+
+-- Calls `visit(userId, egg)` for every egg someone is riding.
+function EggController.VisitRiders(visit: (number, ClientEgg) -> ())
+	for _, egg in eggs do
+		if egg.riderUserId ~= nil then
+			visit(egg.riderUserId, egg)
+		end
+	end
 end
 
 -- Gives an egg a quick wobble, as when it bumps into something.

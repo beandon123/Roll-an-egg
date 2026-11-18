@@ -16,6 +16,7 @@ local EggModels = require(Shared.EggModels)
 local Net = require(Shared.Net)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
+local StaminaMath = require(Shared.StaminaMath)
 local Tuning = require(Shared.Config.Tuning)
 local Zones = require(Shared.Config.Zones)
 
@@ -211,6 +212,9 @@ local function dispatch(events)
 			local player = playersByUserId[event.rider]
 			if player then
 				Net.StaminaChanged:FireClient(player, event.value, event.time, event.rate, event.max)
+				-- So everyone sees a rider tiring as their stamina is about to run out (cleared when it stops
+				-- running down: the claim, or the end of the ride).
+				player:SetAttribute(StaminaMath.RUNS_OUT_AT, StaminaMath.runsOutAt(event.value, event.time, event.rate))
 			end
 		elseif kind == "Claimed" then
 			-- Into the inventory now; the rider keeps rolling on the egg until they get off.

@@ -34,6 +34,10 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   Riding a pet is not walking: a player on their pet can ride it down the runway and jump from it onto an egg.
 - On an egg: steer left/right and stay on until the claim meter fills. Steering into a bank kills you; steering into
   a gap sends you and the egg over the edge.
+- Riders run on top of their egg as it rolls, faster on faster eggs. They lean into their steering and stumble when
+  the egg bumps into something. As their stamina is about to run out they wobble and windmill their arms. Once the
+  egg is theirs they punch the air, and when they are thrown off they tumble away (see
+  [Riding animation](#riding-animation)).
 - A claimed egg goes into your inventory straight away, but you keep rolling on it (no stamina cost) until you jump
   off; then it disappears (a lineup egg comes back on its next lap). Nobody else can get on it.
 - Stamina drains while riding. If it runs out first, you lose your balance and tumble off, and the egg bounces
@@ -280,6 +284,37 @@ An egg nobody is riding steers round every obstacle on its own, along a path wor
 and on every device. A ridden egg goes where its rider steers. The rider's device spots a hit at once and reports
 it; the server checks the report, and also catches hits on its own when an egg is well inside an obstacle.
 
+### Riding animation
+
+Everyone riding an egg runs on top of it as it rolls under them, and every player sees it. R15 and R6 characters
+both work.
+
+- **Running:** quick steps on the spot, leaning forwards, arms pumping, bobbing up between steps. The feet are
+  quicker on faster eggs (about 2.4 strides a second on a Common egg, 3.2 on an Eternal one) and the strides longer.
+- **Landing** on an egg: a quick squash, then straight into the run.
+- **Steering:** they lean into the turn and look where they are going, with the outside arm out for balance.
+- **Bumps:** they rock with the egg, arms thrown out, and run on.
+- **Running out of stamina:** in the last 3 seconds before it runs out they hunch over, wobble more and more and
+  windmill their arms. Other players see this too: the server keeps the time each rider's stamina will run out on
+  their Player (the `StaminaRunsOutAt` attribute).
+- **Claimed:** one fist punched up high, pumping, for the rest of the ride.
+- **Thrown off** (out of stamina, knocked off, or over the edge): arms and legs flailing as they tumble through
+  the air, until they get their balance back.
+
+The poses are worked out in `src/shared/RiderPose.luau` (pure math, tested outside Studio). On each device,
+`src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints each frame. It runs after
+Roblox's own animations, so the pose replaces the sitting pose they would play, blending in and out so nothing
+snaps. Riders stand on the egg (`EggController`), as high above it as they would stand above the ground.
+
+To watch it without opening Studio:
+
+```bash
+lune run tools/rider-preview
+```
+
+Then open `tools/out/rider-preview.html` in a browser. It shows a rider on a rolling egg in every situation above, on
+an R15 or R6 character, from behind (as in the game), the side or the front, in slow motion if you like.
+
 **The look** (`src/server/Map/`): `Scenery` builds each zone's checkered ground (blending into the next zone's
 colours), stepped cliffs that players cannot climb (in the Ocean, a railed boardwalk over a reef with islets and a
 lighthouse), the zone's plants and rocks on the banks, distant hills, mesas, mountains or volcanoes, and the gate.
@@ -405,14 +440,15 @@ src/server/            ServerScriptService.Server
   Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
                          the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
-  Controllers/           Egg drawing, riding, HUD updates, the shop and settings, pet animation, admin flight,
-                         the admin panel
+  Controllers/           Egg drawing, riding and the riders' running animation, HUD updates, the shop and
+                         settings, pet animation, admin flight, the admin panel
   Ui/                    The Fusion HUD; the Eggs and Pets panels; the Shop, Settings and hub station panels
                          (Theme and Widgets hold the shared look); and the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        map-preview.luau: a web page that shows the map in 3D;
                        ui-preview.luau: a web page that sketches the HUD and its panels;
+                       rider-preview.luau: a web page that shows riders running on a rolling egg;
                        export-models.luau: every pet and egg as Studio model files (.rbxm)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```

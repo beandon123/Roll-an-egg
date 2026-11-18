@@ -480,12 +480,13 @@ return function(harness)
 			expect.equal(parts.root.Anchored, true)
 			expect.equal(parts.humanoid.Sit, true)
 
-			-- The character is placed on top of the egg, facing down the runway.
+			-- The character stands on top of the egg, facing down the runway. It is an R6 character (legs 2 studs
+			-- long) with no legs: its root part is held as high above the egg as it would stand above the ground.
 			session:renderFrame(1 / 60)
 			local center, spec = eggCenter(session, egg)
 			local seat = parts.root.CFrame
 			expect.near(seat.Position.Z, center.Z, 1e-3)
-			expect.near(seat.Position.Y, center.Y + spec.radius + 2, 1e-3)
+			expect.near(seat.Position.Y, center.Y + spec.radius + 2 + parts.root.Size.Y / 2, 1e-3)
 			expect.near(seat.LookVector.Z, 1, 1e-3, "facing +Z")
 
 			-- Pushing right on the stick moves the egg to the player's right. The camera looks down the
@@ -699,6 +700,156 @@ return function(harness)
 			local center = eggCenter(session, egg)
 			expect.near(otherRoot.CFrame.Position.Z, center.Z, 1e-3)
 			expect.near(otherRoot.CFrame.Position.X, 6, 1e-3)
+		end)
+	end)
+
+	describe("Client: riders running on their eggs", function()
+		-- Gives a character the joints of an R15 rig, or an R6 one (whose limbs' joints are turned, as in Roblox's
+		-- own R6 rig), all at rest. Returns them by name.
+		local function rigCharacter(session, humanoid, root, r6)
+			local RiderPose = session:require(session:service("ReplicatedStorage").Shared.RiderPose)
+			humanoid.RigType = if r6 then Enum.HumanoidRigType.R6 else Enum.HumanoidRigType.R15
+			if not r6 then
+				humanoid.HipHeight = 2
+				root.Size = Vector3.new(2, 2, 1)
+			end
+			local turned = {
+				["Left Shoulder"] = roblox.CFrame.new(-1, 0.5, 0) * roblox.CFrame.Angles(0, -math.pi / 2, 0),
+				["Right Shoulder"] = roblox.CFrame.new(1, 0.5, 0) * roblox.CFrame.Angles(0, math.pi / 2, 0),
+				["Left Hip"] = roblox.CFrame.new(-1, -1, 0) * roblox.CFrame.Angles(0, -math.pi / 2, 0),
+				["Right Hip"] = roblox.CFrame.new(1, -1, 0) * roblox.CFrame.Angles(0, math.pi / 2, 0),
+			}
+			local motors = {}
+			for _, name in if r6 then RiderPose.R6_JOINTS else RiderPose.JOINTS do
+				local motor = roblox.Instance.new("Motor6D")
+				motor.Name = name
+				motor.C0 = turned[name] or roblox.CFrame.identity
+				-- Roblox always has one; Lune has none until it is set.
+				motor.Transform = roblox.CFrame.identity
+				motor.Parent = humanoid.Parent
+				motors[name] = motor
+			end
+			return motors
+		end
+
+		-- Puts every joint back at rest, as Roblox's own animations would set them each frame.
+		local function rest(motors)
+			for _, motor in motors do
+				motor.Transform = roblox.CFrame.identity
+			end
+		end
+
+		local function atRest(motors): boolean
+			for _, motor in motors do
+				if (motor.Transform.Position).Magnitude > 1e-6 or motor.Transform.LookVector.Z > -1 + 1e-6 then
+					return false
+				end
+			end
+			return true
+		end
+
+		-- Where a limb hanging straight down from a joint points, in its parent part's space.
+		local function limbDirection(motor)
+			local turn = motor.C0.Rotation * motor.Transform.Rotation * motor.C0.Rotation:Inverse()
+			return turn:VectorToWorldSpace(Vector3.new(0, -1, 0))
+		end
+
+		it("makes a rider run on their egg, standing on it, and lets go after they hop off", function()
+			local session, parts = startClient()
+			local motors = rigCharacter(session, parts.humanoid, parts.root, false)
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			cameraAt(session, eggCenter(session, egg))
+			session:renderFrame(1 / 60, 20)
+
+			-- Standing on the egg: an R15 root part is its hip height and half its own height up.
+			local center, spec = eggCenter(session, egg)
+			expect.near(parts.root.CFrame.Position.Y, center.Y + spec.radius + 3, 1e-3)
+
+			-- Leaning into the run, the legs taking turns to swing forward.
+			expect.truthy(motors.Root.Transform.LookVector.Y < -0.1, "leaning forward")
+			local most, least = -math.huge, math.huge
+			for _ = 1, 30 do
+				rest(motors)
+				session:renderFrame(1 / 60)
+				local ahead = limbDirection(motors.LeftHip).Z - limbDirection(motors.RightHip).Z
+				most, least = math.max(most, ahead), math.min(least, ahead)
+			end
+			-- A leg swinging forward points its foot ahead (-Z).
+			expect.truthy(most > 0.5 and least < -0.5, `legs take turns: {least} to {most}`)
+
+			-- Hops off: blended back to Roblox's own animations, then left alone.
+			task.wait(0.6)
+			session:heartbeat(1 / 60)
+			session:fire(session:service("UserInputService"), "JumpRequest")
+			session:fromServer("RideEnded", "Dismount", { eggId = 1, zone = 1, rarity = "Common" })
+			session:fromServer("EggLeft", 1, session.clock, 0, false)
+			session:renderFrame(1 / 60, 30)
+			rest(motors)
+			session:renderFrame(1 / 60)
+			expect.truthy(atRest(motors), "no longer posed")
+		end)
+
+		it("tumbles a rider who is thrown off until they get their balance back", function()
+			local session, parts = startClient()
+			local motors = rigCharacter(session, parts.humanoid, parts.root, false)
+			local egg = eggData(session, 1, 1, "Rare")
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg, 9)
+			cameraAt(session, eggCenter(session, egg))
+			session:renderFrame(1 / 60, 10)
+
+			session:fromServer("RideEnded", "ThrownOff", { eggId = 1, zone = 1, rarity = "Rare" })
+			session:fromServer("EggLeft", 1, session.clock, 1, true)
+			-- Flailing: the arms windmill right round while stunned.
+			local highest = -math.huge
+			for _ = 1, 30 do
+				rest(motors)
+				session:renderFrame(1 / 60)
+				highest = math.max(highest, limbDirection(motors.LeftShoulder).Y)
+			end
+			expect.truthy(highest > 0.3, `an arm swings up overhead: {highest}`)
+
+			-- Once the stun is over, back to Roblox's own animations.
+			local Tuning = shared(session).Tuning
+			session:renderFrame(1 / 60, math.ceil(Tuning.STUN_TIME * 60) + 20)
+			rest(motors)
+			session:renderFrame(1 / 60)
+			expect.truthy(atRest(motors), "no longer posed")
+		end)
+
+		it("shows another rider tiring as their stamina is about to run out, on an R6 character", function()
+			local session = startClient()
+			local other, humanoid, root = session:addPlayer(999, "Other")
+			local motors = rigCharacter(session, humanoid, root, true)
+			local egg = eggData(session, 1, 1, "Rare")
+			egg.rider = 999
+			session:fromServer("EggSpawned", egg)
+			cameraAt(session, eggCenter(session, egg))
+
+			-- How far the left arm swings out to the side, at most, over a second.
+			local function armOut(): number
+				local widest = -math.huge
+				for _ = 1, 60 do
+					rest(motors)
+					session:renderFrame(1 / 60)
+					widest = math.max(widest, -limbDirection(motors["Left Shoulder"]).X)
+					-- The legs swing forwards and back, not out to the side, however the R6 joints are turned.
+					expect.truthy(math.abs(limbDirection(motors["Left Hip"]).X) < 0.35, "leg swings fore and aft")
+				end
+				return widest
+			end
+
+			-- Past the squash of landing on the egg (arms thrown out), running along.
+			armOut()
+			local calm = armOut()
+			expect.truthy(calm < 0.6, `arms in while running: {calm}`)
+			local StaminaMath = session:require(session:service("ReplicatedStorage").Shared.StaminaMath)
+			other:SetAttribute(StaminaMath.RUNS_OUT_AT, session.clock + 0.5)
+			armOut()
+			local tired = armOut()
+			expect.truthy(tired > 0.8, `arms flung out for balance: {tired}`)
 		end)
 	end)
 
