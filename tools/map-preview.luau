@@ -150,27 +150,34 @@ end
 -- Every tier of the training stick, one on each plot's stand: plot 1 has the first tier, plot 8 the last.
 local TrainingStand = session:require(Server.Map.TrainingStand)
 local StickModels = session:require(Shared.StickModels)
-local BirlingPose = session:require(Shared.BirlingPose)
+local RiderPose = session:require(Shared.RiderPose)
 local Sticks = session:require(Shared.Config.Sticks)
 for index = 1, Plots.COUNT do
 	TrainingStand.setLevel(workspace.Map.Plots["Plot" .. index].TrainingStick, index, index)
 end
 
--- A blocky player rolling on some of them, posed the way TrainingController poses a real R15 character (from
--- Shared/BirlingPose), each caught at a different moment of their stride. The roller is turned to match.
+-- A blocky player rolling on some of them, posed the way RiderAnimationController poses a real R15 character (from
+-- Shared/RiderPose), each caught at a different moment of their stride. The roller is turned to match.
 local function addRider(index: number, stride: number)
 	local level = index
 	local angle = stride * 0.7
 	local stand = workspace.Map.Plots["Plot" .. index].TrainingStick
 	local roller = stand.Roller
 	moveModel(roller, StickModels.axleCFrame(index, level) * StickModels.spin(angle))
-	local pose = BirlingPose.pose(stride, stride * 0.4, 1)
+	local pose = RiderPose.pose({
+		phase = stride,
+		time = stride * 0.4,
+		pace = Sticks.RUN_PACE,
+		steer = 0,
+		tired = 0,
+		cheer = 0,
+	})
 	local function turn(name)
 		local p = pose[name]
-		return roblox.CFrame.Angles(p.x, p.y, p.z)
+		return roblox.CFrame.fromEulerAnglesYXZ(p[1], p[2], p[3])
 	end
 	local drop = Sticks.maxTop(level) - Sticks.topHeight(level, angle)
-	local root = StickModels.riderCFrame(index, level, 3) * roblox.CFrame.new(0, pose.Root.lift - drop, 0)
+	local root = StickModels.riderCFrame(index, level, 3) * roblox.CFrame.new(0, pose.Root[5] - drop, 0)
 	local shirt, skin, pants = { 70, 130, 230 }, { 250, 210, 160 }, { 50, 60, 90 }
 	local function limb(name, cframe, size, color)
 		local part = roblox.Instance.new("Part")
@@ -181,7 +188,7 @@ local function addRider(index: number, stride: number)
 		part.Color = roblox.Color3.fromRGB(color[1], color[2], color[3])
 		part.Parent = eggFolder
 	end
-	local lower = root * roblox.CFrame.new(0, -0.2, 0)
+	local lower = root * roblox.CFrame.new(0, -0.2, 0) * turn("Root")
 	limb("LowerTorso", lower * roblox.CFrame.new(0, -0.2, 0), { 2, 0.4, 1 }, pants)
 	local waist = lower * turn("Waist")
 	limb("UpperTorso", waist * roblox.CFrame.new(0, 0.8, 0), { 2, 1.6, 1 }, shirt)

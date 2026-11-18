@@ -5,9 +5,9 @@
 --                again when they walk away.
 --     Rollers    every stand someone is rolling on spins (its Roller is turned by its Root; the rest is welded on),
 --                splashes water, and sparkles and glows during a 2x boost. A stand that upgrades bursts with sparkles.
---     Riders     everyone rolling on a stand is posed running on the spot, arms out for balance (Shared/BirlingPose),
---                by setting their joints' Motor6D.Transform after Roblox's own animations each frame. A plank or a
---                girder rocks them up and down as it turns.
+--     Riders     everyone rolling on a stand runs on the spot, the same way as riders on the eggs: this tells
+--                RiderAnimationController who is on a stand each frame, how hard they run (flat out during a 2x boost)
+--                and how far a plank or a girder rocks them up and down as it turns.
 --     "+1"       each rep floats a number up over the rider's head: the local player's from the server (exactly what
 --                they got), other riders' worked out here from their stand.
 --     2x         the server's bubbles appear on screen; tapping one asks the server for the boost.
@@ -21,13 +21,13 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
-local BirlingPose = Load.shared("BirlingPose")
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
 local Plots = Load.shared("Plots")
 local StickModels = Load.shared("StickModels")
 local Sticks = Load.shared("Config", "Sticks")
 
+local RiderAnimationController = require(script.Parent.RiderAnimationController)
 local TrainingUi = require(script.Parent.Parent.Ui.TrainingUi)
 local UiState = require(script.Parent.Parent.Ui.UiState)
 
@@ -52,28 +52,16 @@ local POPUP_RISE = 3.4
 local MAX_POPUPS = 40
 -- How long a tapped bubble takes to pop.
 local POP_TIME = 0.22
--- How quickly a rider's pose eases in as they step on.
-local POSE_EASE = 4
 
 local STAMINA_BLUE = Color3.fromRGB(110, 220, 255)
 local BOOST_GOLD = Color3.fromRGB(255, 210, 60)
 local INK = Color3.fromRGB(46, 30, 22)
-
--- R6 characters have these joints instead of R15's.
-local R6_JOINTS = { "RootJoint", "Neck", "Left Shoulder", "Right Shoulder", "Left Hip", "Right Hip" }
 
 type StandState = {
 	angle: number,
 	speed: number,
 	level: number?,
 	lastPopup: number,
-}
-
-type RiderState = {
-	motors: { [string]: Motor6D },
-	r6: boolean,
-	stride: number,
-	weight: number,
 }
 
 type Popup = {
@@ -86,9 +74,6 @@ type Popup = {
 }
 
 local stands: { [Model]: StandState } = {}
-local riders: { [Model]: RiderState } = {}
--- This frame's riders, with what posing them needs (worked out in the render step, used after the animations).
-local posing: { [Model]: { level: number, angle: number, boosted: boolean } } = {}
 local popups: { Popup } = {}
 local popupFolder: Folder
 
@@ -172,87 +157,6 @@ local function stepPopups()
 			entry.label.TextTransparency = fade
 			entry.stroke.Transparency = fade
 			index += 1
-		end
-	end
-end
-
-----------------------------------------------------------------------------------------------------------------
--- Posing riders
-
-local function findMotors(character: Model): ({ [string]: Motor6D }, boolean)
-	local motors = {}
-	for _, motor in character:GetDescendants() do
-		if motor:IsA("Motor6D") then
-			motors[motor.Name] = motor
-		end
-	end
-	return motors, motors.RootJoint ~= nil and motors.Root == nil
-end
-
--- Sets a joint so its child turns by `rotation` about the joint, in the parent part's own axes, and moves up `lift`.
-local function setJoint(motor: Motor6D?, rotation: CFrame, lift: number?)
-	if motor == nil then
-		return
-	end
-	local c0 = motor.C0
-	local turn = c0 - c0.Position
-	motor.Transform = turn:Inverse() * CFrame.new(0, lift or 0, 0) * rotation * turn
-end
-
-local function angles(joint): CFrame
-	return CFrame.Angles(joint.x, joint.y, joint.z)
-end
-
-local function pose(entry: RiderState, info, deltaTime: number)
-	local rate = if info.boosted then BirlingPose.BOOST_STRIDE_RATE else BirlingPose.STRIDE_RATE
-	entry.stride = (entry.stride + deltaTime * rate * 2 * math.pi) % (2 * math.pi)
-	entry.weight = math.min(1, entry.weight + deltaTime * POSE_EASE)
-	local joints = BirlingPose.pose(entry.stride, clock, entry.weight)
-	-- A plank or a girder rocks the rider up and down as it turns.
-	local drop = (Sticks.maxTop(info.level) - Sticks.topHeight(info.level, info.angle)) * entry.weight
-	local motors = entry.motors
-
-	if entry.r6 then
-		local waist = joints.Waist
-		setJoint(motors.RootJoint, angles(waist), joints.Root.lift - drop)
-		setJoint(motors.Neck, angles(joints.Neck))
-		-- R6 legs hang from the torso, which leans: lean them back to stand under it.
-		setJoint(motors["Left Hip"], CFrame.Angles(joints.LeftHip.x - waist.x, 0, 0))
-		setJoint(motors["Right Hip"], CFrame.Angles(joints.RightHip.x - waist.x, 0, 0))
-		setJoint(motors["Left Shoulder"], angles(joints.LeftShoulder))
-		setJoint(motors["Right Shoulder"], angles(joints.RightShoulder))
-		return
-	end
-	for _, name in BirlingPose.JOINTS do
-		local joint = joints[name]
-		setJoint(motors[name], angles(joint), if name == "Root" then joint.lift - drop else nil)
-	end
-end
-
--- Hands a character's joints back to Roblox's animations.
-local function release(character: Model, entry: RiderState)
-	for name, motor in entry.motors do
-		if table.find(BirlingPose.JOINTS, name) or table.find(R6_JOINTS, name) then
-			motor.Transform = CFrame.identity
-		end
-	end
-	riders[character] = nil
-end
-
--- After Roblox's animations have run: poses everyone rolling on a stick this frame.
-local function poseRiders(deltaTime: number)
-	for character, info in posing do
-		local entry = riders[character]
-		if entry == nil then
-			local motors, r6 = findMotors(character)
-			entry = { motors = motors, r6 = r6, stride = 0, weight = 0 }
-			riders[character] = entry
-		end
-		pose(entry :: RiderState, info, deltaTime)
-	end
-	for character, entry in riders do
-		if posing[character] == nil then
-			release(character, entry)
 		end
 	end
 end
@@ -347,8 +251,13 @@ local function stepStand(plot: Instance, stand: Model, deltaTime: number, now: n
 	end
 
 	local character = rider and rider.Character
-	if character then
-		posing[character] = { level = level, angle = state.angle, boosted = boosted }
+	if rider and character then
+		-- Running on the roller (sprinting in a boost), rocked down as a plank or a girder turns.
+		RiderAnimationController.SetStickRider(
+			rider.UserId,
+			if boosted then Sticks.BOOST_RUN_PACE else Sticks.RUN_PACE,
+			Sticks.topHeight(level, state.angle) - Sticks.maxTop(level)
+		)
 		-- Other riders' "+1"s (the local player's come from the server).
 		if
 			rider ~= localPlayer
@@ -535,7 +444,6 @@ local function render(deltaTime: number)
 	local camera = Workspace.CurrentCamera
 	local eye = if camera then camera.CFrame.Position else nil
 
-	table.clear(posing)
 	local map = Workspace:FindFirstChild("Map")
 	local plots = map and map:FindFirstChild("Plots")
 	if plots then
@@ -588,10 +496,6 @@ end
 function TrainingController.Start()
 	popupFolder.Parent = localPlayer:WaitForChild("PlayerGui")
 	RunService.RenderStepped:Connect(render)
-	-- After Roblox's character animations have set the joints, so the pose wins.
-	RunService.Stepped:Connect(function(_time, deltaTime)
-		poseRiders(deltaTime)
-	end)
 end
 
 return TrainingController

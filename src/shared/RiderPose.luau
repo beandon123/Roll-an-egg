@@ -1,12 +1,13 @@
 --!strict
--- How a rider moves on top of a rolling egg. They run on the spot to stay on it as it rolls under them, quicker on
--- faster eggs. They lean into their steering, and stumble with their arms thrown out when the egg bumps into
+-- How a rider moves on top of a rolling egg, or of their training stick's roller. They run on the spot to stay on it
+-- as it rolls under them, quicker on faster eggs (and in a training boost). They lean into their steering, and stumble with their arms thrown out when the egg bumps into
 -- something. As their stamina runs out they hunch over, wobble and windmill their arms to keep their balance. Once
 -- the egg is theirs they pump a fist in the air as they go. When they are thrown off they tumble through the air,
 -- arms and legs flailing.
 --
--- Pure math (no Roblox APIs), so the test runner and the preview page (tools/rider-preview) can load it. The client's
--- RiderAnimationController keeps each rider's State up to date and turns the pose into their joints every frame.
+-- Pure math (no Roblox APIs), so the test runner and the preview pages (tools/rider-preview, tools/map-preview) can
+-- load it. The client's RiderAnimationController keeps each rider's State up to date and turns the pose into their
+-- joints every frame.
 --
 -- A pose gives each joint of an R15 character (named as its Motor6D) a turn and a shift of the limb hanging from it:
 -- { rx, ry, rz, px, py, pz }. Turns are in radians about the parent part's axes, Roblox's own (x to the character's
@@ -17,18 +18,20 @@
 --     rz  positive tips the body to its left, swings a right limb out to the side and a left limb in
 -- RiderPose.toR6 folds a pose onto the six joints of an R6 character.
 
+local Rarities = require(script.Parent.Config.Rarities)
+
 local RiderPose = {}
 
 export type Pose = { [string]: { number } }
 
 export type State = {
-	-- Where the stride is, in radians: one full turn is a step with each foot. The caller moves it on by
-	-- RiderPose.strideRate turns a second, so the legs never jump when the speed changes.
+	-- Where the stride is, in radians: one full turn is a step with each foot. The caller moves it on with
+	-- RiderPose.advance, so the legs never jump when the pace changes.
 	phase: number,
 	-- Seconds, for the sways and flails that are not tied to the stride.
 	time: number,
-	-- How fast the egg rolls, in studs a second.
-	speed: number,
+	-- How hard they run, from 0 (as on the slowest eggs) to 1 (the fastest): see RiderPose.paceOf.
+	pace: number,
 	-- Steering, from -1 (sideways to the rider's left, flat out) to 1 (to their right).
 	steer: number,
 	-- 0 normally, rising to 1 as the rider's stamina is about to run out.
@@ -77,19 +80,27 @@ local LEGS = { { "Left", 1, 0, -1 }, { "Right", -1, math.pi, 1 } }
 local WINDMILL_ARMS = { { "Left", -1, 0 }, { "Right", 1, 2.6 } }
 local TUMBLE_ARMS = { { "Left", -1, 0 }, { "Right", 1, 2.4 } }
 
--- Strides a second on an egg rolling at `speed` studs a second: quicker feet on faster eggs, from about 2.4 on the
--- slowest (Common) eggs to about 3.2 on the fastest.
-function RiderPose.strideRate(speed: number): number
-	return math.clamp(1.4 + speed * 0.055, 2.2, 3.4)
-end
-
--- The stride's phase `deltaTime` seconds on, on an egg rolling at `speed`.
-function RiderPose.advance(phase: number, speed: number, deltaTime: number): number
-	return (phase + TAU * RiderPose.strideRate(speed) * deltaTime) % TAU
-end
+-- The roll speeds of the slowest eggs (Common) and the fastest (Eternal), studs a second.
+local SLOWEST = Rarities.rollSpeedOf(1)
+local FASTEST = Rarities.rollSpeedOf(#Rarities.Order)
 
 local function clamp01(value: number): number
 	return math.clamp(value, 0, 1)
+end
+
+-- How hard a rider runs on an egg rolling at `speed` studs a second: 0 on the slowest eggs, 1 on the fastest.
+function RiderPose.paceOf(speed: number): number
+	return clamp01((speed - SLOWEST) / math.max(1, FASTEST - SLOWEST))
+end
+
+-- Strides a second at `pace`: 2.4 at 0 (the slowest eggs), up to 3.2 at 1 (the fastest).
+function RiderPose.strideRate(pace: number): number
+	return 2.4 + 0.8 * clamp01(pace)
+end
+
+-- The stride's phase `deltaTime` seconds on, running at `pace`.
+function RiderPose.advance(phase: number, pace: number, deltaTime: number): number
+	return (phase + TAU * RiderPose.strideRate(pace) * deltaTime) % TAU
 end
 
 local function smoothstep(from: number, to: number, value: number): number
@@ -135,8 +146,7 @@ function RiderPose.pose(state: State, into: Pose?): Pose
 	local tired = clamp01(state.tired)
 	local cheer = clamp01(state.cheer)
 	local steer = math.clamp(state.steer, -1, 1)
-	-- 0 on the slowest eggs, 1 on the fastest.
-	local pace = clamp01((state.speed - 18) / 14)
+	local pace = clamp01(state.pace)
 
 	-- Landing: a quick squash, legs gathered under the body before the strides open up.
 	local landing = 0

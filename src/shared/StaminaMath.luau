@@ -28,8 +28,8 @@ function StaminaMath.timeUntilEmpty(stamina: number, drain: number): number
 	return math.max(0, stamina) / drain
 end
 
--- The attribute the server keeps on each Player while their stamina is running down on an egg: the server time it
--- will run out (missing otherwise). Every device reads it to show riders tiring (the client's
+-- The attribute the server keeps on each Player while their stamina is running down (riding an egg or a pet): the
+-- server time it will run out (missing otherwise). Every device reads it to show egg riders tiring (the client's
 -- RiderAnimationController).
 StaminaMath.RUNS_OUT_AT = "StaminaRunsOutAt"
 

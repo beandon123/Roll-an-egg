@@ -57,6 +57,10 @@ Sticks.BOOST_MULTIPLIER = 2
 Sticks.CLAIM_GRACE = 0.4
 -- The roller spins this many times faster during a boost, and the rider's legs keep up.
 Sticks.BOOST_SPIN = 1.6
+-- How hard the rider runs on the roller, as in Shared/RiderPose (the same animation as riding an egg): 0 is as on the
+-- slowest eggs, 1 the fastest. A steady run normally, a flat-out sprint during a boost.
+Sticks.RUN_PACE = 0.15
+Sticks.BOOST_RUN_PACE = 1
 
 -- The stand: the pool's water is this high above the plaza, and the roller's lowest point hangs this far above it.
 Sticks.WATER_HEIGHT = 1

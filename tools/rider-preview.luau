@@ -1,7 +1,8 @@
 --!nocheck
 -- Builds a web page that shows a rider running on a rolling egg, in 3D, so the riding animation (Shared/RiderPose)
 -- can be checked without opening Studio: running on slow and fast eggs, steering, bumps, running out of stamina
--- (and being thrown off), landing, and cheering after a claim, on an R15 or an R6 character.
+-- (and being thrown off), landing, cheering after a claim, and rolling on the training stick (with a 2x boost), on an
+-- R15 or an R6 character.
 -- From the repository root:
 --     lune run tools/rider-preview
 -- writes tools/out/rider-preview.html. Open it in a browser. Pass a path to write somewhere else.
@@ -17,6 +18,7 @@ local harness = require("../tests/harness")
 local EggModels = harness.load("src/shared/EggModels")
 local EggSpec = harness.load("src/shared/EggSpec")
 local RiderPose = harness.load("src/shared/RiderPose")
+local Sticks = harness.load("src/shared/Config/Sticks")
 local Tuning = harness.load("src/shared/Config/Tuning")
 
 local outPath = process.args[1] or "tools/out/rider-preview.html"
@@ -45,7 +47,7 @@ local scenarios = {
 	{
 		id = "run",
 		label = "Running",
-		about = "Running on the spot as a Common egg rolls under them (18 studs a second).",
+		about = "Running on the spot as a Common egg (the slowest) rolls under them.",
 		zone = 1,
 		rarity = "Common",
 		seconds = 6,
@@ -56,7 +58,7 @@ local scenarios = {
 	{
 		id = "fast",
 		label = "Fast egg",
-		about = "Quicker feet and longer strides on an Eternal egg (32 studs a second).",
+		about = "Quicker feet and longer strides on an Eternal egg, the fastest.",
 		zone = 6,
 		rarity = "Eternal",
 		seconds = 6,
@@ -133,6 +135,18 @@ local scenarios = {
 	},
 }
 
+table.insert(scenarios, {
+	id = "stick",
+	label = "Training stick",
+	about = "Rolling on the training stick: the same run, flat out during a 2x boost (from 2 to 3.5 seconds).",
+	stick = 3,
+	seconds = 6,
+	at = function(t)
+		local boost = smooth(1.9, 2.2, t) - smooth(3.5, 3.8, t)
+		return { pace = Sticks.RUN_PACE + (Sticks.BOOST_RUN_PACE - Sticks.RUN_PACE) * boost, boost = boost }
+	end,
+})
+
 -- The four channels the page needs from each joint (the rest are always 0): rx, ry, rz and py.
 local function pack(pose, names, into)
 	for _, name in names do
@@ -174,15 +188,33 @@ local function eggOf(zone: number, rarity: string)
 	}
 end
 
+-- A training stick tier as the page draws it: a plain round log, spinning (Config/Sticks).
+local function stickOf(level: number)
+	local tier = Sticks.tier(level)
+	local radius = if tier.profile.kind == "Round" then tier.profile.radius else 1
+	return {
+		stick = true,
+		name = tier.name,
+		rarity = "Training",
+		radius = radius,
+		spin = tier.spin,
+		speed = 0,
+		rollHeight = 3,
+		boxes = {},
+	}
+end
+
 local list = {}
 for _, scenario in scenarios do
-	local egg = eggOf(scenario.zone, scenario.rarity)
+	local egg = if scenario.stick then stickOf(scenario.stick) else eggOf(scenario.zone, scenario.rarity)
+	local basePace = if scenario.stick then Sticks.RUN_PACE else RiderPose.paceOf(egg.speed)
 	local frames = {}
 	local phase = 0
 	local pose, r6 = nil, nil
 	for index = 0, scenario.seconds * FPS - 1 do
 		local t = index / FPS
 		local extra = scenario.at(t)
+		local pace = extra.pace or basePace
 		local frame = {}
 		if extra.tumble then
 			pose = RiderPose.tumble(t, extra.tumble, pose)
@@ -190,7 +222,7 @@ for _, scenario in scenarios do
 			pose = RiderPose.pose({
 				phase = phase,
 				time = t,
-				speed = egg.speed,
+				pace = pace,
 				steer = extra.steer or 0,
 				tired = extra.tired or 0,
 				cheer = extra.cheer or 0,
@@ -202,8 +234,9 @@ for _, scenario in scenarios do
 		pack(pose, RiderPose.JOINTS, frame)
 		pack(r6, RiderPose.R6_JOINTS, frame)
 		table.insert(frame, if extra.tumble then round(extra.tumble) else -1)
+		table.insert(frame, round(extra.boost or 0))
 		table.insert(frames, frame)
-		phase = RiderPose.advance(phase, egg.speed, 1 / FPS)
+		phase = RiderPose.advance(phase, pace, 1 / FPS)
 	end
 	table.insert(list, {
 		id = scenario.id,
@@ -219,6 +252,7 @@ local data = {
 	joints = RiderPose.JOINTS,
 	r6Joints = RiderPose.R6_JOINTS,
 	stunTime = Tuning.STUN_TIME,
+	boostSpin = Sticks.BOOST_SPIN,
 	scenarios = list,
 }
 

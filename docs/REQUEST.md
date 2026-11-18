@@ -219,8 +219,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
       walk up to it and roll on it to build stamina, as long as they like (decided). Placed in the plaza on the other
       side of the gate from the green button, with a sign at its front corner (proposed)
 - [ ] Rolling is birling (decided): the player runs on the spot on top of the roller while it spins under them,
-      leaning in with arms out for balance; the roller sits over a wooden trough of water (proposed); jump or a Stop
-      button to get off (proposed)
+      with the same running animation as riding an egg (decided), sprinting during a 2x boost (proposed); the roller
+      sits over a wooden trough of water (proposed); jump or a Stop button to get off (proposed)
 - [ ] 1 stamina 4 times a second at the first tier, with a "+1" over the player's head (decided); it adds to Max
       Stamina for good, through the player's doublings and trail like the rest of it (proposed: the number shown is
       what was really added)

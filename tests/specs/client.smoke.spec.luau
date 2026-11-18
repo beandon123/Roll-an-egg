@@ -2850,12 +2850,15 @@ return function(harness)
 			expect.equal(training.Bubble.Visible, false)
 		end)
 
-		it("spins the roller under a rider and poses them birling, then lets them go", function()
+		it("spins the roller under a rider and runs them on it, as on an egg, then lets them go", function()
 			local session, parts = startClient()
 			local mine, theirs = buildPlots(session)
 			local m = modules(session)
 
 			-- An R15 character: a joint for each part the pose turns.
+			parts.humanoid.RigType = Enum.HumanoidRigType.R15
+			parts.humanoid.HipHeight = 2
+			parts.root.Size = Vector3.new(2, 2, 1)
 			local motors = {}
 			for _, name in
 				{
@@ -2876,9 +2879,13 @@ return function(harness)
 			do
 				local motor = roblox.Instance.new("Motor6D")
 				motor.Name = name
+				-- Roblox always has one; Lune has none until it is set.
+				motor.Transform = CFrame.identity
 				motor.Parent = parts.root.Parent
 				motors[name] = motor
 			end
+			-- Held on top of the roller, as TrainingService does.
+			parts.root.CFrame = m.StickModels.riderCFrame(1, 1, 3)
 			local rest = mine.Roller.PrimaryPart.CFrame
 			local theirRest = theirs.Roller.PrimaryPart.CFrame
 			-- Splashes and other riders' reps only show near the camera.
@@ -2889,12 +2896,16 @@ return function(harness)
 			local turned = mine.Roller.PrimaryPart.CFrame
 			expect.near((turned.Position - m.StickModels.axleCFrame(1, 1).Position).Magnitude, 0, 1e-3)
 			expect.truthy(turned.UpVector:Dot(rest.UpVector) < 0.999, "the roller turns")
-			-- Arms held out to the sides, and the legs running.
-			local rightArm = motors.RightShoulder.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
-			local leftArm = motors.LeftShoulder.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
-			expect.truthy(rightArm.X > 0.6, "right arm out")
-			expect.truthy(leftArm.X < -0.6, "left arm out")
-			expect.truthy(motors.LeftKnee.Transform ~= CFrame.identity, "knees bend")
+			-- Running on the spot as on an egg: leaning forward, the legs taking turns to swing forward (-Z).
+			expect.truthy(motors.Root.Transform.LookVector.Y < -0.1, "leaning forward")
+			local most, least = -math.huge, math.huge
+			for _ = 1, 24 do
+				session:renderFrame(1 / 60)
+				local left = motors.LeftHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+				local right = motors.RightHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+				most, least = math.max(most, right.Z - left.Z), math.min(least, right.Z - left.Z)
+			end
+			expect.truthy(most > 0.5 and least < -0.5, `legs take turns: {least} to {most}`)
 			expect.equal(mine.SplashFx.Splash.Enabled, true, "splashing")
 			expect.equal(theirs.Roller.PrimaryPart.CFrame, theirRest, "nobody on theirs, so it stays still")
 
@@ -2913,10 +2924,16 @@ return function(harness)
 			end
 			expect.truthy(fives >= 1, "the other rider's reps")
 
-			-- Off the stick: the joints are handed back to the character's own animations.
+			-- Off the stick: the joints blend back to the character's own animations (which set them every frame),
+			-- then are left to them.
 			mine:SetAttribute("Rider", 0)
+			session:renderFrame(1 / 30, 15)
+			for _, motor in motors do
+				motor.Transform = CFrame.identity
+			end
 			session:renderFrame(1 / 30)
 			expect.equal(motors.RightShoulder.Transform, CFrame.identity)
+			expect.equal(motors.LeftHip.Transform, CFrame.identity)
 			expect.equal(mine.SplashFx.Splash.Enabled, false)
 		end)
 

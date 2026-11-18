@@ -232,8 +232,8 @@ button: a roller held between two posts over a wooden trough of water (with a li
 strip round its foot in the tier's colour, the tier's name floating above, and a sign at its front corner.
 
 **Rolling.** Walk up to your stick and use its prompt (**Start rolling**): you are stood on top of the roller,
-facing the plaza, and run on the spot while it spins under your feet, leaning forward with your arms held out wide,
-see-sawing for balance (birling). Stay as long as you like; jump, or press **STOP**, to step off. Only the plot's
+facing the plaza, and run on the spot while it spins under your feet (birling), the same way riders run on the eggs
+(see [Riding animation](#riding-animation)): a steady run, and a flat-out sprint during a 2x boost. Stay as long as you like; jump, or press **STOP**, to step off. Only the plot's
 owner can use its stick, so nobody else sees its prompts.
 
 - Every quarter of a second is a **rep**: 4 a second. Each rep adds Max Stamina for good, and the amount floats up
@@ -278,9 +278,9 @@ How it is built:
   Max Stamina trained is saved as `TrainedStamina`, the tier as `StickLevel`.
 - The rollers are built from parts in `src/shared/StickModels.luau` (shared, so the upgrade panel can show them in
   3D); the stand round them in `src/server/Map/TrainingStand.luau`; where it stands in `src/shared/Plots.luau`.
-- Each device spins the rollers, poses the riders and floats the numbers (`src/client/Controllers/TrainingController`).
-  The pose (`src/shared/BirlingPose.luau`) is set on each character's joints every frame after Roblox's own
-  animations, so it needs no uploaded animation and works for R15 and R6 characters alike. The screens are in
+- Each device spins the rollers and floats the numbers (`src/client/Controllers/TrainingController`), and runs the
+  riders with the riding animation (`RiderAnimationController`, see [Riding animation](#riding-animation)); how hard
+  they run, normally and in a boost, is `RUN_PACE` and `BOOST_RUN_PACE` in `Config/Sticks.luau`. The screens are in
   `src/client/Ui/TrainingUi.luau`.
 
 ## Hub stations
@@ -400,11 +400,14 @@ it; the server checks the report, and also catches hits on its own when an egg i
 
 ### Riding animation
 
-Everyone riding an egg runs on top of it as it rolls under them, and every player sees it. R15 and R6 characters
-both work.
+Everyone riding an egg runs on top of it as it rolls under them, and so does everyone rolling on their
+[training stick](#the-training-stick). Every player sees it, and R15 and R6 characters both work.
 
 - **Running:** quick steps on the spot, leaning forwards, arms pumping, bobbing up between steps. The feet are
-  quicker on faster eggs (about 2.4 strides a second on a Common egg, 3.2 on an Eternal one) and the strides longer.
+  quicker on faster eggs (2.4 strides a second on a Common egg, the slowest, up to 3.2 on an Eternal one, the
+  fastest) and the strides longer.
+- **On the training stick:** the same run, at a steady pace, and flat out during a 2x boost. A plank or a girder
+  rocks its rider up and down as it turns.
 - **Landing** on an egg: a quick squash, then straight into the run.
 - **Steering:** they lean into the turn and look where they are going, with the outside arm out for balance.
 - **Bumps:** they rock with the egg, arms thrown out, and run on.
@@ -412,8 +415,8 @@ both work.
   windmill their arms. Other players see this too: the server keeps the time each rider's stamina will run out on
   their Player (the `StaminaRunsOutAt` attribute).
 - **Claimed:** one fist punched up high, pumping, for the rest of the ride.
-- **Thrown off** (out of stamina, knocked off, or over the edge): arms and legs flailing as they tumble through
-  the air, until they get their balance back.
+- **Thrown off** (out of stamina): arms and legs flailing as they tumble through the air, until they get their
+  balance back.
 
 The poses are worked out in `src/shared/RiderPose.luau` (pure math, tested outside Studio). On each device,
 `src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints each frame. It runs after
@@ -426,8 +429,9 @@ To watch it without opening Studio:
 lune run tools/rider-preview
 ```
 
-Then open `tools/out/rider-preview.html` in a browser. It shows a rider on a rolling egg in every situation above, on
-an R15 or R6 character, from behind (as in the game), the side or the front, in slow motion if you like.
+Then open `tools/out/rider-preview.html` in a browser. It shows a rider in every situation above, on an egg or a
+training stick, on an R15 or R6 character, from behind (as in the game), the side or the front, in slow motion if you
+like.
 
 **The look** (`src/server/Map/`): `Scenery` builds each zone's checkered ground (blending into the next zone's
 colours, each row of tiles centred on the runway where it is), tall stepped cliffs that players cannot climb, built
@@ -559,15 +563,15 @@ src/server/            ServerScriptService.Server
   Services/              Connect the rules to players, saved data, the map, and remotes; events, teleports,
                          the Model Showroom, and the admin panel's commands
 src/client/            StarterPlayerScripts.Client
-  Controllers/           Egg drawing, riding and the riders' running animation, HUD updates, the shop and
-                         settings, pet animation, admin flight, the admin panel
+  Controllers/           Egg drawing, riding and the riders' running animation (eggs and training sticks), HUD
+                         updates, the shop and settings, pet animation, admin flight, the admin panel
   Ui/                    The Fusion HUD; the Eggs and Pets panels; the Shop, Settings and hub station panels
                          (Theme and Widgets hold the shared look); and the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
                        map-preview.luau: a web page that shows the map in 3D;
                        ui-preview.luau: a web page that sketches the HUD and its panels;
-                       rider-preview.luau: a web page that shows riders running on a rolling egg;
+                       rider-preview.luau: a web page that shows riders running on a rolling egg or training stick;
                        export-models.luau: every pet and egg as Studio model files (.rbxm)
 vendor/                Fusion and ProfileStore, copied in unchanged (see vendor/README.md)
 ```

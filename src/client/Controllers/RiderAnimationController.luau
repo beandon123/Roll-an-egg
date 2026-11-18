@@ -1,14 +1,17 @@
 -- Makes everyone riding an egg run on top of it as it rolls (Shared/RiderPose works out the poses): quicker feet on
 -- faster eggs, leaning into their steering, stumbling when the egg bumps into something, wobbling and windmilling
--- their arms as their stamina is about to run out, and pumping a fist once the egg is theirs. Riders thrown off
--- (stamina gone, knocked off, over the edge) tumble through the air with their arms and legs flailing.
+-- their arms as their stamina is about to run out, and pumping a fist once the egg is theirs. Riders thrown off (their
+-- stamina gone) tumble through the air with their arms and legs flailing.
+--
+-- Players rolling on their training stick run the same way (TrainingController says who, how hard, and how far a
+-- plank or girder rocks them as it turns): a steady run, and a flat-out sprint during a 2x boost.
 --
 -- Every device animates every rider it can see. The pose is set on each character's Motor6Ds every frame, after
--- Roblox's own animations (RunService.PreSimulation), so it replaces the sitting pose the Animate script plays
--- while riding. It blends in from that pose when a rider lands and back out when they leave, so nothing snaps.
--- Works on R15 and R6 characters.
+-- Roblox's own animations (RunService.PreSimulation), so it replaces the pose the Animate script plays. It blends in
+-- from that pose when a rider gets on and back out when they get off, so nothing snaps. Works on R15 and R6
+-- characters.
 --
--- How tired a rider looks comes from when their stamina will run out: the local player's from their own stamina
+-- How tired an egg rider looks comes from when their stamina will run out: the local player's from their own stamina
 -- (UiState), anyone else's from the attribute the server keeps on their Player (StaminaMath.RUNS_OUT_AT).
 
 local Players = game:GetService("Players")
@@ -27,13 +30,14 @@ local localPlayer = Players.LocalPlayer
 
 local RiderAnimationController = {}
 
--- Seconds to blend into the run on landing, and back to Roblox's own animations after leaving the egg.
+-- Seconds to blend into the run on getting on, and back to Roblox's own animations after getting off.
 local BLEND_IN_TIME = 0.12
 local BLEND_OUT_TIME = 0.25
--- How quickly steering, tiredness and cheering ease to where they are heading (the larger, the quicker).
+-- How quickly steering, tiredness, cheering and the pace ease to where they are heading (the larger, the quicker).
 local STEER_EASE = 10
 local TIRED_EASE = 4
 local CHEER_EASE = 5
+local PACE_EASE = 6
 -- Riders start to look tired this many seconds before their stamina runs out.
 local TIRED_WARNING = 3
 -- Sideways speed (studs a second) that counts as steering flat out.
@@ -44,6 +48,8 @@ local ANIMATE_DISTANCE = 300
 local RESCAN_INTERVAL = 0.5
 -- The usual height of a character's root part above the ground: RiderPose's shifts are for this size.
 local NORMAL_STAND_HEIGHT = 3
+-- A player TrainingController has not mentioned for this long (seconds) has got off their stick.
+local STICK_HOLD = 0.1
 
 -- A pose: see Shared/RiderPose.
 type Pose = { [string]: { number } }
@@ -70,19 +76,22 @@ type Rig = {
 
 type Rider = {
 	userId: number,
-	-- The egg they are on, or nil once they have left it.
+	-- The egg they are on (nil once they have left it), or whether they are on their training stick.
 	eggId: number?,
+	onStick: boolean,
 	-- How much of the pose shows over Roblox's own animations, 0 to 1.
 	weight: number,
 	phase: number,
 	-- Seconds of animation so far, for the sways and flails.
 	time: number,
-	speed: number,
+	pace: number,
 	steer: number,
 	tired: number,
 	cheer: number,
+	-- Studs the whole body is raised (a plank or girder rocks its rider down as it turns).
+	lift: number,
 	lastLateral: number?,
-	-- When (on `clock`) they landed on the egg, and were thrown off (nil if not).
+	-- When (on `clock`) they got on, and were thrown off (nil if not).
 	landedAt: number,
 	thrownAt: number?,
 	-- The server time of the egg's last bump, while the rider stumbles from it.
@@ -92,11 +101,15 @@ type Rider = {
 	rig: Rig?,
 }
 
+-- What TrainingController last said about someone on their stick.
+type StickRide = { pace: number, lift: number, seenAt: number }
+
 local riders: { [number]: Rider } = {}
 -- Seconds of frames so far: what landings, tumbles and looks for joints are timed by.
 local clock = 0
--- Who is on which egg this frame (filled by visitRider).
+-- Who is on which egg this frame (filled by visitRider), and who is on their training stick.
 local onEgg: { [number]: any } = {}
+local onStick: { [number]: StickRide } = {}
 
 local function smoothstep(t: number): number
 	t = math.clamp(t, 0, 1)
@@ -179,14 +192,16 @@ local function newRider(userId: number): Rider
 	return {
 		userId = userId,
 		eggId = nil,
+		onStick = false,
 		weight = 0,
 		-- Riders do not all step in time.
 		phase = (userId * 2.399) % (2 * math.pi),
 		time = 0,
-		speed = 0,
+		pace = 0,
 		steer = 0,
 		tired = 0,
 		cheer = 0,
+		lift = 0,
 		lastLateral = nil,
 		landedAt = clock,
 		thrownAt = nil,
@@ -201,20 +216,27 @@ local function visitRider(userId: number, egg)
 	onEgg[userId] = egg
 end
 
+-- Starts a fresh ride: on an egg (`eggId`), or on the training stick.
+local function getOn(rider: Rider, eggId: number?)
+	rider.eggId = eggId
+	rider.onStick = eggId == nil
+	rider.landedAt = clock
+	rider.thrownAt = nil
+	rider.bumpedAt = nil
+	rider.lastLateral = nil
+	rider.steer = 0
+end
+
 -- Keeps a rider's state up to date with the egg they are on.
 local function follow(rider: Rider, egg, now: number, deltaTime: number)
 	if rider.eggId ~= egg.id then
-		-- Landed on this egg.
-		rider.eggId = egg.id
-		rider.landedAt = clock
-		rider.thrownAt = nil
-		rider.bumpedAt = nil
-		rider.lastLateral = nil
-		rider.steer = 0
+		getOn(rider, egg.id)
 	end
-	rider.speed = egg.spec.rollSpeed
+	rider.pace = RiderPose.paceOf(egg.spec.rollSpeed)
+	rider.lift = 0
 
-	-- Steering, from how fast the egg is moving sideways. Riders face down the runway (+Z), so their right is -X.
+	-- Steering, from how fast the egg is moving across the runway. Riders face down it, so their right is towards
+	-- -lateral.
 	local sideways = 0
 	if rider.lastLateral ~= nil and deltaTime > 0 then
 		sideways = -(egg.lateral - rider.lastLateral) / deltaTime
@@ -232,13 +254,28 @@ local function follow(rider: Rider, egg, now: number, deltaTime: number)
 	end
 end
 
--- The rider has just left their egg: thrown off if the egg is cracking under them (they ran out of stamina).
-local function leave(rider: Rider)
+-- Keeps a rider's state up to date on their training stick: no steering or stamina to run out there, just the pace
+-- (a sprint in a boost) and the rocking of the roller.
+local function followStick(rider: Rider, stick: StickRide, deltaTime: number)
+	if not rider.onStick then
+		getOn(rider, nil)
+		rider.pace = stick.pace
+	end
+	rider.pace = ease(rider.pace, stick.pace, PACE_EASE, deltaTime)
+	rider.lift = stick.lift
+	rider.steer = ease(rider.steer, 0, STEER_EASE, deltaTime)
+	rider.tired = ease(rider.tired, 0, TIRED_EASE, deltaTime)
+	rider.cheer = ease(rider.cheer, 0, CHEER_EASE, deltaTime)
+end
+
+-- The rider has just got off: thrown off if the egg is cracking under them (they ran out of stamina).
+local function getOff(rider: Rider)
 	local egg = rider.eggId and EggController.GetEgg(rider.eggId)
 	if egg and egg.cracking and rider.thrownAt == nil then
 		rider.thrownAt = clock
 	end
 	rider.eggId = nil
+	rider.onStick = false
 	rider.lastLateral = nil
 end
 
@@ -284,13 +321,15 @@ local function animate(rider: Rider, eye: Vector3?)
 		pose = RiderPose.pose({
 			phase = rider.phase,
 			time = rider.time,
-			speed = rider.speed,
+			pace = rider.pace,
 			steer = rider.steer,
 			tired = rider.tired,
 			cheer = rider.cheer,
 			landed = clock - rider.landedAt,
 			bumped = if rider.bumpedAt then now - rider.bumpedAt else nil,
 		}, rider.pose)
+		-- The lift is in studs whatever the character's size (the pose's shifts are scaled to it).
+		pose.Root[5] += rider.lift / rig.scale
 	end
 	rider.pose = pose
 	if rig.r6 then
@@ -305,6 +344,11 @@ local function step(deltaTime: number)
 	clock += deltaTime
 	table.clear(onEgg)
 	EggController.VisitRiders(visitRider)
+	for userId, stick in onStick do
+		if clock - stick.seenAt > STICK_HOLD then
+			onStick[userId] = nil
+		end
+	end
 
 	local now = Workspace:GetServerTimeNow()
 	local camera = Workspace.CurrentCamera
@@ -315,22 +359,31 @@ local function step(deltaTime: number)
 			riders[userId] = newRider(userId)
 		end
 	end
+	for userId in onStick do
+		if riders[userId] == nil then
+			riders[userId] = newRider(userId)
+		end
+	end
 
 	for userId, rider in riders do
 		local egg = onEgg[userId]
+		local stick = onStick[userId]
 		if egg and rider.thrownAt == nil then
 			follow(rider, egg, now, deltaTime)
-		elseif rider.eggId ~= nil and egg == nil then
-			leave(rider)
+		elseif stick and rider.thrownAt == nil then
+			followStick(rider, stick, deltaTime)
+		elseif (rider.eggId ~= nil and egg == nil) or (rider.onStick and stick == nil) then
+			getOff(rider)
 		end
 
-		-- Shown while on an egg or tumbling off one; fading back to Roblox's own animations otherwise.
+		-- Shown while on an egg or a stick, or tumbling off an egg; fading back to Roblox's own animations otherwise.
+		local riding = egg ~= nil or stick ~= nil
 		local tumbling = rider.thrownAt ~= nil and clock - rider.thrownAt < Tuning.STUN_TIME
-		if rider.thrownAt and not tumbling and egg then
+		if rider.thrownAt and not tumbling and riding then
 			-- Thrown off one egg and already on another (the server says when): back to running.
 			rider.thrownAt = nil
 		end
-		local showing = (egg ~= nil and rider.thrownAt == nil) or tumbling
+		local showing = (riding and rider.thrownAt == nil) or tumbling
 		local blend = if showing then BLEND_IN_TIME else BLEND_OUT_TIME
 		rider.weight = math.clamp(rider.weight + (if showing then 1 else -1) * deltaTime / blend, 0, 1)
 		if rider.weight <= 0 and not showing then
@@ -339,7 +392,7 @@ local function step(deltaTime: number)
 		end
 
 		rider.time += deltaTime
-		rider.phase = RiderPose.advance(rider.phase, rider.speed, deltaTime)
+		rider.phase = RiderPose.advance(rider.phase, rider.pace, deltaTime)
 		animate(rider, eye)
 	end
 end
@@ -347,8 +400,8 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- For other controllers
 
--- The local player has just been thrown off their egg (out of stamina, knocked off, or over the edge): they tumble
--- through the air until they get their balance back.
+-- The local player has just been thrown off their egg (out of stamina): they tumble through the air until they get
+-- their balance back.
 function RiderAnimationController.Tumble(userId: number)
 	local rider = riders[userId]
 	if rider == nil then
@@ -357,7 +410,19 @@ function RiderAnimationController.Tumble(userId: number)
 	end
 	rider.thrownAt = clock
 	rider.eggId = nil
+	rider.onStick = false
 	rider.lastLateral = nil
+end
+
+-- A player is rolling on their training stick this frame (TrainingController calls this every frame while they
+-- are): running at `pace` (as in Shared/RiderPose), raised `lift` studs (negative when the roller rocks them down).
+function RiderAnimationController.SetStickRider(userId: number, pace: number, lift: number)
+	local stick = onStick[userId]
+	if stick == nil then
+		onStick[userId] = { pace = pace, lift = lift, seenAt = clock }
+	else
+		stick.pace, stick.lift, stick.seenAt = pace, lift, clock
+	end
 end
 
 function RiderAnimationController.Init()
@@ -365,6 +430,7 @@ function RiderAnimationController.Init()
 	RunService.PreSimulation:Connect(step)
 	Players.PlayerRemoving:Connect(function(player)
 		riders[player.UserId] = nil
+		onStick[player.UserId] = nil
 	end)
 end
 

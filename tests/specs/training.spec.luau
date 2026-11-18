@@ -1,14 +1,14 @@
 --!nocheck
 -- Checks the training stick: its tiers (Config/Sticks), its rules (Logic/Training) on saved-data tables, the sessions
--- that hand out reps and "2x" bubbles, the shop's Robux tiers, the rider's pose (Shared/BirlingPose), and Max
--- Stamina counting what was trained (Logic/Stats).
+-- that hand out reps and "2x" bubbles, the shop's Robux tiers, how hard the rider runs (Shared/RiderPose, the same
+-- run as on the eggs), and Max Stamina counting what was trained (Logic/Stats).
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
 
-	local BirlingPose = harness.load("src/shared/BirlingPose")
 	local NumberFormat = harness.load("src/shared/NumberFormat")
 	local Rarities = harness.load("src/shared/Config/Rarities")
+	local RiderPose = harness.load("src/shared/RiderPose")
 	local Shop = harness.load("src/shared/Config/Shop")
 	local Sticks = harness.load("src/shared/Config/Sticks")
 	local Stats = harness.load("src/server/Logic/Stats")
@@ -251,35 +251,23 @@ return function(harness)
 		end)
 	end)
 
-	describe("Training stick: the rider's pose", function()
-		it("poses every joint, arms out for balance and legs taking turns", function()
-			local pose = BirlingPose.pose(0.7, 1.3, 1)
-			for _, name in BirlingPose.JOINTS do
-				expect.truthy(pose[name], name)
-			end
-			-- Arms held out to the sides (well over 45 degrees), each to its own side.
-			expect.truthy(pose.RightShoulder.z > math.rad(50), "right arm out")
-			expect.truthy(pose.LeftShoulder.z < -math.rad(50), "left arm out")
-			-- Leaning forward.
-			expect.truthy(pose.Waist.x < 0, "leaning in")
-			-- Half a stride later the legs have swapped.
-			local later = BirlingPose.pose(0.7 + math.pi, 1.3, 1)
-			expect.near(later.LeftHip.x, pose.RightHip.x)
-			expect.near(later.RightKnee.x, pose.LeftKnee.x)
-			-- Knees only ever bend backwards.
-			for step = 0, 24 do
-				local frame = BirlingPose.pose(step / 24 * math.pi * 2, step, 1)
-				expect.truthy(frame.LeftKnee.x < 0 and frame.RightKnee.x < 0, "knees")
-			end
-		end)
+	describe("Training stick: the rider's run", function()
+		it("runs like a rider on an egg: steadily, and flat out during a boost", function()
+			expect.truthy(Sticks.RUN_PACE >= 0 and Sticks.RUN_PACE < Sticks.BOOST_RUN_PACE)
+			expect.truthy(Sticks.BOOST_RUN_PACE <= 1)
+			expect.truthy(RiderPose.strideRate(Sticks.BOOST_RUN_PACE) > RiderPose.strideRate(Sticks.RUN_PACE) + 0.5)
 
-		it("eases in from standing still", function()
-			local pose = BirlingPose.pose(2.1, 0.4, 0)
-			for name, joint in pose do
-				expect.near(joint.x, 0, 1e-9, name)
-				expect.near(joint.z, 0, 1e-9, name)
-				expect.near(joint.lift, 0, 1e-9, name)
+			local function riding(phase, pace)
+				return RiderPose.pose({ phase = phase, time = 1, pace = pace, steer = 0, tired = 0, cheer = 0 })
 			end
+			-- The legs take turns, and the arms pump against them.
+			local stride = riding(math.pi / 2, Sticks.RUN_PACE)
+			expect.truthy(stride.LeftHip[1] > stride.RightHip[1] + 0.8, "left leg forward")
+			expect.truthy(stride.RightShoulder[1] > stride.LeftShoulder[1], "right arm forward")
+			-- Longer strides and more lean in a boost.
+			local sprint = riding(math.pi / 2, Sticks.BOOST_RUN_PACE)
+			expect.truthy(sprint.LeftHip[1] - sprint.RightHip[1] > stride.LeftHip[1] - stride.RightHip[1])
+			expect.truthy(sprint.Root[1] < stride.Root[1], "leans further")
 		end)
 	end)
 

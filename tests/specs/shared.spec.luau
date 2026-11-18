@@ -298,7 +298,7 @@ return function(harness)
 
 	describe("RiderPose", function()
 		local function riding(extra)
-			local state = { phase = 0, time = 0, speed = 21, steer = 0, tired = 0, cheer = 0 }
+			local state = { phase = 0, time = 0, pace = 0.3, steer = 0, tired = 0, cheer = 0 }
 			for key, value in extra or {} do
 				state[key] = value
 			end
@@ -319,9 +319,9 @@ return function(harness)
 		it("poses every joint, whatever is going on", function()
 			local states = {
 				riding(),
-				riding({ phase = 2, time = 7, speed = 32, steer = 1, tired = 1, cheer = 1, landed = 0, bumped = 0 }),
-				riding({ phase = 5, time = 3, speed = 18, steer = -1, tired = 0.5, landed = 0.1, bumped = 0.3 }),
-				riding({ speed = 500, steer = 9, tired = 4, cheer = -2, landed = -1, bumped = -1 }),
+				riding({ phase = 2, time = 7, pace = 1, steer = 1, tired = 1, cheer = 1, landed = 0, bumped = 0 }),
+				riding({ phase = 5, time = 3, pace = 0, steer = -1, tired = 0.5, landed = 0.1, bumped = 0.3 }),
+				riding({ pace = 40, steer = 9, tired = 4, cheer = -2, landed = -1, bumped = -1 }),
 			}
 			for index, state in states do
 				local pose = RiderPose.pose(state)
@@ -341,9 +341,16 @@ return function(harness)
 		end)
 
 		it("runs with quicker feet on faster eggs, the legs taking turns", function()
-			expect.truthy(RiderPose.strideRate(18) < RiderPose.strideRate(32))
-			expect.truthy(RiderPose.strideRate(18) >= 2 and RiderPose.strideRate(32) <= 3.5)
-			expect.near(RiderPose.advance(0, 18, 1 / RiderPose.strideRate(18)), 0, 1e-9, "one stride a turn")
+			-- Pace runs from the slowest eggs (Common) to the fastest (Eternal).
+			local Rarities = harness.load("src/shared/Config/Rarities")
+			local slowest, fastest = Rarities.Info.Common.rollSpeed, Rarities.Info.Eternal.rollSpeed
+			expect.near(RiderPose.paceOf(slowest), 0, 1e-9)
+			expect.near(RiderPose.paceOf(fastest), 1, 1e-9)
+			expect.near(RiderPose.paceOf(fastest * 3), 1, 1e-9)
+			expect.truthy(RiderPose.paceOf(Rarities.Info.Rare.rollSpeed) > 0, "faster than a Common egg")
+			expect.truthy(RiderPose.strideRate(0) < RiderPose.strideRate(1))
+			expect.truthy(RiderPose.strideRate(0) >= 2 and RiderPose.strideRate(1) <= 3.5)
+			expect.near(RiderPose.advance(0, 0.4, 1 / RiderPose.strideRate(0.4)), 0, 1e-9, "one stride a turn")
 
 			local quarter = RiderPose.pose(riding({ phase = math.pi / 2 }))
 			local threeQuarters = RiderPose.pose(riding({ phase = 3 * math.pi / 2 }))
