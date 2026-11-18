@@ -149,7 +149,7 @@ local function placementAhead(player: Player): { z: number, lateral: number }?
 	if Runway.zoneAt(position.Z) == nil or Runway.zoneAt(z) == nil then
 		return nil
 	end
-	return { z = z, lateral = position.X }
+	return { z = z, lateral = Runway.lateralOf(position.X, z) }
 end
 
 -- Drops eggs at the chute or "here". Returns the placement used, and a note to add if "here" was not possible.

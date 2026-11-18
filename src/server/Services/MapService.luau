@@ -5,9 +5,9 @@
 -- obstacles on the runway (laid out by Shared/Obstacles, built by Map/ObstacleModels). Gameplay does not depend on any of these parts
 -- (it reads positions from Shared/Runway and Shared/Obstacles), so changing how the map looks never breaks the rules.
 --
--- Also handles dying on the map: a character well below the runway has fallen through a gap in the banks, and one
--- standing in lava or tar (a Lethal obstacle that is going off) is burned up. An admin who is flying (the admin
--- panel) is spared both. (Players never walk on the runway itself; see the client's RideController.)
+-- Also catches a character that has somehow fallen out of the world (well below the runway) and sends it back to
+-- the hub. Nothing on the runway kills: lava and tar only slow players down (see the client's RideController), and
+-- the gaps in the banks have a railing across them. An admin who is flying (the admin panel) is never caught.
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -24,11 +24,8 @@ local Zones = require(Shared.Config.Zones)
 local Cliffs = require(script.Parent.Parent.Map.Cliffs)
 local Scenery = require(script.Parent.Parent.Map.Scenery)
 local Stations = require(script.Parent.Parent.Map.Stations)
-local RunwayService = require(script.Parent.RunwayService)
 
 local SLAB_THICKNESS = 4
--- A player on foot counts as standing in a Lethal obstacle when their root part is this close to the ground.
-local HAZARD_HEIGHT = 5
 -- The painted strip just before the runway where players line up.
 local START_ZONE_DEPTH = 26
 -- The invisible walls round the hub.
@@ -189,10 +186,9 @@ local function setUpSky()
 	atmosphere.Parent = Lighting
 end
 
--- Kills characters that have fallen off the runway, or are standing in lava or tar.
-local function watchForDangers()
+-- Sends characters that have fallen out of the world back to the hub.
+local function watchForFalls()
 	while true do
-		local now = Workspace:GetServerTimeNow()
 		for _, player in Players:GetPlayers() do
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -200,13 +196,7 @@ local function watchForDangers()
 			local flying = player:GetAttribute(AdminTools.FLYING) == true
 			if root and root:IsA("BasePart") and humanoid and humanoid.Health > 0 and not flying then
 				local position = root.Position
-				local ground = Runway.surfaceY(position.Z)
-				local fell = position.Y < ground - Tuning.FALL_KILL_DEPTH
-				-- A rider's character is on their egg, wherever the server last saw it on foot.
-				local burned = not RunwayService.IsRiding(player)
-					and position.Y < ground + HAZARD_HEIGHT
-					and Obstacles.lethalAt(position.X, position.Z, now) ~= nil
-				if fell or burned then
+				if position.Y < Runway.surfaceY(position.Z) - Tuning.FALL_KILL_DEPTH then
 					humanoid.Health = 0
 				end
 			end
@@ -238,7 +228,7 @@ function MapService.Init()
 end
 
 function MapService.Start()
-	watchForDangers()
+	watchForFalls()
 end
 
 return MapService

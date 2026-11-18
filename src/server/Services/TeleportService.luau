@@ -78,14 +78,15 @@ function TeleportService.ToZone(player: Player, zoneId: number): boolean
 		return false
 	end
 	local z = Runway.zoneStartZ(zoneId) + ZONE_LANDING
-	return TeleportService.To(player, Vector3.new(0, Runway.surfaceY(z), z), DOWN_THE_RUNWAY)
+	-- The runway winds: its middle is not always at x = 0.
+	return TeleportService.To(player, Vector3.new(Runway.centerX(z), Runway.surfaceY(z), z), DOWN_THE_RUNWAY)
 end
 
 -- To the end of the last zone, facing down the runway. (There is no cliff any more: the last zone repeats forever;
 -- the place keeps its old name in the admin panel's list.)
 function TeleportService.ToCliff(player: Player): boolean
 	local z = Runway.LENGTH - CLIFF_LANDING
-	return TeleportService.To(player, Vector3.new(0, Runway.surfaceY(z), z), DOWN_THE_RUNWAY)
+	return TeleportService.To(player, Vector3.new(Runway.centerX(z), Runway.surfaceY(z), z), DOWN_THE_RUNWAY)
 end
 
 -- Next to another player, facing the same way they are. Returns false if either has no character.

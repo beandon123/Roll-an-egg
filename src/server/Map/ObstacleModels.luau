@@ -1007,6 +1007,290 @@ builders.DinoSkull = function(model, base, hx, hz, random)
 end
 
 ----------------------------------------------------------------------------------------------------------------
+-- Big obstacles, like the owner's reference: things the size of a house that a rider has to steer well clear of.
+
+-- Pale stone under thick grass, like the cliffs along the runway.
+local PALE_STONE = { 182, 186, 178 }
+local CLIFF_GRASS = { 104, 188, 72 }
+
+-- A huge old tree stump: a wide trunk with ridged bark, rings on its flat top, roots spreading out round its foot,
+-- moss and toadstools.
+builders.GiantStump = function(model, base, hx, hz, random)
+	local radius = math.min(hx, hz) * 0.78
+	local height = between(random, 10, 13)
+	local bark = vary(random, BARK, 0.06)
+	column(model, radius * 2, height, base, bark, { material = M.Wood })
+	-- Ridges of bark standing proud of the trunk.
+	local ridges = 12
+	for index = 1, ridges do
+		local angle = (index + random() * 0.4) / ridges * math.pi * 2
+		local ridgeHeight = height * between(random, 0.75, 1)
+		block(
+			model,
+			Vector3.new(1.4, ridgeHeight, 1.1),
+			base * CFrame.Angles(0, -angle, 0) * CFrame.new(radius - 0.2, ridgeHeight / 2, 0),
+			shade(bark, if index % 2 == 0 then -0.1 else 0.05),
+			{ material = M.Wood, collide = false }
+		)
+	end
+	-- The flat top: rings of lighter wood.
+	for ring, size in { 0.96, 0.72, 0.48, 0.22 } do
+		column(
+			model,
+			radius * 2 * size,
+			0.25,
+			at(base, 0, height + (ring - 1) * 0.02, 0),
+			shade(WOOD_END, if ring % 2 == 0 then -0.14 else 0),
+			{ material = M.Wood, collide = false }
+		)
+	end
+	-- Roots: thick blocks spreading out and down from the foot, inside the footprint.
+	for index = 1, 5 do
+		local angle = (index + random() * 0.5) / 5 * math.pi * 2
+		local reach = math.max(1.5, math.min(hx, hz) - radius)
+		block(
+			model,
+			Vector3.new(reach + 1.5, 2.2, 2),
+			base * CFrame.Angles(0, -angle, 0) * CFrame.new(radius + reach / 2 - 0.5, 1, 0) * CFrame.Angles(0, 0, -0.25),
+			shade(bark, -0.06),
+			{ material = M.Wood }
+		)
+	end
+	-- Moss on the top and a cluster of toadstools.
+	block(
+		model,
+		Vector3.new(radius * 0.8, 0.4, radius * 0.6),
+		at(base, -radius * 0.3, height + 0.3, radius * 0.25) * CFrame.Angles(0, random(), 0),
+		vary(random, MOSS, 0.06),
+		{ material = M.Grass, collide = false }
+	)
+	toadstool(model, at(base, radius * 0.35, height + 0.2, -radius * 0.3), 1.1, random)
+	toadstool(model, at(base, radius * 1.05, 0, radius * 0.5), 1.3, random)
+end
+
+-- A stepped outcrop of pale rock, each step capped with grass hanging over its edge, with loose boulders at its foot.
+builders.Outcrop = function(model, base, hx, hz, random)
+	local width, depth = hx * 1.8, hz * 1.75
+	local y = 0
+	local offsetX, offsetZ = 0, 0
+	for step = 1, 3 do
+		local height = between(random, 4.5, 6.5) * (1 - 0.12 * (step - 1))
+		local center = at(base, offsetX, y + height / 2, offsetZ) * CFrame.Angles(0, (random() - 0.5) * 0.2, 0)
+		block(
+			model,
+			Vector3.new(width, height, depth),
+			center,
+			vary(random, shade(PALE_STONE, -0.04 * (3 - step)), 0.04),
+			{ material = M.Slate }
+		)
+		block(
+			model,
+			Vector3.new(width + 0.8, 1.2, depth + 0.8),
+			center * CFrame.new(0, height / 2 + 0.6, 0),
+			vary(random, CLIFF_GRASS, 0.04),
+			{ material = M.Grass }
+		)
+		y += height + 1.2
+		width *= between(random, 0.6, 0.72)
+		depth *= between(random, 0.62, 0.75)
+		offsetX += (random() - 0.5) * hx * 0.4
+		offsetZ += (random() - 0.5) * hz * 0.3
+	end
+	-- A bush on top, and boulders tumbled round the foot.
+	block(model, Vector3.new(3, 2.4, 3), at(base, offsetX, y + 1, offsetZ), vary(random, LEAF, 0.06), {
+		material = M.Grass,
+		collide = false,
+	})
+	for _ = 1, 4 do
+		local angle = random() * math.pi * 2
+		local size = between(random, 1.6, 2.8)
+		block(
+			model,
+			Vector3.one * size,
+			at(base, math.cos(angle) * (hx - size / 2), size * 0.4, math.sin(angle) * (hz - size / 2))
+				* tumble(random, 0.4, 1),
+			vary(random, PALE_STONE, 0.06),
+			{ material = M.Slate, collide = false }
+		)
+	end
+end
+
+-- A sandstone butte: tall stripes of sandstone narrowing a little towards a flat top, with a cactus on it.
+builders.Butte = function(model, base, hx, hz, random)
+	local bands = { { 214, 152, 96 }, { 196, 130, 82 }, { 226, 172, 112 }, { 186, 120, 76 }, { 206, 146, 92 } }
+	local width, depth = hx * 1.85, hz * 1.85
+	local y = 0
+	for index = 1, 6 do
+		local height = between(random, 2.6, 3.8)
+		block(
+			model,
+			Vector3.new(width, height, depth),
+			at(base, (random() - 0.5) * 0.6, y + height / 2, (random() - 0.5) * 0.6),
+			vary(random, bands[(index - 1) % #bands + 1], 0.03),
+			{ material = M.Sandstone }
+		)
+		y += height
+		width *= between(random, 0.9, 0.96)
+		depth *= between(random, 0.9, 0.96)
+	end
+	-- A darker rim round the top.
+	block(model, Vector3.new(width * 1.06, 1, depth * 1.06), at(base, 0, y + 0.5, 0), { 150, 92, 62 }, {
+		material = M.Sandstone,
+	})
+	builders.Cactus(model, at(base, width * 0.2, y + 1, -depth * 0.15), 2.4, 2.4, random)
+	-- Rubble at the foot.
+	for _ = 1, 4 do
+		local angle = random() * math.pi * 2
+		block(
+			model,
+			Vector3.one * between(random, 1.2, 2.2),
+			at(base, math.cos(angle) * hx * 0.95, 0.6, math.sin(angle) * hz * 0.95) * tumble(random, 0.5, 1),
+			bands[2],
+			{ material = M.Sandstone, collide = false }
+		)
+	end
+end
+
+-- Great blocks of blue ice stacked in steps, snow on every ledge, with loose cubes of ice round them.
+builders.IceBlocks = function(model, base, hx, hz, random)
+	local ice = { 150, 204, 242 }
+	local width, depth = hx * 1.2, hz * 1.5
+	local stacks = {
+		{ -hx * 0.4, 0, width, between(random, 7, 9), depth },
+		{ hx * 0.45, (random() - 0.5) * hz * 0.4, width * 0.8, between(random, 4.5, 6), depth * 0.8 },
+		{ -hx * 0.25, (random() - 0.5) * hz * 0.3, width * 0.65, between(random, 4, 5), depth * 0.6 },
+	}
+	for index, stack in stacks do
+		local y = if index == 3 then stacks[1][4] else 0
+		local center = at(base, stack[1], y + stack[4] / 2, stack[2]) * CFrame.Angles(0, (random() - 0.5) * 0.25, 0)
+		block(
+			model,
+			Vector3.new(stack[3], stack[4], stack[5]),
+			center,
+			vary(random, shade(ice, -0.05 * index), 0.04),
+			{ material = M.Ice, transparency = 0.08, reflectance = 0.1 }
+		)
+		block(
+			model,
+			Vector3.new(stack[3] + 0.4, 0.9, stack[5] + 0.4),
+			center * CFrame.new(0, stack[4] / 2 + 0.45, 0),
+			SNOW,
+			{ material = M.Snow }
+		)
+	end
+	for _ = 1, 5 do
+		local angle = random() * math.pi * 2
+		local size = between(random, 1.4, 2.6)
+		block(
+			model,
+			Vector3.one * size,
+			at(base, math.cos(angle) * (hx - size / 2), size / 2, math.sin(angle) * (hz - size / 2))
+				* CFrame.Angles(0, random() * 3, 0),
+			vary(random, ice, 0.06),
+			{ material = M.Ice, transparency = 0.1, collide = false }
+		)
+	end
+end
+
+-- A shipwreck washed up across the boardwalk: a broken wooden hull lying on its side, a snapped mast with a torn
+-- sail, and loose planks.
+builders.Wreck = function(model, base, hx, hz, random)
+	local plank = vary(random, { 132, 92, 58 }, 0.05)
+	local length = hx * 1.7
+	-- The hull, in planked bands, lying across the runway with its bow to one side.
+	local bands = 4
+	for band = 1, bands do
+		local height = 1.6
+		local shrink = 1 - 0.08 * math.abs(band - 2.5)
+		block(
+			model,
+			Vector3.new(length * shrink, height, hz * 1.5 * shrink),
+			at(base, -hx * 0.1, (band - 0.5) * height, 0) * CFrame.Angles(0, 0, 0.12),
+			shade(plank, if band % 2 == 0 then -0.08 else 0.02),
+			{ material = M.WoodPlanks }
+		)
+	end
+	-- The bow: a wedge closing off one end.
+	wedge(
+		model,
+		Vector3.new(hz * 1.3, bands * 1.6, hx * 0.5),
+		at(base, hx * 0.72, bands * 0.8, 0) * CFrame.Angles(0, math.pi / 2, 0),
+		shade(plank, -0.04),
+		{ material = M.WoodPlanks }
+	)
+	-- The deck rail, broken off part way.
+	block(model, Vector3.new(length * 0.6, 0.8, 0.6), at(base, -hx * 0.3, bands * 1.6 + 0.6, -hz * 0.6), plank, {
+		material = M.Wood,
+		collide = false,
+	})
+	-- The mast, snapped and leaning, with a torn sail.
+	local mast = at(base, -hx * 0.15, bands * 1.6, 0) * CFrame.Angles(0, 0, 0.35)
+	block(model, Vector3.new(1, 12, 1), mast * CFrame.new(0, 6, 0), { 108, 76, 50 }, { material = M.Wood })
+	block(
+		model,
+		Vector3.new(6, 6, 0.2),
+		mast * CFrame.new(3, 8, 0) * CFrame.Angles(0, 0, -0.1),
+		{ 236, 226, 200 },
+		{ material = M.Fabric, collide = false }
+	)
+	-- Loose planks and a barrel in the sand.
+	for _ = 1, 3 do
+		block(
+			model,
+			Vector3.new(between(random, 3, 5), 0.4, 0.9),
+			at(base, (random() - 0.5) * hx * 1.6, 0.2, (random() - 0.5) * hz * 1.6) * CFrame.Angles(0, random() * 3, 0),
+			plank,
+			{ material = M.WoodPlanks, collide = false }
+		)
+	end
+	column(model, 2.2, 2.6, at(base, -hx * 0.75, 0, hz * 0.55), { 140, 98, 60 }, { material = M.Wood })
+end
+
+-- A jagged crag of black obsidian, glowing through its cracks, with smoke curling off the top.
+builders.Crag = function(model, base, hx, hz, random)
+	local rock = { 46, 40, 48 }
+	local spikes = {
+		{ 0, 0, hx * 1.1, between(random, 11, 14), hz * 1.1, 0 },
+		{ -hx * 0.5, hz * 0.2, hx * 0.8, between(random, 7, 9), hz * 0.9, -0.18 },
+		{ hx * 0.55, -hz * 0.15, hx * 0.75, between(random, 6, 8), hz * 0.85, 0.2 },
+		{ hx * 0.15, hz * 0.45, hx * 0.6, between(random, 4, 6), hz * 0.6, 0.1 },
+	}
+	local top: BasePart? = nil
+	for index, spike in spikes do
+		local part = block(
+			model,
+			Vector3.new(spike[3], spike[4], spike[5]),
+			at(base, spike[1], spike[4] / 2 - 0.5, spike[2]) * CFrame.Angles(0, random() * 0.6, spike[6]),
+			vary(random, shade(rock, 0.04 * (index - 1)), 0.05),
+			{ material = M.Basalt }
+		)
+		if index == 1 then
+			top = part
+		end
+		-- A glowing crack up its face.
+		block(
+			model,
+			Vector3.new(0.35, spike[4] * 0.7, 0.35),
+			at(base, spike[1] + (random() - 0.5) * spike[3] * 0.5, spike[4] * 0.4, spike[2] - spike[5] / 2 - 0.1)
+				* CFrame.Angles(0, 0, (random() - 0.5) * 0.5),
+			{ 255, 120, 30 },
+			{ material = M.Neon, collide = false }
+		)
+	end
+	if top then
+		emitter(top, "Smoke", { 70, 64, 66 }, {
+			offset = Vector3.new(0, top.Size.Y / 2, 0),
+			size = 3,
+			rate = 4,
+			speed = 4,
+			life = 3,
+			lift = 2,
+			spread = 18,
+		})
+	end
+end
+
+----------------------------------------------------------------------------------------------------------------
 
 local ObstacleModels = {}
 

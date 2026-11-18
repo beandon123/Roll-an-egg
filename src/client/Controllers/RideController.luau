@@ -1,13 +1,15 @@
 -- The local player's side of riding: asking to jump onto eggs, steering, hopping off, being thrown off, and
--- running into obstacles (spotted here at once and reported; the server has the final say and checks on its own).
+-- running into obstacles or the side of the runway (spotted here at once and reported; the server has the final say
+-- and checks on its own). Nothing on the runway kills: a hit costs stamina and may slow the egg down, and the side
+-- of the runway bounces the egg back.
 --
 -- The server decides everything that matters (whether a mount counts, stamina, claims). This controller only
 -- asks, steers, and makes the result feel immediate.
 --
 -- Players never walk on the runway. Stepping onto it past the start zone launches them into a long, floaty leap,
 -- and so does jumping off an egg; they have Tuning.LEAP_TIME seconds to land on an egg. Touching the runway first,
--- or running out of time, kills them, and they start again at the hub. (Riding a pet, or flying as an admin, is not
--- walking. The server kills them too if this device does not; see RunwayService.)
+-- or running out of time, sends them back to the hub. (Riding a pet, or flying as an admin, is not walking. The
+-- server does it too if this device does not; see RunwayService.) Riding a pet through lava or tar is slow going.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -57,14 +59,21 @@ local awaitingJumpRelease = false
 local lastLeftEggId: number? = nil
 local lastLeftAt = 0
 
--- Obstacles this ride has hit, so each one counts once, and whether a hit has already ended the ride here.
+-- Obstacles this ride has hit, so each one counts once.
 local rideHits: { [number]: boolean } = {}
-local endedByHit = false
 -- Where the egg was last frame, to notice it being carried back one loop (its obstacles can then be hit again).
 local rideLastZ: number? = nil
 
 local BUMP_COLOR = Color3.fromRGB(255, 190, 90)
 local OUCH_COLOR = Color3.fromRGB(255, 110, 110)
+local SLOW_COLOR = Color3.fromRGB(255, 150, 70)
+
+-- The words for each kind of hit, before the obstacle's name.
+local HIT_WORDS = { Bump = "Bumped into", Crash = "Crashed into", Slow = "Slowed by" }
+-- When the egg last bounced off the side of the runway here (the server's clock).
+local lastEdgeAt = -math.huge
+-- While wading through lava or tar on a pet: the humanoid slowed down, the speed it had, and the speed it was given.
+local wading: { humanoid: Humanoid, speed: number, slowed: number }? = nil
 
 -- While leaping: when the time to land on an egg runs out (os.clock()), and the force that makes the leap floaty.
 local leapEndsAt: number? = nil
@@ -72,7 +81,7 @@ local leapForce: VectorForce? = nil
 -- A mount request is on its way: touching the runway does not count until the server has had time to answer.
 local mountPendingUntil = 0
 local MOUNT_PENDING_GRACE = 0.5
--- This character is about to die (it hit a bank, went over the edge, or missed its leap); nothing more to do.
+-- This character is about to go back to the hub (it missed its leap); nothing more to do.
 local doomed = false
 
 local function getCharacter(): (Humanoid?, BasePart?)
@@ -163,9 +172,9 @@ local function missedLeap(humanoid: Humanoid, root: BasePart)
 end
 
 -- Whether a character root at `position` is standing on the runway (rather than in the air above it, or off the
--- side).
+-- side). The runway winds, so "across" is measured from its centre line there.
 local function isOnRunway(position: Vector3): boolean
-	return math.abs(position.X) <= Runway.WIDTH / 2
+	return math.abs(Runway.lateralOf(position.X, position.Z)) <= Runway.WIDTH / 2
 		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
 end
 
@@ -186,7 +195,7 @@ local function updateLeap()
 	end
 
 	local position = root.Position
-	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isCarried() then
+	if position.Z < 0 or math.abs(Runway.lateralOf(position.X, position.Z)) > Runway.WIDTH / 2 + 4 or isCarried() then
 		-- Back over the hub, off the side (falling), or not on foot.
 		if leapEndsAt ~= nil then
 			endLeap(root)
@@ -240,13 +249,13 @@ local function release(reason: string)
 	root.Anchored = false
 	humanoid.Sit = false
 
-	local side = if root.Position.X >= 0 then 1 else -1
+	local side = if Runway.lateralOf(root.Position.X, root.Position.Z) >= 0 then 1 else -1
 	if reason == "Dismount" then
 		-- Leap forward off the egg, toward the next one.
 		startLeap(humanoid, root, Vector3.new(0, Tuning.LEAP_UP_SPEED, eggSpeed + 4))
-	elseif reason == "ThrownOff" or reason == "KnockedOff" then
-		-- Lost their balance (or knocked off): tumble off to one side, stunned. Only a lucky landing on another egg
-		-- saves them.
+	elseif reason == "ThrownOff" then
+		-- Lost their balance (ran out of stamina): tumble off to one side, stunned. Only a lucky landing on another
+		-- egg saves them.
 		stunnedUntil = os.clock() + Tuning.STUN_TIME
 		humanoid.PlatformStand = true
 		startLeap(humanoid, root, Vector3.new(side * 16, Tuning.LEAP_UP_SPEED * 0.6, eggSpeed * 0.5))
@@ -256,19 +265,6 @@ local function release(reason: string)
 				humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 			end
 		end)
-	elseif reason == "HitWall" then
-		-- Crashed into the bank. The server ends it.
-		doomed = true
-		root.AssemblyLinearVelocity = Vector3.new(-side * 10, 15, eggSpeed * 0.3)
-		humanoid.Health = 0
-	elseif reason == "FellOff" then
-		-- Over the edge through a gap; the fall kills them.
-		doomed = true
-		root.AssemblyLinearVelocity = Vector3.new(side * 14, 5, eggSpeed)
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-	elseif reason == "Hazard" then
-		-- Into lava or tar; the server ends it.
-		doomed = true
 	end
 end
 
@@ -301,7 +297,6 @@ local function onRideStarted(eggId: number, info)
 	awaitingJumpRelease = true
 	rideHits = {}
 	rideLastZ = nil
-	endedByHit = false
 	mountPendingUntil = 0
 	endLeap(root)
 
@@ -353,12 +348,6 @@ end
 local function onRideEnded(reason: string, info)
 	if reason == "ThrownOff" then
 		UiState.showToast("Out of stamina!", OUCH_COLOR)
-	elseif (reason == "KnockedOff" or reason == "Hazard") and not endedByHit then
-		UiState.showToast(if reason == "Hazard" then "Ouch!" else "Knocked off!", OUCH_COLOR)
-	elseif reason == "HitWall" then
-		UiState.showToast("Hit the wall!", OUCH_COLOR)
-	elseif reason == "FellOff" then
-		UiState.showToast("Off the edge!", OUCH_COLOR)
 	end
 
 	-- A hop off was already handled on this device when the button was pressed.
@@ -385,18 +374,74 @@ local function onHit(obstacleId: number, lateral: number?)
 	egg.targetLateral = egg.lateral
 	EggController.Wobble(egg.id)
 
+	-- What it costs (as on the server): stamina, unless the egg is already claimed, and maybe a slow-down, shown
+	-- here at once (the server's own slow-down follows).
 	local kind = Obstacles.Config.Kinds[obstacle.kind]
-	if obstacle.tier == "Bump" then
-		local cost = NumberFormat.abbreviate(egg.spec.requirement * Tuning.BUMP_STAMINA)
-		UiState.showToast(`Bumped into {kind.name}! -{cost} stamina`, BUMP_COLOR)
-	elseif obstacle.tier == "KnockOff" then
-		endedByHit = true
-		UiState.showToast(`Knocked off by {kind.name}!`, OUCH_COLOR)
-		release("KnockedOff")
-	else
-		-- The server ends the ride and the character.
-		endedByHit = true
-		UiState.showToast(kind.hitText or `Into {kind.name}!`, OUCH_COLOR)
+	local effect = Tuning.HIT_EFFECTS[obstacle.tier]
+	if effect and effect.slow > 0 and lateral == nil then
+		EggController.SlowDown(egg.id, Workspace:GetServerTimeNow(), effect.slow)
+	end
+	local text = kind.hitText or `{HIT_WORDS[obstacle.tier] or "Into"} {kind.name}!`
+	if effect and not ride.claimed then
+		text ..= ` -{NumberFormat.abbreviate(egg.spec.requirement * effect.stamina)} stamina`
+	end
+	UiState.showToast(text, if obstacle.tier == "Bump" then BUMP_COLOR else SLOW_COLOR)
+end
+
+-- The egg being ridden bounced off the side of the runway: spotted on this device (`lateral` nil: bounce it here),
+-- or by the server (`lateral`: where it bounced the egg to).
+local function onEdge(lateral: number?)
+	local ride = UiState.ride
+	local egg = if ride then EggController.GetEgg(ride.eggId) else nil
+	if ride == nil or egg == nil then
+		return
+	end
+	local now = Workspace:GetServerTimeNow()
+	if lateral ~= nil and now - lastEdgeAt < Tuning.WALL_BOUNCE_COOLDOWN + 0.5 then
+		-- Already bounced here; just agree with the server about where the egg ended up.
+		egg.lateral = lateral
+		egg.targetLateral = lateral
+		return
+	end
+	lastEdgeAt = now
+	local limit = Runway.maxLateral(egg.spec.halfLength)
+	egg.lateral = lateral or (if egg.lateral >= 0 then 1 else -1) * math.max(0, limit - Tuning.WALL_KNOCKBACK)
+	egg.targetLateral = egg.lateral
+	EggController.Wobble(egg.id)
+	local effect = Tuning.HIT_EFFECTS.Wall
+	if lateral == nil then
+		EggController.SlowDown(egg.id, now, effect.slow)
+	end
+	local text = "Bounced off the wall!"
+	if not ride.claimed then
+		text ..= ` -{NumberFormat.abbreviate(egg.spec.requirement * effect.stamina)} stamina`
+	end
+	UiState.showToast(text, BUMP_COLOR)
+end
+
+-- Riding a pet (or leaping) through lava or tar slows the player down until they are out of it. The speed is put
+-- back only if nothing else (such as getting on or off a pet) has changed it meanwhile.
+local function updateWading()
+	local humanoid, root = getCharacter()
+	local inSlow = false
+	if humanoid and root and humanoid.Health > 0 and UiState.ride == nil then
+		local position = root.Position
+		if position.Z >= 0 then
+			local lateral = Runway.lateralOf(position.X, position.Z)
+			inSlow = Obstacles.slowAt(lateral, position.Z, Workspace:GetServerTimeNow()) ~= nil
+		end
+	end
+	local current = wading
+	if inSlow and current == nil and humanoid then
+		local slowed = humanoid.WalkSpeed * Tuning.WADE_SPEED_FACTOR
+		wading = { humanoid = humanoid, speed = humanoid.WalkSpeed, slowed = slowed }
+		humanoid.WalkSpeed = slowed
+		UiState.showToast("Slow going!", SLOW_COLOR)
+	elseif not inSlow and current ~= nil then
+		wading = nil
+		if current.humanoid.Parent and math.abs(current.humanoid.WalkSpeed - current.slowed) < 0.01 then
+			current.humanoid.WalkSpeed = current.speed
+		end
 	end
 end
 
@@ -449,9 +494,15 @@ local function steer(deltaTime: number)
 	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
 	egg.targetLateral = egg.lateral
 
-	-- Obstacles: report a hit straight away so the server can check it, and show it now.
+	-- The side of the runway: the egg bounces back off it. Tell the server, and show it now.
 	local now = Workspace:GetServerTimeNow()
-	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	if Runway.isAtEdge(egg.lateral, egg.spec.halfLength) and now - lastEdgeAt >= Tuning.WALL_BOUNCE_COOLDOWN then
+		Net.ReportEdge:FireServer()
+		onEdge(nil)
+	end
+
+	-- Obstacles: report a hit straight away so the server can check it, and show it now.
+	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now, egg.slow))
 	if rideLastZ and z < rideLastZ - Runway.LOOP_LENGTH / 2 then
 		-- Carried back one loop: the obstacles ahead can be hit again (as on the server).
 		rideHits = {}
@@ -511,6 +562,11 @@ function RideController.Init()
 	Net.ObstacleHit.OnClientEvent:Connect(function(obstacleId: number, _tier: string, lateral: number)
 		onHit(obstacleId, lateral)
 	end)
+	Net.EdgeHit.OnClientEvent:Connect(function(lateral: number)
+		if typeof(lateral) == "number" then
+			onEdge(lateral)
+		end
+	end)
 
 	Net.StaminaChanged.OnClientEvent:Connect(function(value: number, time: number, rate: number, max: number)
 		UiState.staminaState = { value = value, time = time, rate = rate, max = max }
@@ -536,6 +592,7 @@ function RideController.Init()
 		end
 		lookForEgg()
 		updateLeap()
+		updateWading()
 	end)
 
 	-- Before the eggs are drawn (EggController renders just before the camera).

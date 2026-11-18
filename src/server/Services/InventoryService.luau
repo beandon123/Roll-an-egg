@@ -1,5 +1,6 @@
--- Each player's eggs, pen, pets and dollars. Claimed eggs arrive in the inventory; the player puts them down in
--- their pen, where they hatch on a timer into pets (Silver, Gold or Rainbow if lucky). Pets in the pen earn dollars
+-- Each player's eggs, pen, pets and dollars. Claimed eggs arrive in the inventory, as tools in the player's Roblox
+-- inventory (EggToolService); the player holds one and clicks a spot in their pen to put it down there, where it
+-- hatches on a timer into a pet (Silver, Gold or Rainbow if lucky). Pets in the pen earn dollars
 -- every second; pets can be sold; dollars buy a bigger pen. The rules are in Logic/Hatchery, Shared/HatchMath and
 -- Shared/PetWorth; this service runs them against the clock, saves the results, and keeps the player's device
 -- and plot up to date.
@@ -21,6 +22,7 @@ local NumberFormat = require(Shared.NumberFormat)
 local PetModels = require(Shared.PetModels)
 
 local DataService = require(script.Parent.DataService)
+local EggToolService = require(script.Parent.EggToolService)
 local MountService = require(script.Parent.MountService)
 local PlotService = require(script.Parent.PlotService)
 local Hatchery = require(script.Parent.Parent.Logic.Hatchery)
@@ -67,11 +69,13 @@ local function sendDollars(player: Player, data)
 	Net.DollarsChanged:FireClient(player, data.Dollars, incomeOf(player, data))
 end
 
--- Sends the player everything in their inventory, pen and pets.
+-- Sends the player everything in their inventory, pen and pets, and brings the egg tools in their Backpack up to
+-- date.
 function InventoryService.Push(player: Player)
 	local data = DataService.GetData(player)
 	if data then
 		Net.InventoryChanged:FireClient(player, Hatchery.state(data, incomeMultipliers[player]))
+		EggToolService.Sync(player)
 	end
 end
 
@@ -240,17 +244,22 @@ local function isUid(value: unknown): boolean
 	return typeof(value) == "string" and #value > 0 and #value <= MAX_UID_LENGTH
 end
 
-local function onPlaceEgg(player: Player, eggUid: unknown)
-	if not isUid(eggUid) then
+local function isCoordinate(value: unknown): boolean
+	return typeof(value) == "number" and value == value and math.abs(value) < 1e6
+end
+
+-- The player clicked (or tapped) a spot while holding an egg: put it down there, if the spot is in their own pen.
+local function onPlaceEgg(player: Player, eggUid: unknown, x: unknown, z: unknown)
+	if not isUid(eggUid) or not isCoordinate(x) or not isCoordinate(z) then
 		return
 	end
 	local data = forRequest(player)
 	if data == nil then
 		return
 	end
-	local inward, along = PlotService.SpotInPen(player)
+	local inward, along = PlotService.SpotAt(player, x :: number, z :: number)
 	if inward == nil or along == nil then
-		notice(player, "Walk into your pen to put eggs down", WARN)
+		notice(player, "Click a spot inside your pen to put the egg down", WARN)
 		return
 	end
 	local entry, reason = Hatchery.place(data, eggUid :: string, inward, along, now())

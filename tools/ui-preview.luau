@@ -9,6 +9,8 @@
 --     trails   the Trails stall's panel open, a few trails owned (trails-end: scrolled to the last trails)
 --     sell     the Sell stall's panel open
 --     shop     the shop open
+--     eggs     the Eggs panel open
+--     secret   the message (big white letters) when a Secret egg spawns
 -- The page draws a 1280 x 720 screen; add #w=844&h=390 to the address for a phone held sideways.
 --
 -- It runs the game's own client scripts in the Studio stand-in (tests/studio), then turns the HUD's GUI objects into
@@ -77,6 +79,15 @@ elseif scene == "sell" then
 	UiState.openPanel:set("Sell")
 elseif scene == "shop" then
 	UiState.openPanel:set("Shop")
+elseif scene == "eggs" then
+	UiState.actions.openPanel("Eggs")
+elseif scene == "secret" then
+	UiState.showAnnouncement(
+		"SECRET EGG SPAWNED!",
+		"Start of the Volcano zone at 7:55:46 PM",
+		roblox.Color3.new(0, 0, 0),
+		60
+	)
 end
 -- Long enough for the panels' springs to settle.
 session:renderFrame(1 / 30, 90)

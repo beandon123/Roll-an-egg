@@ -35,7 +35,6 @@ local UiState = {
 	isDay = scope:Value(true),
 	dayNightSeconds = scope:Value(0),
 
-	zoneName = scope:Value("Hub"),
 	-- The server event running now ("Avalanche"), or nil.
 	serverEvent = scope:Value(nil :: string?),
 
@@ -100,7 +99,8 @@ local UiState = {
 	toastColor = scope:Value(Color3.new(1, 1, 1)),
 	toastVisible = scope:Value(false),
 
-	-- The banner shown when a Secret or rarer egg spawns: a title, then where and when it spawned.
+	-- The big white message shown when a Secret or rarer egg spawns: a title, then where and when it spawned, and
+	-- the colour of its rarity.
 	announceTitle = scope:Value(""),
 	announceDetail = scope:Value(""),
 	announceColor = scope:Value(Color3.new(1, 1, 1)),
@@ -119,7 +119,8 @@ local UiState = {
 		buyTrail = function(_trailId: string) end,
 		equipTrail = function(_trailId: string) end,
 		sellEggs = function(_kind: string, _count: number) end,
-		placeEgg = function(_uid: string) end,
+		-- Puts one of the player's eggs of a kind in their hand, ready to click a spot in their pen.
+		holdEgg = function(_kind: string) end,
 		openPanel = function(_panel: string) end,
 		setInPen = function(_uid: string, _inPen: boolean) end,
 		equipBest = function() end,
@@ -180,7 +181,8 @@ function UiState.showToast(text: string, color: Color3?, seconds: number?)
 	end)
 end
 
--- Shows the rare-egg banner. It sits below the toast, so everyday messages such as "Hop combo" never hide it.
+-- Shows the rare-egg message for `seconds` (5 unless given). It sits below the toast, so everyday messages such as
+-- "Hop combo" never hide it.
 function UiState.showAnnouncement(title: string, detail: string, color: Color3, seconds: number?)
 	announceToken += 1
 	local token = announceToken
@@ -188,7 +190,7 @@ function UiState.showAnnouncement(title: string, detail: string, color: Color3, 
 	UiState.announceDetail:set(detail)
 	UiState.announceColor:set(color)
 	UiState.announceVisible:set(true)
-	task.delay(seconds or 10, function()
+	task.delay(seconds or 5, function()
 		if token == announceToken then
 			UiState.announceVisible:set(false)
 		end

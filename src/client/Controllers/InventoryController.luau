@@ -1,6 +1,7 @@
 -- The local player's eggs, pen, pets and dollars: keeps UiState up to date with what the server sends, does what
 -- the Eggs and Pets panels' buttons ask (Ui/Panels), shows the server's messages and announces hatches, and fills
--- the panels' 3D preview with the selected egg or pet, turning slowly.
+-- the panels' 3D preview with the selected egg or pet, turning slowly. (Eggs are put down from the Roblox inventory:
+-- see EggToolController.)
 --
 -- The server decides everything (see InventoryService and MountService): this only asks, and shows.
 
@@ -12,7 +13,6 @@ local Load = require(script.Parent.Parent.Load)
 local EggRig = Load.shared("EggRig")
 local Net = Load.shared("Net")
 local PetRig = Load.shared("PetRig")
-local Plots = Load.shared("Plots")
 
 local Panels = require(script.Parent.Parent.Ui.Panels)
 local UiState = require(script.Parent.Parent.Ui.UiState)
@@ -28,7 +28,6 @@ local CLOCK_RATE = 4
 local PREVIEW_TURN = 0.7
 -- An egg in the preview is shown at the size it has in the pen.
 local PREVIEW_EGG = { radius = 2.2, halfLength = 2.9 }
-local WARN = Color3.fromRGB(255, 190, 90)
 
 local lastClockAt = -math.huge
 
@@ -43,26 +42,6 @@ local preview = {
 
 local function rgb(color: { number }?): Color3?
 	return if color then Color3.fromRGB(color[1], color[2], color[3]) else nil
-end
-
--- Whether the local player is standing in their own pen.
-local function inOwnPen(): boolean
-	local character = localPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	local map = Workspace:FindFirstChild("Map")
-	local plots = map and map:FindFirstChild("Plots")
-	if root == nil or not root:IsA("BasePart") or plots == nil then
-		return false
-	end
-	for _, plot in plots:GetChildren() do
-		if plot:GetAttribute("Owner") == localPlayer.UserId then
-			local index = plot:GetAttribute("Index") :: number
-			local position = root.CFrame.Position
-			local inward, along = Plots.toLocal(index, position.X, position.Z)
-			return Plots.inPen(peek(UiState.penLevel), inward, along, 0)
-		end
-	end
-	return false
 end
 
 -- The first item of a panel, to show when it opens with nothing of its own selected.
@@ -92,21 +71,6 @@ local function openPanel(panel: string)
 	if panel ~= "None" and (selected == nil or selected.type ~= wanted) then
 		UiState.selected:set(firstOf(panel))
 	end
-end
-
-local function placeEgg(uid: string)
-	if #peek(UiState.hatching) >= peek(UiState.eggCapacity) then
-		UiState.showToast(
-			`Your pen can only hatch {peek(UiState.eggCapacity)} eggs at once: wait, or buy a bigger pen`,
-			WARN
-		)
-		return
-	end
-	if not inOwnPen() then
-		UiState.showToast("Walk into your pen to put eggs down", WARN)
-		return
-	end
-	Net.PlaceEgg:FireServer(uid)
 end
 
 -- Takes in the inventory the server sent.
@@ -249,7 +213,6 @@ local function update(deltaTime: number)
 end
 
 function InventoryController.Init()
-	UiState.actions.placeEgg = placeEgg
 	UiState.actions.openPanel = openPanel
 	UiState.actions.setInPen = function(uid: string, inPen: boolean)
 		Net.SetInPen:FireServer(uid, inPen)

@@ -396,4 +396,55 @@ return function(harness)
 			expect.equal(Runway.wallAt(-1, Runway.zoneStartZ(3) + 10, 3), true)
 		end)
 	end)
+
+	describe("Runway bends", function()
+		it("winds through every zone, straight and in the middle at the hub and at every zone's start", function()
+			expect.equal(Runway.centerX(-50), 0)
+			expect.equal(Runway.slope(-50), 0)
+			for zoneId = 1, Runway.ZONE_COUNT + Runway.REPEATS do
+				local startZ = Runway.zoneStartZ(zoneId)
+				expect.near(Runway.centerX(startZ), 0, 1e-9, `zone {zoneId} start`)
+				expect.near(Runway.slope(startZ), 0, 1e-9, `zone {zoneId} runs straight at its gate`)
+				-- And it really winds: well off to one side somewhere in the zone.
+				local furthest = 0
+				for step = 0, 60 do
+					furthest = math.max(furthest, math.abs(Runway.centerX(startZ + step * 10)))
+				end
+				expect.truthy(furthest >= 30, `zone {zoneId} swings {furthest} studs`)
+			end
+		end)
+
+		it("bends smoothly and gently: no jumps, and never more than about 30 degrees off straight", function()
+			local lastX = Runway.centerX(0)
+			for z = 0.5, Runway.LOOP_END, 0.5 do
+				local x = Runway.centerX(z)
+				expect.truthy(math.abs(x - lastX) < 0.5 * 0.6, `no jump at {z}`)
+				expect.truthy(math.abs(Runway.heading(z)) < math.rad(30), `gentle at {z}`)
+				-- The slope is how fast the centre line moves.
+				expect.near(Runway.slope(z), (Runway.centerX(z + 0.01) - Runway.centerX(z - 0.01)) / 0.02, 1e-2)
+				lastX = x
+			end
+		end)
+
+		it("repeats its last zone's bends, so being carried back one loop does not move anything", function()
+			for z = Runway.FINAL_ZONE_START, Runway.LOOP_END, 7 do
+				expect.near(Runway.centerX(z), Runway.centerX(z + Runway.LOOP_LENGTH), 1e-6)
+				expect.near(
+					Runway.centerX(Runway.wrapZ(z + Runway.LOOP_LENGTH)),
+					Runway.centerX(z + Runway.LOOP_LENGTH),
+					1e-6
+				)
+			end
+		end)
+
+		it("turns runway positions into the world and back", function()
+			for _, z in { 0, 130, 777, 2100, 3333 } do
+				for _, lateral in { -50, 0, 12.5 } do
+					local x = Runway.worldX(lateral, z)
+					expect.near(x, Runway.centerX(z) + lateral, 1e-9)
+					expect.near(Runway.lateralOf(x, z), lateral, 1e-9)
+				end
+			end
+		end)
+	end)
 end

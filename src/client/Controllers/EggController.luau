@@ -7,18 +7,20 @@
 -- Riders are pinned to this device's copy of the egg, so nobody appears to slide off because of lag. An egg without
 -- a rider follows its path round the obstacles (Shared/Obstacles), worked out here exactly as on the server.
 --
--- Rolling eggs kick up a small cloud of dust behind them, coloured for the ground they are rolling over.
+-- Rolling eggs kick up a thick cloud of dust behind them, coloured for the ground they are rolling over.
 --
--- An egg appears on the ground at the start of its zone (fading in with a puff of dust) and rolls straight down the
--- runway. The only time it leaves the ground is the one small bounce it makes before cracking, when its rider runs
--- out of stamina.
+-- An egg appears on the ground at the start of its zone (fading in with a puff of dust) and rolls down the runway,
+-- following its bends (Shared/Runway: eggs are worked out in runway space and drawn in the world, turned to face
+-- along the runway). The only time it leaves the ground is the one small bounce it makes before cracking, when its
+-- rider runs out of stamina. An egg that runs into something slows down for a moment (Shared/EggMotion).
 --
 -- The last zone never ends (see Shared/Runway). Every egg in it is drawn at its copy nearest the local player, so
 -- when the local player is carried back one loop, everything around them is carried back with them and nothing
 -- seems to move. Dust is the one thing that cannot be moved once made, so near the end of a loop each egg also lays
 -- its trail one loop back ("echo" dust), ready for when the player arrives there.
 --
--- Also shows the on-screen message when a Secret or rarer egg spawns.
+-- Also shows the on-screen message when a Secret or rarer egg spawns, with an alert sound so the whole server
+-- notices.
 --
 -- Each egg's look comes from Shared/EggModels (a blocky model, different for every zone and rarity), built into parts
 -- by Shared/EggRig. Every part is anchored, and this controller writes where every one of them goes, each at its own
@@ -29,11 +31,13 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
 local EggRig = Load.shared("EggRig")
+local Sounds = Load.shared("Config", "Sounds")
 local EggMotion = Load.shared("EggMotion")
 local EggSpec = Load.shared("EggSpec")
 local Net = Load.shared("Net")
@@ -69,9 +73,13 @@ local POP_DISTANCE = 50
 -- Within this many studs of the end of a loop, eggs also lay their dust one loop back (see the header).
 local ECHO_RANGE = 60
 -- No dust for eggs this far from the camera.
-local DUST_MAX_DISTANCE = 250
--- Seconds an egg that goes off the side takes to fall out of sight.
-local FALL_TIME = 0.7
+local DUST_MAX_DISTANCE = 280
+-- How long the Secret egg message stays up, in seconds.
+local ANNOUNCE_TIME = 5
+-- An egg's drawn position eases onto a new slow-down the server sends, rather than jumping (see SlowDown), at this
+-- rate, and never by more than NUDGE_LIMIT studs.
+local NUDGE_SETTLE = 6
+local NUDGE_LIMIT = 8
 
 -- Eggs far from the camera are redrawn every few frames instead of every frame: within NEAR_DISTANCE studs every
 -- frame, out to FAR_DISTANCE every MID_REDRAW_FRAMES frames, beyond that every FAR_REDRAW_FRAMES. An egg someone is
@@ -123,6 +131,10 @@ export type ClientEgg = {
 	-- Set while it bounces before cracking (its rider ran out of stamina).
 	bounceTime: number?,
 	cracking: boolean,
+	-- Its slow-downs from running into things (Shared/EggMotion), and how far (studs) its drawn position is still
+	-- easing onto the latest one.
+	slow: any?,
+	zNudge: number,
 	model: Model,
 	-- The invisible part at the middle of the egg, which its label and effects sit on.
 	root: Part,
@@ -285,28 +297,31 @@ local function setPose(egg: ClientEgg, pose: CFrame)
 	end
 end
 
--- The dust an egg kicks up as it rolls: puffs from a strip across its width, drifting up and back.
+-- The dust an egg kicks up as it rolls: a thick cloud of puffs from a strip across its width, billowing up and
+-- hanging behind it for a moment, so a rolling egg is easy to spot from far off.
 local function addDust(model: Model, spec): (BasePart, ParticleEmitter)
 	local dust = newEggPart("Dust", model)
 	dust.Transparency = 1
-	dust.Size = Vector3.new(spec.halfLength * 1.5, 0.2, 0.6)
+	dust.Size = Vector3.new(spec.halfLength * 1.9, 0.2, 1.2)
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "Dust"
 	emitter.Texture = DUST_TEXTURE
-	emitter.Rate = 8 + spec.radius * 3
-	emitter.Lifetime = NumberRange.new(0.7, 1.3)
-	emitter.Speed = NumberRange.new(1.5, 4)
-	emitter.SpreadAngle = Vector2.new(35, 35)
+	emitter.Rate = 22 + spec.radius * 7
+	emitter.Lifetime = NumberRange.new(1.1, 2)
+	emitter.Speed = NumberRange.new(2, 5)
+	emitter.SpreadAngle = Vector2.new(40, 40)
 	-- Up, and back up the runway (eggs roll towards +Z).
 	emitter.EmissionDirection = Enum.NormalId.Top
-	emitter.Acceleration = Vector3.new(0, 1.5, -2)
-	emitter.Drag = 2
+	emitter.Acceleration = Vector3.new(0, 1.2, -2.5)
+	emitter.Drag = 1.6
 	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, spec.radius * 0.45),
-		NumberSequenceKeypoint.new(1, spec.radius * 1.3),
+		NumberSequenceKeypoint.new(0, spec.radius * 0.7),
+		NumberSequenceKeypoint.new(0.4, spec.radius * 1.6),
+		NumberSequenceKeypoint.new(1, spec.radius * 2.3),
 	})
 	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.45),
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.5, 0.45),
 		NumberSequenceKeypoint.new(1, 1),
 	})
 	emitter.Rotation = NumberRange.new(0, 360)
@@ -318,12 +333,12 @@ end
 
 -- Where an egg is down the runway (carried back in the endless last zone: Runway.wrapZ), as on the server.
 local function eggZ(egg: ClientEgg, now: number): number
-	return Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	return Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now, egg.slow))
 end
 
 -- How far an egg has rolled in all, for how far round it has turned.
 local function rolled(egg: ClientEgg, now: number): number
-	return EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now) - egg.startZ
+	return EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now, egg.slow) - egg.startZ
 end
 
 -- Where an egg is drawn side to side: where its rider has it, or along its path round the obstacles.
@@ -359,15 +374,15 @@ local function getReferenceZ(now: number): number
 	return if camera then camera.CFrame.Position.Z else 0
 end
 
--- Where to draw an egg: side-to-side position, height of its centre, distance down the runway, and how high it is
--- off the ground (only during its bounce before cracking). The egg the local player rides is drawn where it really
--- is, so it carries them back one loop when it gets there; every other egg is drawn at its copy nearest them.
+-- Where to draw an egg in the world: x, the height of its centre, z, and how high it is off the ground (only during
+-- its bounce before cracking). The egg the local player rides is drawn where it really is, so it carries them back
+-- one loop when it gets there; every other egg is drawn at its copy nearest them.
 local function eggPosition(egg: ClientEgg, now: number, referenceZ: number): (number, number, number, number)
-	local z = eggZ(egg, now)
-	local x = currentLateral(egg, now)
+	local z = eggZ(egg, now) + egg.zNudge
 	if egg.riderUserId ~= localPlayer.UserId then
 		z = Runway.nearestImage(z, referenceZ)
 	end
+	local x = Runway.worldX(currentLateral(egg, now), z)
 	local bounce = EggMotion.bounceOffset(egg.bounceTime, now, Tuning.CRACK_BOUNCE_TIME, Tuning.CRACK_BOUNCE_HEIGHT)
 	return x, Runway.surfaceY(z) + egg.rollHeight + bounce, z, bounce
 end
@@ -388,8 +403,9 @@ end
 -- the egg rolls along the ground near the camera. `echoing`: the local player is about to be carried back one loop.
 local function updateDust(egg: ClientEgg, x: number, z: number, cameraPosition: Vector3?, echoing: boolean)
 	local dustZ = z - egg.spec.radius * 0.6
-	local position = Vector3.new(x, Runway.surfaceY(dustZ) + 0.2, dustZ)
-	egg.dust.CFrame = CFrame.new(position)
+	local dustX = x + Runway.centerX(dustZ) - Runway.centerX(z)
+	local position = Vector3.new(dustX, Runway.surfaceY(dustZ) + 0.2, dustZ)
+	egg.dust.CFrame = CFrame.new(position) * CFrame.Angles(0, Runway.heading(dustZ), 0)
 
 	local zone = Runway.zoneAt(z)
 	if zone and zone ~= egg.dustZone then
@@ -406,8 +422,10 @@ local function updateDust(egg: ClientEgg, x: number, z: number, cameraPosition: 
 
 	local echoOn = on and echoing
 	if echoOn then
+		-- The last zone's bends repeat with it, so one loop back is the same x.
 		local echoZ = dustZ - Runway.LOOP_LENGTH
-		egg.echo.CFrame = CFrame.new(x, Runway.surfaceY(echoZ) + 0.2, echoZ)
+		egg.echo.CFrame = CFrame.new(dustX, Runway.surfaceY(echoZ) + 0.2, echoZ)
+			* CFrame.Angles(0, Runway.heading(echoZ), 0)
 	end
 	egg.echoOn = setEmitting(egg.echoEmitter, echoOn, egg.echoOn)
 end
@@ -438,7 +456,32 @@ local function localClockTime(time: number): string
 	return string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
 end
 
--- The on-screen message for a Secret or rarer egg: what spawned, where, and when.
+-- An alarm everyone in the server hears when a Secret or rarer egg spawns: a few rising chimes, twice over
+-- (Config/Sounds), as loud as the player's Effects volume allows.
+local function playAlert()
+	local alert = Sounds.SECRET_ALERT
+	local volume = UiState.Fusion.peek(UiState.settings.EffectsVolume)
+	if typeof(volume) ~= "number" or volume <= 0 then
+		return
+	end
+	for _, note in alert.notes do
+		task.delay(note.at, function()
+			local sound = Instance.new("Sound")
+			sound.Name = "SecretAlert"
+			sound.SoundId = alert.id
+			sound.Volume = alert.volume * volume
+			sound.PlaybackSpeed = note.pitch
+			sound.Parent = SoundService
+			sound:Play()
+			task.delay(alert.length, function()
+				sound:Destroy()
+			end)
+		end)
+	end
+end
+
+-- The on-screen message for a Secret or rarer egg: what spawned, where, and when, in big white letters for
+-- ANNOUNCE_TIME seconds, with the alert sound.
 local function announce(egg: ClientEgg)
 	local info = Rarities.Info[egg.rarity]
 	if not info.announce then
@@ -447,17 +490,19 @@ local function announce(egg: ClientEgg)
 	UiState.showAnnouncement(
 		`{string.upper(egg.rarity)} EGG SPAWNED!`,
 		`Start of the {Zones.List[egg.zone].name} zone at {localClockTime(egg.spawnTime)}`,
-		rgb(info.color)
+		rgb(info.color),
+		ANNOUNCE_TIME
 	)
+	playAlert()
 end
 
--- Holds a rider's character on top of an egg.
+-- Holds a rider's character on top of an egg, facing along the runway.
 local function pinRider(userId: number, x: number, y: number, z: number, radius: number)
 	local player = Players:GetPlayerByUserId(userId)
 	local character = player and player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
-		root.CFrame = CFrame.new(x, y + radius + SEAT_HEIGHT, z) * FACE_FORWARD
+		root.CFrame = CFrame.new(x, y + radius + SEAT_HEIGHT, z) * CFrame.Angles(0, Runway.heading(z), 0) * FACE_FORWARD
 	end
 end
 
@@ -482,7 +527,9 @@ local function draw(
 		end
 	end
 	local angle = EggMotion.rollAngle(rolled(egg, now), egg.spec.radius)
-	setPose(egg, CFrame.new(x, y, z) * wobble * CFrame.Angles(angle, 0, 0) * egg.facing)
+	-- Turned to face along the runway (it winds), then rolled about its own axis across it.
+	local heading = CFrame.Angles(0, Runway.heading(z), 0)
+	setPose(egg, CFrame.new(x, y, z) * heading * wobble * CFrame.Angles(angle, 0, 0) * egg.facing)
 	egg.drawnX, egg.drawnZ = x, z
 	updateDust(egg, x, z, cameraPosition, echoing)
 	if egg.riderUserId ~= nil then
@@ -537,6 +584,8 @@ local function addEgg(data): ClientEgg?
 		ownerUserId = data.owner,
 		bounceTime = data.bounceTime,
 		cracking = data.bounceTime ~= nil,
+		slow = if typeof(data.slow) == "table" then data.slow else nil,
+		zNudge = 0,
 		model = model,
 		root = root,
 		parts = parts,
@@ -607,37 +656,25 @@ local function removeEgg(eggId: number, reason: string?)
 	end
 	eggs[eggId] = nil
 
-	local x = egg.drawnX or egg.lateral
-	local z = egg.drawnZ or eggZ(egg, Workspace:GetServerTimeNow())
 	if reason == "Cracked" then
+		local z = egg.drawnZ or eggZ(egg, Workspace:GetServerTimeNow())
+		local x = egg.drawnX or Runway.worldX(egg.lateral, z)
 		showSplat(egg, x, z)
 		egg.model:Destroy()
 		return
 	end
 
-	-- Everything else fades out quickly; an egg that went over the edge also drops out of sight.
-	local falling = reason == "FellOff"
-	local tweenInfo = if falling
-		then TweenInfo.new(FALL_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-		else TweenInfo.new(0.25)
-	local drop = Vector3.new(if x > 0 then 12 else -12, -40, 0)
+	-- Everything else fades out quickly.
+	local tweenInfo = TweenInfo.new(0.25)
 	egg.needLabel.Parent.Enabled = false
 	for _, descendant in egg.model:GetDescendants() do
 		if descendant:IsA("BasePart") and descendant ~= egg.root then
-			local goal: { [string]: any } = { Transparency = 1 }
-			if falling and descendant ~= egg.dust and descendant ~= egg.echo then
-				goal.CFrame = descendant.CFrame + drop
-			end
-			TweenService:Create(descendant, tweenInfo, goal):Play()
+			TweenService:Create(descendant, tweenInfo, { Transparency = 1 }):Play()
 		elseif descendant:IsA("ParticleEmitter") or descendant:IsA("Light") then
 			descendant.Enabled = false
 		end
 	end
-	if falling then
-		-- The root falls with them, taking the egg's light and particles along.
-		TweenService:Create(egg.root, tweenInfo, { CFrame = egg.root.CFrame + drop }):Play()
-	end
-	task.delay(if falling then FALL_TIME + 0.1 else 0.3, function()
+	task.delay(0.3, function()
 		egg.model:Destroy()
 	end)
 end
@@ -658,6 +695,7 @@ local function render(deltaTime: number)
 	local smoothing = math.min(1, deltaTime * LATERAL_SMOOTHING)
 	local localUserId = localPlayer.UserId
 	local settle = math.exp(-deltaTime * OFFSET_SETTLE)
+	local nudgeSettle = math.exp(-deltaTime * NUDGE_SETTLE)
 	local cameraPosition = getCameraPosition()
 
 	local referenceZ = getReferenceZ(now)
@@ -669,6 +707,9 @@ local function render(deltaTime: number)
 	local echoing = referenceZ >= Runway.LOOP_END - ECHO_RANGE and referenceZ < Runway.LOOP_END
 
 	for eggId, egg in eggs do
+		if egg.zNudge ~= 0 then
+			egg.zNudge = if math.abs(egg.zNudge) < 0.01 then 0 else egg.zNudge * nudgeSettle
+		end
 		-- The local rider steers their own egg directly (see RideController); everyone else's eases toward
 		-- the last position the server reported. A riderless egg settles onto its path.
 		if egg.riderUserId == nil then
@@ -732,6 +773,28 @@ function EggController.Wobble(eggId: number)
 	end
 end
 
+-- The egg's slow-downs are now `slow` (from the server; Shared/EggMotion). Its drawn position eases onto the new
+-- numbers instead of jumping.
+function EggController.SetSlow(eggId: number, slow: any)
+	local egg = eggs[eggId]
+	if egg == nil or typeof(slow) ~= "table" or typeof(slow.lost) ~= "number" then
+		return
+	end
+	local now = Workspace:GetServerTimeNow()
+	local before = eggZ(egg, now)
+	egg.slow = slow
+	egg.zNudge = math.clamp(egg.zNudge + before - eggZ(egg, now), -NUDGE_LIMIT, NUDGE_LIMIT)
+end
+
+-- Slows an egg down here at once, for `duration` seconds from `now` (the rider's own device does this the moment
+-- their egg hits something; the server's numbers follow, through SetSlow).
+function EggController.SlowDown(eggId: number, now: number, duration: number)
+	local egg = eggs[eggId]
+	if egg and duration > 0 then
+		egg.slow = EggMotion.addSlow(egg.slow, now, duration)
+	end
+end
+
 -- The closest egg a leaping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
 -- player just jumped off). Eggs that are taken, claimed, or cracking are skipped. `extraHeight` lets a player riding a tall pet, held high above the ground, reach down.
 function EggController.FindMountable(
@@ -747,7 +810,8 @@ function EggController.FindMountable(
 			continue
 		end
 		local x, y, z = eggPosition(egg, now, position.Z)
-		local dx, dz = position.X - x, position.Z - z
+		-- Measured along and across the runway there (it winds).
+		local dx, dz = Runway.lateralOf(position.X, z) - Runway.lateralOf(x, z), position.Z - z
 		-- The egg's footprint is an oval: long side to side, short front to back.
 		local nx = dx / (egg.spec.halfLength + Tuning.MOUNT_REACH)
 		local nz = dz / (egg.spec.radius + Tuning.MOUNT_REACH)
@@ -831,6 +895,8 @@ function EggController.Init()
 			refreshLabel(egg)
 		end
 	end)
+
+	Net.EggSlowed.OnClientEvent:Connect(EggController.SetSlow)
 
 	Net.EggLateral.OnClientEvent:Connect(function(eggId: number, lateral: number)
 		local egg = eggs[eggId]

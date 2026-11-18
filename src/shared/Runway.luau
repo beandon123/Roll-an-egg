@@ -3,9 +3,15 @@
 -- checks) reads it from here, so gameplay never depends on map parts being loaded.
 -- Pure math (no Roblox APIs) so the test runner can load it outside Studio.
 --
--- Coordinates: the runway starts at z = 0 and runs toward +z. x is the side-to-side ("lateral") position,
--- with 0 on the centre line. The hub sits behind the start, at negative z. The runway is level all the way: eggs
--- roll at the speed their rarity sets, not because of a slope.
+-- Coordinates: the runway starts at z = 0 and runs toward +z. The hub sits behind the start, at negative z. The
+-- runway is level all the way: eggs roll at the speed their rarity sets, not because of a slope.
+--
+-- The runway winds. Its centre line swings from side to side through each zone (Runway.BENDS) and is back in the
+-- middle, running straight, at every zone's start, where the gate stands and the eggs appear. Everything that plays
+-- the game works in runway space: `z` down the runway, and `lateral`, the side-to-side position measured from the
+-- centre line at that z. Only drawing and checking characters needs the world: world x = centerX(z) + lateral
+-- (Runway.worldX), and back (Runway.lateralOf). So a row of obstacles, an egg's path and a rider's steering are all
+-- worked out as if the runway were straight.
 --
 -- The runway has no end. Whatever the last zone is, it repeats forever: the same ground, banks, gate and obstacles
 -- every LOOP_LENGTH studs (the map builds REPEATS copies of it past LENGTH, Shared/Obstacles lays its obstacles out
@@ -13,8 +19,9 @@
 -- LOOP_LENGTH to a spot that looks exactly the same, so the move cannot be seen. Eggs are drawn at the copy of
 -- their position nearest the viewer (nearestImage), so they never jump around near anyone either.
 --
--- Banks (walls) run down both sides, with fairly large gaps. A rider who steers their egg into a bank dies; one who
--- steers it into a gap goes over the edge with it.
+-- Banks (tall stepped cliffs) run down both sides, broken by fairly large gaps that look out over the valley below.
+-- Nothing at the edge kills: an egg steered into a bank, or into the low railing across a gap, bounces back off it
+-- (see Logic/RunwaySim), which costs its rider some stamina.
 
 local Runway = {}
 
@@ -58,9 +65,80 @@ Runway.GAPLESS_END = 40
 
 export type WallGap = { side: number, startZ: number, endZ: number }
 
+-- How each zone's stretch of runway winds. "S" swings the centre line out to one side over the first half of the
+-- zone and across to the other over the second; "Bulge" swings it out to one side and back. `amplitude` is how far
+-- the centre line moves, in studs (positive towards +x). Every shape is back in the middle, running straight, at both
+-- ends of the zone. The last zone's shape repeats with it past the end of the runway.
+export type Bend = { shape: "S" | "Bulge", amplitude: number }
+Runway.BENDS = {
+	{ shape = "S", amplitude = 46 }, -- Forest
+	{ shape = "Bulge", amplitude = -72 }, -- Desert
+	{ shape = "S", amplitude = -46 }, -- Snow
+	{ shape = "Bulge", amplitude = 64 }, -- Ocean
+	{ shape = "S", amplitude = 46 }, -- Volcano
+	{ shape = "S", amplitude = -44 }, -- Prehistoric
+} :: { Bend }
+
 -- Height of the walking surface at a given distance down the runway.
 function Runway.surfaceY(_z: number): number
 	return Runway.BASE_Y
+end
+
+----------------------------------------------------------------------------------------------------------------
+-- Winding
+
+-- How far the centre line is from x = 0 at `z`, and how fast that changes (studs of x per stud of z).
+local function bendAt(z: number): (number, number)
+	if z <= 0 then
+		return 0, 0
+	end
+	local zoneIndex = math.min(math.floor(z / Runway.ZONE_LENGTH) + 1, Runway.ZONE_COUNT)
+	local bend = Runway.BENDS[zoneIndex]
+	if bend == nil then
+		return 0, 0
+	end
+	-- How far through its zone (or, past the end of the runway, through its copy of the last zone) `z` is.
+	local u = (z % Runway.ZONE_LENGTH) / Runway.ZONE_LENGTH
+	local value, perU
+	if bend.shape == "S" then
+		local s = math.sin(2 * math.pi * u)
+		value, perU = s * s, 2 * math.pi * math.sin(4 * math.pi * u)
+		if u > 0.5 then
+			value, perU = -value, -perU
+		end
+	else
+		local s = math.sin(math.pi * u)
+		value, perU = s * s, math.pi * math.sin(2 * math.pi * u)
+	end
+	return bend.amplitude * value, bend.amplitude * perU / Runway.ZONE_LENGTH
+end
+
+-- World x of the middle of the runway at `z` (0 at the hub and at every zone's start).
+function Runway.centerX(z: number): number
+	local x = bendAt(z)
+	return x
+end
+
+-- How fast the runway is swinging sideways at `z`: studs of x per stud down the runway.
+function Runway.slope(z: number): number
+	local _, slope = bendAt(z)
+	return slope
+end
+
+-- Which way the runway runs at `z`, as a turn about the vertical axis (radians) from straight down +z, positive
+-- towards +x: CFrame.Angles(0, Runway.heading(z), 0) turns something that faces +z to face along the runway.
+function Runway.heading(z: number): number
+	return math.atan(Runway.slope(z))
+end
+
+-- World x of a spot `lateral` studs across the runway at `z`.
+function Runway.worldX(lateral: number, z: number): number
+	return Runway.centerX(z) + lateral
+end
+
+-- How far across the runway world x is at `z` (0 on the centre line).
+function Runway.lateralOf(x: number, z: number): number
+	return x - Runway.centerX(z)
 end
 
 -- Distance down the runway where a zone begins. Past the last zone, the copies of it count on: LENGTH is where
@@ -101,7 +179,7 @@ function Runway.isAtEdge(x: number, halfLength: number): boolean
 end
 
 -- Where an egg starts its ride, side to side: a riderless egg may run right along a bank, so whoever gets on starts
--- a little way in from it, and only dies there if they steer into it.
+-- a little way in from it, and only bounces off it if they steer into it.
 Runway.MOUNT_EDGE_MARGIN = 1.5
 function Runway.mountLateral(x: number, halfLength: number): number
 	local limit = math.max(0, Runway.maxLateral(halfLength) - Runway.MOUNT_EDGE_MARGIN)

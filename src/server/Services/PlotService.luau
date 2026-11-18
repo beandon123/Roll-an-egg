@@ -101,24 +101,19 @@ function PlotService.GetPlot(player: Player): number?
 	return plotOf[player]
 end
 
--- Where the player is standing in their own pen, as (inward, along), or nil if they are not in it.
-function PlotService.SpotInPen(player: Player): (number?, number?)
+-- Where a spot on the ground (world x and z) is in the player's own pen, as (inward, along), or nil if it is not in
+-- their pen.
+function PlotService.SpotAt(player: Player, x: number, z: number): (number?, number?)
 	local index = plotOf[player]
 	local data = DataService.GetData(player)
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if index == nil or data == nil or root == nil or not root:IsA("BasePart") then
+	if index == nil or data == nil then
 		return nil, nil
 	end
-	local position = root.CFrame.Position
-	local inward, along = Plots.toLocal(index, position.X, position.Z)
-	if not Plots.inPen(data.PenLevel, inward, along, 0) or position.Y > Runway.BASE_Y + 12 then
+	local inward, along = Plots.toLocal(index, x, z)
+	if not Plots.inPen(data.PenLevel, inward, along, 0) then
 		return nil, nil
 	end
-	-- A little in front of the player, so the egg is not under their feet.
-	local ahead = root.CFrame.LookVector * 4
-	local aheadInward, aheadAlong = Plots.toLocal(index, position.X + ahead.X, position.Z + ahead.Z)
-	return aheadInward, aheadAlong
+	return inward, along
 end
 
 -- Who presses the green button is handed to `handler` (InventoryService buys the upgrade).

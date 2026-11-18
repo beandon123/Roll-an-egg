@@ -38,7 +38,9 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight, level runway (~3,600 studs long, 120 wide; decided: flat and wide) holding six zones in order
+- [ ] One level, winding runway (~3,600 studs long, 120 wide; decided: flat and wide; decided: it winds between
+      tall walls with gaps, like the owner's reference screenshots, straight and centred at every zone's start; built)
+      holding six zones in order
       (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); more zones added later (decided)
     - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
@@ -46,8 +48,9 @@ Original theme, art, and creatures.
     - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
           (proposed, from the owner's reference screenshots)
-    - [ ] Natural, fairly large gaps in the walls (decided), each marked by a red strip: steering an egg into a wall
-          kills the rider; steering it into a gap sends egg and rider over the edge
+    - [ ] Natural, fairly large gaps in the walls (decided), looking out over a valley with a low railing across
+          (built). Nothing on the runway kills (decided): steering an egg into a wall or a railing bounces it back,
+          costing stamina and slowing it for a moment (built)
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot (see Hub below)
     - [ ] Zone signposts show the stamina you'll want for that zone's eggs
 - [ ] Teleport pads at the hub, one per zone, bought with dollars (decided)
@@ -57,8 +60,8 @@ Original theme, art, and creatures.
 - [ ] Each zone has an egg chute at its start; eggs roll on down the runway from there and keep their own zone's
       rarity and stamina requirement wherever they roll
     - [ ] Eggs appear on the ground at the start of their zone (no drop from above), roll straight down the strip,
-          and leave a small dust trail behind them; they never leave the ground, except for one small bounce before
-          cracking (decided)
+          and leave a thick dust cloud behind them (decided: thicker and more obvious, built); they never leave the
+          ground, except for one small bounce before cracking (decided)
 - [ ] 8 eggs per zone, one per pet (decided). Deeper zones start at a higher rarity (decided):
     - [ ] Forest: 2 Common, 2 Uncommon, Rare, Epic, Legendary, Mythic
     - [ ] Desert: Common, 2 Uncommon, Rare, Epic, Legendary, 2 Mythic
@@ -72,23 +75,25 @@ Original theme, art, and creatures.
     - [ ] Lineup eggs appear at the start of their zone a few seconds apart, roll towards the end of their zone, fade
           out a quarter of the way into the next zone, and appear at the start again, lap after lap, until the
           closure (decided). One that is claimed comes back on its next lap (proposed)
+    - [ ] There is always an egg at the start of every zone to jump on (decided): whenever none has left a zone's
+          start for 3.5 s, the zone's lineup egg due next leaves at once (built)
     - [ ] Mid-cycle drops: now and then an extra egg drops and rolls once; Secret and rarer eggs are greatly reduced
           compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 30 s, proposed)
-    - [ ] Rolling eggs leave a small cloud of dust in their wake (decided)
+    - [ ] Rolling eggs leave a thick cloud of dust in their wake (decided)
 - [ ] Egg lifecycle
     - [ ] Never jumped on: fades out a quarter of the way into the next zone (decided); a ridden egg rolls on past
           that line and fades once its rider leaves it
     - [ ] Rider ran out of stamina: bounces slightly, cracks and splats; the same egg comes back at the start of its
-          zone ~5 s later (decided). The same happens to an egg steered over the edge through a gap
-    - [ ] Left by its rider any other way (jumped off, knocked off, crashed into a wall, died): keeps rolling, free
-          for anyone
+          zone ~5 s later (decided)
+    - [ ] Left by its rider any other way (jumped off, died): keeps rolling, free for anyone
     - [ ] At each runway closure, every egg without a rider disappears; ridden eggs stay and keep rolling (decided)
 - [ ] Rarities: Common, Uncommon, Rare, Epic, Legendary, Mythic, Secret, Eternal (decided) + Titan Egg (event) + Robux egg
     - [ ] Rarer eggs are bigger and need more stamina (decided)
     - [ ] Readable from a distance: zone-themed shell + rarity color/glow/particles + size; icon/shape for colorblind players
     - [ ] Secret and Eternal pets show as "???" in the collection book until hatched (proposed)
     - [ ] On-screen message for every player when a Secret or Eternal egg spawns, saying where (zone) and when
-          (the player's local time); no message for anything below Secret (decided)
+          (the player's local time); no message for anything below Secret (decided). Large white text, up for 5 s,
+          with an alert sound so the whole server notices (decided, built)
 
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
@@ -196,7 +201,8 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] At closing: every egg without a rider disappears; anyone riding stays on and keeps going; players stay on the track
     - [ ] An egg that loses its rider during the closure disappears too (proposed)
 - [ ] During the 10 s closure every egg in the server hatches 30x faster (10 s = 5 min of hatch progress)
-- [ ] HUD shows the time left until the runway closes
+- [ ] No runway timer or zone name across the top of the HUD (decided: removed); a short message when the runway is
+      about to close, and when it closes (built)
 
 ### Riding & Claiming
 - [ ] Mount: anyone can jump onto any egg (decided) -> riding pose; one rider per egg (Titan Egg excepted);
@@ -208,16 +214,19 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] Claim meter fills while you stay on; 100% = "CLAIMED!" -> egg goes straight into the inventory
     - [ ] The rider stays on and keeps rolling on the claimed egg, just for show (no stamina cost, can't be thrown off),
           until they jump off; it then disappears; nobody else can get on it (decided)
-- [ ] Obstacle tiers (decided): Bump (lose a chunk of stamina + wobble) / Knock-off (thrown off) / Lethal (death)
+- [ ] Obstacle tiers (decided: no hazard on the runway kills, they only slow you or drain stamina): Bump (lose a
+      little stamina + wobble) / Crash (lose more stamina, and the egg slows for a moment) / Slow (lava and tar: the
+      egg slows for longer, a little stamina lost; players riding a pet wade through slowly) (built)
     - [ ] Zone-themed obstacles fitting each zone's terrain (decided), in rows across the runway, every row
           leaving a gap for the biggest egg; eggs without a rider steer round them on their own. Built so far:
-          Forest: fallen logs, stumps, bushes, toadstools (Bump), boulders, trees (Knock-off);
-          Desert: cacti, tumbleweeds, skulls (Bump), sandstone rocks, sand geysers (Knock-off);
-          Snow: snowdrifts, snowmen (Bump), pines, ice boulders (Knock-off);
-          Ocean: coral, barrels (Bump), sea rocks, snapping giant clams (Knock-off);
-          Volcano: obsidian spikes (Bump), basalt, smoking rocks (Knock-off), lava pools, lava bursts (Lethal);
-          Prehistoric: giant ferns, dinosaur skulls (Bump), giant ribcages, mossy boulders (Knock-off), tar pits
-          (Lethal). Geysers, clams and lava vents go off now and then and warn first; still to come: rolling logs,
+          Forest: fallen logs, stumps, bushes, toadstools (Bump), boulders, trees, giant stumps, rock outcrops (Crash);
+          Desert: cacti, tumbleweeds, skulls (Bump), sandstone rocks, buttes, sand geysers (Crash);
+          Snow: snowdrifts, snowmen (Bump), pines, ice boulders, walls of ice blocks (Crash);
+          Ocean: coral, barrels (Bump), sea rocks, shipwrecks, snapping giant clams (Crash);
+          Volcano: obsidian spikes (Bump), basalt, smoking rocks, obsidian crags (Crash), lava pools, lava bursts
+          (Slow); Prehistoric: giant ferns, dinosaur skulls (Bump), giant ribcages, mossy boulders, giant stumps, rock
+          outcrops (Crash), tar pits (Slow). Big obstacles like the owner's reference screenshots (decided, built).
+          Geysers, clams and lava vents go off now and then and warn first; still to come: rolling logs,
           swinging vines, giant snowballs, ice patches, crashing waves, falling rocks, stampeding dino herds
 - [ ] Leaving an egg (decided)
     - [ ] Eggs only bounce and crack when the rider runs out of stamina ("loses their balance"); see Egg lifecycle
@@ -227,10 +236,10 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
       floaty leap with a few seconds (3.5 s) to land on an egg; touching the runway first, or running out of time,
       kills them. Riding a pet is not walking: a player on their pet can ride it down the runway and jump from it
       onto an egg (proposed, keeping pet riding as built)
-- [ ] Thrown off (stamina at 0, knock-off obstacle, losing a duel): ragdoll + 1.5 s stun, claim progress lost; they
-      are leaping, so only a lucky landing on another egg saves them
-- [ ] Death (decided: crashing into a side wall, going over the side through a gap, missing an egg when leaping, a
-      lethal obstacle, resetting): cartoon splat, respawn at your plot; current ride lost; no dollars or items lost
+- [ ] Thrown off (stamina at 0, losing a duel): ragdoll + 1.5 s stun, claim progress lost; they are leaping, so only
+      a lucky landing on another egg saves them
+- [ ] Death (decided: missing an egg when leaping, resetting; walls, gaps and obstacles never kill): cartoon splat,
+      respawn at your plot; current ride lost; no dollars or items lost
 - [ ] Egg-to-egg hopping: progress resets on the new egg; landing within 1 s of leaving the last one refunds 10% stamina
       and builds a hop-combo counter
 - [ ] Claim feedback: burst VFX, fanfare, "+1 RARE EGG" popup
@@ -315,9 +324,11 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 ### Plot & Pen
 - [ ] 8 plots around the hub; assigned on join, released on leave; plots can't be raided (built: four fenced pens
       down each side of a plaza in front of the runway, the owner's name over the gate; players respawn at theirs)
-- [ ] Inventory (decided): claimed eggs appear in an Eggs tab on the right of the screen (built)
+- [ ] Inventory (decided): claimed eggs go into the player's Roblox inventory (the hotbar: one tool per kind of egg,
+      named with the count) and appear in an Eggs tab on the right of the screen (built)
 - [ ] Eggs can only be put down on the player's own plot, anywhere in the pen: no nest area, just an open pen where
-      pets roam and eggs hatch (decided, built)
+      pets roam and eggs hatch (decided, built). The player places each one by hand (decided): hold the egg, and
+      click or tap the spot; a see-through egg on a ring shows where it would go (built)
 - [ ] Pets tab on the right (decided): eggs hatching with their countdowns, every pet; put pets in the pen or take
       them out, and an Equip best button that fills the pen with the best (decided, built)
 - [ ] A bigger pen is an upgrade bought with a green button at the front of the pen (decided, built): each level
@@ -457,7 +468,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
           gates; and the hub: its stations and the terraced cliffs round it)
 - [ ] Runway closure moment: horn, eggs without riders pop and vanish in a wave, eggs in pens glow and pulse during the 30x hatch
 - [ ] UI/UX: mobile-first, large touch targets; main HUD = dollars, stamina, inventory, growing eggs, shop, index, mount,
-      Reset shortcut, runway-closing timer, next-event timer
+      Reset shortcut, next-event timer (the runway-closing timer was removed, decided)
+    - [ ] The Eggs and Pets tabs show pictures (decided, built): an egg, and a paw
     - [ ] Wallet at the bottom left, like the owner's reference (decided, built): eggs, Max Stamina and dollars as big
           outlined numbers on dark bands that fade out across the screen, green "+" buttons that open the shop, and
           what the pen earns a second under the dollars
@@ -479,7 +491,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Keyboard/gamepad prompts swap automatically by input type
 - [ ] Audio (proposed: licensed tracks and sounds from Roblox's Creator Store): music per zone; rolling rumble;
       crack; per-rarity cues; claim fanfare; duel beat track + grade sounds; splat; closing horn;
-      Titan Egg alarm
+      Titan Egg alarm; Secret egg alert (built, from a sound every Roblox client has; Config/Sounds)
 - [ ] VFX: rarity glows, dust trails, crack, claim burst, splat, hatch reveal, duel flash, Titan Egg landing,
       closure pop wave
 - [ ] Accessibility: rarity icons as well as colors; reduce camera shake; haptics toggle; duel timing calibration;

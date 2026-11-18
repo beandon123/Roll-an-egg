@@ -103,16 +103,6 @@ local function killCharacter(player: Player)
 	end
 end
 
--- Kills the character the player has now after `delay` seconds, unless it has already died or been replaced.
-local function killCharacterAfter(player: Player, delay: number)
-	local character = player.Character
-	task.delay(delay, function()
-		if player.Character == character then
-			killCharacter(player)
-		end
-	end)
-end
-
 local function eggName(rarity: string, kind: string): string
 	local about = EggModels.describe(kind)
 	return `{rarity} {if about then about.name else "egg"}`
@@ -170,6 +160,14 @@ local function dispatch(events)
 			if player then
 				Net.ObstacleHit:FireClient(player, event.obstacle, event.tier, event.lateral)
 			end
+		elseif kind == "EdgeHit" then
+			Net.EggLateral:FireAllClients(event.id, event.lateral)
+			local player = playersByUserId[event.rider]
+			if player then
+				Net.EdgeHit:FireClient(player, event.lateral)
+			end
+		elseif kind == "EggSlowed" then
+			Net.EggSlowed:FireAllClients(event.id, event.slow)
 		elseif kind == "EggRemoved" then
 			Net.EggRemoved:FireAllClients(event.id, event.reason, event.by)
 		elseif kind == "EggMounted" then
@@ -199,13 +197,6 @@ local function dispatch(events)
 					rarity = event.rarity,
 					kind = event.kind,
 				})
-				if event.reason == "Hazard" or event.reason == "HitWall" then
-					-- Rode the egg into lava or tar, or into a bank.
-					killCharacter(player)
-				elseif event.reason == "FellOff" then
-					-- Over the edge through a gap in the banks: let them fall for a moment first.
-					killCharacterAfter(player, Tuning.FALL_OFF_TIME)
-				end
 			end
 		elseif kind == "StaminaChanged" then
 			local player = playersByUserId[event.rider]
@@ -267,6 +258,10 @@ local function onReportHit(player: Player, obstacleId: unknown)
 		return
 	end
 	sim:reportHit(player.UserId, obstacleId, now())
+end
+
+local function onReportEdge(player: Player)
+	sim:reportEdge(player.UserId, now())
 end
 
 local function onRideLateral(player: Player, x: unknown)
@@ -362,7 +357,7 @@ local function checkLeaps(time: number)
 			and root ~= nil
 			and root:IsA("BasePart")
 			and root.Position.Z >= 0
-			and math.abs(root.Position.X) <= Runway.WIDTH / 2
+			and math.abs(Runway.lateralOf(root.Position.X, root.Position.Z)) <= Runway.WIDTH / 2
 			and not (rider and rider.eggId ~= nil)
 			and not MountService.IsMounted(player)
 			and player:GetAttribute(AdminTools.FLYING) ~= true
@@ -453,6 +448,7 @@ function RunwayService.Init()
 	Net.RequestMount.OnServerEvent:Connect(onRequestMount)
 	Net.RequestDismount.OnServerEvent:Connect(onRequestDismount)
 	Net.ReportHit.OnServerEvent:Connect(onReportHit)
+	Net.ReportEdge.OnServerEvent:Connect(onReportEdge)
 	Net.RideLateral.OnServerEvent:Connect(onRideLateral)
 	Net.GetSnapshot.OnServerInvoke = onGetSnapshot
 

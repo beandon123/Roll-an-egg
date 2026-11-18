@@ -7,10 +7,11 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level, 120-stud-wide runway through six
-  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each with its own checkered ground, stepped cliffs (a
-  boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
-  [The runway](#the-runway)). The banks down both sides are broken by fairly large gaps (marked with red strips).
+- The map: the hub with a painted START ZONE where the runway begins, then a level, 120-stud-wide runway that winds
+  through six zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) like a canyon, each with its own checkered
+  ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the Ocean), plants
+  and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The cliffs down both
+  sides are broken by fairly large gaps that look out over a valley, with a low railing across.
 - The runway never ends. The last zone repeats seamlessly past the end (ground, banks, gate and obstacles), and
   riders are quietly carried back one repeat at a time, so nobody ever reaches an end or sees one.
 - The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
@@ -21,40 +22,44 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that appear on the
   ground at the start of their zone and roll down the runway lap after lap; now and then an extra egg drops
-  mid-cycle. Rarity sets their size, speed (18 studs a second for a Common egg up to 32 for an Eternal one; walking
-  is 16) and stamina requirement. Rolling eggs leave a small trail of dust.
-- When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when (a lineup egg on
-  its first lap of the day only). Other eggs spawn quietly.
-- Zone-themed obstacles on the runway. Eggs nobody is riding steer round them; riders have to steer clear
-  themselves, or get bumped, thrown off, or burned.
+  mid-cycle. There is always an egg at the start of every zone to jump on: one leaves it at least every 3.5 seconds.
+  Rarity sets their size, speed (18 studs a second for a Common egg up to 32 for an Eternal one; walking is 16) and
+  stamina requirement. Rolling eggs kick up a thick cloud of dust.
+- When a Secret or Eternal egg spawns, every player sees a big white message for 5 seconds saying where and when,
+  and hears an alert (a lineup egg on its first lap of the day only). Other eggs spawn quietly.
+- Zone-themed obstacles on the runway, small and big (giant stumps, rock outcrops, buttes, walls of ice blocks,
+  shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
+  lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated (see below).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   Riding a pet is not walking: a player on their pet can ride it down the runway and jump from it onto an egg.
-- On an egg: steer left/right and stay on until the claim meter fills. Steering into a bank kills you; steering into
-  a gap sends you and the egg over the edge.
+- On an egg: steer left/right and stay on until the claim meter fills. Steering into the side of the runway (a bank,
+  or the railing across a gap) bounces the egg back off it, which costs some stamina.
 - A claimed egg goes into your inventory straight away, but you keep rolling on it (no stamina cost) until you jump
   off; then it disappears (a lineup egg comes back on its next lap). Nobody else can get on it.
 - Stamina drains while riding. If it runs out first, you lose your balance and tumble off, and the egg bounces
-  slightly and cracks. A cracked egg, or one that went over the edge, comes back at the start of its zone a few
-  seconds later. Jumping off an unclaimed egg (or being knocked off, or dying on it) leaves it rolling for anyone.
+  slightly and cracks. A cracked egg comes back at the start of its zone a few seconds later. Jumping off an
+  unclaimed egg (or dying on it) leaves it rolling for anyone.
 - The 3-minute runway cycle: a warning, then a 10-second closure before dawn that clears every egg without a
   rider.
-- Claimed eggs go into your inventory (the **Eggs** tab on the right). Stand anywhere in your pen and **Place** one:
-  it hatches there on a timer, faster while the runway is closed, sometimes into a Silver, Gold or Rainbow pet.
+- Claimed eggs go into your Roblox inventory (the hotbar at the bottom of the screen, one tool per kind of egg, such
+  as "Acorn Egg x3") and the **Eggs** tab on the right. Hold one and click (or tap) a spot in your pen to put it
+  down: it hatches there on a timer, faster while the runway is closed, sometimes into a Silver, Gold or Rainbow pet.
 - The **Pets** tab shows the eggs hatching and every pet you have. Put pets in your pen or take them out, or
   **Equip best**. Pets in the pen roam it and earn dollars every second. Sell pets for dollars.
 - The green button at the front of your pen buys a bigger pen: room for more eggs at once and more pets.
 - Ride any of your pets: it carries you faster than walking, and you can jump from it onto an egg.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
   saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
-- The HUD: runway timer and zone (top), Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with
-  what your pen earns a second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop
-  at that section), the Eggs, Pets and Ride tabs on the right edge, the day and night clock at the bottom right (a
-  moon and "in 1m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck
-  boost runs, the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the
-  banner for Secret and rarer eggs.
+- The HUD: Shop and Settings tabs on the left edge, eggs, Max Stamina and dollars (with what your pen earns a
+  second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop at that section), the
+  Eggs (an egg), Pets (a paw) and Ride tabs on the right edge, the day and night clock at the bottom right (a moon and
+  "in 1m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck boost runs,
+  the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the big white
+  message for Secret and rarer eggs. Nothing runs across the top: a short message says when the runway is about to
+  close, and when it closes.
 - **Shop** ("Coop Shop"): the next pen level for Robux or dollars (the same upgrade as the green button), x2 / x4
   server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
   Max Stamina, from x2 up to x1024), dollar packs, and the x2 Dollars pass (every pet in your pen earns double).
@@ -66,8 +71,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   display.
 
 The eggs, pets, runway, plots, hub stations and the cliffs round the hub have their real look; the UI uses emoji
-for icons. Not built yet: duels, other upgrades, offline earnings, teleport pads, the Titan Egg event, the tutorial, and
-all sound. The pet and comfort settings are saved for the systems that will read them.
+for most icons (the Eggs and Pets tabs have pictures drawn from frames). Not built yet: duels, other upgrades,
+offline earnings, teleport pads, the Titan Egg event, the tutorial, and all sound apart from the Secret egg alert. The
+pet and comfort settings are saved for the systems that will read them.
 
 ## Try it in Roblox Studio
 
@@ -109,6 +115,7 @@ Services* is on. Otherwise the game still runs and simply does not save.
 | Land on an egg | Steer onto it while leaping | Thumbstick | Left stick |
 | Steer | A / D | Thumbstick | Left stick |
 | Leap off an egg | Jump | Jump button | A |
+| Put an egg down | Pick it in the hotbar (1-9), or **Hold** on its card in the Eggs tab, then click a spot in your pen | Tap it in the hotbar, then tap a spot in your pen | Pick it, aim at the spot, R2 |
 | Eggs and pets | Click the **Eggs** / **Pets** tabs on the right | Tap them | Select them |
 | Ride / get off your pet | **Ride** on its card, then the **RIDE** / **GET OFF** button | Tap them | Select them |
 | Buy a bigger pen | Walk up to the green button by your gate, hold E | Hold its prompt | Hold X |
@@ -160,14 +167,18 @@ require(game.ServerScriptService.Server.Services.ShowroomService).MoveImportedMo
 
 ## Eggs, pens and pets
 
-Every egg you claim on the runway goes into your inventory. Open the **Eggs** tab on the right of the screen to see
-them, each with its rarity and how long it takes to hatch, and a 3D preview of the one you pick.
+Every egg you claim on the runway goes into your Roblox inventory: the hotbar at the bottom of the screen has a tool
+for each kind of egg you hold, named with how many you have ("Acorn Egg x3"); holding one puts the egg in your hand.
+The **Eggs** tab on the right of the screen lists them too, each with its rarity and how long it takes to hatch, and a
+3D preview of the one you pick (its **Hold** button puts that egg in your hand). `EggToolService` keeps the tools
+in step with your saved eggs (they come back when you respawn); `EggToolController` puts them down.
 
 **Your pen.** Your plot is one of 8 fenced pens at the hub, four across the back facing the runway and two down
 each side of the plaza, with your name over the gate (`src/shared/Plots.luau` lays them out; `src/server/Services/PlotService.luau` hands them out and builds
-them). It is open grass: walk in, stand anywhere and press **Place**, and the egg goes down just in front of you
-(not too close to another one), on a little straw bed with a countdown above it. A new pen hatches 2 eggs at once
-and holds 10 pets.
+them). It is open grass: hold an egg and click (or tap) anywhere in it, and the egg goes down right there (or as near
+as it can without crowding another one), on a little straw bed with a countdown above it. While you hold an egg, a
+see-through egg on a ring shows where it would go: green in your pen, red anywhere else. A new pen hatches 2 eggs at
+once and holds 10 pets.
 
 **Hatching.** Hatch times go by rarity, from 30 seconds for a Common egg to 6 hours for an Eternal one
 (`src/shared/Config/Rarities.luau`). They are worked out from timestamps (`src/shared/HatchMath.luau`), so eggs keep
@@ -237,52 +248,64 @@ The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max 
 
 ## The runway
 
-The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`). It has no end: whatever
-the last zone is, it repeats past the end of the runway (the map builds 3 copies of it, obstacles and all), and
-anything reaching the end of the loop is carried back one repeat to a spot that looks exactly the same. Each device
-draws the eggs there at their copy nearest the player, so nothing seems to move.
+The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`). It winds like a canyon: its
+centre line swings out to one side and back, or across from one side to the other, in every zone (`Runway.BENDS`), up
+to about 70 studs, and is back in the middle, running straight, at every zone's start. Gameplay never sees the bends:
+eggs, obstacles and steering all work in runway space (distance down the runway, and how far across it from the
+centre line), and only drawing and checking characters turns that into the world (`Runway.worldX`,
+`Runway.lateralOf`). It has no end: whatever the last zone is, it repeats past the end of the runway (the map builds 3
+copies of it, obstacles and bends and all), and anything reaching the end of the loop is carried back one repeat to a
+spot that looks exactly the same. Each device draws the eggs there at their copy nearest the player, so nothing seems
+to move.
 
-**Banks and gaps.** Stepped cliffs run down both sides, broken by gaps of 40 to 80 studs at irregular spacing (none
-by a zone's gate). A rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge
-with it. Players never walk on the runway: walking past the start zone, or jumping off an egg, starts a floaty leap
-with 3.5 seconds to land on an egg, and touching the runway first kills them.
+**Banks and gaps.** Tall stepped cliffs run down both sides, three steps of stone capped with grass (or sand, snow or
+rock) hanging over their edges, broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's gate). Each
+gap looks out over a valley, with a low wooden railing across it and an invisible wall above. Nothing at the edge
+kills: a rider who steers their egg into a bank or a railing bounces back off it, losing 10% of the egg's stamina
+requirement and slowing for a moment. Players never walk on the runway: walking past the start zone, or jumping off
+an egg, starts a floaty leap with 3.5 seconds to land on an egg, and touching the runway first sends them back to the
+hub.
 
 **Eggs.** Each runway cycle (3 minutes) is one day (`src/shared/CycleClock.luau`): the sun rises as a cycle
 begins, night falls 70% of the way through, and the runway closes for the last 10 seconds before dawn. At sunrise
-every zone rolls a lineup of 8 eggs with its usual odds. They appear on the ground at the start of the zone 5
+every zone rolls a lineup of 8 eggs with its usual odds. They appear on the ground at the start of the zone 3.5
 seconds apart, roll to a quarter of the way into the next zone (the last zone's into its first copy), fade out, and
-appear at the start again, lap after lap, until the runway closes. A lineup egg that is claimed comes back on its
-next lap; one that cracks (only when its rider runs out of stamina) or goes over the edge comes back 5 seconds
-later.
+appear at the start again, lap after lap, until the runway closes. So that there is always an egg to jump on at the
+start of every zone, whenever none has left it for 3.5 seconds the zone's lineup egg due next leaves at once. A
+lineup egg that is claimed comes back on its next lap; one that cracks (only when its rider runs out of stamina)
+comes back 5 seconds later.
 About every 30 seconds a zone also drops an extra, mid-cycle egg that rolls once; Secret and Eternal eggs are 10
 times rarer mid-cycle than at sunrise. A ridden egg rolls on past its fade line until its rider leaves it. The
 numbers are in `src/shared/Config/Tuning.luau`; the rules are in `src/server/Logic/RunwaySim.luau`.
 
 **Obstacles.** Each zone has its own obstacles in rows across the runway, laid out from a fixed seed so every
 server and player gets the same runway (`src/shared/Obstacles.luau`; kinds, sizes and mixes in
-`src/shared/Config/Obstacles.luau`). Every row leaves a gap wide enough for the biggest egg. What happens to the
-rider of an egg that hits one:
+`src/shared/Config/Obstacles.luau`). Every row leaves a gap wide enough for the biggest egg. No obstacle kills
+anyone. What happens to the rider of an egg that hits one (the egg is always knocked aside, clear of the row):
 
-| Zone | Bump (stamina lost, egg knocked aside) | Knock-off (thrown off, egg rolls on) | Lethal (rider dies) |
+| Zone | Bump (10% of the egg's stamina) | Crash (20%, and the egg slows for 1.2 s) | Slow (12%, and the egg slows for 2 s) |
 | --- | --- | --- | --- |
-| Forest | fallen logs, stumps, bushes, toadstools | boulders, trees | |
-| Desert | cacti, tumbleweeds, skulls | sandstone rocks, sand geysers* | |
-| Snow | snowdrifts, snowmen | pines, ice boulders | |
-| Ocean | coral, barrels | sea rocks, giant clams* | |
-| Volcano | obsidian spikes | basalt columns, smoking rocks | lava pools, lava vents* |
-| Prehistoric | giant ferns, dinosaur skulls | giant ribcages, mossy boulders | tar pits |
+| Forest | fallen logs, stumps, bushes, toadstools | boulders, trees, giant stumps, rock outcrops | |
+| Desert | cacti, tumbleweeds, skulls | sandstone rocks, buttes, sand geysers* | |
+| Snow | snowdrifts, snowmen | pines, ice boulders, walls of ice blocks | |
+| Ocean | coral, barrels | sea rocks, shipwrecks, giant clams* | |
+| Volcano | obsidian spikes | basalt columns, smoking rocks, obsidian crags | lava pools, lava vents* |
+| Prehistoric | giant ferns, dinosaur skulls | giant ribcages, mossy boulders, giant stumps, rock outcrops | tar pits |
 
 \* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell), then a burst
-or a snap. They are harmless in between. A Bump costs 10% of the egg's stamina requirement. Lava and tar also kill
-anyone who lands in them.
+or a snap. They are harmless in between. A slowed egg rolls at 40% of its speed (`Shared/EggMotion` works it out from
+the clock, so every device draws it in the same place). Players riding a pet through lava or tar (or leaping into it)
+wade through at under half speed. The numbers are `Tuning.HIT_EFFECTS`.
 
 An egg nobody is riding steers round every obstacle on its own, along a path worked out the same way on the server
 and on every device. A ridden egg goes where its rider steers. The rider's device spots a hit at once and reports
 it; the server checks the report, and also catches hits on its own when an egg is well inside an obstacle.
 
 **The look** (`src/server/Map/`): `Scenery` builds each zone's checkered ground (blending into the next zone's
-colours), stepped cliffs that players cannot climb (in the Ocean, a railed boardwalk over a reef with islets and a
-lighthouse), the zone's plants and rocks on the banks, distant hills, mesas, mountains or volcanoes, and the gate.
+colours, each row of tiles centred on the runway where it is), tall stepped cliffs that players cannot climb, built
+in short segments that follow the bends, with valleys beyond the gaps (in the Ocean, a railed boardwalk over a reef
+with islets and a lighthouse), the zone's plants and rocks on the banks, distant hills, mesas, mountains or
+volcanoes, and the gate.
 `ObstacleModels` builds each obstacle, in the same blocky style as the eggs and pets, sized to the footprint the
 rules use. The client adds the dust behind rolling eggs (`EggController`), animates the obstacles that go off
 (`ObstacleController`), and runs the day and night (`DayNightController`).
@@ -302,7 +325,7 @@ lune run tools/ui-preview trails
 ```
 
 Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
-trails), `sell` and `shop`. It runs the game's own client scripts and draws their GUI objects in HTML: a close sketch,
+trails), `sell`, `shop`, `eggs` (the Eggs panel) and `secret` (the message when a Secret egg spawns). It runs the game's own client scripts and draws their GUI objects in HTML: a close sketch,
 not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models

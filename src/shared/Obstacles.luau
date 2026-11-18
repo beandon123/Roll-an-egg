@@ -3,7 +3,7 @@
 --     * the layout: zone-themed obstacles in rows across the runway (kinds and sizes in Config/Obstacles)
 --     * paths: how an egg without a rider steers round them, so it never rolls through one
 --     * hits: whether a ridden egg, which goes wherever its rider steers, has run into one
---     * timing: when obstacles that go off now and then (geysers, lava vents, clams) are dangerous
+--     * timing: when obstacles that go off now and then (geysers, lava vents, clams) are in the way
 -- The layout comes from a fixed seed per zone, so the server, every client and the map builder all get the same
 -- runway without sending it anywhere. Pure math (no Roblox APIs) so the test runner can load it outside Studio.
 
@@ -269,7 +269,7 @@ function Obstacles.activity(obstacle: Obstacle, now: number): Activity
 	return "Idle"
 end
 
--- Whether an obstacle is dangerous at any point within `slack` seconds of a moment.
+-- Whether an obstacle is in the way (Active) at any point within `slack` seconds of a moment.
 function Obstacles.activeAround(obstacle: Obstacle, now: number, slack: number): boolean
 	local timing = obstacle.timing
 	if timing == nil then
@@ -415,12 +415,13 @@ function Obstacles.hitAt(
 	return nil
 end
 
--- The Lethal obstacle a player on foot at (x, z) is standing in right now, if any.
-function Obstacles.lethalAt(x: number, z: number, now: number): Obstacle?
+-- The Slow obstacle (lava, tar) a player not on an egg is standing in right now, if any. `x` is across the runway
+-- (Runway.lateralOf), as everywhere here.
+function Obstacles.slowAt(x: number, z: number, now: number): Obstacle?
 	for _, row in Obstacles.rowsBetween(z, z) do
 		for _, obstacle in row.obstacles do
 			if
-				obstacle.tier == "Lethal"
+				obstacle.tier == "Slow"
 				and math.abs(x - obstacle.x) < obstacle.hx
 				and math.abs(z - obstacle.z) < obstacle.hz
 				and Obstacles.activity(obstacle, now) == "Active"
