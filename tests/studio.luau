@@ -104,6 +104,7 @@ end
 
 fakeEvent("RunService", "Heartbeat")
 fakeEvent("RunService", "RenderStepped")
+fakeEvent("RunService", "Stepped")
 fakeEvent("Players", "PlayerAdded")
 fakeEvent("Players", "PlayerRemoving")
 fakeEvent("Player", "CharacterAdded")
@@ -576,16 +577,19 @@ function Session:heartbeat(deltaTime: number, count: number?)
 	end
 end
 
--- Advances the clock and runs one rendered frame: render steps in priority order, then RenderStepped.
+-- Advances the clock and runs one rendered frame: render steps in priority order, then RenderStepped, then Stepped
+-- (which in Roblox comes after the character animations have run).
 function Session:renderFrame(deltaTime: number, count: number?)
 	current = self
 	local renderStepped = signalOf(self:service("RunService"), "RenderStepped")
+	local stepped = signalOf(self:service("RunService"), "Stepped")
 	for _ = 1, count or 1 do
 		self.clock += deltaTime
 		for _, step in table.clone(self.renderSteps) do
 			step.callback(deltaTime)
 		end
 		renderStepped:Fire(deltaTime)
+		stepped:Fire(self.clock, deltaTime)
 	end
 end
 
@@ -741,8 +745,8 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		game = roblox.deserializePlace(fs.readFile(placePath)),
 		isServer = options.isServer,
 		isStudio = if options.isStudio == nil then true else options.isStudio,
-		-- The shared server clock, in seconds. Starts partway through a runway cycle, well before it closes.
-		clock = 180 * 1000 + 5,
+		-- The shared server clock, in seconds. Starts 5 seconds into a (5-minute) runway cycle, well before it closes.
+		clock = 300 * 600 + 5,
 		signals = {},
 		values = {},
 		messages = {},

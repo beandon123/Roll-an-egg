@@ -22,6 +22,7 @@ local Shop = require(Shared.Config.Shop)
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local RunwayService = require(script.Parent.RunwayService)
+local TrainingService = require(script.Parent.TrainingService)
 
 -- How many granted purchase IDs each player's data remembers.
 local PURCHASE_ID_MEMORY = 100
@@ -68,6 +69,7 @@ local function stateOf(player: Player)
 	return {
 		dollars = if data then data.Dollars else 0,
 		penLevel = if data then data.PenLevel else 1,
+		stickLevel = if data then data.StickLevel else 1,
 		staminaMultiplier = if data then data.StaminaMultiplier else 1,
 		passes = passList(player),
 	}
@@ -132,6 +134,10 @@ local function grant(player: Player, reward: Shop.Grant): string
 		local message = InventoryService.RaisePen(player)
 		pushState(player)
 		return message or "Your pen is already the biggest it can be!"
+	elseif reward.kind == "StickLevel" then
+		local message = TrainingService.RaiseStick(player)
+		pushState(player)
+		return message or "Your stick is as good as it gets!"
 	elseif reward.kind == "StaminaDoubling" then
 		data.StaminaMultiplier = math.min(Shop.MAX_STAMINA_MULTIPLIER, data.StaminaMultiplier * 2)
 		RunwayService.RefreshMaxStamina(player)
@@ -233,6 +239,13 @@ local function onRequestPurchase(player: Player, itemId: unknown)
 			return
 		end
 		productId, reward = next.productId, { kind = "PenLevel" }
+	elseif itemId == Shop.STICK_UPGRADE_ID then
+		local next = Shop.StickLevels[(data.StickLevel or 1) + 1]
+		if next == nil then
+			sendResult(player, itemId, false, "Your stick is as good as it gets!")
+			return
+		end
+		productId, reward = next.productId, { kind = "StickLevel" }
 	elseif itemId == Shop.STAMINA_DOUBLING_ID then
 		local next = Shop.StaminaDoublings[data.StaminaMultiplier * 2]
 		if next == nil then
@@ -257,18 +270,23 @@ local function onRequestPurchase(player: Player, itemId: unknown)
 	end
 end
 
--- "Buy this with dollars". Only the next pen level has a dollar price for now; it is the same purchase as the
--- green button at the front of the pen.
+-- "Buy this with dollars": the next pen level (the same purchase as the green button at the front of the pen) or the
+-- next tier of the training stick (the same as its sign's panel).
 local function onBuyWithDollars(player: Player, itemId: unknown)
-	if itemId ~= Shop.PEN_UPGRADE_ID or throttled(player) then
+	if (itemId ~= Shop.PEN_UPGRADE_ID and itemId ~= Shop.STICK_UPGRADE_ID) or throttled(player) then
 		return
 	end
 	if DataService.GetData(player) == nil then
 		return
 	end
-	local ok, message = InventoryService.UpgradePen(player)
+	local ok, message
+	if itemId == Shop.STICK_UPGRADE_ID then
+		ok, message = TrainingService.UpgradeWithDollars(player)
+	else
+		ok, message = InventoryService.UpgradePen(player)
+	end
 	pushState(player)
-	sendResult(player, itemId, ok, message)
+	sendResult(player, itemId :: string, ok, message)
 end
 
 local function onGetShopState(player: Player)

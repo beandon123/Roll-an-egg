@@ -1,4 +1,5 @@
--- Keeps the shop's numbers up to date: dollars, pen level, owned passes, server luck, and real Robux prices.
+-- Keeps the shop's numbers up to date: dollars, pen level, training stick tier, owned passes, server luck, and real
+-- Robux prices.
 -- Shows the result of each purchase as a toast.
 
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -23,6 +24,9 @@ local function applyState(state)
 	end
 	if typeof(state.penLevel) == "number" then
 		UiState.penLevel:set(state.penLevel)
+	end
+	if typeof(state.stickLevel) == "number" then
+		UiState.stickLevel:set(state.stickLevel)
 	end
 	if typeof(state.staminaMultiplier) == "number" then
 		UiState.staminaMultiplier:set(state.staminaMultiplier)
@@ -53,6 +57,14 @@ local function loadPrices()
 			table.insert(
 				wanted,
 				{ key = "PenLevel" .. level, id = penLevel.productId, infoType = Enum.InfoType.Product }
+			)
+		end
+	end
+	for level, stickLevel in Shop.StickLevels do
+		if stickLevel.productId ~= 0 then
+			table.insert(
+				wanted,
+				{ key = "StickLevel" .. level, id = stickLevel.productId, infoType = Enum.InfoType.Product }
 			)
 		end
 	end

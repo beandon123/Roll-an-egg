@@ -563,7 +563,43 @@ local function meTab(scope, run: Run)
 		section(scope, "Dollars", "Dollars", 4, {
 			grid(scope, "Buttons", 1, 4, dollarButtons(scope, run)),
 		}),
-		section(scope, "Inventory", "Your inventory", 5, {
+		section(scope, "Stick", "Training stick", 5, {
+			grid(scope, "Buttons", 1, 4, {
+				button(scope, {
+					Name = "Down",
+					LayoutOrder = 1,
+					Text = "Level -",
+					OnClick = function()
+						run("Stick", { action = "Down" })
+					end,
+				}),
+				button(scope, {
+					Name = "Up",
+					LayoutOrder = 2,
+					Text = "Level +",
+					OnClick = function()
+						run("Stick", { action = "Up" })
+					end,
+				}),
+				button(scope, {
+					Name = "Max",
+					LayoutOrder = 3,
+					Text = "Max level",
+					OnClick = function()
+						run("Stick", { action = "Max" })
+					end,
+				}),
+				button(scope, {
+					Name = "ClearTrained",
+					LayoutOrder = 4,
+					Text = "Clear trained",
+					OnClick = function()
+						run("Stick", { action = "ClearTrained" })
+					end,
+				}),
+			}),
+		}),
+		section(scope, "Inventory", "Your inventory", 6, {
 			scope:New("Frame")({
 				Name = "Lines",
 				LayoutOrder = 1,

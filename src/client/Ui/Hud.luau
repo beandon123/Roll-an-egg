@@ -2,8 +2,9 @@
 --
 -- Layout (phones first): luck boost top left; Shop and Settings tabs on the left edge; the wallet (Max Stamina,
 -- dollars, eggs) bottom left; Eggs, Pets and Ride tabs on the right edge (Ui/Panels); stamina and claim meters bottom
--- centre; the day and night clock bottom right. Messages appear near the top: short ones (toasts), and the big white
--- alert when a Secret or rarer egg spawns. The Shop and Settings panels open in the middle over a dimmed backdrop.
+-- centre (and, while rolling on the training stick, its card and 2x bubbles: Ui/TrainingUi); the day and night clock
+-- bottom right. Messages appear near the top: short ones (toasts), and the big white alert when a Secret or rarer egg
+-- spawns. The Shop and Settings panels open in the middle over a dimmed backdrop.
 
 local Workspace = game:GetService("Workspace")
 
@@ -15,6 +16,7 @@ local SettingsPanel = require(script.Parent.SettingsPanel)
 local ShopPanel = require(script.Parent.ShopPanel)
 local StationPanels = require(script.Parent.StationPanels)
 local Theme = require(script.Parent.Theme)
+local TrainingUi = require(script.Parent.TrainingUi)
 local UiState = require(script.Parent.UiState)
 local Widgets = require(script.Parent.Widgets)
 
@@ -580,6 +582,9 @@ function Hud.mount(playerGui: Instance)
 						},
 					}),
 
+					-- While rolling on the training stick: its card above the stamina bar, and the 2x bubbles.
+					TrainingUi.hud(scope),
+
 					-- Panels, over a backdrop that closes them when tapped.
 					scope:New("TextButton")({
 						Name = "Backdrop",
@@ -600,6 +605,8 @@ function Hud.mount(playerGui: Instance)
 					SettingsPanel.build(scope),
 					-- The Trails stall, Sell stall and fuse machine panels (hidden until a station is used).
 					StationPanels.build(scope),
+					-- The training stick's upgrade panel (from the sign beside the stick).
+					TrainingUi.panel(scope),
 
 					-- Right edge: the Eggs, Pets and Ride tabs, and the panel they open.
 					Panels.build(scope),

@@ -122,6 +122,9 @@ export type Rider = {
 	lastLeaveVoluntary: boolean,
 	lastLeftEggId: number?,
 	combo: number,
+	-- Riding a pet (not an egg): stamina drains at Tuning.PET_RIDE_DRAIN, and the pet bucks them off at `petEmptyAt`.
+	onPet: boolean,
+	petEmptyAt: number,
 }
 
 -- Why a ride ended. (ThrownOff: ran out of stamina. Nothing on the runway ends a ride any other way.)
@@ -193,6 +196,8 @@ export type Event =
 	-- The egg ran into something and slows down for a moment.
 	| { type: "EggSlowed", id: number, slow: EggMotion.Slow }
 	| { type: "Claimed", rider: number, id: number, zone: number, rarity: string, kind: string }
+	-- The rider's pet ran their stamina out and bucked them off.
+	| { type: "PetBucked", rider: number }
 
 local RunwaySim = {}
 RunwaySim.__index = RunwaySim
@@ -307,7 +312,7 @@ end
 
 -- Sends a riderless egg on its way from where it is now (`lateral`, at `z`), steering round the obstacles ahead.
 function RunwaySim._setPath(self: RunwaySim, egg: Egg, lateral: number, z: number)
-	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength)
+	egg.lateral = Runway.clampLateral(lateral, egg.spec.halfLength, z)
 	egg.pathZ = z
 	egg.path = self.obstacles.planPath(egg.lateral, z, egg.fadeZ, egg.spec.halfLength, egg.spec.radius)
 end
@@ -338,19 +343,20 @@ function RunwaySim._launch(
 		return nil
 	end
 	self.nextEggId += 1
-	-- Clear of the banks, so a rider who gets on is not straight against one.
-	local limit = math.max(0, Runway.maxLateral(spec.halfLength) - Tuning.EGG_SPAWN_EDGE_MARGIN)
 	local startZ = spec.startZ
-	local lateral = (self.random() * 2 - 1) * limit
-	if placement then
-		local z, x = placement.z, placement.lateral
-		-- On the runway, and far enough before the end of the loop to be worth riding.
-		if z and z == z then
-			startZ = math.clamp(z, 0, Runway.LOOP_END - spec.radius * 4)
-		end
-		if x and x == x then
-			lateral = Runway.clampLateral(x, spec.halfLength)
-		end
+	local placedZ = placement and placement.z
+	-- On the runway, and far enough before the end of the loop to be worth riding.
+	if placedZ and placedZ == placedZ then
+		startZ = math.clamp(placedZ, 0, Runway.LOOP_END - spec.radius * 4)
+	end
+	-- Clear of the banks, so a rider who gets on is not straight against one.
+	local low, high = Runway.lateralRange(spec.halfLength, startZ)
+	low = math.min(0, low + Tuning.EGG_SPAWN_EDGE_MARGIN)
+	high = math.max(0, high - Tuning.EGG_SPAWN_EDGE_MARGIN)
+	local lateral = low + self.random() * (high - low)
+	local placedX = placement and placement.lateral
+	if placedX and placedX == placedX then
+		lateral = Runway.clampLateral(placedX, spec.halfLength, startZ)
 	end
 	local egg: Egg = {
 		id = self.nextEggId,
@@ -362,7 +368,7 @@ function RunwaySim._launch(
 		startZ = startZ,
 		-- An egg dropped further down than its zone still gets a stretch of runway before it fades (but fades before
 		-- the end of the loop).
-		fadeZ = math.min(math.max(Runway.fadeZ(zoneId), startZ + Runway.ZONE_LENGTH), Runway.LOOP_END - 1),
+		fadeZ = EggSpec.fadeZ(zoneId, startZ),
 		lateral = 0,
 		pathZ = startZ,
 		path = nil :: any,
@@ -422,12 +428,12 @@ function RunwaySim.spawnEgg(
 	return self:_launch(zoneId, rarity, kind, now, true, placement)
 end
 
--- How many eggs each zone's lineup holds at the current egg rate.
-local function lineupSize(rate: number): number
-	return math.max(1, math.round(Tuning.EGGS_PER_ZONE * rate))
+-- How many eggs a zone's lineup holds at the current egg rate (EggSpec.lineupSize at the usual rate).
+local function lineupSize(zoneId: number, rate: number): number
+	return math.max(1, math.round(EggSpec.lineupSize(zoneId) * rate))
 end
 
--- Rolls `count` lineup eggs for a zone, leaving the chute LINEUP_LAUNCH_GAP seconds apart (less while eggs drop
+-- Rolls `count` lineup eggs for a zone, leaving the chute EggSpec.lineupGap seconds apart (less while eggs drop
 -- faster) from `firstLaunch`.
 function RunwaySim._rollSlots(
 	self: RunwaySim,
@@ -438,6 +444,7 @@ function RunwaySim._rollSlots(
 	into: { Slot },
 	rolled: { any }
 )
+	local gap = EggSpec.lineupGap(zoneId, self.spawnRateMultiplier)
 	for index = 1, count do
 		local rarity = EggSpec.rollRarity(zoneId, self.random(), self.luck)
 		local kind = EggSpec.pickEgg(zoneId, rarity, self.random())
@@ -448,7 +455,7 @@ function RunwaySim._rollSlots(
 				zone = zoneId,
 				rarity = rarity,
 				kind = kind,
-				nextLaunch = firstLaunch + (index - 1) * Tuning.LINEUP_LAUNCH_GAP / self.spawnRateMultiplier,
+				nextLaunch = firstLaunch + (index - 1) * gap,
 				lapTime = (Runway.fadeZ(zoneId) - startZ) / spec.rollSpeed,
 				extra = if extra then true else nil,
 			})
@@ -462,7 +469,7 @@ function RunwaySim._rollLineup(self: RunwaySim, now: number)
 	local lineup: { Slot } = {}
 	local rolled = {}
 	for zoneId = 1, #Zones.List do
-		self:_rollSlots(zoneId, lineupSize(self.spawnRateMultiplier), now, false, lineup, rolled)
+		self:_rollSlots(zoneId, lineupSize(zoneId, self.spawnRateMultiplier), now, false, lineup, rolled)
 	end
 	self.lineup = lineup
 	self:_emit({ type = "LineupRolled", eggs = rolled })
@@ -496,7 +503,7 @@ function RunwaySim.setEggRate(self: RunwaySim, multiplier: number, now: number)
 				have += 1
 			end
 		end
-		local more = lineupSize(multiplier) - have
+		local more = lineupSize(zoneId, multiplier) - have
 		if more > 0 then
 			self:_rollSlots(zoneId, more, now, true, lineup, rolled)
 		end
@@ -609,6 +616,8 @@ function RunwaySim.addRider(self: RunwaySim, riderId: number, maxStamina: number
 		lastLeaveVoluntary = false,
 		lastLeftEggId = nil,
 		combo = 0,
+		onPet = false,
+		petEmptyAt = math.huge,
 	}
 	self.riders[riderId] = rider
 	self:_setStamina(rider, maxStamina, now, self:_regenRate(rider))
@@ -629,14 +638,39 @@ function RunwaySim.setMaxStamina(self: RunwaySim, riderId: number, maxStamina: n
 	self:_restartStamina(rider, current, now)
 end
 
--- Sets a rider's stamina, draining it while they ride an unclaimed egg and refilling it otherwise.
+-- Sets a rider's stamina, draining it while they ride an unclaimed egg or a pet, and refilling it otherwise.
 function RunwaySim._restartStamina(self: RunwaySim, rider: Rider, value: number, now: number)
 	local ride = rider.ride
-	local draining = ride ~= nil and not ride.claimed
-	self:_setStamina(rider, value, now, if ride and draining then -ride.drain else self:_regenRate(rider))
-	if ride and draining then
+	local onEgg = ride ~= nil and not ride.claimed
+	local onPet = rider.onPet and rider.eggId == nil
+	local rate = if ride and onEgg then -ride.drain elseif onPet then -Tuning.PET_RIDE_DRAIN else self:_regenRate(rider)
+	self:_setStamina(rider, value, now, rate)
+	if ride and onEgg then
 		ride.emptyAt = now + StaminaMath.timeUntilEmpty(rider.staminaValue, ride.drain)
 	end
+	rider.petEmptyAt = if onPet
+		then now + StaminaMath.timeUntilEmpty(rider.staminaValue, Tuning.PET_RIDE_DRAIN)
+		else math.huge
+end
+
+-- The player gets on their pet (`onPet`), or off it. Riding a pet costs PET_RIDE_DRAIN stamina a second; when it
+-- runs out the pet bucks them off (a PetBucked event). Returns false, changing nothing, if they are too tired to get
+-- on (less than PET_RIDE_MIN_STAMINA) or are riding an egg.
+function RunwaySim.setOnPet(self: RunwaySim, riderId: number, onPet: boolean, now: number): boolean
+	local rider = self.riders[riderId]
+	if rider == nil then
+		return false
+	end
+	if onPet == rider.onPet then
+		return true
+	end
+	local stamina = self:getStamina(riderId, now)
+	if onPet and (rider.eggId ~= nil or stamina < Tuning.PET_RIDE_MIN_STAMINA) then
+		return false
+	end
+	rider.onPet = onPet
+	self:_restartStamina(rider, stamina, now)
+	return true
 end
 
 -- Fills a player's stamina to their Max Stamina. A ride in progress keeps draining from the new value.
@@ -740,8 +774,9 @@ function RunwaySim._bounceOffEdge(self: RunwaySim, rider: Rider, egg: Egg, now: 
 		return
 	end
 	ride.lastEdgeAt = now
-	local limit = Runway.maxLateral(egg.spec.halfLength)
-	egg.lateral = (if egg.lateral >= 0 then 1 else -1) * math.max(0, limit - Tuning.WALL_KNOCKBACK)
+	local side = if egg.lateral >= 0 then 1 else -1
+	local limit = Runway.maxLateral(egg.spec.halfLength, self:_eggZ(egg, now), side)
+	egg.lateral = side * math.max(0, limit - Tuning.WALL_KNOCKBACK)
 	ride.lateralTime = now
 	self:_emit({ type = "EdgeHit", rider = rider.id, id = egg.id, lateral = egg.lateral, time = now })
 	self:_payForHit(rider, egg, "Wall", now)
@@ -757,7 +792,8 @@ function RunwaySim.reportEdge(self: RunwaySim, riderId: number, now: number): bo
 		return false
 	end
 	local reach = rider.agility * Tuning.HIT_REPORT_SLACK + 3
-	if math.abs(egg.lateral) < Runway.maxLateral(egg.spec.halfLength) - reach then
+	local side = if egg.lateral >= 0 then 1 else -1
+	if math.abs(egg.lateral) < Runway.maxLateral(egg.spec.halfLength, self:_eggZ(egg, now), side) - reach then
 		return false
 	end
 	self:_bounceOffEdge(rider, egg, now)
@@ -835,10 +871,13 @@ function RunwaySim.requestMount(
 		lastEdgeAt = -math.huge,
 	}
 	-- From here the rider steers, starting from wherever the egg's path had taken it (a little way in from a bank).
-	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength)
+	egg.lateral = Runway.mountLateral(self:eggLateral(egg, now), egg.spec.halfLength, self:_eggZ(egg, now))
 	rider.ride = ride
 	rider.eggId = eggId
 	egg.riderId = riderId
+	-- Off their pet, if they were on one (RunwayService sends it away).
+	rider.onPet = false
+	rider.petEmptyAt = math.huge
 
 	self:_setStamina(rider, stamina, now, -spec.drain)
 	self:_emit({ type = "EggMounted", id = eggId, rider = riderId, time = now })
@@ -903,7 +942,7 @@ function RunwaySim.setLateral(self: RunwaySim, riderId: number, x: number, now: 
 	local ride = rider.ride
 	local elapsed = math.max(0, now - ride.lateralTime)
 	local maxMove = rider.agility * elapsed * 1.5 + 2
-	local target = Runway.clampLateral(x, egg.spec.halfLength)
+	local target = Runway.clampLateral(x, egg.spec.halfLength, self:_eggZ(egg, now))
 	egg.lateral += math.clamp(target - egg.lateral, -maxMove, maxMove)
 	ride.lateralTime = now
 	return egg
@@ -1101,6 +1140,15 @@ function RunwaySim.step(self: RunwaySim, now: number)
 
 	self:_checkObstacles(now)
 
+	-- Pets that have run their riders' stamina out buck them off.
+	for _, rider in self.riders do
+		if rider.onPet and rider.eggId == nil and now >= rider.petEmptyAt then
+			rider.onPet = false
+			self:_restartStamina(rider, 0, now)
+			self:_emit({ type = "PetBucked", rider = rider.id })
+		end
+	end
+
 	for _, rider in self.riders do
 		local ride = rider.ride
 		local egg = if rider.eggId then self.eggs[rider.eggId] else nil
@@ -1116,7 +1164,7 @@ function RunwaySim.step(self: RunwaySim, now: number)
 				continue
 			end
 		end
-		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength) then
+		if Runway.isAtEdge(egg.lateral, egg.spec.halfLength, self:_eggZ(egg, now)) then
 			self:_bounceOffEdge(rider, egg, now)
 		end
 	end

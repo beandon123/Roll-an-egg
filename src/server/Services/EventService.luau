@@ -1,7 +1,7 @@
 -- Server events, and the admin panel's controls over the runway cycle.
 --
 -- Built so far: the Egg Avalanche, twice the eggs in every zone until the runway closes. It runs on the schedule in
--- Shared/CycleClock (cycle 10 of every 20, so once an hour) or whenever an admin starts one. The Titan Egg is not
+-- Shared/CycleClock (cycle 6 of every 12, so once an hour) or whenever an admin starts one. The Titan Egg is not
 -- built yet, so its slot in the schedule passes quietly.
 --
 -- Close / Open the runway now jump the shared cycle clock ahead to the next closure or the next cycle

@@ -47,9 +47,14 @@ local TEMPLATE = {
 		Owned = {},
 		Equipped = "",
 	},
+	-- The training stick in front of the pen (Config/Sticks): its tier, and the Max Stamina rolling on it has added
+	-- (before multipliers, like MaxStaminaBonus).
+	StickLevel = 1,
+	TrainedStamina = 0,
 	Stats = {
 		EggsClaimed = 0,
 		EggsSold = 0,
+		TrainingReps = 0,
 	},
 }
 

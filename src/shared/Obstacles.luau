@@ -43,7 +43,8 @@ export type Row = {
 export type Move = { z0: number, z1: number, from: number, to: number }
 
 -- The way an egg without a rider rolls from `fromZ`: it starts at `lane` and makes each move in turn.
-export type Path = { lane: number, fromZ: number, moves: { Move } }
+-- `halfLength`: the egg's, so the path keeps it off the walls where they bend in (Shared/Runway).
+export type Path = { lane: number, fromZ: number, moves: { Move }, halfLength: number? }
 
 export type Activity = "Idle" | "Warning" | "Active"
 
@@ -95,19 +96,19 @@ local function newBag(weights: { [string]: number }, random: () -> number): () -
 	end
 end
 
--- The gaps between a row's obstacles (and the runway edges), widest first.
-local function widestGap(placed: { { lo: number, hi: number } }): number
+-- The widest gap between a row's obstacles (and the runway's edges, from `low` to `high` across it).
+local function widestGap(placed: { { lo: number, hi: number } }, low: number, high: number): number
 	local spans = table.clone(placed)
 	table.sort(spans, function(a, b)
 		return a.lo < b.lo
 	end)
 	local widest = 0
-	local edge = -Runway.WIDTH / 2
+	local edge = low
 	for _, span in spans do
 		widest = math.max(widest, span.lo - edge)
 		edge = math.max(edge, span.hi)
 	end
-	return math.max(widest, Runway.WIDTH / 2 - edge)
+	return math.max(widest, high - edge)
 end
 
 local rows: { Row } = {}
@@ -122,12 +123,18 @@ local function layOutZone(zoneId: number)
 	local nextKind = newBag(mix.weights, random)
 	local zoneStart = Runway.zoneStartZ(zoneId)
 	local z = zoneStart + Config.FIRST_ROW
-	local half = Runway.WIDTH / 2
+	local width = Runway.zoneWidth(zoneId)
+	-- Wider zones get more obstacles to a row, so they are no emptier than the first.
+	local crowd = width / Runway.START_WIDTH
 
-	while z <= zoneStart + Runway.ZONE_LENGTH - Config.LAST_ROW do
-		-- One to three obstacles, usually two.
+	while z <= zoneStart + Runway.zoneLength(zoneId) - Config.LAST_ROW do
+		-- The open runway all along the row, between the walls where they bend in (a bare egg's width of nothing,
+		-- so the faces of the walls themselves).
+		local reach = Config.ROW_JITTER + 12
+		local low, high = Runway.lateralRangeOver(-1, z - reach, z + reach)
+		-- One to three obstacles across the first zone's width, usually two; more where the runway is wider.
 		local roll = random()
-		local count = if roll < 0.3 then 1 elseif roll < 0.8 then 2 else 3
+		local count = math.max(1, math.round((if roll < 0.3 then 1 elseif roll < 0.8 then 2 else 3) * crowd))
 
 		local placed: { { lo: number, hi: number } } = {}
 		local row: Row = { zMin = math.huge, zMax = -math.huge, obstacles = {} }
@@ -138,7 +145,7 @@ local function layOutZone(zoneId: number)
 			local hx, hz = kind.hx * grow, kind.hz * grow
 			-- Try a few spots; give up on this obstacle if none leaves the row passable.
 			for _ = 1, 12 do
-				local x = (random() * 2 - 1) * (half - hx)
+				local x = low + hx + random() * math.max(0, high - low - 2 * hx)
 				local span = { lo = x - hx, hi = x + hx }
 				local clash = false
 				for _, other in placed do
@@ -152,7 +159,7 @@ local function layOutZone(zoneId: number)
 					continue
 				end
 				table.insert(placed, span)
-				if widestGap(placed) < Config.MIN_GAP then
+				if widestGap(placed, low, high) < Config.MIN_GAP then
 					table.remove(placed)
 					continue
 				end
@@ -293,7 +300,8 @@ end
 -- The nearest spot to `x` where an egg of this half-length can pass a row without touching any of it.
 -- `beside` lists obstacles the egg is already level with: it cannot slide across those to get there.
 function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { Obstacle }?): number
-	local limit = Runway.maxLateral(halfLength)
+	-- Within the walls all along the row (they may bend in there).
+	local low, high = Runway.lateralRangeOver(halfLength, row.zMin - halfLength, row.zMax + halfLength)
 	local margin = halfLength + Config.STEER_MARGIN
 	local function blocked(at: number): boolean
 		for _, obstacle in row.obstacles do
@@ -302,9 +310,16 @@ function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { 
 			end
 		end
 		if beside then
-			local low, high = math.min(x, at), math.max(x, at)
+			-- It cannot slide across an obstacle it is already level with. Sliding away from one is always fine,
+			-- even for an egg squeezed in close beside it; sliding toward one is blocked if it would touch it.
+			local from, to = math.min(x, at), math.max(x, at)
 			for _, obstacle in beside do
-				if obstacle.x + obstacle.hx + margin > low and obstacle.x - obstacle.hx - margin < high then
+				local toward = (at - x) * (obstacle.x - x) > 0
+				if
+					toward
+					and obstacle.x + obstacle.hx + halfLength > from
+					and obstacle.x - obstacle.hx - halfLength < to
+				then
 					return true
 				end
 			end
@@ -312,7 +327,7 @@ function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { 
 		return false
 	end
 
-	local start = math.clamp(x, -limit, limit)
+	local start = math.clamp(x, low, high)
 	if not blocked(start) then
 		return start
 	end
@@ -320,7 +335,7 @@ function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { 
 	for _, obstacle in row.obstacles do
 		for _, side in { -1, 1 } do
 			local candidate = obstacle.x + side * (obstacle.hx + margin + 0.01)
-			if math.abs(candidate) <= limit and not blocked(candidate) then
+			if candidate >= low and candidate <= high and not blocked(candidate) then
 				local distance = math.abs(candidate - x)
 				if distance < bestDistance then
 					best, bestDistance = candidate, distance
@@ -334,8 +349,8 @@ end
 -- The way an egg without a rider rolls from `fromZ` to `toZ`, starting at `lane`: whenever a row of obstacles is
 -- in its way, it slides over to the nearest gap in good time and carries on along its new lane.
 function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength: number, radius: number): Path
-	local current = Runway.clampLateral(lane, halfLength)
-	local path: Path = { lane = current, fromZ = fromZ, moves = {} }
+	local current = Runway.clampLateral(lane, halfLength, fromZ)
+	local path: Path = { lane = current, fromZ = fromZ, moves = {}, halfLength = halfLength }
 	-- No lane change starts before the egg is clear of the last row it passed.
 	local readyFrom = fromZ
 	for _, row in Obstacles.rowsBetween(fromZ - radius, toZ + radius) do
@@ -358,6 +373,11 @@ function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength
 				local z1 = math.max(touchZ - FRONT_CLEARANCE, (fromZ + touchZ) / 2)
 				local wanted = math.max(MIN_RAMP, math.abs(target - current) * RAMP_PER_STUD)
 				local z0 = math.max(readyFrom, z1 - wanted)
+				local low, high = Runway.lateralRange(halfLength, z0)
+				if target < low or target > high then
+					-- Out to a lane only this zone is wide enough for: wait until the egg is in it.
+					z0 = math.max(z0, Runway.zoneStartZ(Runway.zoneAt(z1) or 1))
+				end
 				z0 = math.max(fromZ, math.min(z0, z1 - math.min(1, (z1 - fromZ) / 2)))
 				table.insert(path.moves, { z0 = z0, z1 = z1, from = current, to = target })
 				current = target
@@ -368,7 +388,8 @@ function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength
 	return path
 end
 
--- Where an egg following a path is, side to side, at a distance down the runway.
+-- Where an egg following a path is, side to side, at a distance down the runway. Where a wall bends in across its
+-- lane, it slides along the wall.
 function Obstacles.lateralAt(path: Path, z: number): number
 	local x = path.lane
 	for _, move in path.moves do
@@ -377,12 +398,14 @@ function Obstacles.lateralAt(path: Path, z: number): number
 		elseif z > move.z0 then
 			local u = (z - move.z0) / (move.z1 - move.z0)
 			u = u * u * (3 - 2 * u)
-			return move.from + (move.to - move.from) * u
+			x = move.from + (move.to - move.from) * u
+			break
 		else
 			break
 		end
 	end
-	return x
+	local halfLength = path.halfLength
+	return if halfLength then Runway.clampLateral(x, halfLength, z) else x
 end
 
 ----------------------------------------------------------------------------------------------------------------
@@ -406,24 +429,6 @@ function Obstacles.hitAt(
 			if
 				math.abs(x - obstacle.x) < obstacle.hx + reachX
 				and math.abs(z - obstacle.z) < obstacle.hz + reachZ
-				and Obstacles.activity(obstacle, now) == "Active"
-			then
-				return obstacle
-			end
-		end
-	end
-	return nil
-end
-
--- The Slow obstacle (lava, tar) a player not on an egg is standing in right now, if any. `x` is across the runway
--- (Runway.lateralOf), as everywhere here.
-function Obstacles.slowAt(x: number, z: number, now: number): Obstacle?
-	for _, row in Obstacles.rowsBetween(z, z) do
-		for _, obstacle in row.obstacles do
-			if
-				obstacle.tier == "Slow"
-				and math.abs(x - obstacle.x) < obstacle.hx
-				and math.abs(z - obstacle.z) < obstacle.hz
 				and Obstacles.activity(obstacle, now) == "Active"
 			then
 				return obstacle
