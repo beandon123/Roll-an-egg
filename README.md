@@ -349,10 +349,13 @@ reaching the end of the loop is carried back one repeat to a spot that looks exa
 eggs there at their copy nearest the player, so nothing seems to move.
 
 **Banks and gaps.** Tall stepped cliffs run down both sides, three steps of stone capped with grass (or sand, snow or
-rock) hanging over their edges (the Ocean has a 7-stud boardwalk railing instead), broken by gaps of 40 to 80 studs at
-irregular spacing (none by a zone's gate). Each gap looks out over a valley, with a low wooden railing across it and
-an invisible wall above. Nothing at the edge kills: a rider who steers their egg into a bank or a railing bounces back
-off it, losing 10% of the egg's stamina requirement and slowing for a moment. Players never walk on the runway:
+rock) hanging over their edges: the wall beside the runway stands 16 to 34 studs high, the step behind it 12 to 20
+studs higher and the back step 14 to 30 higher again (the Ocean has a 7-stud boardwalk railing instead). The runway
+widens zone by zone, from 120 studs in the Forest to 220 in the Prehistoric zone, the banks stepping out at each gate.
+The banks are broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's gate). Each gap looks out over
+a valley, with a low wooden railing across it and an invisible wall above. Nothing at the edge kills: a rider who
+steers their egg into a bank or a railing bounces back off it, losing 10% of the egg's stamina requirement and slowing
+for a moment. Players never walk on the runway:
 walking past the start zone, or jumping off an egg, starts a floaty leap with 3.5 seconds to land on an egg, and
 touching the runway first sends them back to the hub.
 

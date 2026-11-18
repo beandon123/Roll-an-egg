@@ -2459,7 +2459,7 @@ return function(harness)
 					expect.truthy(walls > 0, "sea walls")
 				else
 					-- The grassy (sandy, snowy...) top of the wall beside the runway: its first step, which starts at the
-					-- runway's edge (plus a kerb), wherever the bends take it, and stands 17 to 25 studs high.
+					-- runway's edge (plus a kerb), wherever the bends take it, and stands 16 to 34 studs high.
 					local caps = 0
 					for _, part in banks:GetChildren() do
 						if part:IsA("BasePart") and math.abs(part.Size.Y - 2) < 1e-3 then
@@ -2468,7 +2468,7 @@ return function(harness)
 							local top = position.Y + part.Size.Y / 2 - runway.BASE_Y
 							if inner > half and inner < half + 3 and top > 0 then
 								caps += 1
-								expect.truthy(top >= 17 - 1e-3 and top <= 25 + 1e-3, `{zone.key} wall {top} high`)
+								expect.truthy(top >= 16 - 1e-3 and top <= 34 + 1e-3, `{zone.key} wall {top} high`)
 							end
 						end
 					end

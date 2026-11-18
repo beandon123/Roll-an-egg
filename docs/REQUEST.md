@@ -56,8 +56,8 @@ Original theme, art, and creatures.
           short ones (built)
     - [ ] The Ocean stays a boardwalk over the sea (decided): no swimming or drowning; its rope railing closes off
           the gaps like any other (decided)
-    - [ ] Tall walls (decided): the cliff wall beside the runway stands about 17-25 studs high, with higher steps
-          behind it; the Ocean's boardwalk railing is 7 studs tall
+    - [ ] Tall walls (decided): the cliff wall beside the runway stands about 16-34 studs high (about 25 on average),
+          with higher steps behind it (12-20 and 14-30 studs more); the Ocean's boardwalk railing is 7 studs tall
     - [ ] Natural, fairly large gaps in the walls (decided), looking out over a valley with a low railing across
           (built). Nothing on the runway kills (decided): steering an egg into a wall or a railing bounces it back,
           costing stamina and slowing it for a moment (built)

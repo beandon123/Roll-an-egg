@@ -566,13 +566,15 @@ end
 local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random): { Top }
 	local phase = random() * 10
 	local tops: { Top } = {}
-	-- Each step's width and height at `z`, rising and falling gently along the runway.
+	-- Each step's width and height at `z`, rising and falling gently along the runway. The wall beside the runway stands
+	-- 16 to 34 studs high, well above the head of anyone riding even the biggest egg; the step behind it climbs 12 to
+	-- 20 studs more, and the back step 14 to 30 more again.
 	local function layoutAt(z: number)
 		local w1 = 12 + 4 * wave(z, phase + 3)
 		local w2 = 14 + 4 * wave(z, phase + 5)
-		local h1 = steps(21 + 4 * wave(z, phase), 2)
-		local h2 = h1 + steps(13 + 4 * wave(z, phase + 1), 2)
-		local h3 = h2 + steps(15 + 6 * wave(z, phase + 2), 2)
+		local h1 = steps(25 + 9 * wave(z, phase), 2)
+		local h2 = h1 + steps(16 + 4 * wave(z, phase + 1), 2)
+		local h3 = h2 + steps(22 + 8 * wave(z, phase + 2), 2)
 		return {
 			{ inner = 2, width = w1, top = h1 },
 			{ inner = 2 + w1, width = w2, top = h2 },
