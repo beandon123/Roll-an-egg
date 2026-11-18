@@ -419,9 +419,12 @@ Everyone riding an egg runs on top of it as it rolls under them, and so does eve
   balance back.
 
 The poses are worked out in `src/shared/RiderPose.luau` (pure math, tested outside Studio). On each device,
-`src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints each frame. It runs after
-Roblox's own animations, so the pose replaces the sitting pose they would play, blending in and out so nothing
-snaps. Riders stand on the egg (`EggController`), as high above it as they would stand above the ground.
+`src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints just before each frame is
+drawn. Roblox's own animations set every joint's `Motor6D.Transform` each frame, and riders are anchored, so the pose
+goes into each joint's `C0` instead, cancelling out whatever those animations are doing; it blends in and out so
+nothing snaps, and every `C0` is put back when the ride is over. Riders stand on the egg (`EggController`), as high
+above it as they would stand above the ground. In Studio, the Output window says so the first time each player is
+posed (for example `[Riding animation] Player1 is running on an egg (R15, 15 of 15 joints)`).
 
 To watch it without opening Studio:
 

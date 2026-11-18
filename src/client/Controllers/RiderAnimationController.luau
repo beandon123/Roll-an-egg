@@ -6,10 +6,11 @@
 -- Players rolling on their training stick run the same way (TrainingController says who, how hard, and how far a
 -- plank or girder rocks them as it turns): a steady run, and a flat-out sprint during a 2x boost.
 --
--- Every device animates every rider it can see. The pose is set on each character's Motor6Ds every frame, after
--- Roblox's own animations (RunService.PreSimulation), so it replaces the pose the Animate script plays. It blends in
--- from that pose when a rider gets on and back out when they get off, so nothing snaps. Works on R15 and R6
--- characters.
+-- Every device animates every rider it can see, every frame just before it is drawn. Riders are anchored, and
+-- Roblox's own animations (the Animate script) set every joint's Motor6D.Transform each frame, so the pose goes into
+-- each joint's C0 instead, which nothing else touches, cancelling out whatever those animations are doing: the joint
+-- ends up exactly in the pose. It blends in from Roblox's pose when a rider gets on and back out when they get off,
+-- and each joint's C0 is put back when they are done. Works on R15 and R6 characters.
 --
 -- How tired an egg rider looks comes from when their stamina will run out: the local player's from their own stamina
 -- (UiState), anyone else's from the attribute the server keeps on their Player (StaminaMath.RUNS_OUT_AT).
@@ -56,10 +57,13 @@ type Pose = { [string]: { number } }
 
 type Joint = {
 	motor: Motor6D,
-	-- The pose turns a limb about its parent part's axes; a Motor6D's Transform is in its C0's axes. These turn one
+	-- The pose turns a limb about its parent part's axes; a Motor6D's offsets are in its C0's axes. These turn one
 	-- into the other (C0's rotation, and its inverse).
 	toJoint: CFrame,
 	fromJoint: CFrame,
+	-- The joint's own C0, put back when the rider is done, and the C0 last written here (as Roblox stores it).
+	rest: CFrame,
+	written: CFrame?,
 }
 
 type Rig = {
@@ -105,6 +109,8 @@ type Rider = {
 type StickRide = { pace: number, lift: number, seenAt: number }
 
 local riders: { [number]: Rider } = {}
+-- In Studio, who has been reported in the Output as running (once each), to show the animation is at work.
+local reported: { [number]: boolean } = {}
 -- Seconds of frames so far: what landings, tumbles and looks for joints are timed by.
 local clock = 0
 -- Who is on which egg this frame (filled by visitRider), and who is on their training stick.
@@ -130,6 +136,8 @@ local function findJoints(rig: Rig)
 				motor = descendant,
 				toJoint = rotation:Inverse(),
 				fromJoint = rotation,
+				rest = descendant.C0,
+				written = nil,
 			}
 			rig.count += 1
 		end
@@ -279,7 +287,10 @@ local function getOff(rider: Rider)
 	rider.lastLateral = nil
 end
 
--- Sets the rider's joints to their pose, `weight` of the way from what Roblox's animations put them at.
+-- Sets the rider's joints to their pose, `weight` of the way from where Roblox's animations put them.
+--
+-- A joint places its limb at Part0 * C0 * Transform * C1:Inverse(). Roblox's animations own Transform (they set it
+-- every frame), so the pose goes into C0, with their Transform cancelled out: C0 = rest * pose * Transform:Inverse().
 local function apply(rig: Rig, pose: Pose, weight: number)
 	local scale = rig.scale
 	for name, joint in rig.joints do
@@ -293,14 +304,35 @@ local function apply(rig: Rig, pose: Pose, weight: number)
 		if p == nil then
 			continue
 		end
+		if joint.written and motor.C0 ~= joint.written then
+			-- Something else moved the joint (the character was rescaled): that is where it rests now.
+			joint.rest = motor.C0
+		end
+		local animated = motor.Transform
 		local target = joint.toJoint
 			* CFrame.new(p[4] * scale, p[5] * scale, p[6] * scale)
 			* CFrame.fromEulerAnglesYXZ(p[1], p[2], p[3])
 			* joint.fromJoint
 		if weight < 1 then
-			target = motor.Transform:Lerp(target, weight)
+			target = animated:Lerp(target, weight)
 		end
-		motor.Transform = target
+		motor.C0 = joint.rest * target * animated:Inverse()
+		-- Read back, as Roblox rounds what it stores.
+		joint.written = motor.C0
+	end
+end
+
+-- Puts every joint of the rider's character back as it was.
+local function release(rider: Rider)
+	local rig = rider.rig
+	if rig == nil then
+		return
+	end
+	for _, joint in rig.joints do
+		if joint.written and joint.motor.C0 == joint.written then
+			joint.motor.C0 = joint.rest
+		end
+		joint.written = nil
 	end
 end
 
@@ -311,6 +343,15 @@ local function animate(rider: Rider, eye: Vector3?)
 	end
 	if eye and (rig.root.Position - eye).Magnitude > ANIMATE_DISTANCE then
 		return
+	end
+	if RunService:IsStudio() and not reported[rider.userId] then
+		reported[rider.userId] = true
+		local wanted = if rig.r6 then #RiderPose.R6_JOINTS else #RiderPose.JOINTS
+		print(
+			`[Riding animation] {rig.character.Name} is running on {if rider.onStick
+				then "their training stick"
+				else "an egg"}` .. ` ({if rig.r6 then "R6" else "R15"}, {rig.count} of {wanted} joints)`
+		)
 	end
 
 	local pose
@@ -387,6 +428,7 @@ local function step(deltaTime: number)
 		local blend = if showing then BLEND_IN_TIME else BLEND_OUT_TIME
 		rider.weight = math.clamp(rider.weight + (if showing then 1 else -1) * deltaTime / blend, 0, 1)
 		if rider.weight <= 0 and not showing then
+			release(rider)
 			riders[userId] = nil
 			continue
 		end
@@ -426,8 +468,8 @@ function RiderAnimationController.SetStickRider(userId: number, pace: number, li
 end
 
 function RiderAnimationController.Init()
-	-- After Roblox's animations have set the joints this frame, so this pose replaces theirs.
-	RunService.PreSimulation:Connect(step)
+	-- Last thing before the frame is drawn: after the camera, and after EggController has put riders on their eggs.
+	RunService:BindToRenderStep("RollAnEgg_RiderPose", Enum.RenderPriority.Last.Value, step)
 	Players.PlayerRemoving:Connect(function(player)
 		riders[player.UserId] = nil
 		onStick[player.UserId] = nil

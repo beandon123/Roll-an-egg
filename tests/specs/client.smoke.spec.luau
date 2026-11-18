@@ -800,6 +800,9 @@ return function(harness)
 	end)
 
 	describe("Client: riders running on their eggs", function()
+		-- Each joint's own C0, as the character was built.
+		local restOf = {}
+
 		-- Gives a character the joints of an R15 rig, or an R6 one (whose limbs' joints are turned, as in Roblox's
 		-- own R6 rig), all at rest. Returns them by name.
 		local function rigCharacter(session, humanoid, root, r6)
@@ -824,30 +827,45 @@ return function(harness)
 				motor.Transform = roblox.CFrame.identity
 				motor.Parent = humanoid.Parent
 				motors[name] = motor
+				restOf[motor] = motor.C0
 			end
 			return motors
 		end
 
-		-- Puts every joint back at rest, as Roblox's own animations would set them each frame.
+		-- Roblox's own animations setting every joint's Transform, as they do each frame: standing still, or (as the
+		-- Animate script does while seated) sitting, thighs up and knees bent.
+		local SITTING = roblox.CFrame.new(0, 0.3, 0) * roblox.CFrame.Angles(1.4, 0.2, 0)
 		local function rest(motors)
 			for _, motor in motors do
 				motor.Transform = roblox.CFrame.identity
 			end
 		end
-
-		local function atRest(motors): boolean
+		local function sit(motors)
 			for _, motor in motors do
-				if (motor.Transform.Position).Magnitude > 1e-6 or motor.Transform.LookVector.Z > -1 + 1e-6 then
-					return false
-				end
+				motor.Transform = SITTING
 			end
-			return true
+		end
+
+		-- How a joint actually turns and shifts its limb, from rest: Part1 = Part0 * C0 * Transform * C1:Inverse().
+		local function effective(motor)
+			return restOf[motor]:Inverse() * motor.C0 * motor.Transform
 		end
 
 		-- Where a limb hanging straight down from a joint points, in its parent part's space.
 		local function limbDirection(motor)
-			local turn = motor.C0.Rotation * motor.Transform.Rotation * motor.C0.Rotation:Inverse()
+			local rest = restOf[motor].Rotation
+			local turn = rest * effective(motor).Rotation * rest:Inverse()
 			return turn:VectorToWorldSpace(Vector3.new(0, -1, 0))
+		end
+
+		-- Every joint's C0 put back exactly as it was.
+		local function released(motors): boolean
+			for _, motor in motors do
+				if motor.C0 ~= restOf[motor] then
+					return false
+				end
+			end
+			return true
 		end
 
 		it("makes a rider run on their egg, standing on it, and lets go after they hop off", function()
@@ -863,28 +881,38 @@ return function(harness)
 			local center, spec = eggCenter(session, egg)
 			expect.near(parts.root.CFrame.Position.Y, center.Y + spec.radius + 3, 1e-3)
 
-			-- Leaning into the run, the legs taking turns to swing forward.
-			expect.truthy(motors.Root.Transform.LookVector.Y < -0.1, "leaning forward")
+			-- Leaning into the run, the legs taking turns to swing forward, whatever Roblox's own animation (sitting,
+			-- here) sets: it is cancelled out, and never changed.
 			local most, least = -math.huge, math.huge
 			for _ = 1, 30 do
-				rest(motors)
+				sit(motors)
+				local animated = motors.LeftHip.Transform
 				session:renderFrame(1 / 60)
+				expect.truthy(effective(motors.Root).LookVector.Y < -0.1, "leaning forward")
 				local ahead = limbDirection(motors.LeftHip).Z - limbDirection(motors.RightHip).Z
 				most, least = math.max(most, ahead), math.min(least, ahead)
+				expect.equal(motors.LeftHip.Transform, animated, "Roblox's animation is left alone")
 			end
 			-- A leg swinging forward points its foot ahead (-Z).
 			expect.truthy(most > 0.5 and least < -0.5, `legs take turns: {least} to {most}`)
+			-- The same pose standing still: only Roblox's part differs, not where the limbs end up.
+			local sitting = limbDirection(motors.LeftKnee)
+			rest(motors)
+			expect.truthy((limbDirection(motors.LeftKnee) - sitting).Magnitude > 0.1, "Roblox's pose changed")
+			session:renderFrame(1 / 60)
+			expect.truthy(effective(motors.Root).LookVector.Y < -0.1, "still leaning forward")
 
-			-- Hops off: blended back to Roblox's own animations, then left alone.
+			-- Hops off: blended back to Roblox's own animations, then every joint put back as it was.
 			task.wait(0.6)
 			session:heartbeat(1 / 60)
 			session:fire(session:service("UserInputService"), "JumpRequest")
 			session:fromServer("RideEnded", "Dismount", { eggId = 1, zone = 1, rarity = "Common" })
 			session:fromServer("EggLeft", 1, session.clock, 0, false)
 			session:renderFrame(1 / 60, 30)
-			rest(motors)
+			expect.truthy(released(motors), "joints put back")
+			sit(motors)
 			session:renderFrame(1 / 60)
-			expect.truthy(atRest(motors), "no longer posed")
+			expect.truthy(released(motors), "and left alone")
 		end)
 
 		it("tumbles a rider who is thrown off until they get their balance back", function()
@@ -910,9 +938,7 @@ return function(harness)
 			-- Once the stun is over, back to Roblox's own animations.
 			local Tuning = shared(session).Tuning
 			session:renderFrame(1 / 60, math.ceil(Tuning.STUN_TIME * 60) + 20)
-			rest(motors)
-			session:renderFrame(1 / 60)
-			expect.truthy(atRest(motors), "no longer posed")
+			expect.truthy(released(motors), "joints put back")
 		end)
 
 		it("shows another rider tiring as their stamina is about to run out, on an R6 character", function()
@@ -2896,13 +2922,17 @@ return function(harness)
 			local turned = mine.Roller.PrimaryPart.CFrame
 			expect.near((turned.Position - m.StickModels.axleCFrame(1, 1).Position).Magnitude, 0, 1e-3)
 			expect.truthy(turned.UpVector:Dot(rest.UpVector) < 0.999, "the roller turns")
-			-- Running on the spot as on an egg: leaning forward, the legs taking turns to swing forward (-Z).
-			expect.truthy(motors.Root.Transform.LookVector.Y < -0.1, "leaning forward")
+			-- Running on the spot as on an egg: leaning forward, the legs taking turns to swing forward (-Z). The
+			-- joints rest at C0 = identity, so a limb's turn is C0 * Transform (Roblox's animations set Transform).
+			local function turned(motor)
+				return motor.C0 * motor.Transform
+			end
+			expect.truthy(turned(motors.Root).LookVector.Y < -0.1, "leaning forward")
 			local most, least = -math.huge, math.huge
 			for _ = 1, 24 do
 				session:renderFrame(1 / 60)
-				local left = motors.LeftHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
-				local right = motors.RightHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+				local left = turned(motors.LeftHip):VectorToWorldSpace(Vector3.new(0, -1, 0))
+				local right = turned(motors.RightHip):VectorToWorldSpace(Vector3.new(0, -1, 0))
 				most, least = math.max(most, right.Z - left.Z), math.min(least, right.Z - left.Z)
 			end
 			expect.truthy(most > 0.5 and least < -0.5, `legs take turns: {least} to {most}`)
@@ -2924,16 +2954,12 @@ return function(harness)
 			end
 			expect.truthy(fives >= 1, "the other rider's reps")
 
-			-- Off the stick: the joints blend back to the character's own animations (which set them every frame),
-			-- then are left to them.
+			-- Off the stick: the joints blend back to the character's own animations, and are put back as they were.
 			mine:SetAttribute("Rider", 0)
 			session:renderFrame(1 / 30, 15)
 			for _, motor in motors do
-				motor.Transform = CFrame.identity
+				expect.equal(motor.C0, CFrame.identity, motor.Name)
 			end
-			session:renderFrame(1 / 30)
-			expect.equal(motors.RightShoulder.Transform, CFrame.identity)
-			expect.equal(motors.LeftHip.Transform, CFrame.identity)
 			expect.equal(mine.SplashFx.Splash.Enabled, false)
 		end)
 
