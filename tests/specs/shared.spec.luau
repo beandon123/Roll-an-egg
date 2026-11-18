@@ -7,6 +7,7 @@ return function(harness)
 	local CycleClock = harness.load("src/shared/CycleClock")
 	local EggMotion = harness.load("src/shared/EggMotion")
 	local EggSpec = harness.load("src/shared/EggSpec")
+	local JumpAim = harness.load("src/shared/JumpAim")
 	local LuckBoost = harness.load("src/shared/LuckBoost")
 	local NumberFormat = harness.load("src/shared/NumberFormat")
 	local RiderPose = harness.load("src/shared/RiderPose")
@@ -14,62 +15,85 @@ return function(harness)
 	local StaminaMath = harness.load("src/shared/StaminaMath")
 
 	describe("CycleClock", function()
-		it("runs 3-minute cycles that end with a 10-second closure", function()
-			expect.equal(CycleClock.CYCLE_LENGTH, 180)
+		it("runs 5-minute cycles: open for 4 minutes 50 seconds, then a 10-second closure", function()
+			expect.equal(CycleClock.CYCLE_LENGTH, 300)
 			expect.equal(CycleClock.CLOSED_LENGTH, 10)
+			expect.equal(CycleClock.CLOSE_AT, 290)
 
-			local open = CycleClock.getState(180 * 7 + 30)
+			local open = CycleClock.getState(300 * 7 + 30)
 			expect.equal(open.index, 7)
 			expect.equal(open.phase, "Open")
-			expect.near(open.untilClose, 140)
-			expect.near(open.untilNextCycle, 150)
+			expect.near(open.untilClose, 260)
+			expect.near(open.untilNextCycle, 270)
 
-			expect.equal(CycleClock.getState(180 * 7 + 159.9).phase, "Open")
-			expect.equal(CycleClock.getState(180 * 7 + 160).phase, "Warning")
-			expect.equal(CycleClock.getState(180 * 7 + 169.9).phase, "Warning")
+			expect.equal(CycleClock.getState(300 * 7 + 279.9).phase, "Open")
+			expect.equal(CycleClock.getState(300 * 7 + 280).phase, "Warning")
+			expect.equal(CycleClock.getState(300 * 7 + 289.9).phase, "Warning")
 
-			local closed = CycleClock.getState(180 * 7 + 170)
+			local closed = CycleClock.getState(300 * 7 + 290)
 			expect.equal(closed.phase, "Closed")
 			expect.equal(closed.untilClose, 0)
 			expect.near(closed.untilNextCycle, 10)
 
-			expect.equal(CycleClock.getState(180 * 8).index, 8)
-			expect.equal(CycleClock.getState(180 * 8).phase, "Open")
+			expect.equal(CycleClock.getState(300 * 8).index, 8)
+			expect.equal(CycleClock.getState(300 * 8).phase, "Open")
 		end)
 
-		it("makes each cycle one day: sunrise as it begins, night before it ends", function()
-			local start = 180 * 12
+		it("makes each cycle one day and one night: a 4:50 day while the runway is open, a 10-second night", function()
+			local start = 300 * 12
+			local dayLength = CycleClock.CYCLE_LENGTH * CycleClock.DAY_FRACTION
+			local nightLength = CycleClock.CYCLE_LENGTH - dayLength
+			expect.near(dayLength, 290, 1e-9)
+			expect.near(nightLength, 10, 1e-9)
+			-- The sun rises as the cycle begins, is highest half way through the day, and sets as the runway closes.
 			expect.equal(CycleClock.clockTime(start), CycleClock.SUNRISE)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION / 2), 12)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION), CycleClock.SUNSET)
-			-- Midnight comes halfway through the night, and the runway closes before dawn.
-			local nightLength = 180 * (1 - CycleClock.DAY_FRACTION)
-			expect.near(CycleClock.clockTime(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
-			expect.truthy(CycleClock.clockTime(start + CycleClock.CLOSE_AT) < CycleClock.SUNRISE)
-			expect.near(CycleClock.clockTime(start + 179.999), CycleClock.SUNRISE, 1e-3)
+			expect.near(CycleClock.clockTime(start + dayLength / 2), 12)
+			expect.near(CycleClock.clockTime(start + CycleClock.CLOSE_AT), CycleClock.SUNSET)
+			expect.near(CycleClock.clockTime(start + CycleClock.CLOSE_AT - 0.001), CycleClock.SUNSET, 1e-3)
+			-- Midnight comes halfway through the night (the clock runs 0 to 24, so a hair before midnight is nearly
+			-- 24), and the sun is back up as the next cycle begins.
+			local midnight = CycleClock.clockTime(start + dayLength + nightLength / 2)
+			expect.near(math.min(midnight, 24 - midnight), 0)
+			expect.truthy(CycleClock.clockTime(start + CycleClock.CLOSE_AT + 6) < CycleClock.SUNRISE)
+			-- (The whole night goes by in 10 seconds, so the clock is racing here.)
+			expect.near(CycleClock.clockTime(start + 299.999), CycleClock.SUNRISE, 0.01)
 
-			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION / 2), 1)
-			expect.equal(CycleClock.daylight(start + 180 * CycleClock.DAY_FRACTION + nightLength / 2), 0)
+			expect.equal(CycleClock.daylight(start + dayLength / 2), 1)
+			expect.equal(CycleClock.daylight(start + dayLength + nightLength / 2), 0)
 			expect.near(CycleClock.daylight(start), 0.5)
+			-- Broad daylight for most of the day: it only starts to fade in the last minute before the runway closes.
+			expect.equal(CycleClock.daylight(start + 60), 1)
+			expect.equal(CycleClock.daylight(start + CycleClock.CLOSE_AT - 60), 1)
+			expect.truthy(CycleClock.daylight(start + CycleClock.CLOSE_AT - 10) < 1)
 		end)
 
 		it("tells the HUD whether it is day, and how long until that changes", function()
-			local start = 180 * 12
-			local sunset = 180 * CycleClock.DAY_FRACTION
+			local start = 300 * 12
+			local sunset = CycleClock.CLOSE_AT
 			local isDay, untilChange = CycleClock.dayNight(start + 5)
 			expect.equal(isDay, true)
-			expect.near(untilChange, sunset - 5)
+			expect.near(untilChange, 285)
+			isDay, untilChange = CycleClock.dayNight(start + sunset - 0.5)
+			expect.equal(isDay, true, "day right up to the closure")
+			expect.near(untilChange, 0.5)
 			isDay, untilChange = CycleClock.dayNight(start + sunset)
-			expect.equal(isDay, false, "night falls at sunset")
-			expect.near(untilChange, 180 - sunset, 1e-9, "until the next sunrise")
+			expect.equal(isDay, false, "night falls as the runway closes")
+			expect.near(untilChange, 10, 1e-9, "until the next sunrise")
 			isDay, untilChange = CycleClock.dayNight(start + CycleClock.CLOSE_AT + 2)
-			expect.equal(isDay, false, "still night while the runway is closed")
+			expect.equal(isDay, false, "night while the runway is closed")
 			expect.near(untilChange, CycleClock.CLOSED_LENGTH - 2)
+			-- It is night exactly when the runway is closed.
+			for second = 0, 299 do
+				local closed = CycleClock.getState(start + second + 0.5).phase == "Closed"
+				expect.equal(CycleClock.dayNight(start + second + 0.5), not closed, "at " .. second)
+			end
 		end)
 
 		it("schedules each event once an hour, 30 minutes apart", function()
+			expect.equal(CycleClock.EVENT_PERIOD * CycleClock.CYCLE_LENGTH, 3600)
+			expect.equal((CycleClock.AVALANCHE_CYCLE - CycleClock.TITAN_CYCLE) * CycleClock.CYCLE_LENGTH, 1800)
 			local titans, avalanches = 0, 0
-			for index = 0, 39 do
+			for index = 0, 23 do
 				local event = CycleClock.eventForCycle(index)
 				if event == "Titan" then
 					titans += 1
@@ -77,21 +101,21 @@ return function(harness)
 					avalanches += 1
 				end
 			end
-			-- 40 cycles x 3 minutes = 2 hours.
+			-- 24 cycles x 5 minutes = 2 hours.
 			expect.equal(titans, 2)
 			expect.equal(avalanches, 2)
-			expect.equal(CycleClock.eventForCycle(20), "Titan")
-			expect.equal(CycleClock.eventForCycle(30), "Avalanche")
-			expect.equal(CycleClock.eventForCycle(25), nil)
+			expect.equal(CycleClock.eventForCycle(12), "Titan")
+			expect.equal(CycleClock.eventForCycle(18), "Avalanche")
+			expect.equal(CycleClock.eventForCycle(15), nil)
 		end)
 
 		it("can be moved ahead, for every device at once", function()
-			local time = 180 * 7 + 30
+			local time = 300 * 7 + 30
 			expect.equal(CycleClock.getOffset(), 0)
-			CycleClock.setOffset(140)
+			CycleClock.setOffset(260)
 			local moved = CycleClock.getState(time)
 			CycleClock.setOffset(0)
-			expect.equal(moved.phase, "Closed", "140 s on, the runway has closed")
+			expect.equal(moved.phase, "Closed", "260 s on, the runway has closed")
 			expect.equal(moved.index, 7)
 			expect.equal(CycleClock.getState(time).phase, "Open", "and back")
 		end)
@@ -119,26 +143,50 @@ return function(harness)
 			expect.equal(Runway.surfaceY(0), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(1800), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(Runway.LENGTH), Runway.BASE_Y)
-			expect.equal(Runway.WIDTH, 120)
+		end)
+
+		it("gets wider zone by zone, then keeps the last zone's width through its endless repeats", function()
+			expect.equal(Runway.START_WIDTH, 120)
+			expect.equal(Runway.widthAt(-10), Runway.START_WIDTH, "where it leaves the hub")
+			expect.equal(Runway.widthAt(0), Runway.START_WIDTH)
+			for zoneId = 2, Runway.ZONE_COUNT do
+				local start = Runway.zoneStartZ(zoneId)
+				expect.truthy(Runway.widthAt(start) > Runway.widthAt(start - 1), `zone {zoneId} is wider`)
+				expect.equal(Runway.widthAt(start), Runway.zoneWidth(zoneId))
+				expect.equal(
+					Runway.widthAt(start + Runway.zoneLength(zoneId) - 1),
+					Runway.zoneWidth(zoneId),
+					"all along it"
+				)
+				expect.equal(Runway.zoneWidth(zoneId) % 20, 0, "a whole number of ground tiles")
+			end
+			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT), Runway.MAX_WIDTH)
+			-- The last zone's copies, and everywhere an egg can be carried back to, are as wide as it.
+			for _, z in { Runway.FINAL_ZONE_START, Runway.LENGTH, Runway.LOOP_START, Runway.LOOP_END, 1e6 } do
+				expect.equal(Runway.widthAt(z), Runway.MAX_WIDTH, `at {z}`)
+			end
+			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT + 2), Runway.MAX_WIDTH)
+			-- Wider runway, more room to steer.
+			expect.truthy(Runway.maxLateral(4, Runway.LENGTH) > Runway.maxLateral(4, 0))
 		end)
 
 		it("knows which zone a position is in", function()
 			expect.equal(Runway.zoneAt(-1), nil)
 			expect.equal(Runway.zoneAt(0), 1)
-			expect.equal(Runway.zoneAt(599.9), 1)
-			expect.equal(Runway.zoneAt(600), 2)
-			expect.equal(Runway.zoneAt(2999), 5)
-			expect.equal(Runway.zoneAt(3000), 6)
-			expect.equal(Runway.zoneAt(3599), 6)
+			expect.equal(Runway.zoneAt(799.9), 1)
+			expect.equal(Runway.zoneAt(800), 2)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6) - 1), 5)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6)), 6)
+			expect.equal(Runway.zoneAt(Runway.LENGTH - 1), 6)
 			-- The last zone never ends.
-			expect.equal(Runway.zoneAt(3600), 6)
+			expect.equal(Runway.zoneAt(Runway.LENGTH), 6)
 			expect.equal(Runway.zoneAt(50000), 6)
-			expect.equal(Runway.zoneStartZ(3), 1200)
+			expect.equal(Runway.zoneStartZ(3), 1960)
 		end)
 
 		it("loops the last zone: anything reaching the end of the loop is carried back one loop", function()
 			expect.equal(Runway.FINAL_ZONE_START, Runway.zoneStartZ(Runway.ZONE_COUNT))
-			expect.equal(Runway.LOOP_LENGTH, Runway.ZONE_LENGTH)
+			expect.equal(Runway.LOOP_LENGTH, Runway.zoneLength(Runway.ZONE_COUNT))
 			expect.equal(Runway.LOOP_END - Runway.LOOP_START, Runway.LOOP_LENGTH)
 			expect.truthy(Runway.LOOP_START > Runway.FINAL_ZONE_START, "the loop starts inside the last zone")
 			expect.truthy(Runway.LOOP_END < Runway.LENGTH + Runway.REPEATS * Runway.LOOP_LENGTH, "built that far")
@@ -148,7 +196,7 @@ return function(harness)
 			expect.near(Runway.wrapZ(Runway.LOOP_END), Runway.LOOP_START)
 			expect.near(Runway.wrapZ(Runway.LOOP_END + 10), Runway.LOOP_START + 10)
 			expect.near(Runway.wrapZ(Runway.LOOP_END + 5 * Runway.LOOP_LENGTH + 10), Runway.LOOP_START + 10)
-			for _, z in { 5000, 12345.6, 1e6 } do
+			for _, z in { Runway.LOOP_END + 1, 23456.7, 1e6 } do
 				local wrapped = Runway.wrapZ(z)
 				expect.truthy(wrapped >= Runway.LOOP_START and wrapped < Runway.LOOP_END, tostring(z))
 			end
@@ -176,26 +224,33 @@ return function(harness)
 		it(
 			"fades the last zone's riderless eggs a quarter of the way into its first copy, before the loop ends",
 			function()
-				expect.equal(Runway.fadeZ(1), 750)
+				-- A quarter of the way into the Desert.
+				expect.equal(Runway.fadeZ(1), 800 + 1160 / 4)
 				local last = Runway.fadeZ(Runway.ZONE_COUNT)
-				expect.equal(last, Runway.LENGTH + Runway.ZONE_LENGTH / 4)
+				expect.equal(last, Runway.LENGTH + Runway.zoneLength(Runway.ZONE_COUNT) / 4)
 				expect.truthy(last < Runway.LOOP_END)
 			end
 		)
 
 		it("knows when an egg is pressed against the side", function()
-			local limit = Runway.maxLateral(4)
-			expect.equal(Runway.isAtEdge(limit, 4), true)
-			expect.equal(Runway.isAtEdge(-limit, 4), true)
-			expect.equal(Runway.isAtEdge(limit - 1, 4), false)
+			for _, z in { 10, Runway.zoneStartZ(4) + 10, Runway.LOOP_END - 10 } do
+				local limit = Runway.maxLateral(4, z)
+				expect.equal(Runway.isAtEdge(limit, 4, z), true)
+				expect.equal(Runway.isAtEdge(-limit, 4, z), true)
+				expect.equal(Runway.isAtEdge(limit - 1, 4, z), false)
+			end
+			-- Pressed against the first zone's bank is well clear of the wider zone's.
+			expect.equal(Runway.isAtEdge(Runway.maxLateral(4, 10), 4, Runway.zoneStartZ(2) + 10), false)
 		end)
 
 		it("keeps eggs on the runway", function()
-			local limit = Runway.maxLateral(4)
-			expect.near(limit, Runway.WIDTH / 2 - 5)
-			expect.equal(Runway.clampLateral(999, 4), limit)
-			expect.equal(Runway.clampLateral(-999, 4), -limit)
-			expect.equal(Runway.clampLateral(3, 4), 3)
+			for _, z in { 10, Runway.zoneStartZ(3) + 10, Runway.LENGTH + 10 } do
+				local limit = Runway.maxLateral(4, z)
+				expect.near(limit, Runway.widthAt(z) / 2 - 5)
+				expect.equal(Runway.clampLateral(999, 4, z), limit)
+				expect.equal(Runway.clampLateral(-999, 4, z), -limit)
+				expect.equal(Runway.clampLateral(3, 4, z), 3)
+			end
 		end)
 	end)
 
@@ -469,7 +524,7 @@ return function(harness)
 						"clear of the gate and where eggs appear"
 					)
 					expect.truthy(
-						gap.endZ <= startZ + Runway.ZONE_LENGTH - Runway.GAPLESS_END,
+						gap.endZ <= startZ + Runway.zoneLength(zoneId) - Runway.GAPLESS_END,
 						"clear of the next zone"
 					)
 					expect.truthy(gap.startZ >= lastEnd[gap.side] + Runway.BANK_MIN_LENGTH - 1e-9, "bank between gaps")
@@ -509,6 +564,190 @@ return function(harness)
 			-- The gate's stretch has no gaps.
 			expect.equal(Runway.wallAt(1, Runway.zoneStartZ(3) + 10, 3), true)
 			expect.equal(Runway.wallAt(-1, Runway.zoneStartZ(3) + 10, 3), true)
+		end)
+	end)
+
+	describe("Runway bends", function()
+		it("winds through every zone, straight and in the middle at the hub and at every zone's start", function()
+			expect.equal(Runway.centerX(-50), 0)
+			expect.equal(Runway.slope(-50), 0)
+			for zoneId = 1, Runway.ZONE_COUNT + Runway.REPEATS do
+				local startZ = Runway.zoneStartZ(zoneId)
+				expect.near(Runway.centerX(startZ), 0, 1e-9, `zone {zoneId} start`)
+				expect.near(Runway.slope(startZ), 0, 1e-9, `zone {zoneId} runs straight at its gate`)
+				-- And it really winds: well off to one side somewhere in the zone.
+				local furthest = 0
+				for step = 0, 60 do
+					furthest = math.max(furthest, math.abs(Runway.centerX(startZ + step * 10)))
+				end
+				expect.truthy(furthest >= 30, `zone {zoneId} swings {furthest} studs`)
+			end
+		end)
+
+		it("bends smoothly and gently: no jumps, and never more than about 30 degrees off straight", function()
+			local lastX = Runway.centerX(0)
+			for z = 0.5, Runway.LOOP_END, 0.5 do
+				local x = Runway.centerX(z)
+				expect.truthy(math.abs(x - lastX) < 0.5 * 0.6, `no jump at {z}`)
+				expect.truthy(math.abs(Runway.heading(z)) < math.rad(30), `gentle at {z}`)
+				-- The slope is how fast the centre line moves.
+				expect.near(Runway.slope(z), (Runway.centerX(z + 0.01) - Runway.centerX(z - 0.01)) / 0.02, 1e-2)
+				lastX = x
+			end
+		end)
+
+		it("repeats its last zone's bends, so being carried back one loop does not move anything", function()
+			for z = Runway.FINAL_ZONE_START, Runway.LOOP_END, 7 do
+				expect.near(Runway.centerX(z), Runway.centerX(z + Runway.LOOP_LENGTH), 1e-6)
+				expect.near(
+					Runway.centerX(Runway.wrapZ(z + Runway.LOOP_LENGTH)),
+					Runway.centerX(z + Runway.LOOP_LENGTH),
+					1e-6
+				)
+			end
+		end)
+
+		it("never stands an obstacle outside the runway, however wide its zone", function()
+			local Obstacles = harness.load("src/shared/Obstacles")
+			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
+				for _, obstacle in row.obstacles do
+					for z = obstacle.z - obstacle.hz, obstacle.z + obstacle.hz, 1 do
+						expect.truthy(
+							obstacle.x + obstacle.hx <= Runway.edgeAt(1, z) + 1e-6
+								and obstacle.x - obstacle.hx >= Runway.edgeAt(-1, z) - 1e-6,
+							`{obstacle.kind} #{obstacle.id} off the runway`
+						)
+					end
+				end
+			end
+		end)
+
+		it("turns runway positions into the world and back", function()
+			for _, z in { 0, 130, 777, 2100, 3333 } do
+				for _, lateral in { -50, 0, 12.5 } do
+					local x = Runway.worldX(lateral, z)
+					expect.near(x, Runway.centerX(z) + lateral, 1e-9)
+					expect.near(Runway.lateralOf(x, z), lateral, 1e-9)
+				end
+			end
+		end)
+	end)
+
+	describe("JumpAim", function()
+		-- A Common-sized egg at the middle of the runway, 100 studs down it, rolling at 27 studs a second.
+		local function egg(id, x, z, speed)
+			return { id = id, x = x, z = z, seatY = 18, speed = speed or 0, halfLength = 3.9, radius = 3 }
+		end
+		local function jumper(x, y, z, vx, vy, vz, gravity)
+			return { x = x, y = y, z = z, vx = vx or 0, vy = vy or 0, vz = vz or 0, gravity = gravity or 0 }
+		end
+
+		it("works out when a jump comes back down to a height", function()
+			-- Dropped from 20 studs up with gravity 10: sqrt(2 * 20 / 10) = 2 s.
+			expect.near(JumpAim.timeToHeight(20, 0, 10, 0), 2)
+			-- Thrown up at 10 from the ground: back down after 2 s.
+			expect.near(JumpAim.timeToHeight(0, 10, 10, 0), 2)
+			-- Below the height and never rising to it, or no gravity: where it is now.
+			expect.equal(JumpAim.timeToHeight(0, 1, 10, 5), 0)
+			expect.equal(JumpAim.timeToHeight(5, -3, 0, 0), 0)
+		end)
+
+		it("measures how far outside an egg's footprint a spot is", function()
+			expect.equal(JumpAim.footprintGap(0, 0, 4, 3), 0)
+			expect.equal(JumpAim.footprintGap(3.9, -2.9, 4, 3), 0, "inside, near a corner")
+			expect.near(JumpAim.footprintGap(10, 0, 4, 3), 6, 1e-9)
+			expect.near(JumpAim.footprintGap(0, -8, 4, 3), 5, 1e-9)
+			expect.near(JumpAim.footprintGap(7, 7, 4, 3), 5, 1e-9)
+		end)
+
+		it("picks the egg a jump will come down on, allowing for the eggs rolling on meanwhile", function()
+			-- Falling straight down from 38 studs with gravity 10: lands at the seat height after 2 s. The egg 40 studs
+			-- behind rolls under them at 20 studs a second; the one right below now has rolled 40 studs on by then.
+			local falling = jumper(0, 38, 100, 0, 0, 0, 10)
+			local below = egg(1, 0, 100, 20)
+			local behind = egg(2, 0, 60, 20)
+			expect.equal(JumpAim.pick(falling, { below, behind }, nil, 14, 3, 3), 2)
+			expect.near(JumpAim.miss(falling, behind, 3), 0, 1e-9)
+			-- Moving forward with the eggs, the one below stays below.
+			local riding = jumper(0, 38, 100, 0, 0, 20, 10)
+			expect.equal(JumpAim.pick(riding, { below, behind }, nil, 14, 3, 3), 1)
+			-- Nothing near where the jump comes down: no egg.
+			expect.equal(JumpAim.pick(jumper(0, 38, 100, 40, 0, 0, 10), { below, behind }, nil, 14, 3, 3), nil)
+			-- Judged from where they are now when there is no gravity (a player on a pet).
+			expect.equal(JumpAim.pick(jumper(10, 40, 100), { egg(1, 0, 100), egg(2, 0, 60) }, nil, 14, 3, 3), 1)
+		end)
+
+		it("keeps the egg it picked unless another is clearly nearer", function()
+			local here = jumper(0, 18, 100)
+			local left = egg(1, -9, 100)
+			local right = egg(2, 10, 100)
+			-- Left is 1 stud nearer than right: it wins from scratch, but does not take over from right.
+			expect.equal(JumpAim.pick(here, { left, right }, nil, 14, 3, 3), 1)
+			expect.equal(JumpAim.pick(here, { left, right }, 2, 14, 3, 3), 2)
+			-- Clearly nearer: it takes over.
+			expect.equal(JumpAim.pick(here, { egg(1, -5, 100), right }, 2, 14, 3, 3), 1)
+			-- An egg picked last frame that has gone (or is out of range) is dropped.
+			expect.equal(JumpAim.pick(here, { left }, 2, 14, 3, 3), 1)
+			expect.equal(JumpAim.pick(here, { left, egg(2, 40, 100) }, 2, 14, 3, 3), 1)
+		end)
+
+		it("takes hold of a jumper close to the egg, not far off, far above it, or below its middle", function()
+			local target = egg(1, 0, 100)
+			expect.truthy(JumpAim.inMagnetRange(jumper(0, 18, 100), target, 10, 20), "on top")
+			expect.truthy(JumpAim.inMagnetRange(jumper(12, 30, 100), target, 10, 20), "close by, above")
+			expect.falsy(JumpAim.inMagnetRange(jumper(16, 18, 100), target, 10, 20), "too far across")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 18, 115), target, 10, 20), "too far ahead")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 39, 100), target, 10, 20), "too high")
+			-- The seat is 18; the egg's middle is 18 - radius - 2 = 13.
+			expect.truthy(JumpAim.inMagnetRange(jumper(0, 13.5, 100), target, 10, 20), "level with it")
+			expect.falsy(JumpAim.inMagnetRange(jumper(0, 12, 100), target, 10, 20), "below its middle")
+		end)
+
+		it("draws the jumper onto the egg's top, moving with it", function()
+			local target = egg(1, 0, 100, 27)
+			-- Right on the seat: just roll along with the egg.
+			local x, y, z = JumpAim.pull(jumper(0, 18, 100), target, 9, 70)
+			expect.near(x, 0, 1e-9)
+			expect.near(y, 0, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- A little way off: pulled toward the seat in proportion.
+			x, y, z = JumpAim.pull(jumper(2, 19, 100), target, 9, 70)
+			expect.near(x, -18, 1e-9)
+			expect.near(y, -9, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- Far off: the pull is capped, but the egg's own speed is always added.
+			x, y, z = JumpAim.pull(jumper(30, 18, 100), target, 9, 70)
+			expect.near(x, -70, 1e-9)
+			expect.near(z, 27, 1e-9)
+			-- Following the pull closes in on the seat within a fraction of a second.
+			local at = jumper(8, 26, 96)
+			local eggZ = 100
+			for _ = 1, 20 do
+				local vx, vy, vz = JumpAim.pull(at, egg(1, 0, eggZ, 27), 9, 70)
+				at.x += vx / 60
+				at.y += vy / 60
+				at.z += vz / 60
+				eggZ += 27 / 60
+			end
+			expect.truthy(JumpAim.footprintGap(at.x, at.z - eggZ, 0, 0) < 1, "within a stud after a third of a second")
+			expect.truthy(math.abs(at.y - 18) < 1, "and at the seat's height")
+		end)
+
+		it("follows an egg round the runway's bends: it drifts sideways as it rolls", function()
+			-- An egg 20 studs off to the side of where it would be if the runway ran straight, by the time the jumper
+			-- comes down (2 s): aimed at where it will be, not where it is.
+			local drifting = egg(1, 0, 100, 27)
+			drifting.xAt = function(t)
+				return 10 * t
+			end
+			drifting.vx = 10
+			local falling = jumper(20, 38, 154, 0, 0, 0, 10)
+			expect.near(JumpAim.miss(falling, drifting, 3), 0, 1e-9)
+			expect.truthy(JumpAim.miss(falling, egg(2, 0, 100, 27), 3) > 10, "straight down +z, it would miss")
+			-- The magnet moves the jumper sideways with it too.
+			local x, _, z = JumpAim.pull(jumper(0, 18, 100), drifting, 9, 70)
+			expect.near(x, 10, 1e-9)
+			expect.near(z, 27, 1e-9)
 		end)
 	end)
 end

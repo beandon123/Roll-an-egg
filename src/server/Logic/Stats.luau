@@ -18,11 +18,11 @@ function Stats.trailMultiplier(data): number
 	return if trail then trail.stamina else 1
 end
 
--- Max Stamina from everything the player owns: the base plus Max Stamina bought in the shop, times their
--- doublings, times their equipped trail's boost.
+-- Max Stamina from everything the player owns: the base plus Max Stamina bought in the shop and trained on their
+-- training stick, times their doublings, times their equipped trail's boost.
 function Stats.maxStamina(data): number
-	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, data.MaxStaminaBonus or 0, data.StaminaMultiplier or 1)
-		* Stats.trailMultiplier(data)
+	local bonus = (data.MaxStaminaBonus or 0) + (data.TrainedStamina or 0)
+	return Shop.maxStamina(Tuning.BASE_MAX_STAMINA, bonus, data.StaminaMultiplier or 1) * Stats.trailMultiplier(data)
 end
 
 return Stats

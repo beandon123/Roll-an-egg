@@ -1,5 +1,5 @@
--- The shop panel: a featured pen upgrade, server luck boosts, Max Stamina, dollar packs, and game passes
--- (Config/Shop). Buttons only ask the server; the server checks prices and shows Roblox's purchase prompt.
+-- The shop panel: featured upgrades (the training stick's next tier, and the pen's next level), server luck boosts,
+-- Max Stamina, dollar packs, and game passes (Config/Shop). Buttons only ask the server; the server checks prices and shows Roblox's purchase prompt.
 
 local Load = require(script.Parent.Parent.Load)
 local Net = Load.shared("Net")
@@ -7,6 +7,7 @@ local NumberFormat = Load.shared("NumberFormat")
 local Shop = Load.shared("Config", "Shop")
 
 local Theme = require(script.Parent.Theme)
+local TrainingUi = require(script.Parent.TrainingUi)
 local UiState = require(script.Parent.UiState)
 local Widgets = require(script.Parent.Widgets)
 
@@ -220,7 +221,7 @@ local function penCard(scope)
 
 	return scope:New("Frame")({
 		Name = "PenUpgrade",
-		LayoutOrder = 2,
+		LayoutOrder = 3,
 		Size = UDim2.new(1, -8, 0, 262),
 		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
@@ -712,7 +713,7 @@ function ShopPanel.build(scope)
 	})
 
 	local contents = {
-		Featured = penCard(scope),
+		Featured = { TrainingUi.stickCard(scope, 2), penCard(scope) },
 		Luck = productGrid(scope, "Luck", Theme.Sections.Luck, 2),
 		Stamina = { doublingCard(scope), productGrid(scope, "Stamina", Theme.Sections.Stamina, 3, 3) },
 		Dollars = productGrid(scope, "Dollars", Theme.Sections.Dollars, 3),

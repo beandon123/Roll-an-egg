@@ -1,5 +1,6 @@
 -- The Eggs and Pets tabs on the right of the screen, built with Fusion, and the Ride button under them:
---     Eggs  the eggs the player has claimed; Place puts one down where they stand in their pen
+--     Eggs  the eggs the player has claimed (they are in the Roblox inventory too); Hold puts one in their hand,
+--           ready to click a spot in their pen
 --     Pets  the eggs hatching in the pen, each with its countdown, and every pet that has hatched: put it in the
 --           pen or take it out, ride it, or sell it; Equip best fills the pen with the best ones
 --     Ride  gets on the chosen pet, or off it
@@ -103,24 +104,140 @@ local function label(scope, props)
 	})
 end
 
--- An egg shape in its rarity colour, with a glint.
+-- How wide an egg is at each height, from its narrow top (v = -1) to its round bottom (v = 1): half its width, as a
+-- fraction of its widest.
+local function eggHalfWidth(v: number): number
+	return math.sqrt(math.max(0, 1 - v * v)) * (0.8 + 0.14 * v) / 0.84
+end
+
+-- An egg shape drawn from thin horizontal slices (no image needed), filling its parent (best about 0.78 as wide as
+-- it is tall), in one colour.
+local function eggSlices(scope, name: string, color: Color3, slices: number, inset: number)
+	local parts = {}
+	for index = 0, slices - 1 do
+		local v = (index + 0.5) / slices * 2 - 1
+		local width = eggHalfWidth(v) * (1 - inset * 2)
+		table.insert(
+			parts,
+			scope:New("Frame")({
+				Name = "Slice" .. index,
+				AnchorPoint = Vector2.new(0.5, 0),
+				Position = UDim2.fromScale(0.5, inset + (1 - inset * 2) * index / slices),
+				-- A hair taller than its share, so no line shows between slices.
+				Size = UDim2.new(width, 0, (1 - inset * 2) / slices, 1),
+				BackgroundColor3 = color,
+				BorderSizePixel = 0,
+			})
+		)
+	end
+	return scope:New("Frame")({
+		Name = name,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		[Children] = parts,
+	})
+end
+
+-- A shine on the egg's upper left.
+local function eggShine(scope)
+	return scope:New("Frame")({
+		Name = "Shine",
+		Position = UDim2.fromScale(0.24, 0.2),
+		Size = UDim2.fromScale(0.17, 0.27),
+		Rotation = 18,
+		BackgroundColor3 = WHITE,
+		BackgroundTransparency = 0.35,
+		[Children] = { scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }) },
+	})
+end
+
+-- The Eggs tab's picture: a speckled cream egg with a dark outline and a shine.
+function Panels.eggPicture(scope, props: { Size: UDim2, Position: UDim2?, AnchorPoint: Vector2? })
+	local speckles = {}
+	for index, spot in { { 0.62, 0.38, 0.1 }, { 0.42, 0.62, 0.08 }, { 0.68, 0.7, 0.07 }, { 0.3, 0.45, 0.06 } } do
+		table.insert(
+			speckles,
+			scope:New("Frame")({
+				Name = "Speckle" .. index,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(spot[1], spot[2]),
+				Size = UDim2.fromScale(spot[3], spot[3] * 0.78),
+				BackgroundColor3 = Color3.fromRGB(196, 150, 104),
+				BorderSizePixel = 0,
+				[Children] = { scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }) },
+			})
+		)
+	end
+	return scope:New("Frame")({
+		Name = "EggPicture",
+		AnchorPoint = props.AnchorPoint,
+		Position = props.Position,
+		Size = props.Size,
+		BackgroundTransparency = 1,
+		[Children] = {
+			eggSlices(scope, "Outline", Color3.fromRGB(46, 34, 30), 28, 0),
+			eggSlices(scope, "Shell", Color3.fromRGB(255, 244, 222), 28, 0.07),
+			speckles,
+			eggShine(scope),
+		},
+	})
+end
+
+-- The Pets tab's picture: a paw print, a big pad and four toe pads, each with a dark outline.
+function Panels.pawPicture(scope, props: { Size: UDim2, Position: UDim2?, AnchorPoint: Vector2? })
+	local fill = Color3.fromRGB(255, 240, 222)
+	-- Each pad twice: its outline underneath, its fill on top, so where pads overlap no outline shows inside.
+	local function pad(name: string, x: number, y: number, width: number, height: number, rotation: number, outline)
+		return scope:New("Frame")({
+			Name = name .. (if outline then "Outline" else ""),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(x, y),
+			Size = UDim2.fromScale(width, height),
+			Rotation = rotation,
+			BackgroundColor3 = fill,
+			ZIndex = if outline then 1 else 2,
+			[Children] = {
+				scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }),
+				if outline then scope:New("UIStroke")({ Color = Color3.fromRGB(70, 34, 20), Thickness = 3 }) else nil,
+			},
+		})
+	end
+	local pads = {
+		-- The big pad: two overlapping rounds make it wider at the top, like a real one.
+		{ "PadBottom", 0.5, 0.74, 0.46, 0.34, 0 },
+		{ "PadTop", 0.5, 0.64, 0.56, 0.34, 0 },
+		{ "ToeOuterLeft", 0.14, 0.4, 0.18, 0.25, -28 },
+		{ "ToeLeft", 0.36, 0.17, 0.19, 0.27, -10 },
+		{ "ToeRight", 0.64, 0.17, 0.19, 0.27, 10 },
+		{ "ToeOuterRight", 0.86, 0.4, 0.18, 0.25, 28 },
+	}
+	local parts = {}
+	for _, outline in { true, false } do
+		for _, spec in pads do
+			table.insert(parts, pad(spec[1], spec[2], spec[3], spec[4], spec[5], spec[6], outline))
+		end
+	end
+	return scope:New("Frame")({
+		Name = "PawPicture",
+		AnchorPoint = props.AnchorPoint,
+		Position = props.Position,
+		Size = props.Size,
+		BackgroundTransparency = 1,
+		[Children] = parts,
+	})
+end
+
+-- An egg shape in its rarity colour, with a shine.
 local function eggIcon(scope, rarity: string, size: number)
 	return scope:New("Frame")({
 		Name = "Icon",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 8),
 		Size = UDim2.fromOffset(size * 0.78, size),
-		BackgroundColor3 = Panels.rarityColor(rarity),
+		BackgroundTransparency = 1,
 		[Children] = {
-			scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }),
-			scope:New("UIStroke")({ Color = Color3.new(0, 0, 0), Thickness = 2, Transparency = 0.4 }),
-			scope:New("Frame")({
-				Position = UDim2.fromScale(0.22, 0.18),
-				Size = UDim2.fromScale(0.2, 0.22),
-				BackgroundColor3 = WHITE,
-				BackgroundTransparency = 0.45,
-				[Children] = { scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }) },
-			}),
+			eggSlices(scope, "Shell", Panels.rarityColor(rarity), 14, 0),
+			eggShine(scope),
 		},
 	})
 end
@@ -196,17 +313,17 @@ local function eggCard(scope, item)
 				TextSize = 11,
 			}),
 			scope:New("TextButton")({
-				Name = "Place",
+				Name = "Hold",
 				AnchorPoint = Vector2.new(0.5, 1),
 				Position = UDim2.new(0.5, 0, 1, -6),
 				Size = UDim2.new(1, -12, 0, 26),
 				BackgroundColor3 = GO,
 				Font = Enum.Font.GothamBold,
-				Text = "Place",
+				Text = "Hold",
 				TextColor3 = WHITE,
 				TextSize = 14,
 				[OnEvent("Activated")] = function()
-					UiState.actions.placeEgg(item.uid)
+					UiState.actions.holdEgg(item.kind)
 				end,
 				[Children] = { corner(scope, 8) },
 			}),
@@ -624,8 +741,8 @@ local function panel(scope)
 								return ""
 							end
 							return if use(UiState.panel) == "Eggs"
-								then "Claim eggs on the runway, then place them here to hatch."
-								else "Place eggs in your nests: they hatch into pets."
+								then "Claim eggs on the runway, then put them down in your pen to hatch."
+								else "Put eggs down in your pen: they hatch into pets."
 						end),
 						Color = MUTED,
 						TextSize = 14,
@@ -668,7 +785,7 @@ local function panel(scope)
 									if #use(UiState.eggs) == 0 then
 										return "No eggs yet: ride one to the end of its claim meter!"
 									end
-									return `Stand in your pen to put eggs down ({math.max(0, free)} of {use(
+									return `Hold an egg, then click a spot in your pen ({math.max(0, free)} of {use(
 										UiState.eggCapacity
 									)} free)`
 								end)
@@ -756,23 +873,32 @@ local function panel(scope)
 	})
 end
 
--- A big button down the right edge that opens a panel, with a count badge.
-local function tabButton(scope, name: string, order: number, color: Color3, badge)
+-- A big button down the right edge that opens a panel: its picture, its name under it, and a count badge.
+local function tabButton(scope, name: string, order: number, color: Color3, badge, picture)
 	return scope:New("TextButton")({
 		Name = name .. "Tab",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(84, 84),
 		BackgroundColor3 = color,
-		Font = Enum.Font.FredokaOne,
-		Text = string.upper(name),
-		TextColor3 = WHITE,
-		TextSize = 20,
-		TextStrokeTransparency = 0.5,
+		Text = "",
 		[OnEvent("Activated")] = function()
 			local current = Fusion.peek(UiState.panel)
 			UiState.actions.openPanel(if current == name then "None" else name)
 		end,
 		[Children] = {
+			picture,
+			scope:New("TextLabel")({
+				Name = "Label",
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -3),
+				Size = UDim2.new(1, 0, 0, 18),
+				BackgroundTransparency = 1,
+				Font = Enum.Font.FredokaOne,
+				Text = string.upper(name),
+				TextColor3 = WHITE,
+				TextSize = 16,
+				TextStrokeTransparency = 0.3,
+			}),
 			corner(scope, 16),
 			scope:New("UIStroke")({
 				Color = Color3.new(0, 0, 0),
@@ -784,6 +910,7 @@ local function tabButton(scope, name: string, order: number, color: Color3, badg
 				Name = "Badge",
 				AnchorPoint = Vector2.new(1, 0),
 				Position = UDim2.new(1, 6, 0, -6),
+				ZIndex = 3,
 				Size = UDim2.fromOffset(30, 26),
 				BackgroundColor3 = Color3.fromRGB(230, 50, 60),
 				Font = Enum.Font.GothamBold,
@@ -822,9 +949,25 @@ function Panels.build(scope)
 					EGGS_COLOR,
 					scope:Computed(function(use)
 						return #use(UiState.eggs)
-					end)
+					end),
+					Panels.eggPicture(scope, {
+						AnchorPoint = Vector2.new(0.5, 0),
+						Position = UDim2.new(0.5, 0, 0, 7),
+						Size = UDim2.fromOffset(44, 56),
+					})
 				),
-				tabButton(scope, "Pets", 2, PETS_COLOR, UiState.newPets),
+				tabButton(
+					scope,
+					"Pets",
+					2,
+					PETS_COLOR,
+					UiState.newPets,
+					Panels.pawPicture(scope, {
+						AnchorPoint = Vector2.new(0.5, 0),
+						Position = UDim2.new(0.5, 0, 0, 9),
+						Size = UDim2.fromOffset(54, 52),
+					})
+				),
 				-- Get on the chosen pet, or off it (only once one has been chosen).
 				scope:New("TextButton")({
 					Name = "RideTab",

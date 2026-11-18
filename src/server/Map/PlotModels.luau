@@ -6,6 +6,7 @@
 --                    ProximityPrompt), with its price above it
 --     Eggs           the eggs hatching in the pen, each on a little straw bed with a countdown board above it
 --                    (filled in on each client by HatchController)
+--     TrainingStick  the owner's training stick, in the plaza on the other side of the gate (Map/TrainingStand)
 -- PlotService builds them and keeps them up to date.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,6 +17,8 @@ local NumberFormat = require(Shared.NumberFormat)
 local PetWorth = require(Shared.PetWorth)
 local Plots = require(Shared.Plots)
 local Runway = require(Shared.Runway)
+
+local TrainingStand = require(script.Parent.TrainingStand)
 
 local PlotModels = {}
 
@@ -339,6 +342,7 @@ function PlotModels.buildPlot(parent: Instance, index: number): Model
 
 	buildButton(model, index)
 	PlotModels.setButton(model, 1, PetWorth.penUpgradeCost(1))
+	TrainingStand.build(model, index)
 
 	local eggs = Instance.new("Folder")
 	eggs.Name = "Eggs"

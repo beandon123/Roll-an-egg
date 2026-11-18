@@ -44,7 +44,7 @@ Theme.Sections = {
 		icon = "⭐",
 		light = rgb(255, 160, 96),
 		deep = rgb(255, 88, 104),
-		blurb = "Make room for more pets",
+		blurb = "Better training sticks and bigger pens",
 	},
 	Luck = {
 		name = "Luck",

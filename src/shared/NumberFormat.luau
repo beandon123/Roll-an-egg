@@ -39,6 +39,15 @@ function NumberFormat.abbreviate(n: number): string
 	return sign .. trim(scaled, decimals) .. SUFFIXES[tier]
 end
 
+-- Like abbreviate, but a small number that is not whole keeps one decimal: 1.5 -> "1.5", 7.25 -> "7.2", 4 -> "4",
+-- 2500 -> "2.5K". For amounts gained, such as Max Stamina from one roll on the training stick with a x1.5 trail.
+function NumberFormat.amount(n: number): string
+	if n == n and math.abs(n) < 100 and math.abs(n - math.floor(n)) >= 0.05 then
+		return trim(n, 1)
+	end
+	return NumberFormat.abbreviate(n)
+end
+
 -- Seconds as "m:ss".
 function NumberFormat.clock(seconds: number): string
 	local whole = math.max(0, math.ceil(seconds))

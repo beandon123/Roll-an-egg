@@ -14,34 +14,44 @@ local EVENTS = {
 	"EggMounted", -- (eggId, userId, time)
 	"EggLeft", -- (eggId, time, lateral, cracking): rider gone; if cracking, the egg bounces once then cracks
 	"EggClaimed", -- (eggId, userId, rarity, kind): in that player's inventory now; they may still be riding it
+	"EggSlowed", -- (eggId, slow): the egg ran into something and slows down for a moment (Shared/EggMotion)
 	"Announce", -- (text, colorRgb?)
 	"LuckChanged", -- (boosts): see LuckBoost
 	-- Server -> one player
 	"RideStarted", -- (eggId, { startTime, startStamina, drain, claimTime, combo })
-	"RideEnded", -- (reason, { eggId, zone, rarity, kind }): Dismount, ThrownOff, KnockedOff, Hazard, HitWall,
-	-- FellOff, Died, Left
+	"RideEnded", -- (reason, { eggId, zone, rarity, kind }): Dismount, ThrownOff, Died, Left
 	"StaminaChanged", -- (value, time, rate, max): see StaminaMath
 	"ObstacleHit", -- (obstacleId, tier, lateral): the rider's egg hit an obstacle (Shared/Obstacles)
+	"EdgeHit", -- (lateral): the rider's egg bounced off the side of the runway, back to `lateral`
 	"InventoryChanged", -- ({ eggs, hatching, pets, penLevel, ... }): see Logic/Hatchery's state()
 	"PetHatched", -- (pet): one of the player's eggs has hatched
 	"DollarsChanged", -- (dollars, incomePerSecond)
 	"Notice", -- (text, colorRgb?): a message for this player alone
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
-	"PlayerStateUpdated", -- ({ dollars, penLevel, passes }): sent whenever any of them changes
+	"PetBucked", -- (petKind): the player's stamina ran out on their pet, and it bucked them off
+	"PlayerStateUpdated", -- ({ dollars, penLevel, stickLevel, passes }): sent whenever any of them changes
 	"PurchaseResult", -- (itemId, ok, message)
 	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
+	"TrainingStarted", -- ({ level, plot }): the player is rolling on their training stick (Config/Sticks)
+	"TrainingEnded", -- (reason): Stopped, Died, Left, Moved
+	"TrainingRep", -- (gain, boosted): one rep; gain is the Max Stamina it added, multipliers and all
+	"TrainingBubble", -- (bubbleId, endsAt): a "2x" bubble to tap before endsAt (server time)
+	"TrainingBoost", -- (endsAt): the bubble was tapped in time; reps count double until endsAt
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
 	"ReportHit", -- (obstacleId): the rider's device saw their egg hit an obstacle
-	"PlaceEgg", -- (eggUid): put an egg from the inventory down where the player stands in their pen
+	"ReportEdge", -- (): the rider's device saw their egg hit the side of the runway
+	"PlaceEgg", -- (eggUid, x, z): put an egg from the inventory down at that spot in the player's pen
 	"SetInPen", -- (petUid, inPen): put a pet in the pen or take it out
 	"EquipBest", -- (): fill the pen with the player's best pets
 	"SellPet", -- (petUid)
 	"RidePet", -- (petUid or ""): ride a pet, or get off
 	"RequestPurchase", -- (itemId) a Robux item from Config/Shop; the server shows Roblox's purchase prompt
-	"BuyWithDollars", -- (itemId) an item with a dollar price
+	"BuyWithDollars", -- (itemId) an item with a dollar price: the next pen level or training stick tier
 	"SaveSettings", -- ({ [key]: value }) see Config/Settings
+	"StopTraining", -- (): get off the training stick
+	"ClaimTrainingBoost", -- (bubbleId): the player tapped a "2x" bubble
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.
@@ -52,7 +62,7 @@ local UNRELIABLE_EVENTS = {
 
 local FUNCTIONS = {
 	"GetSnapshot", -- player -> server: () -> { eggs, inventory, ... }
-	"GetShopState", -- player -> server: () -> { dollars, penLevel, passes, luck }
+	"GetShopState", -- player -> server: () -> { dollars, penLevel, stickLevel, passes, luck }
 	"GetSettings", -- player -> server: () -> { [key]: value }
 	"AdminCommand", -- player -> server: (command, args) -> (ok, message, data?); admins only (see AdminService)
 	"GetTrails", -- player -> server: () -> { owned, equipped }

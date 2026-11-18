@@ -9,17 +9,24 @@
 --     trails   the Trails stall's panel open, a few trails owned (trails-end: scrolled to the last trails)
 --     sell     the Sell stall's panel open
 --     shop     the shop open
+--     eggs     the Eggs panel open
+--     secret   the message (big white letters) when a Secret egg spawns
+--     stick    the training stick's upgrade panel (from the sign beside the stick), the stick at its third tier
+--     training rolling on the training stick: its card, a 2x boost running and a "2x" bubble to tap
 -- The page draws a 1280 x 720 screen; add #w=844&h=390 to the address for a phone held sideways.
 --
 -- It runs the game's own client scripts in the Studio stand-in (tests/studio), then turns the HUD's GUI objects into
--- HTML: frames, text, corners, outlines, gradients, list layouts, padding and scaling. It is a close sketch, not
--- Roblox's renderer: fonts are the nearest web fonts, emoji are the browser's, and text sizes are approximate.
+-- HTML: frames, text, corners, outlines, gradients, list and grid layouts, padding, automatic sizes and scaling, and
+-- the models in 3D previews (ViewportFrames) as flat-shaded drawings. It is a close sketch, not Roblox's renderer:
+-- fonts are the nearest web fonts, emoji are the browser's, and text sizes are approximate.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
 local Vector2 = roblox.Vector2
+local Vector3new = roblox.Vector3.new
+local Vector3zero = roblox.Vector3.zero
 
 local Studio = require("../tests/studio")
 
@@ -77,9 +84,36 @@ elseif scene == "sell" then
 	UiState.openPanel:set("Sell")
 elseif scene == "shop" then
 	UiState.openPanel:set("Shop")
+elseif scene == "eggs" then
+	UiState.actions.openPanel("Eggs")
+elseif scene == "secret" then
+	UiState.showAnnouncement(
+		"SECRET EGG SPAWNED!",
+		"Start of the Volcano zone at 7:55:46 PM",
+		roblox.Color3.new(0, 0, 0),
+		60
+	)
+elseif scene == "stick" then
+	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
+	UiState.openPanel:set("Stick")
+elseif scene == "training" then
+	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
+	session:fromServer("TrainingStarted", { level = 3, plot = 1, startedAt = session.clock })
+	for _ = 1, 37 do
+		session:fromServer("TrainingRep", 7.5, false)
+	end
+	session:fromServer("TrainingBoost", session.clock + 60)
 end
 -- Long enough for the panels' springs to settle.
 session:renderFrame(1 / 30, 90)
+if scene == "training" then
+	-- A bubble that has just finished popping in, up and to the left of the player.
+	session:fromServer("TrainingBubble", 1, session.clock + 60)
+	session:renderFrame(1 / 30, 30)
+	UiState.trainingBubble:set({ id = 1, endsAt = session.clock + 60, x = 0.33, y = 0.36 })
+	UiState.bubbleLeft:set(0.7)
+	session:renderFrame(1 / 30)
+end
 if scene == "trails-end" then
 	-- Scrolled along to the fanciest trails.
 	playerGui.Hud.Root.Trails.Body.Scroll.CanvasPosition = Vector2.new(1100, 0)
@@ -105,7 +139,12 @@ local function css(color, transparency: number?): string
 	)
 end
 
+-- Plain pixels when there is no Scale part: inside a box whose height comes from its contents, a height such as
+-- calc(0% + 70px) counts as auto, not 70px.
 local function udim(value): string
+	if value.Scale == 0 then
+		return string.format("%.2fpx", value.Offset)
+	end
 	return string.format("calc(%.4f%% + %.2fpx)", value.Scale * 100, value.Offset)
 end
 
@@ -184,15 +223,152 @@ local function textShadow(stroke): string
 	return table.concat(parts, ", ")
 end
 
+-- A ViewportFrame's models, drawn from its camera as an SVG of flat-shaded faces, furthest first. Blocks are boxes;
+-- cylinders and balls are twelve-sided prisms.
+local SIDES = 12
+local function viewportSvg(viewport): string
+	-- (Lune cannot read CurrentCamera back; the previews keep their camera inside them.)
+	local camera = viewport:FindFirstChildOfClass("Camera")
+	if camera == nil then
+		return ""
+	end
+	local width = if viewport.Size.X.Scale == 0 then viewport.Size.X.Offset else 68
+	local height = viewport.Size.Y.Offset
+	if width <= 0 or height <= 0 then
+		return ""
+	end
+	local view = camera.CFrame
+	local eye = view.Position
+	local tanHalf = math.tan(math.rad(camera.FieldOfView) / 2)
+	local light = viewport.LightDirection.Unit
+	local tint = viewport.ImageColor3
+	local faces = {}
+	local function project(point)
+		local p = view:PointToObjectSpace(point)
+		local depth = -p.Z
+		if depth <= 0.05 then
+			return nil, depth
+		end
+		local x = p.X / (depth * tanHalf * width / height)
+		local y = p.Y / (depth * tanHalf)
+		return string.format("%.1f,%.1f", (x * 0.5 + 0.5) * width, (-y * 0.5 + 0.5) * height), depth
+	end
+	local function addFace(part, corners)
+		local a, b, c = corners[1], corners[2], corners[3]
+		local normal = (b - a):Cross(c - a)
+		if normal.Magnitude < 1e-6 then
+			return
+		end
+		normal = normal.Unit
+		local middle = Vector3zero
+		for _, corner in corners do
+			middle += corner
+		end
+		middle /= #corners
+		if normal:Dot(middle - eye) >= 0 then
+			return
+		end
+		local points, depth = {}, 0
+		for _, corner in corners do
+			local point, d = project(corner)
+			if point == nil then
+				return
+			end
+			table.insert(points, point)
+			depth += d
+		end
+		local shade = if part.Material.Name == "Neon" then 1 else 0.55 + 0.5 * math.max(0, -normal:Dot(light))
+		local color = part.Color
+		table.insert(faces, {
+			depth = depth / #corners,
+			svg = string.format(
+				'<polygon points="%s" fill="rgb(%d,%d,%d)" fill-opacity="%.2f"/>',
+				table.concat(points, " "),
+				math.min(255, math.round(color.R * tint.R * shade * 255)),
+				math.min(255, math.round(color.G * tint.G * shade * 255)),
+				math.min(255, math.round(color.B * tint.B * shade * 255)),
+				1 - part.Transparency * 0.6
+			),
+		})
+	end
+	for _, part in viewport:GetDescendants() do
+		if part:IsA("BasePart") and part.Transparency < 1 then
+			local frame, size = part.CFrame, part.Size
+			local shape = if part:IsA("Part") then part.Shape.Name else "Block"
+			if shape == "Block" then
+				local h = size / 2
+				local function corner(x, y, z)
+					return frame * Vector3new(x * h.X, y * h.Y, z * h.Z)
+				end
+				for _, face in
+					{
+						{ { 1, -1, -1 }, { 1, 1, -1 }, { 1, 1, 1 }, { 1, -1, 1 } },
+						{ { -1, -1, 1 }, { -1, 1, 1 }, { -1, 1, -1 }, { -1, -1, -1 } },
+						{ { -1, 1, -1 }, { -1, 1, 1 }, { 1, 1, 1 }, { 1, 1, -1 } },
+						{ { -1, -1, 1 }, { -1, -1, -1 }, { 1, -1, -1 }, { 1, -1, 1 } },
+						{ { -1, -1, 1 }, { 1, -1, 1 }, { 1, 1, 1 }, { -1, 1, 1 } },
+						{ { 1, -1, -1 }, { -1, -1, -1 }, { -1, 1, -1 }, { 1, 1, -1 } },
+					}
+				do
+					local corners = {}
+					for _, c in face do
+						table.insert(corners, corner(c[1], c[2], c[3]))
+					end
+					addFace(part, corners)
+				end
+			else
+				-- Along the part's X axis; a ball is as long as it is wide.
+				local radius = math.min(size.Y, size.Z) / 2
+				local half = if shape == "Ball" then radius else size.X / 2
+				local function ring(x)
+					local points = {}
+					for step = 0, SIDES - 1 do
+						local angle = step / SIDES * math.pi * 2
+						table.insert(points, frame * Vector3new(x, math.cos(angle) * radius, math.sin(angle) * radius))
+					end
+					return points
+				end
+				local near, far = ring(half), ring(-half)
+				for step = 1, SIDES do
+					local nextStep = step % SIDES + 1
+					addFace(part, { near[step], far[step], far[nextStep], near[nextStep] })
+				end
+				addFace(part, near)
+				local reversed = {}
+				for index = SIDES, 1, -1 do
+					table.insert(reversed, far[index])
+				end
+				addFace(part, reversed)
+			end
+		end
+	end
+	table.sort(faces, function(a, b)
+		return a.depth > b.depth
+	end)
+	local svg = {}
+	for _, face in faces do
+		table.insert(svg, face.svg)
+	end
+	return string.format(
+		'<svg viewBox="0 0 %d %d" preserveAspectRatio="xMidYMid meet" '
+			.. 'style="position:absolute;inset:0;width:100%%;height:100%%;pointer-events:none">%s</svg>',
+		width,
+		height,
+		table.concat(svg)
+	)
+end
+
 local ALIGN_X = { Left = "flex-start", Center = "center", Right = "flex-end" }
 local ALIGN_Y = { Top = "flex-start", Center = "center", Bottom = "flex-end" }
 
 local render
 
--- The children of a GUI object, inside a box inset by its UIPadding and laid out by its UIListLayout.
-local function renderChildren(object): string
+-- The children of a GUI object, inside a box inset by its UIPadding and laid out by its UIListLayout or
+-- UIGridLayout. `inFlow` is for an object sized by its children (AutomaticSize): their box then takes up room in it.
+local function renderChildren(object, inFlow: boolean?): string
 	local html = {}
 	local list = childOfClass(object, "UIListLayout")
+	local grid = childOfClass(object, "UIGridLayout")
 	local padding = childOfClass(object, "UIPadding")
 	local children = {}
 	for index, child in object:GetChildren() do
@@ -203,7 +379,7 @@ local function renderChildren(object): string
 	if #children == 0 then
 		return ""
 	end
-	if list then
+	if list or grid then
 		table.sort(children, function(a, b)
 			if a.child.LayoutOrder ~= b.child.LayoutOrder then
 				return a.child.LayoutOrder < b.child.LayoutOrder
@@ -211,17 +387,32 @@ local function renderChildren(object): string
 			return a.index < b.index
 		end)
 	end
+	local layout = if list then "list" elseif grid then "grid" else nil
 	for _, entry in children do
-		table.insert(html, render(entry.child, list ~= nil))
+		table.insert(html, render(entry.child, layout))
 	end
-	local style = { "position:absolute" }
-	if padding then
-		table.insert(style, `top:{udim(padding.PaddingTop)}`)
-		table.insert(style, `bottom:{udim(padding.PaddingBottom)}`)
-		table.insert(style, `left:{udim(padding.PaddingLeft)}`)
-		table.insert(style, `right:{udim(padding.PaddingRight)}`)
+	local style = {}
+	if inFlow then
+		-- In the flow, so the object grows to fit. The padding becomes margins rather than CSS padding, so children
+		-- placed by Position still measure from inside it, as they do in the inset box below.
+		table.insert(style, "position:relative")
+		if padding then
+			local sides = { padding.PaddingTop, padding.PaddingRight, padding.PaddingBottom, padding.PaddingLeft }
+			for index, side in sides do
+				sides[index] = udim(side)
+			end
+			table.insert(style, `margin:{table.concat(sides, " ")}`)
+		end
 	else
-		table.insert(style, "inset:0")
+		table.insert(style, "position:absolute")
+		if padding then
+			table.insert(style, `top:{udim(padding.PaddingTop)}`)
+			table.insert(style, `bottom:{udim(padding.PaddingBottom)}`)
+			table.insert(style, `left:{udim(padding.PaddingLeft)}`)
+			table.insert(style, `right:{udim(padding.PaddingRight)}`)
+		else
+			table.insert(style, "inset:0")
+		end
 	end
 	if list then
 		local row = list.FillDirection.Name == "Horizontal"
@@ -229,6 +420,23 @@ local function renderChildren(object): string
 		table.insert(style, `gap:{udim(list.Padding)}`)
 		local x, y = ALIGN_X[list.HorizontalAlignment.Name], ALIGN_Y[list.VerticalAlignment.Name]
 		table.insert(style, `justify-content:{if row then x else y};align-items:{if row then y else x}`)
+	elseif grid then
+		-- Cells of CellSize, CellPadding apart, filling a line before starting the next. auto-fit fits as many cells
+		-- on a line as there is room for and drops the unused ones, so the alignment centres the cells there are,
+		-- as Roblox does. StartCorner is always drawn as TopLeft.
+		local cell, gap = grid.CellSize, grid.CellPadding
+		local maxCells = grid.FillDirectionMaxCells
+		local count = if maxCells > 0 then tostring(math.min(maxCells, #children)) else "auto-fit"
+		table.insert(style, `display:grid;gap:{udim(gap.Y)} {udim(gap.X)}`)
+		if grid.FillDirection.Name == "Vertical" then
+			table.insert(style, `grid-auto-flow:column;grid-template-rows:repeat({count}, {udim(cell.Y)})`)
+			table.insert(style, `grid-auto-columns:{udim(cell.X)}`)
+		else
+			table.insert(style, `grid-template-columns:repeat({count}, {udim(cell.X)})`)
+			table.insert(style, `grid-auto-rows:{udim(cell.Y)}`)
+		end
+		local x, y = ALIGN_X[grid.HorizontalAlignment.Name], ALIGN_Y[grid.VerticalAlignment.Name]
+		table.insert(style, `justify-content:{x};align-content:{y}`)
 	end
 	if object:IsA("ScrollingFrame") then
 		local scroll = object.CanvasPosition
@@ -237,15 +445,19 @@ local function renderChildren(object): string
 	return `<div class="content" style="{table.concat(style, ";")}">{table.concat(html)}</div>`
 end
 
-function render(object, inList: boolean): string
+-- `layout` is "list" or "grid" when the object's parent has a UIListLayout or UIGridLayout, which places it instead
+-- of its Position (and, for a grid, sizes it instead of its Size).
+function render(object, layout: string?): string
 	if not object.Visible then
 		return ""
 	end
 	local style = {}
 	local size = object.Size
-	local automatic = object.AutomaticSize.Name
-	local width = if automatic == "X" or automatic == "XY" then "max-content" else udim(size.X)
-	local height = if automatic == "Y" or automatic == "XY" then "max-content" else udim(size.Y)
+	local automatic = if layout == "grid" then "None" else object.AutomaticSize.Name
+	local autoX = automatic == "X" or automatic == "XY"
+	local autoY = automatic == "Y" or automatic == "XY"
+	local width = if layout == "grid" then "100%" elseif autoX then "max-content" else udim(size.X)
+	local height = if layout == "grid" then "100%" elseif autoY then "max-content" else udim(size.Y)
 	local constraint = childOfClass(object, "UISizeConstraint")
 	if constraint then
 		if constraint.MaxSize.X < 1e9 then
@@ -256,12 +468,18 @@ function render(object, inList: boolean): string
 		end
 	end
 	table.insert(style, `width:{width};height:{height}`)
-	if automatic == "X" or automatic == "XY" then
+	-- An automatic size grows from Size, never shrinks below it.
+	if autoX then
 		table.insert(style, `min-width:{udim(size.X)}`)
 	end
+	if autoY then
+		table.insert(style, `min-height:{udim(size.Y)}`)
+	end
 	local transforms = {}
-	if inList then
+	if layout == "list" then
 		table.insert(style, "position:relative;flex-shrink:0")
+	elseif layout == "grid" then
+		table.insert(style, "position:relative")
 	else
 		table.insert(style, "position:absolute")
 		table.insert(style, `left:{udim(object.Position.X)};top:{udim(object.Position.Y)}`)
@@ -339,7 +557,10 @@ function render(object, inList: boolean): string
 		table.insert(style, `box-shadow:0 0 0 {stroke.Thickness}px {css(stroke.Color, stroke.Transparency)}`)
 	end
 
-	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{textHtml}{renderChildren(object)}</div>`
+	-- A frame sized by its children has them in its flow. (Text that sizes its label is already in the flow above.)
+	local children = renderChildren(object, (autoX or autoY) and not isText)
+	local drawing = if object:IsA("ViewportFrame") then viewportSvg(object) else ""
+	return `<div data-name="{escape(object.Name)}" style="{table.concat(style, ";")}">{drawing}{textHtml}{children}</div>`
 end
 
 local hud = playerGui:FindFirstChild("Hud")

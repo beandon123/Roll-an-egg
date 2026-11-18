@@ -105,6 +105,7 @@ end
 fakeEvent("RunService", "Heartbeat")
 fakeEvent("RunService", "RenderStepped")
 fakeEvent("RunService", "PreSimulation")
+fakeEvent("RunService", "Stepped")
 fakeEvent("Players", "PlayerAdded")
 fakeEvent("Players", "PlayerRemoving")
 fakeEvent("Player", "CharacterAdded")
@@ -114,6 +115,9 @@ fakeEvent("BaseRemoteEvent", "OnServerEvent")
 fakeEvent("BaseRemoteEvent", "OnClientEvent")
 fakeEvent("UserInputService", "JumpRequest")
 fakeEvent("GuiButton", "Activated")
+fakeEvent("Tool", "Activated")
+fakeEvent("Tool", "Equipped")
+fakeEvent("Tool", "Unequipped")
 fakeEvent("ProximityPrompt", "Triggered")
 fakeEvent("ProximityPromptService", "PromptTriggered")
 fakeEvent("GuiObject", "InputBegan")
@@ -279,6 +283,56 @@ roblox.implementMethod("Workspace", "BulkMoveTo", function(_, parts, cframes, mo
 	end
 end)
 
+-- Holding a tool moves it from the Backpack into the character, as Roblox does.
+roblox.implementMethod("Humanoid", "EquipTool", function(self, tool)
+	local character = self.Parent
+	for _, child in character:GetChildren() do
+		if child:IsA("Tool") then
+			child.Parent =
+				current.game:GetService("Players"):GetPlayerFromCharacter(character):FindFirstChildOfClass("Backpack")
+		end
+	end
+	tool.Parent = character
+end)
+roblox.implementMethod("Players", "GetPlayerFromCharacter", function(self, character)
+	for _, child in self:GetChildren() do
+		if child:IsA("Player") and child.Character == character then
+			return child
+		end
+	end
+	return nil
+end)
+
+-- Sounds do not play here; each one played is counted, by its SoundId.
+roblox.implementMethod("Sound", "Play", function(self)
+	current.soundsPlayed[self.SoundId] = (current.soundsPlayed[self.SoundId] or 0) + 1
+end)
+
+-- The pointer: tests set `session.pointerRay` (a Ray, for the mouse or the last tap) and `session.lastInputType`.
+roblox.implementMethod("Player", "GetMouse", function()
+	return {
+		UnitRay = current.pointerRay or roblox.Ray.new(roblox.Vector3.new(0, 100, 0), roblox.Vector3.new(0, -1, 0)),
+	}
+end)
+roblox.implementMethod("UserInputService", "GetLastInputType", function()
+	return current.lastInputType or Enum.UserInputType.MouseMovement
+end)
+roblox.implementMethod("Camera", "ViewportPointToRay", function(self)
+	return roblox.Ray.new(self.CFrame.Position, self.CFrame.LookVector)
+end)
+-- Raycasts only see the flat ground at the runway's height (y = 10), which is all the game asks them for.
+roblox.implementMethod("Workspace", "Raycast", function(_, origin, direction)
+	local groundY = 10
+	if direction.Y >= 0 or origin.Y < groundY then
+		return nil
+	end
+	local t = (groundY - origin.Y) / direction.Y
+	if t > 1 then
+		return nil
+	end
+	return { Position = origin + direction * t, Normal = roblox.Vector3.new(0, 1, 0) }
+end)
+
 roblox.implementMethod("Humanoid", "GetState", function(self)
 	return current.humanoidStates[self] or Enum.HumanoidStateType.Running
 end)
@@ -348,6 +402,13 @@ function Session:environment(scriptInstance)
 		ColorSequenceKeypoint = roblox.ColorSequenceKeypoint,
 		NumberSequence = roblox.NumberSequence,
 		NumberSequenceKeypoint = roblox.NumberSequenceKeypoint,
+		Ray = roblox.Ray,
+		-- Lune has no RaycastParams; raycasts here only see the ground anyway (see Workspace:Raycast above).
+		RaycastParams = {
+			new = function()
+				return { FilterDescendantsInstances = {} }
+			end,
+		},
 		utf8 = utf8,
 		TweenInfo = {
 			new = function(...)
@@ -461,6 +522,8 @@ function Session:addPlayer(userId: number, name: string)
 	character.PrimaryPart = root
 	character.Parent = self:service("Workspace")
 	player.Character = character
+	local backpack = Instance.new("Backpack")
+	backpack.Parent = player
 
 	if self.isServer then
 		signalOf(players, "PlayerAdded"):Fire(player)
@@ -516,12 +579,13 @@ function Session:heartbeat(deltaTime: number, count: number?)
 end
 
 -- Advances the clock and runs one rendered frame: render steps in priority order, then RenderStepped, then
--- PreSimulation (which comes after Roblox's animations).
+-- PreSimulation and Stepped (which in Roblox come after the character animations have run).
 function Session:renderFrame(deltaTime: number, count: number?)
 	current = self
 	local runService = self:service("RunService")
 	local renderStepped = signalOf(runService, "RenderStepped")
 	local preSimulation = signalOf(runService, "PreSimulation")
+	local stepped = signalOf(runService, "Stepped")
 	for _ = 1, count or 1 do
 		self.clock += deltaTime
 		for _, step in table.clone(self.renderSteps) do
@@ -529,6 +593,7 @@ function Session:renderFrame(deltaTime: number, count: number?)
 		end
 		renderStepped:Fire(deltaTime)
 		preSimulation:Fire(deltaTime)
+		stepped:Fire(self.clock, deltaTime)
 	end
 end
 
@@ -684,8 +749,8 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		game = roblox.deserializePlace(fs.readFile(placePath)),
 		isServer = options.isServer,
 		isStudio = if options.isStudio == nil then true else options.isStudio,
-		-- The shared server clock, in seconds. Starts partway through a runway cycle, well before it closes.
-		clock = 180 * 1000 + 5,
+		-- The shared server clock, in seconds. Starts 5 seconds into a (5-minute) runway cycle, well before it closes.
+		clock = 300 * 600 + 5,
 		signals = {},
 		values = {},
 		messages = {},
@@ -694,6 +759,11 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		overrides = {},
 		humanoidStates = {},
 		emitted = {},
+		-- SoundId -> how many times a sound with it was played.
+		soundsPlayed = {},
+		-- Where the pointer is (see Player:GetMouse) and what the player last used, for tests that set them.
+		pointerRay = nil,
+		lastInputType = nil,
 		invokeHandlers = {},
 		kicks = {},
 		prompts = {},

@@ -34,6 +34,27 @@ return function(harness)
 			end
 		end)
 
+		it("rolls eggs by rarity alone, from the Common speed up to twice as fast for the rarest", function()
+			local common = Rarities.Info.Common.rollSpeed
+			expect.equal(common, 27, "half as fast again as the first-pass 18 studs a second")
+			expect.equal(
+				Rarities.Info[Rarities.Order[#Rarities.Order]].rollSpeed,
+				common * 2,
+				"the rarest: twice as fast"
+			)
+			for _, rarity in Rarities.Order do
+				local speed = Rarities.Info[rarity].rollSpeed
+				expect.truthy(speed >= common and speed <= common * 2, rarity)
+				-- The same in every zone: all Mythic eggs roll at one speed.
+				for _, zone in Zones.List do
+					local spec = EggSpec.get(zone.id, rarity)
+					if spec then
+						expect.equal(spec.rollSpeed, speed, `{zone.name} {rarity}`)
+					end
+				end
+			end
+		end)
+
 		it("rolls every egg faster than walking, and slower than a pet of its own rarity runs", function()
 			local Economy = harness.load("src/shared/Config/Economy")
 			for _, rarity in Rarities.Order do
@@ -197,19 +218,20 @@ return function(harness)
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
-					expect.truthy(Runway.maxLateral(spec.halfLength) > 10, rarity .. " steering room")
+					expect.truthy(Runway.maxLateral(spec.halfLength, spec.startZ) > 10, rarity .. " steering room")
 				end
 			end
 		end)
 
-		it("lets every egg be claimed within a zone and a half of riding", function()
+		it("lets every egg be claimed within two and a half zones of riding", function()
 			-- The runway has no end (the last zone repeats), so a claim cannot run out of it; but claiming one egg
-			-- should not take a tour of the whole runway either.
+			-- should not take a tour of the whole runway either. (The rarest eggs roll fastest and take longest to
+			-- claim, so they go furthest.)
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					local rideDistance = spec.rollSpeed * spec.claimTime
-					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 1.5, zone.name .. " " .. rarity)
+					expect.truthy(rideDistance < Runway.zoneLength(zone.id) * 2.5, zone.name .. " " .. rarity)
 				end
 			end
 		end)
