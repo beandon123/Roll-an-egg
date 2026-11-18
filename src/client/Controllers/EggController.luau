@@ -716,7 +716,8 @@ function EggController.SetRider(eggId: number, userId: number)
 		return
 	end
 	-- A little way in from a bank, as on the server (Runway.mountLateral).
-	local lateral = Runway.mountLateral(currentLateral(egg, Workspace:GetServerTimeNow()), egg.spec.halfLength)
+	local now = Workspace:GetServerTimeNow()
+	local lateral = Runway.mountLateral(currentLateral(egg, now), egg.spec.halfLength, eggZ(egg, now))
 	egg.riderUserId = userId
 	egg.lateral = lateral
 	egg.targetLateral = lateral

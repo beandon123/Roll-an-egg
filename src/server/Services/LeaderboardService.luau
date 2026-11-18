@@ -163,7 +163,7 @@ local function buildBoard(parent: Instance)
 	end
 
 	-- Left of the start zone (as seen from the hub), turned to face the spawn.
-	local base = Vector3.new(Runway.WIDTH / 2 + 18, Runway.BASE_Y, -12)
+	local base = Vector3.new(Runway.START_WIDTH / 2 + 18, Runway.BASE_Y, -12)
 	local center = base + Vector3.new(0, POST_HEIGHT + BOARD_HEIGHT / 2, 0)
 	local facing = CFrame.lookAt(center, Vector3.new(0, center.Y, -Runway.HUB_LENGTH / 2))
 

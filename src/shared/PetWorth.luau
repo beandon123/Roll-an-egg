@@ -33,7 +33,7 @@ end
 
 -- How fast the pet carries a rider, in studs per second.
 function PetWorth.mountSpeed(pet: PetLike): number
-	return (Economy.MOUNT_SPEED[pet.rarity] or 22) + PetWorth.variant(pet.variant).speedBonus
+	return (Economy.MOUNT_SPEED[pet.rarity] or Economy.MOUNT_SPEED.Common) + PetWorth.variant(pet.variant).speedBonus
 end
 
 -- The variant a newly hatched pet comes out as, from a random number in [0, 1): the rarest is checked first.

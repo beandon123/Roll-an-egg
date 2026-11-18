@@ -7,10 +7,11 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level, 120-stud-wide runway through six
-  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric), each with its own checkered ground, stepped cliffs (a
-  boardwalk over a reef in the Ocean), plants and rocks, distant hills, and a gate with the zone's name (see
-  [The runway](#the-runway)). The banks down both sides are broken by fairly large gaps (marked with red strips).
+- The map: the hub with a painted START ZONE where the runway begins, then a level runway through six zones (Forest,
+  Desert, Snow, Ocean, Volcano, Prehistoric) that gets wider zone by zone, from 120 studs in the Forest to 220 in the
+  Prehistoric zone. Each zone has its own checkered ground, tall stepped cliffs (a boardwalk over a reef in the
+  Ocean), plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The banks
+  down both sides are broken by fairly large gaps (marked with red strips).
 - The runway never ends. The last zone repeats seamlessly past the end (ground, banks, gate and obstacles), and
   riders are quietly carried back one repeat at a time, so nobody ever reaches an end or sees one.
 - The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
@@ -21,7 +22,7 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   back to the players in the server when the store cannot be reached).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that appear on the
   ground at the start of their zone and roll down the runway lap after lap; now and then an extra egg drops
-  mid-cycle. Rarity sets their size, speed (18 studs a second for a Common egg up to 32 for an Eternal one; walking
+  mid-cycle. Rarity sets their size, speed (27 studs a second for a Common egg up to 48 for an Eternal one; walking
   is 16) and stamina requirement. Rolling eggs leave a small trail of dust.
 - When a Secret or Eternal egg spawns, every player gets an on-screen message saying where and when (a lineup egg on
   its first lap of the day only). Other eggs spawn quietly.
@@ -187,8 +188,9 @@ over it): the fence moves out 10 studs, and the pen hatches one more egg at once
 and 18 pets at level 9. The numbers are in `src/shared/Config/Economy.luau`.
 
 **Riding pets.** **Ride** on a pet's card brings it out under you; then the **RIDE** / **GET OFF** button below the
-tabs gets you on and off it. A pet carries you faster than walking (22 studs a second for a Common pet, up to 44
-for an Eternal one, plus a little for variants), round the hub and down the runway. Jump from it onto an egg as usual:
+tabs gets you on and off it. A pet carries you faster than walking (33 studs a second for a Common pet, up to 66
+for an Eternal one, plus a little for variants), round the hub and down the runway; a pet always outruns an egg of its
+own rarity. Jump from it onto an egg as usual:
 the pet goes away while you ride the egg and comes back 3 seconds after you leave it
 (`src/server/Services/MountService.luau`).
 
@@ -237,25 +239,31 @@ The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max 
 
 ## The runway
 
-The runway is level and 120 studs wide, 600 studs per zone (`src/shared/Runway.luau`). It has no end: whatever
-the last zone is, it repeats past the end of the runway (the map builds 3 copies of it, obstacles and all), and
-anything reaching the end of the loop is carried back one repeat to a spot that looks exactly the same. Each device
-draws the eggs there at their copy nearest the player, so nothing seems to move.
+The runway is level, 600 studs per zone, and gets wider zone by zone (`src/shared/Runway.luau`): 120 studs in the
+Forest, then 20 studs more in each zone after it (10 on each side), so the Ocean, the fourth zone, is half as wide
+again (180) and the Prehistoric zone 220, over 80% wider than the Forest. The banks step out at each zone's gate.
+Eggs land anywhere across their zone, riders can steer as far as its banks, and each zone's obstacle rows span its
+width, with more obstacles to a row in the wider zones. It has no end: whatever the last zone is, it repeats past
+the end of the runway (the map builds 3 copies of it, obstacles and all), and anything reaching the end of the loop
+is carried back one repeat to a spot that looks exactly the same. Each device draws the eggs there at their copy
+nearest the player, so nothing seems to move.
 
 **Banks and gaps.** Stepped cliffs run down both sides, broken by gaps of 40 to 80 studs at irregular spacing (none
-by a zone's gate). A rider who steers their egg into a bank dies; one who steers it into a gap goes over the edge
-with it. Players never walk on the runway: walking past the start zone, or jumping off an egg, starts a floaty leap
-with 3.5 seconds to land on an egg, and touching the runway first kills them.
+by a zone's gate). The step that faces the runway stands about 15 to 35 studs high, above the head of anyone riding
+even the biggest egg, and the steps behind it climb higher. A rider who steers their egg into a bank dies; one who
+steers it into a gap goes over the edge with it. Players never walk on the runway: walking past the start zone, or
+jumping off an egg, starts a floaty leap with 3.5 seconds to land on an egg, and touching the runway first kills
+them.
 
 **Eggs.** Each runway cycle (3 minutes) is one day (`src/shared/CycleClock.luau`): the sun rises as a cycle
 begins, night falls 70% of the way through, and the runway closes for the last 10 seconds before dawn. At sunrise
-every zone rolls a lineup of 8 eggs with its usual odds. They appear on the ground at the start of the zone 5
+every zone rolls a lineup of 12 eggs with its usual odds. They appear on the ground at the start of the zone 1.75
 seconds apart, roll to a quarter of the way into the next zone (the last zone's into its first copy), fade out, and
 appear at the start again, lap after lap, until the runway closes. A lineup egg that is claimed comes back on its
 next lap; one that cracks (only when its rider runs out of stamina) or goes over the edge comes back 5 seconds
 later.
-About every 30 seconds a zone also drops an extra, mid-cycle egg that rolls once; Secret and Eternal eggs are 10
-times rarer mid-cycle than at sunrise. A ridden egg rolls on past its fade line until its rider leaves it. The
+About every 13 seconds a zone also drops an extra, mid-cycle egg that rolls once (up to 5 of them on the runway at a
+time); Secret and Eternal eggs are 10 times rarer mid-cycle than at sunrise. A ridden egg rolls on past its fade line until its rider leaves it. The
 numbers are in `src/shared/Config/Tuning.luau`; the rules are in `src/server/Logic/RunwaySim.luau`.
 
 **Obstacles.** Each zone has its own obstacles in rows across the runway, laid out from a fixed seed so every

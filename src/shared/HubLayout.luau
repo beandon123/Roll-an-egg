@@ -115,7 +115,7 @@ end
 -- Terraced cliffs round the hub
 
 -- The runway and the cliff banks down both its sides, which the hub's cliffs must stay off.
-HubLayout.BANKS_HALF_WIDTH = Runway.WIDTH / 2 + 110
+HubLayout.BANKS_HALF_WIDTH = Runway.START_WIDTH / 2 + 110
 HubLayout.CLIFF_KEEP_OUT = {
 	{ x = 0, z = 300, sizeX = HubLayout.BANKS_HALF_WIDTH * 2, sizeZ = 600 } :: Rect,
 }

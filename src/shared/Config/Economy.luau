@@ -38,14 +38,14 @@ Economy.VARIANTS = {
 
 -- How fast a pet carries its rider (studs per second; walking is 16), by rarity.
 Economy.MOUNT_SPEED = {
-	Common = 22,
-	Uncommon = 24,
-	Rare = 27,
-	Epic = 30,
-	Legendary = 33,
-	Mythic = 36,
-	Secret = 40,
-	Eternal = 44,
+	Common = 33,
+	Uncommon = 36,
+	Rare = 40.5,
+	Epic = 45,
+	Legendary = 49.5,
+	Mythic = 54,
+	Secret = 60,
+	Eternal = 66,
 }
 -- Seconds after leaving an egg before a ridden pet comes back.
 Economy.RESUMMON_DELAY = 3

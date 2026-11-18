@@ -38,14 +38,19 @@ Original theme, art, and creatures.
 
 ## Desired Features
 ### Runway & Zones
-- [ ] One straight, level runway (~3,600 studs long, 120 wide; decided: flat and wide) holding six zones in order
+- [ ] One straight, level runway (~3,600 studs long; decided: flat and wide) holding six zones in order
       (decided): 1 Forest, 2 Desert, 3 Snow, 4 Ocean,
       5 Volcano, 6 Prehistoric (dinosaurs; added past the Volcano, decided); more zones added later (decided)
     - [ ] No end (decided): whatever the last zone is, it repeats seamlessly. Riders are quietly carried back one
           repeat at a time, and the haze in the distance means the end is never visible
     - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
-    - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
-          (proposed, from the owner's reference screenshots)
+    - [ ] Runway 120 studs wide at the start with walls down both sides, and a painted "START ZONE" where it leaves
+          the hub (proposed, from the owner's reference screenshots)
+    - [ ] It gets wider zone by zone (decided: 50% wider by the fourth zone, 75-100% wider by the last): 20 studs
+          more per zone, so 120, 140, 160, 180, 200 and 220 studs; the walls step out at each zone's gate, and each
+          zone's obstacle rows span its width
+    - [ ] Tall walls (decided): the wall facing the runway stands well above the head of a player riding even the
+          biggest egg (about 15-35 studs), with higher steps behind it
     - [ ] Natural, fairly large gaps in the walls (decided), each marked by a red strip: steering an egg into a wall
           kills the rider; steering it into a gap sends egg and rider over the edge
     - [ ] Hub + all 8 plots at the start of the runway; players spawn at their plot (see Hub below)
@@ -68,12 +73,14 @@ Original theme, art, and creatures.
     - [ ] Prehistoric: 2 Epic, 2 Legendary, Mythic, Secret, 2 Eternal (decided: one Mythic, one Secret, two Eternals)
     - [ ] A drop picks a rarity with the zone's odds, then one of the zone's eggs of that rarity (equal chance)
 - [ ] Eggs: lineup rolled per zone at the start of each cycle, at sunrise; down-runway movement fixed by spawn time
-      (decided); 8 lineup eggs per zone (12 during Egg Avalanche)
+      (decided); 12 lineup eggs per zone (decided: half as many eggs again on the runway at any time as the first
+      pass's 8), 24 during an Egg Avalanche
     - [ ] Lineup eggs appear at the start of their zone a few seconds apart, roll towards the end of their zone, fade
           out a quarter of the way into the next zone, and appear at the start again, lap after lap, until the
           closure (decided). One that is claimed comes back on its next lap (proposed)
     - [ ] Mid-cycle drops: now and then an extra egg drops and rolls once; Secret and rarer eggs are greatly reduced
-          compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 30 s, proposed)
+          compared with the sunrise lineup (decided; 10x rarer, about one drop per zone every 13 s and up to 5 on
+          the runway at once, proposed: with eggs rolling faster, that keeps half as many again on the runway)
     - [ ] Rolling eggs leave a small cloud of dust in their wake (decided)
 - [ ] Egg lifecycle
     - [ ] Never jumped on: fades out a quarter of the way into the next zone (decided); a ridden egg rolls on past
@@ -93,14 +100,17 @@ Original theme, art, and creatures.
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
     Rarity     Size   Claim time  Roll speed  Duel (beats @ tempo)
-    Common     1.0x   5 s         18 st/s     6 @ 90 bpm
-    Uncommon   1.1x   7 s         20 st/s     6 @ 100 bpm
-    Rare       1.25x  9 s         21 st/s     8 @ 110 bpm
-    Epic       1.4x   12 s        24 st/s     8 @ 125 bpm
-    Legendary  1.6x   15 s        26 st/s     10 @ 135 bpm
-    Mythic     1.8x   18 s        28 st/s     10 @ 150 bpm
-    Secret     2.0x   22 s        30 st/s     12 @ 160 bpm
-    Eternal    2.3x   26 s        32 st/s     12 @ 170 bpm
+    Common     1.0x   5 s         27 st/s     6 @ 90 bpm
+    Uncommon   1.1x   7 s         30 st/s     6 @ 100 bpm
+    Rare       1.25x  9 s         31.5 st/s   8 @ 110 bpm
+    Epic       1.4x   12 s        36 st/s     8 @ 125 bpm
+    Legendary  1.6x   15 s        39 st/s     10 @ 135 bpm
+    Mythic     1.8x   18 s        42 st/s     10 @ 150 bpm
+    Secret     2.0x   22 s        45 st/s     12 @ 160 bpm
+    Eternal    2.3x   26 s        48 st/s     12 @ 170 bpm
+
+    Roll speeds went up by half (decided). Steering, the leap onto the runway and ridden pets' speeds went up by the
+    same amount, so every egg is still slower than a pet of its own rarity.
 
 First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 500 decided, rest proposed):
 

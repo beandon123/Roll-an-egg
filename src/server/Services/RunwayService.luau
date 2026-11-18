@@ -362,7 +362,7 @@ local function checkLeaps(time: number)
 			and root ~= nil
 			and root:IsA("BasePart")
 			and root.Position.Z >= 0
-			and math.abs(root.Position.X) <= Runway.WIDTH / 2
+			and math.abs(root.Position.X) <= Runway.widthAt(root.Position.Z) / 2
 			and not (rider and rider.eggId ~= nil)
 			and not MountService.IsMounted(player)
 			and player:GetAttribute(AdminTools.FLYING) ~= true

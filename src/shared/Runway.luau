@@ -15,6 +15,11 @@
 --
 -- Banks (walls) run down both sides, with fairly large gaps. A rider who steers their egg into a bank dies; one who
 -- steers it into a gap goes over the edge with it.
+--
+-- The runway gets wider zone by zone: each zone is WIDTH_PER_ZONE studs wider than the one before, so the fourth is
+-- half as wide again as the first (180 studs to 120) and the last, and its copies, over 80% wider (220). The banks
+-- step out at each zone's gate. Anything that needs to know where the sides are asks with a distance down the runway
+-- (widthAt).
 
 local Runway = {}
 
@@ -22,8 +27,12 @@ Runway.ZONE_COUNT = 6
 Runway.ZONE_LENGTH = 600
 -- Where the zones end and the last zone starts repeating.
 Runway.LENGTH = Runway.ZONE_COUNT * Runway.ZONE_LENGTH
--- Wide enough for a whole server to chase eggs side by side; cliff banks run down both sides.
-Runway.WIDTH = 120
+-- The first zone's width: wide enough for a whole server to chase eggs side by side. Each zone after it is
+-- WIDTH_PER_ZONE studs wider (10 more on each side). Cliff banks run down both sides.
+Runway.START_WIDTH = 120
+Runway.WIDTH_PER_ZONE = 20
+-- The last zone's width, which its copies past the end keep.
+Runway.MAX_WIDTH = Runway.START_WIDTH + Runway.WIDTH_PER_ZONE * (Runway.ZONE_COUNT - 1)
 
 -- Height of the walking surface, at the hub and all the way down the runway.
 Runway.BASE_Y = 10
@@ -84,27 +93,39 @@ function Runway.zoneAt(z: number): number?
 	return math.min(math.floor(z / Runway.ZONE_LENGTH) + 1, Runway.ZONE_COUNT)
 end
 
--- The furthest from the centre line an egg of this half-length may sit: its end then touches the bank (or hangs
--- over a gap).
-function Runway.maxLateral(halfLength: number): number
-	return math.max(0, Runway.WIDTH / 2 - halfLength - 1)
+-- How wide a zone is, bank to bank. Zones past the last one are its copies, as wide as it.
+function Runway.zoneWidth(zoneId: number): number
+	local zone = math.clamp(zoneId, 1, Runway.ZONE_COUNT)
+	return Runway.START_WIDTH + Runway.WIDTH_PER_ZONE * (zone - 1)
 end
 
-function Runway.clampLateral(x: number, halfLength: number): number
-	local limit = Runway.maxLateral(halfLength)
+-- How wide the runway is at a distance down it (behind the start, as wide as the first zone). It never narrows
+-- further down, so a spot that is on the runway stays on it as an egg rolls on.
+function Runway.widthAt(z: number): number
+	return Runway.zoneWidth(Runway.zoneAt(z) or 1)
+end
+
+-- The furthest from the centre line an egg of this half-length may sit at `z` down the runway: its end then touches
+-- the bank (or hangs over a gap).
+function Runway.maxLateral(halfLength: number, z: number): number
+	return math.max(0, Runway.widthAt(z) / 2 - halfLength - 1)
+end
+
+function Runway.clampLateral(x: number, halfLength: number, z: number): number
+	local limit = Runway.maxLateral(halfLength, z)
 	return math.clamp(x, -limit, limit)
 end
 
--- Whether an egg is pressed against the side of the runway.
-function Runway.isAtEdge(x: number, halfLength: number): boolean
-	return math.abs(x) >= Runway.maxLateral(halfLength) - 0.01
+-- Whether an egg at `z` down the runway is pressed against the side of it.
+function Runway.isAtEdge(x: number, halfLength: number, z: number): boolean
+	return math.abs(x) >= Runway.maxLateral(halfLength, z) - 0.01
 end
 
 -- Where an egg starts its ride, side to side: a riderless egg may run right along a bank, so whoever gets on starts
 -- a little way in from it, and only dies there if they steer into it.
 Runway.MOUNT_EDGE_MARGIN = 1.5
-function Runway.mountLateral(x: number, halfLength: number): number
-	local limit = math.max(0, Runway.maxLateral(halfLength) - Runway.MOUNT_EDGE_MARGIN)
+function Runway.mountLateral(x: number, halfLength: number, z: number): number
+	local limit = math.max(0, Runway.maxLateral(halfLength, z) - Runway.MOUNT_EDGE_MARGIN)
 	return math.clamp(x, -limit, limit)
 end
 

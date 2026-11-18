@@ -6,6 +6,9 @@
 --     * timing: when obstacles that go off now and then (geysers, lava vents, clams) are dangerous
 -- The layout comes from a fixed seed per zone, so the server, every client and the map builder all get the same
 -- runway without sending it anywhere. Pure math (no Roblox APIs) so the test runner can load it outside Studio.
+--
+-- The runway widens zone by zone (Shared/Runway): each zone's rows span its own width, with more obstacles to a row
+-- the wider it is, so a wide zone is as busy as a narrow one.
 
 local Config = require(script.Parent.Config.Obstacles)
 local Runway = require(script.Parent.Runway)
@@ -95,19 +98,19 @@ local function newBag(weights: { [string]: number }, random: () -> number): () -
 	end
 end
 
--- The gaps between a row's obstacles (and the runway edges), widest first.
-local function widestGap(placed: { { lo: number, hi: number } }): number
+-- The widest gap between a row's obstacles (and the runway edges, `half` studs either side of the middle).
+local function widestGap(placed: { { lo: number, hi: number } }, half: number): number
 	local spans = table.clone(placed)
 	table.sort(spans, function(a, b)
 		return a.lo < b.lo
 	end)
 	local widest = 0
-	local edge = -Runway.WIDTH / 2
+	local edge = -half
 	for _, span in spans do
 		widest = math.max(widest, span.lo - edge)
 		edge = math.max(edge, span.hi)
 	end
-	return math.max(widest, Runway.WIDTH / 2 - edge)
+	return math.max(widest, half - edge)
 end
 
 local rows: { Row } = {}
@@ -122,12 +125,14 @@ local function layOutZone(zoneId: number)
 	local nextKind = newBag(mix.weights, random)
 	local zoneStart = Runway.zoneStartZ(zoneId)
 	local z = zoneStart + Config.FIRST_ROW
-	local half = Runway.WIDTH / 2
+	local width = Runway.zoneWidth(zoneId)
+	local half = width / 2
 
 	while z <= zoneStart + Runway.ZONE_LENGTH - Config.LAST_ROW do
-		-- One to three obstacles, usually two.
+		-- One to three obstacles, usually two, across the first zone's width; more across a wider zone.
 		local roll = random()
 		local count = if roll < 0.3 then 1 elseif roll < 0.8 then 2 else 3
+		count = math.max(1, math.round(count * width / Runway.START_WIDTH))
 
 		local placed: { { lo: number, hi: number } } = {}
 		local row: Row = { zMin = math.huge, zMax = -math.huge, obstacles = {} }
@@ -152,7 +157,7 @@ local function layOutZone(zoneId: number)
 					continue
 				end
 				table.insert(placed, span)
-				if widestGap(placed) < Config.MIN_GAP then
+				if widestGap(placed, half) < Config.MIN_GAP then
 					table.remove(placed)
 					continue
 				end
@@ -290,10 +295,11 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- Paths for eggs without a rider
 
--- The nearest spot to `x` where an egg of this half-length can pass a row without touching any of it.
--- `beside` lists obstacles the egg is already level with: it cannot slide across those to get there.
+-- The nearest spot to `x` where an egg of this half-length can pass a row without touching any of it (and within
+-- the runway's width where the row stands). `beside` lists obstacles the egg is already level with: it cannot slide
+-- across those to get there.
 function Obstacles.clearLane(row: Row, x: number, halfLength: number, beside: { Obstacle }?): number
-	local limit = Runway.maxLateral(halfLength)
+	local limit = Runway.maxLateral(halfLength, row.zMin)
 	local margin = halfLength + Config.STEER_MARGIN
 	local function blocked(at: number): boolean
 		for _, obstacle in row.obstacles do
@@ -334,7 +340,7 @@ end
 -- The way an egg without a rider rolls from `fromZ` to `toZ`, starting at `lane`: whenever a row of obstacles is
 -- in its way, it slides over to the nearest gap in good time and carries on along its new lane.
 function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength: number, radius: number): Path
-	local current = Runway.clampLateral(lane, halfLength)
+	local current = Runway.clampLateral(lane, halfLength, fromZ)
 	local path: Path = { lane = current, fromZ = fromZ, moves = {} }
 	-- No lane change starts before the egg is clear of the last row it passed.
 	local readyFrom = fromZ
@@ -359,6 +365,11 @@ function Obstacles.planPath(lane: number, fromZ: number, toZ: number, halfLength
 				local wanted = math.max(MIN_RAMP, math.abs(target - current) * RAMP_PER_STUD)
 				local z0 = math.max(readyFrom, z1 - wanted)
 				z0 = math.max(fromZ, math.min(z0, z1 - math.min(1, (z1 - fromZ) / 2)))
+				-- A lane only the row's own (wider) zone has room for: the egg keeps to its lane until it is in that
+				-- zone. (Its first row is well past its start, so there is still room to change lane.)
+				if math.abs(target) > Runway.maxLateral(halfLength, z0) then
+					z0 = math.max(z0, Runway.zoneStartZ(Runway.zoneAt(row.zMin) or 1))
+				end
 				table.insert(path.moves, { z0 = z0, z1 = z1, from = current, to = target })
 				current = target
 			end

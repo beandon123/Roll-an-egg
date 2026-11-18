@@ -165,7 +165,7 @@ end
 -- Whether a character root at `position` is standing on the runway (rather than in the air above it, or off the
 -- side).
 local function isOnRunway(position: Vector3): boolean
-	return math.abs(position.X) <= Runway.WIDTH / 2
+	return math.abs(position.X) <= Runway.widthAt(position.Z) / 2
 		and position.Y - Runway.surfaceY(position.Z) < Tuning.STANDING_HEIGHT
 end
 
@@ -186,7 +186,7 @@ local function updateLeap()
 	end
 
 	local position = root.Position
-	if position.Z < 0 or math.abs(position.X) > Runway.WIDTH / 2 + 4 or isCarried() then
+	if position.Z < 0 or math.abs(position.X) > Runway.widthAt(position.Z) / 2 + 4 or isCarried() then
 		-- Back over the hub, off the side (falling), or not on foot.
 		if leapEndsAt ~= nil then
 			endLeap(root)
@@ -446,12 +446,13 @@ local function steer(deltaTime: number)
 		humanoid.Sit = true
 	end
 
-	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength)
+	-- As far as the banks where the egg is now: the runway widens zone by zone.
+	local now = Workspace:GetServerTimeNow()
+	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
+	egg.lateral = Runway.clampLateral(egg.lateral + readSteer() * agility * deltaTime, egg.spec.halfLength, z)
 	egg.targetLateral = egg.lateral
 
 	-- Obstacles: report a hit straight away so the server can check it, and show it now.
-	local now = Workspace:GetServerTimeNow()
-	local z = Runway.wrapZ(EggMotion.zAt(egg.spawnTime, egg.startZ, egg.spec.rollSpeed, now))
 	if rideLastZ and z < rideLastZ - Runway.LOOP_LENGTH / 2 then
 		-- Carried back one loop: the obstacles ahead can be hit again (as on the server).
 		rideHits = {}

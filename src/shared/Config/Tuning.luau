@@ -20,14 +20,18 @@ Tuning.EGG_LENGTH_RATIO = 1.3
 -- How many eggs each zone rolls for its lineup at sunrise (the start of each cycle). Each lineup egg rolls from
 -- the start of its zone to a quarter of the way into the next zone (Runway.fadeZ), fades out, and appears at the
 -- start of its zone again, over and over until the runway closes. One that is claimed comes back on its next lap;
--- one that cracks or goes off the side comes back EGG_RESPAWN_DELAY later.
-Tuning.EGGS_PER_ZONE = 8
--- Seconds between lineup eggs leaving the start of their zone at sunrise.
-Tuning.LINEUP_LAUNCH_GAP = 5
--- Mid-cycle drops: now and then a zone drops an extra egg that rolls once and fades. It is rolled like a lineup egg,
--- except that every rarity from WILD_RARE_FROM up is WILD_RARE_ODDS times as likely.
-Tuning.WILD_DROP_INTERVAL = 30
-Tuning.WILD_DROP_MAX = 3
+-- one that cracks or goes off the side comes back EGG_RESPAWN_DELAY later. So each zone always has about this many
+-- lineup eggs on the runway.
+Tuning.EGGS_PER_ZONE = 12
+-- Seconds between lineup eggs leaving the start of their zone at sunrise: short enough for the whole lineup to be out
+-- within one lap of the zone's most common egg (about 20 s in the last zone), so the zone soon has all its eggs.
+Tuning.LINEUP_LAUNCH_GAP = 1.75
+-- Mid-cycle drops: now and then (about every WILD_DROP_INTERVAL seconds, up to WILD_DROP_MAX on the runway at once) a
+-- zone drops an extra egg that rolls once and fades. It is rolled like a lineup egg, except that every rarity from
+-- WILD_RARE_FROM up is WILD_RARE_ODDS times as likely. The faster eggs roll, the sooner each one is gone, so the more
+-- often they must drop to keep as many on the runway.
+Tuning.WILD_DROP_INTERVAL = 13
+Tuning.WILD_DROP_MAX = 5
 Tuning.WILD_RARE_ODDS = 0.1
 Tuning.WILD_RARE_FROM = "Secret"
 -- During an Egg Avalanche, eggs drop this many times as often (and up to this many times as many per zone).
@@ -49,7 +53,7 @@ Tuning.WALL_KNOCKBACK = 6
 -- Studs per second a rider can steer the egg sideways before upgrades. Tuned with the eggs' roll speeds
 -- (Config/Rarities): the faster eggs roll, the sooner the next row of obstacles arrives, so the quicker a rider has to
 -- be able to move over.
-Tuning.BASE_AGILITY = 21
+Tuning.BASE_AGILITY = 31.5
 -- How close (studs beyond the egg's radius) a jumping player must be for the client to ask to mount.
 Tuning.MOUNT_REACH = 2.5
 -- How far (studs beyond the egg's radius) the server lets the player be from the egg when it checks a mount.
@@ -74,7 +78,7 @@ Tuning.LEAP_UP_SPEED = 45
 Tuning.LEAP_GRAVITY = 0.2
 -- Forward speed when leaping off the hub onto the runway: half as fast again as the slowest egg rolls
 -- (Config/Rarities), so the leap carries a player in among the eggs rolling away from the start.
-Tuning.LEAP_FORWARD_SPEED = 27
+Tuning.LEAP_FORWARD_SPEED = 40.5
 -- A character whose root part is lower than this above the runway is standing on it.
 Tuning.STANDING_HEIGHT = 3.4
 -- Extra seconds the server allows before it kills a player who is still on the runway without an egg (the

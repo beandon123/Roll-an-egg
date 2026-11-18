@@ -11,7 +11,7 @@ return function(harness)
 	local Runway = harness.load("src/shared/Runway")
 
 	-- The painted start zone at the front of the hub, and the spawn pad in the middle of the plaza.
-	local START_ZONE = { x = 0, z = -15, sizeX = Runway.WIDTH + 4, sizeZ = 30 }
+	local START_ZONE = { x = 0, z = -15, sizeX = Runway.START_WIDTH + 4, sizeZ = 30 }
 	local SPAWN = { x = 0, z = -Runway.HUB_LENGTH / 2 }
 
 	-- Each player's plot, as big as it gets.

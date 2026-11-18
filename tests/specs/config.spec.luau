@@ -7,6 +7,7 @@ return function(harness)
 	local Rarities = harness.load("src/shared/Config/Rarities")
 	local Zones = harness.load("src/shared/Config/Zones")
 	local Runway = harness.load("src/shared/Runway")
+	local Tuning = harness.load("src/shared/Config/Tuning")
 	local EggSpec = harness.load("src/shared/EggSpec")
 	local Settings = harness.load("src/shared/Config/Settings")
 	local Shop = harness.load("src/shared/Config/Shop")
@@ -197,20 +198,37 @@ return function(harness)
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
-					expect.truthy(Runway.maxLateral(spec.halfLength) > 10, rarity .. " steering room")
+					local room = Runway.maxLateral(spec.halfLength, Runway.zoneStartZ(zone.id))
+					expect.truthy(room > 10, rarity .. " steering room")
 				end
 			end
 		end)
 
-		it("lets every egg be claimed within a zone and a half of riding", function()
+		it("lets every egg be claimed within a little over two zones of riding", function()
 			-- The runway has no end (the last zone repeats), so a claim cannot run out of it; but claiming one egg
-			-- should not take a tour of the whole runway either.
+			-- should not take a tour of the whole runway either. (The fastest eggs, the rarest, take the longest.)
 			for _, zone in Zones.List do
 				for rarity in zone.stamina do
 					local spec = EggSpec.get(zone.id, rarity)
 					local rideDistance = spec.rollSpeed * spec.claimTime
-					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 1.5, zone.name .. " " .. rarity)
+					expect.truthy(rideDistance < Runway.ZONE_LENGTH * 2.25, zone.name .. " " .. rarity)
 				end
+			end
+		end)
+
+		it("sends a zone's whole lineup out within one lap of its most common egg", function()
+			-- So the zone soon has its full count of eggs on the runway, spread along it.
+			local launching = Tuning.LINEUP_LAUNCH_GAP * (Tuning.EGGS_PER_ZONE - 1)
+			for _, zone in Zones.List do
+				local mostCommon, odds = nil, 0
+				for rarity, weight in zone.weights do
+					if weight > odds then
+						mostCommon, odds = rarity, weight
+					end
+				end
+				local spec = EggSpec.get(zone.id, mostCommon)
+				local lapTime = (Runway.fadeZ(zone.id) - spec.startZ) / spec.rollSpeed
+				expect.truthy(launching < lapTime, `{zone.name}: {launching} s to launch, a lap of {lapTime} s`)
 			end
 		end)
 	end)

@@ -502,7 +502,7 @@ return function(harness)
 
 			-- It cannot be steered off the side of the runway.
 			session:renderFrame(1, 30)
-			local limit = shared(session).Runway.maxLateral(spec.halfLength)
+			local limit = shared(session).Runway.maxLateral(spec.halfLength, model.Root.CFrame.Position.Z)
 			expect.near(model.Root.CFrame.Position.X, -limit, 1e-3)
 		end)
 

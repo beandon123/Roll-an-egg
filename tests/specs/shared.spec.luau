@@ -118,7 +118,32 @@ return function(harness)
 			expect.equal(Runway.surfaceY(0), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(1800), Runway.BASE_Y)
 			expect.equal(Runway.surfaceY(Runway.LENGTH), Runway.BASE_Y)
-			expect.equal(Runway.WIDTH, 120)
+			expect.equal(Runway.START_WIDTH, 120)
+		end)
+
+		it("gets wider zone by zone: half as wide again by the fourth, and 75% to 100% wider by the last", function()
+			expect.equal(Runway.zoneWidth(1), Runway.START_WIDTH)
+			expect.equal(Runway.widthAt(-50), Runway.START_WIDTH, "the start zone, at the hub")
+			expect.equal(Runway.widthAt(0), Runway.START_WIDTH)
+			for zoneId = 2, Runway.ZONE_COUNT do
+				expect.truthy(Runway.zoneWidth(zoneId) > Runway.zoneWidth(zoneId - 1), "zone " .. zoneId .. " is wider")
+				-- The whole zone is that wide, from its gate to the next.
+				local startZ = Runway.zoneStartZ(zoneId)
+				expect.equal(Runway.widthAt(startZ), Runway.zoneWidth(zoneId))
+				expect.equal(Runway.widthAt(startZ + Runway.ZONE_LENGTH - 0.01), Runway.zoneWidth(zoneId))
+				expect.equal(Runway.widthAt(startZ - 0.01), Runway.zoneWidth(zoneId - 1))
+			end
+			expect.near(Runway.zoneWidth(4) / Runway.START_WIDTH, 1.5)
+			local last = Runway.zoneWidth(Runway.ZONE_COUNT) / Runway.START_WIDTH
+			expect.truthy(last >= 1.75 and last <= 2, `the last zone is {last}x as wide`)
+			expect.equal(Runway.MAX_WIDTH, Runway.zoneWidth(Runway.ZONE_COUNT))
+			-- The last zone's copies past the end are as wide as it, so being carried back one loop is seamless.
+			expect.equal(Runway.widthAt(Runway.LENGTH + 10), Runway.MAX_WIDTH)
+			expect.equal(Runway.widthAt(Runway.LOOP_END + 1000), Runway.MAX_WIDTH)
+			-- Every 20-stud tile of the checkered ground fits across every zone.
+			for zoneId = 1, Runway.ZONE_COUNT do
+				expect.equal(Runway.zoneWidth(zoneId) % 20, 0, "zone " .. zoneId)
+			end
 		end)
 
 		it("knows which zone a position is in", function()
@@ -183,18 +208,24 @@ return function(harness)
 		)
 
 		it("knows when an egg is pressed against the side", function()
-			local limit = Runway.maxLateral(4)
-			expect.equal(Runway.isAtEdge(limit, 4), true)
-			expect.equal(Runway.isAtEdge(-limit, 4), true)
-			expect.equal(Runway.isAtEdge(limit - 1, 4), false)
+			local limit = Runway.maxLateral(4, 100)
+			expect.equal(Runway.isAtEdge(limit, 4, 100), true)
+			expect.equal(Runway.isAtEdge(-limit, 4, 100), true)
+			expect.equal(Runway.isAtEdge(limit - 1, 4, 100), false)
+			-- Further down, where the runway is wider, the same spot is clear of the side.
+			expect.equal(Runway.isAtEdge(limit, 4, Runway.zoneStartZ(2) + 1), false)
 		end)
 
-		it("keeps eggs on the runway", function()
-			local limit = Runway.maxLateral(4)
-			expect.near(limit, Runway.WIDTH / 2 - 5)
-			expect.equal(Runway.clampLateral(999, 4), limit)
-			expect.equal(Runway.clampLateral(-999, 4), -limit)
-			expect.equal(Runway.clampLateral(3, 4), 3)
+		it("keeps eggs on the runway, as wide as it is where they are", function()
+			local limit = Runway.maxLateral(4, 100)
+			expect.near(limit, Runway.START_WIDTH / 2 - 5)
+			expect.equal(Runway.clampLateral(999, 4, 100), limit)
+			expect.equal(Runway.clampLateral(-999, 4, 100), -limit)
+			expect.equal(Runway.clampLateral(3, 4, 100), 3)
+			local finalZ = Runway.FINAL_ZONE_START + 100
+			expect.near(Runway.maxLateral(4, finalZ), Runway.MAX_WIDTH / 2 - 5)
+			expect.equal(Runway.clampLateral(999, 4, finalZ), Runway.maxLateral(4, finalZ))
+			expect.equal(Runway.mountLateral(999, 4, finalZ), Runway.maxLateral(4, finalZ) - Runway.MOUNT_EDGE_MARGIN)
 		end)
 	end)
 
