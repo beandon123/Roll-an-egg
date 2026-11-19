@@ -9,7 +9,9 @@
 -- #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
 --
 -- It runs the game's own MapService in the Studio stand-in (tests/studio) and copies every part it builds, so the
--- page shows exactly the parts the game makes. Lighting, particles and the client's animations are left out.
+-- page shows exactly the parts the game makes, in the game's fog by day. Lighting, particles and the client's
+-- animations are left out. Each plot's training stick shows a different tier (plot 1 the first, plot 8 the last), and
+-- a few have a blocky player rolling on them, posed the way the game poses riders.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -53,12 +55,14 @@ for zoneId, zone in Zones.List do
 		local entry = zone.eggs[(index * 3) % #zone.eggs + 1]
 		local spec = EggSpec.get(zoneId, entry.rarity)
 		local startZ = Runway.zoneStartZ(zoneId) + 12
-		local lane = (random() * 2 - 1) * Runway.maxLateral(spec.halfLength)
+		local low, high = Runway.lateralRange(spec.halfLength, startZ)
+		local lane = low + random() * (high - low)
 		local path = Obstacles.planPath(lane, startZ, Runway.fadeZ(zoneId), spec.halfLength, spec.radius)
-		local z = startZ + 40 + random() * (Runway.ZONE_LENGTH - 60)
-		local x = Obstacles.lateralAt(path, z)
+		local z = startZ + 40 + random() * (Runway.zoneLength(zoneId) - 60)
+		local x = Runway.worldX(Obstacles.lateralAt(path, z), z)
 		local egg = EggRig.build(entry.egg, spec)
 		local target = roblox.CFrame.new(x, Runway.BASE_Y + spec.radius, z)
+			* roblox.CFrame.Angles(0, Runway.heading(z), 0)
 			* roblox.CFrame.Angles(random() * 6, 0, 0)
 			* (if index % 2 == 0 then roblox.CFrame.Angles(0, math.pi, 0) else roblox.CFrame.identity)
 		local move = target * egg.PrimaryPart.CFrame:Inverse()
@@ -143,6 +147,76 @@ for _, entry in showcase do
 	end
 end
 
+-- Every tier of the training stick, one on each plot's stand: plot 1 has the first tier, plot 8 the last.
+local TrainingStand = session:require(Server.Map.TrainingStand)
+local StickModels = session:require(Shared.StickModels)
+local RiderPose = session:require(Shared.RiderPose)
+local Sticks = session:require(Shared.Config.Sticks)
+for index = 1, Plots.COUNT do
+	TrainingStand.setLevel(workspace.Map.Plots["Plot" .. index].TrainingStick, index, index)
+end
+
+-- A blocky player rolling on some of them, posed the way RiderAnimationController poses a real R15 character (from
+-- Shared/RiderPose), each caught at a different moment of their stride. The roller is turned to match.
+local function addRider(index: number, stride: number)
+	local level = index
+	local angle = stride * 0.7
+	local stand = workspace.Map.Plots["Plot" .. index].TrainingStick
+	local roller = stand.Roller
+	moveModel(roller, StickModels.axleCFrame(index, level) * StickModels.spin(angle))
+	local pose = RiderPose.pose({
+		phase = stride,
+		time = stride * 0.4,
+		pace = Sticks.RUN_PACE,
+		steer = 0,
+		tired = 0,
+		cheer = 0,
+	})
+	local function turn(name)
+		local p = pose[name]
+		return roblox.CFrame.fromEulerAnglesYXZ(p[1], p[2], p[3])
+	end
+	local drop = Sticks.maxTop(level) - Sticks.topHeight(level, angle)
+	local root = StickModels.riderCFrame(index, level, 3) * roblox.CFrame.new(0, pose.Root[5] - drop, 0)
+	local shirt, skin, pants = { 70, 130, 230 }, { 250, 210, 160 }, { 50, 60, 90 }
+	local function limb(name, cframe, size, color)
+		local part = roblox.Instance.new("Part")
+		part.Name = name
+		part.Anchored = true
+		part.Size = roblox.Vector3.new(size[1], size[2], size[3])
+		part.CFrame = cframe
+		part.Color = roblox.Color3.fromRGB(color[1], color[2], color[3])
+		part.Parent = eggFolder
+	end
+	local lower = root * roblox.CFrame.new(0, -0.2, 0) * turn("Root")
+	limb("LowerTorso", lower * roblox.CFrame.new(0, -0.2, 0), { 2, 0.4, 1 }, pants)
+	local waist = lower * turn("Waist")
+	limb("UpperTorso", waist * roblox.CFrame.new(0, 0.8, 0), { 2, 1.6, 1 }, shirt)
+	limb(
+		"Head",
+		waist * roblox.CFrame.new(0, 1.6, 0) * turn("Neck") * roblox.CFrame.new(0, 0.6, 0),
+		{ 1.2, 1.2, 1.2 },
+		skin
+	)
+	for _, side in { "Left", "Right" } do
+		local sign = if side == "Left" then -1 else 1
+		local hip = lower * roblox.CFrame.new(sign * 0.5, -0.4, 0) * turn(side .. "Hip")
+		limb(side .. "UpperLeg", hip * roblox.CFrame.new(0, -0.52, 0), { 0.95, 1.05, 0.95 }, pants)
+		local knee = hip * roblox.CFrame.new(0, -1.05, 0) * turn(side .. "Knee")
+		limb(side .. "LowerLeg", knee * roblox.CFrame.new(0, -0.52, 0), { 0.9, 1.05, 0.9 }, pants)
+		local ankle = knee * roblox.CFrame.new(0, -1.05, 0) * turn(side .. "Ankle")
+		limb(side .. "Foot", ankle * roblox.CFrame.new(0, -0.15, -0.15), { 0.95, 0.3, 1.2 }, { 40, 40, 50 })
+		local shoulder = waist * roblox.CFrame.new(sign * 1.5, 1.35, 0) * turn(side .. "Shoulder")
+		limb(side .. "UpperArm", shoulder * roblox.CFrame.new(0, -0.5, 0), { 0.95, 1.1, 0.95 }, shirt)
+		local elbow = shoulder * roblox.CFrame.new(0, -1, 0) * turn(side .. "Elbow")
+		limb(side .. "LowerArm", elbow * roblox.CFrame.new(0, -0.55, 0), { 0.9, 1.1, 0.9 }, skin)
+	end
+end
+addRider(2, 1.1)
+addRider(3, 2.6)
+addRider(6, 0.3)
+addRider(8, 4)
+
 local function round(value: number): number
 	return math.round(value * 1000) / 1000
 end
@@ -192,9 +266,25 @@ end
 local data = serde.encode("json", {
 	parts = parts,
 	zones = zones,
-	width = Runway.WIDTH,
+	widths = (function()
+		local widths = {}
+		for zoneId = 1, Runway.ZONE_COUNT do
+			table.insert(widths, Runway.zoneWidth(zoneId))
+		end
+		return widths
+	end)(),
 	baseY = Runway.BASE_Y,
-	zoneLength = Runway.ZONE_LENGTH,
+	zoneLengths = Runway.ZONE_LENGTHS,
+	-- The game's fog by day (MapService), drawn the same way: linear from FogStart to FogEnd.
+	fog = (function()
+		local lighting = session:service("Lighting")
+		local color = lighting.FogColor
+		return {
+			start = lighting.FogStart,
+			finish = lighting.FogEnd,
+			color = string.format("#%02x%02x%02x", color.R * 255 + 0.5, color.G * 255 + 0.5, color.B * 255 + 0.5),
+		}
+	end)(),
 })
 local template = fs.readFile("tools/map-preview.html")
 local page = string.gsub(template, "/%*MAP_DATA%*/null", function()

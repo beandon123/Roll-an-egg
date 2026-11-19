@@ -23,6 +23,7 @@ local NumberFormat = require(Shared.NumberFormat)
 local Rarities = require(Shared.Config.Rarities)
 local Runway = require(Shared.Runway)
 local Shop = require(Shared.Config.Shop)
+local Sticks = require(Shared.Config.Sticks)
 local Zones = require(Shared.Config.Zones)
 
 local Admins = require(script.Parent.Parent.Config.Admins)
@@ -33,6 +34,7 @@ local RunwayService = require(script.Parent.RunwayService)
 local ShopService = require(script.Parent.ShopService)
 local ShowroomService = require(script.Parent.ShowroomService)
 local TeleportService = require(script.Parent.TeleportService)
+local TrainingService = require(script.Parent.TrainingService)
 
 -- Most commands one player may send in RATE_WINDOW seconds.
 local RATE_LIMIT = 20
@@ -149,7 +151,7 @@ local function placementAhead(player: Player): { z: number, lateral: number }?
 	if Runway.zoneAt(position.Z) == nil or Runway.zoneAt(z) == nil then
 		return nil
 	end
-	return { z = z, lateral = position.X }
+	return { z = z, lateral = Runway.lateralOf(position.X, z) }
 end
 
 -- Drops eggs at the chute or "here". Returns the placement used, and a note to add if "here" was not possible.
@@ -490,11 +492,31 @@ commands.Stamina = function(player, args)
 		RunwayService.RefillStamina(player)
 		return true, "Stamina refilled."
 	elseif action == "Reset" then
-		-- Back to what the player really has: the base, plus anything bought in the shop.
+		-- Back to what the player really has: the base, plus anything bought in the shop or trained.
 		RunwayService.RefreshMaxStamina(player)
 		return true, `Max Stamina is back to {RunwayService.GetMaxStamina(player)}.`
 	end
 	return false, "Unknown stamina action."
+end
+
+-- The training stick: a tier up or down, the last tier, or forget the Max Stamina trained on it.
+commands.Stick = function(player, args)
+	local data = DataService.GetData(player)
+	if data == nil then
+		return false, "Your data has not loaded yet."
+	end
+	local level = data.StickLevel or 1
+	local action = args.action
+	if action == "Up" or action == "Down" or action == "Max" then
+		local target = if action == "Up" then level + 1 elseif action == "Down" then level - 1 else Sticks.MAX_LEVEL
+		local message = TrainingService.SetLevel(player, math.clamp(target, 1, Sticks.MAX_LEVEL))
+		ShopService.RefreshPlayer(player)
+		return true, message
+	elseif action == "ClearTrained" then
+		TrainingService.ClearTrained(player)
+		return true, `Trained stamina cleared. Max Stamina is {RunwayService.GetMaxStamina(player)}.`
+	end
+	return false, "Unknown stick action."
 end
 
 commands.Dollars = function(player, args)

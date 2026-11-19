@@ -59,6 +59,17 @@ Plots.EGG_SPACING = 8
 Plots.EGG_MARGIN = 4
 -- Where the green "bigger pen" button stands: in the plaza, just in front of the fence, beside the gate.
 Plots.BUTTON_SPOT = { -6, 18 }
+-- The training stick (Config/Sticks) stands in the plaza in front of the pen, on the other side of the gate from the
+-- button: the middle of its stand, as (inward, along). Its roller runs along the fence, and its rider faces the
+-- plaza.
+Plots.STICK_SPOT = { -13, -21 }
+-- The ground the stand and its sign take up, as (inward, along) ranges: the sign stands at its front corner, on
+-- the side away from the gate.
+Plots.STICK_AREA = { inward = { -21, -8 }, along = { -30, -12 } }
+-- Where the sign stands, as (inward, along), and how far it is turned (radians, about the vertical) from facing the
+-- plaza head on, towards the gate.
+Plots.STICK_SIGN_SPOT = { -19, -27.2 }
+Plots.STICK_SIGN_TURN = math.rad(40)
 
 -- Every plot's frame. The back row comes first, left to right as seen from the start zone (from -x to +x), so the
 -- first players to join get the plots facing the runway; then the left side and the right side, back to front.
@@ -161,6 +172,21 @@ end
 -- The middle of a pen of a level, as (inward, along).
 function Plots.penMiddle(level: number): (number, number)
 	return Plots.penWidth(level) / 2, 0
+end
+
+-- The middle of a plot's training stick stand, on the ground, in world x and z. Turn it by Plots.yaw: the stand's X
+-- axis then points inward (its rider faces the other way, out to the plaza) and its roller runs along its Z axis.
+function Plots.stickSpot(index: number): (number, number)
+	return Plots.point(index, Plots.STICK_SPOT[1], Plots.STICK_SPOT[2])
+end
+
+-- The ground a plot's training stick and its sign take up, as a rectangle: its middle and its size along world x
+-- and z.
+function Plots.stickRect(index: number): (number, number, number, number)
+	local area = Plots.STICK_AREA
+	local x0, z0 = Plots.point(index, area.inward[1], area.along[1])
+	local x1, z1 = Plots.point(index, area.inward[2], area.along[2])
+	return (x0 + x1) / 2, (z0 + z1) / 2, math.abs(x1 - x0), math.abs(z1 - z0)
 end
 
 -- Where a player appears at their plot: in the plaza just outside their gate.

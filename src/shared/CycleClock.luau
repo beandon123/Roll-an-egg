@@ -3,12 +3,12 @@
 -- all agree on it without sending any messages.
 -- Pure math (no Roblox APIs) so the test runner can load it outside Studio.
 --
--- Each cycle is CYCLE_LENGTH seconds: the runway is open, shows a warning for the last WARNING_LENGTH seconds
--- before it closes, then is closed for the final CLOSED_LENGTH seconds.
+-- Each cycle is CYCLE_LENGTH seconds (5 minutes): the runway is open for 4 minutes 50 seconds, showing a warning for
+-- the last WARNING_LENGTH seconds before it closes, then is closed for the final CLOSED_LENGTH seconds.
 --
--- Each cycle is also one day. The sun rises as a cycle begins, which is when every zone rolls out its fresh lineup
--- of eggs; night falls DAY_FRACTION of the way through; the runway closes in the last moments before the next
--- sunrise.
+-- Each cycle is also one day and one night. The sun rises as a cycle begins, which is when every zone rolls out its
+-- fresh lineup of eggs. The day lasts as long as the runway is open (4 minutes 50 seconds); night falls as it
+-- closes, and is over 10 seconds later, when the next cycle's sun rises.
 
 export type Phase = "Open" | "Warning" | "Closed"
 
@@ -26,7 +26,7 @@ export type State = {
 
 local CycleClock = {}
 
-CycleClock.CYCLE_LENGTH = 180
+CycleClock.CYCLE_LENGTH = 300
 CycleClock.CLOSED_LENGTH = 10
 CycleClock.WARNING_LENGTH = 10
 -- Seconds into a cycle when the runway closes.
@@ -35,13 +35,13 @@ CycleClock.CLOSE_AT = CycleClock.CYCLE_LENGTH - CycleClock.CLOSED_LENGTH
 -- The time of day (Lighting.ClockTime, in hours) at the start of a cycle and when night falls.
 CycleClock.SUNRISE = 6
 CycleClock.SUNSET = 18
--- How much of each cycle is daytime.
-CycleClock.DAY_FRACTION = 0.7
+-- How much of each cycle is daytime: all the time the runway is open. The night is the closure.
+CycleClock.DAY_FRACTION = CycleClock.CLOSE_AT / CycleClock.CYCLE_LENGTH
 
--- Events repeat every EVENT_PERIOD cycles (20 x 3 min = once an hour each, 30 min apart).
-CycleClock.EVENT_PERIOD = 20
+-- Events repeat every EVENT_PERIOD cycles (12 x 5 min = once an hour each, 30 min apart).
+CycleClock.EVENT_PERIOD = 12
 CycleClock.TITAN_CYCLE = 0
-CycleClock.AVALANCHE_CYCLE = 10
+CycleClock.AVALANCHE_CYCLE = 6
 -- The event running now ("Avalanche"), or nil: the server's EventService keeps it in this Workspace attribute.
 CycleClock.EVENT_ATTRIBUTE = "ServerEvent"
 -- What each event is called on screen.
@@ -97,7 +97,7 @@ function CycleClock.clockTime(serverTime: number): number
 end
 
 -- Whether it is daytime at a moment, and the seconds until that changes: until sunset during the day, until the
--- next sunrise (the next cycle) at night. The HUD shows this as a moon or a sun and "in 1m 20s".
+-- next sunrise (the next cycle) at night. The HUD shows this as a moon or a sun and "in 3m 20s".
 function CycleClock.dayNight(serverTime: number): (boolean, number)
 	local state = CycleClock.getState(serverTime)
 	local sunset = CycleClock.CYCLE_LENGTH * CycleClock.DAY_FRACTION

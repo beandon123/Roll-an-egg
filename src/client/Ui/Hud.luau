@@ -1,13 +1,14 @@
 -- The on-screen HUD, built with Fusion. It only reads UiState; controllers change UiState and the HUD follows.
 --
--- Layout (phones first): runway timer and zone top centre; luck boost top left; Shop and Settings tabs on the
--- left edge; the wallet (Max Stamina, dollars, eggs) bottom left; Eggs, Pets and Ride tabs on the right edge
--- (Ui/Panels); stamina and claim meters bottom centre; the day and night clock bottom right. The Shop and Settings panels open in the middle over a dimmed backdrop.
+-- Layout (phones first): luck boost top left; Shop and Settings tabs on the left edge; the wallet (Max Stamina,
+-- dollars, eggs) bottom left; Eggs, Pets and Ride tabs on the right edge (Ui/Panels); stamina and claim meters bottom
+-- centre (and, while rolling on the training stick, its card and 2x bubbles: Ui/TrainingUi); the day and night clock
+-- bottom right. Messages appear near the top: short ones (toasts), and the big white alert when a Secret or rarer egg
+-- spawns. The Shop and Settings panels open in the middle over a dimmed backdrop.
 
 local Workspace = game:GetService("Workspace")
 
 local Load = require(script.Parent.Parent.Load)
-local CycleClock = Load.shared("CycleClock")
 local NumberFormat = Load.shared("NumberFormat")
 
 local Panels = require(script.Parent.Panels)
@@ -15,6 +16,7 @@ local SettingsPanel = require(script.Parent.SettingsPanel)
 local ShopPanel = require(script.Parent.ShopPanel)
 local StationPanels = require(script.Parent.StationPanels)
 local Theme = require(script.Parent.Theme)
+local TrainingUi = require(script.Parent.TrainingUi)
 local UiState = require(script.Parent.UiState)
 local Widgets = require(script.Parent.Widgets)
 
@@ -28,7 +30,6 @@ local STAMINA_COLOR = Color3.fromRGB(90, 200, 255)
 local CLAIM_COLOR = Color3.fromRGB(120, 230, 120)
 local DANGER_COLOR = Color3.fromRGB(255, 95, 95)
 local WARNING_COLOR = Color3.fromRGB(255, 160, 50)
-local EVENT_COLOR = Color3.fromRGB(130, 80, 200)
 
 -- The design is laid out for a 720-pixel-tall screen and scaled to fit others.
 local REFERENCE_HEIGHT = 720
@@ -41,31 +42,6 @@ end
 
 local function outline(scope)
 	return scope:New("UIStroke")({ Color = Color3.new(0, 0, 0), Thickness = 2, Transparency = 0.5 })
-end
-
--- A rounded dark panel with one line of text.
-local function pill(scope, props)
-	return scope:New("Frame")({
-		Name = props.Name,
-		AnchorPoint = props.AnchorPoint,
-		Position = props.Position,
-		Size = props.Size,
-		LayoutOrder = props.LayoutOrder,
-		BackgroundColor3 = props.Color or PANEL,
-		BackgroundTransparency = 0.1,
-		[Children] = {
-			corner(scope, 12),
-			outline(scope),
-			scope:New("TextLabel")({
-				BackgroundTransparency = 1,
-				Size = UDim2.fromScale(1, 1),
-				Font = Enum.Font.GothamBold,
-				Text = props.Text,
-				TextColor3 = WHITE,
-				TextSize = props.TextSize or 18,
-			}),
-		},
-	})
 end
 
 -- A progress bar with text over it. `Fill` is a state object from 0 to 1.
@@ -281,32 +257,14 @@ function Hud.mount(playerGui: Instance)
 		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 	end
 
-	local cycleText = scope:Computed(function(use)
-		local phase = use(UiState.cyclePhase)
-		local clock = NumberFormat.clock(use(UiState.cycleSeconds))
-		if phase == "Closed" then
-			return `Runway closed - eggs hatch 30x!  {clock}`
-		elseif phase == "Warning" then
-			return `Runway closing in {clock}!`
-		end
-		local event = use(UiState.serverEvent)
-		if event then
-			return `{CycleClock.EVENT_NAMES[event] or event}!  Runway closes in {clock}`
-		end
-		return `Runway closes in {clock}`
-	end)
-
-	local cycleColor = scope:Computed(function(use)
-		local phase = use(UiState.cyclePhase)
-		if phase == "Closed" then
-			return DANGER_COLOR
-		elseif phase == "Warning" then
-			return WARNING_COLOR
-		elseif use(UiState.serverEvent) then
-			return EVENT_COLOR
-		end
-		return PANEL
-	end)
+	-- The Secret egg alert pops up a little larger than it settles.
+	local announceScale = scope:Spring(
+		scope:Computed(function(use)
+			return if use(UiState.announceVisible) then 1 else 0.7
+		end),
+		28,
+		0.55
+	)
 
 	local staminaFill = scope:Computed(function(use)
 		local max = use(UiState.maxStamina)
@@ -349,29 +307,6 @@ function Hud.mount(playerGui: Instance)
 				end),
 				[Children] = {
 					scope:New("UIScale")({ Scale = uiScale }),
-
-					-- Top centre: the runway cycle and the zone the player is in.
-					pill(scope, {
-						Name = "Cycle",
-						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 8),
-						Size = UDim2.fromOffset(340, 38),
-						Color = cycleColor,
-						Text = cycleText,
-						TextSize = 17,
-					}),
-					scope:New("TextLabel")({
-						Name = "Zone",
-						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 50),
-						Size = UDim2.fromOffset(300, 24),
-						BackgroundTransparency = 1,
-						Font = Enum.Font.FredokaOne,
-						Text = UiState.zoneName,
-						TextColor3 = WHITE,
-						TextSize = 22,
-						TextStrokeTransparency = 0.3,
-					}),
 
 					-- Top left: the server luck boost, while one is running.
 					scope:New("Frame")({
@@ -530,39 +465,52 @@ function Hud.mount(playerGui: Instance)
 						ZIndex = 30,
 					}),
 
-					-- Secret and rarer eggs: what spawned, where, and when. The banner takes the rarity's color.
+					-- Secret and rarer eggs: what spawned, where, and when, in big white letters across the screen (no box)
+					-- for a few seconds, while an alert sounds (see the client's EggController).
 					scope:New("Frame")({
 						Name = "Announcement",
 						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 142),
-						Size = UDim2.fromOffset(480, 74),
-						BackgroundColor3 = UiState.announceColor,
-						BackgroundTransparency = 0.15,
+						Position = UDim2.new(0.5, 0, 0, 146),
+						Size = UDim2.new(1, -40, 0, 120),
+						BackgroundTransparency = 1,
 						Visible = UiState.announceVisible,
+						ZIndex = 25,
 						[Children] = {
-							corner(scope, 12),
-							outline(scope),
+							scope:New("UIScale")({ Scale = announceScale }),
 							scope:New("TextLabel")({
 								Name = "Title",
 								BackgroundTransparency = 1,
-								Position = UDim2.fromOffset(0, 6),
-								Size = UDim2.new(1, 0, 0, 34),
+								Size = UDim2.new(1, 0, 0, 76),
 								Font = Enum.Font.FredokaOne,
 								Text = UiState.announceTitle,
 								TextColor3 = WHITE,
-								TextSize = 30,
-								TextStrokeTransparency = 0.2,
+								TextSize = 68,
+								ZIndex = 25,
+								[Children] = {
+									scope:New("UIStroke")({
+										Color = Color3.new(0, 0, 0),
+										Thickness = 4,
+										Transparency = 0.1,
+									}),
+								},
 							}),
 							scope:New("TextLabel")({
 								Name = "Detail",
 								BackgroundTransparency = 1,
-								Position = UDim2.fromOffset(0, 42),
-								Size = UDim2.new(1, 0, 0, 24),
-								Font = Enum.Font.GothamBold,
+								Position = UDim2.fromOffset(0, 78),
+								Size = UDim2.new(1, 0, 0, 36),
+								Font = Enum.Font.FredokaOne,
 								Text = UiState.announceDetail,
 								TextColor3 = WHITE,
-								TextSize = 17,
-								TextStrokeTransparency = 0.3,
+								TextSize = 30,
+								ZIndex = 25,
+								[Children] = {
+									scope:New("UIStroke")({
+										Color = Color3.new(0, 0, 0),
+										Thickness = 3,
+										Transparency = 0.15,
+									}),
+								},
 							}),
 						},
 					}),
@@ -634,6 +582,9 @@ function Hud.mount(playerGui: Instance)
 						},
 					}),
 
+					-- While rolling on the training stick: its card above the stamina bar, and the 2x bubbles.
+					TrainingUi.hud(scope),
+
 					-- Panels, over a backdrop that closes them when tapped.
 					scope:New("TextButton")({
 						Name = "Backdrop",
@@ -654,6 +605,8 @@ function Hud.mount(playerGui: Instance)
 					SettingsPanel.build(scope),
 					-- The Trails stall, Sell stall and fuse machine panels (hidden until a station is used).
 					StationPanels.build(scope),
+					-- The training stick's upgrade panel (from the sign beside the stick).
+					TrainingUi.panel(scope),
 
 					-- Right edge: the Eggs, Pets and Ride tabs, and the panel they open.
 					Panels.build(scope),

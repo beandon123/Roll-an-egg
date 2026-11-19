@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rider Animation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* A 3D stage of one rider on a rolling egg, with the scenario picker and playback options under it. */
+  :root {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --ink: #17202e;
+    --muted: #586477;
+    --line: #d3dbe6;
+    --chip: #e6ecf4;
+    --yolk: #f2ac1f;
+    --yolk-ink: #3b2a00;
+    --focus: #2f6fdb;
+    --display: "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151f;
+      --panel: #182030;
+      --ink: #e8eef7;
+      --muted: #98a5b9;
+      --line: #283346;
+      --chip: #222c3f;
+      --yolk: #ffc23d;
+      --yolk-ink: #2d2000;
+      --focus: #7fb0ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151f;
+    --panel: #182030;
+    --ink: #e8eef7;
+    --muted: #98a5b9;
+    --line: #283346;
+    --chip: #222c3f;
+    --yolk: #ffc23d;
+    --yolk-ink: #2d2000;
+    --focus: #7fb0ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 var(--body);
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 32px; }
+  h1 { font: 600 26px/1.2 var(--display); margin: 0 0 4px; }
+  .lede { margin: 0 0 16px; color: var(--muted); }
+  .stage {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #9fd3f5;
+    border: 1px solid var(--line);
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .caption {
+    position: absolute; left: 12px; bottom: 12px; right: 12px;
+    display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+    color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+  }
+  .caption strong { font: 600 18px/1.2 var(--display); }
+  .controls { display: grid; gap: 12px; margin-top: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row > span { color: var(--muted); font-size: 13px; min-width: 64px; }
+  button {
+    font: 500 14px/1 var(--body);
+    color: var(--ink);
+    background: var(--chip);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 9px 14px;
+    min-height: 38px;
+    cursor: pointer;
+  }
+  button[aria-pressed="true"] { background: var(--yolk); color: var(--yolk-ink); border-color: transparent; font-weight: 600; }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  #about { margin: 0; color: var(--muted); min-height: 3em; }
+  .noscript { padding: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rider animation</h1>
+  <p class="lede">How players move while they ride an egg down the runway, worked out by the game's own
+    <code>Shared/RiderPose</code>.</p>
+  <div class="stage" id="stage">
+    <div class="caption"><strong id="title"></strong><span id="egg"></span></div>
+  </div>
+  <div class="controls">
+    <p id="about"></p>
+    <div class="row" role="group" aria-label="Scenario" id="scenarios"></div>
+    <div class="row" role="group" aria-label="Character">
+      <span>Character</span>
+      <button type="button" data-rig="r15" aria-pressed="true">R15</button>
+      <button type="button" data-rig="r6" aria-pressed="false">R6</button>
+    </div>
+    <div class="row" role="group" aria-label="Camera">
+      <span>Camera</span>
+      <button type="button" data-view="game" aria-pressed="true">Game</button>
+      <button type="button" data-view="side" aria-pressed="false">Side</button>
+      <button type="button" data-view="front" aria-pressed="false">Front</button>
+    </div>
+    <div class="row" role="group" aria-label="Speed">
+      <span>Speed</span>
+      <button type="button" data-speed="1" aria-pressed="true">Normal</button>
+      <button type="button" data-speed="0.25" aria-pressed="false">Slow motion</button>
+      <button type="button" data-speed="0" aria-pressed="false">Pause</button>
+    </div>
+  </div>
+</main>
+<noscript><p class="noscript">This preview needs JavaScript.</p></noscript>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const DATA = /*RIDER_DATA*/null;
+  const stage = document.getElementById("stage");
+
+  // ---------------------------------------------------------------- scene
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color("#9fd3f5");
+  scene.fog = new THREE.Fog("#9fd3f5", 60, 160);
+  const camera = new THREE.PerspectiveCamera(45, 16 / 10, 0.1, 400);
+
+  scene.add(new THREE.HemisphereLight("#ffffff", "#5d7a3a", 0.75));
+  const sun = new THREE.DirectionalLight("#fff6e0", 0.85);
+  sun.position.set(-18, 40, 12);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 100 });
+  scene.add(sun);
+
+  // The runway: a checkered strip that slides back under the egg as it rolls (the camera rides along with it).
+  const TILE = 8;
+  const checker = document.createElement("canvas");
+  checker.width = checker.height = 64;
+  const g2 = checker.getContext("2d");
+  g2.fillStyle = "#7cb342"; g2.fillRect(0, 0, 64, 64);
+  g2.fillStyle = "#6aa336"; g2.fillRect(0, 0, 32, 32); g2.fillRect(32, 32, 32, 32);
+  const groundTexture = new THREE.CanvasTexture(checker);
+  groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.magFilter = THREE.NearestFilter;
+  const GROUND = 240;
+  groundTexture.repeat.set(GROUND / (TILE * 2), GROUND / (TILE * 2));
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(GROUND, GROUND),
+    new THREE.MeshLambertMaterial({ map: groundTexture })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ---------------------------------------------------------------- the egg
+  const BOX = new THREE.BoxGeometry(1, 1, 1);
+  const materials = new Map();
+  function materialFor(hex, kind, transparency) {
+    const key = hex + kind + transparency;
+    if (!materials.has(key)) {
+      const color = new THREE.Color(hex);
+      materials.set(key, kind === "Neon"
+        ? new THREE.MeshBasicMaterial({ color })
+        : new THREE.MeshLambertMaterial({ color, transparent: transparency > 0, opacity: 1 - transparency }));
+    }
+    return materials.get(key);
+  }
+  // A training stick: a round log on its side (its axis along x, like an egg's), bark-brown with lighter ends.
+  function buildStick(info) {
+    const group = new THREE.Group();
+    const log = new THREE.Mesh(
+      new THREE.CylinderGeometry(info.radius, info.radius, 7, 10),
+      materialFor("#8a5a32", "Plastic", 0)
+    );
+    log.rotation.z = Math.PI / 2;
+    log.castShadow = true;
+    group.add(log);
+    // Stripes of darker bark, so the spin shows.
+    for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+      const stripe = new THREE.Mesh(BOX, materialFor("#5e3b1e", "Plastic", 0));
+      stripe.position.set(0, Math.cos(angle) * info.radius, Math.sin(angle) * info.radius);
+      stripe.rotation.x = -angle;
+      stripe.scale.set(7.05, 0.12, info.radius * 0.5);
+      group.add(stripe);
+    }
+    return group;
+  }
+  const water = new THREE.Mesh(
+    new THREE.BoxGeometry(9, 0.6, 5),
+    new THREE.MeshLambertMaterial({ color: "#3fa7d6", transparent: true, opacity: 0.85 })
+  );
+  water.position.set(0, 0.3, 0);
+
+  function buildEgg(egg) {
+    if (egg.stick) return buildStick(egg);
+    const group = new THREE.Group();
+    for (const [x, y, z, sx, sy, sz, hex, kind, tr] of egg.boxes) {
+      const mesh = new THREE.Mesh(BOX, materialFor(hex, kind, tr));
+      mesh.position.set(x, y, z);
+      mesh.scale.set(sx, sy, sz);
+      mesh.castShadow = true;
+      group.add(mesh);
+    }
+    return group;
+  }
+
+  // ---------------------------------------------------------------- the rider
+  // Blocky characters laid out like Roblox's R15 and R6 rigs, facing -z, their root part 3 studs off the ground.
+  // Each joint is a group at its pivot; a pose turns it (Euler YXZ, as CFrame.fromEulerAnglesYXZ) and shifts it.
+  const SKIN = "#f5cd30", SHIRT = "#2f7fd8", PANTS = "#4b5d8c", SHOE = "#33343a";
+  const R15 = [
+    // joint, parent, pivot (in the parent joint's space), boxes: [x, y, z, sx, sy, sz, colour]
+    ["Root", null, [0, -1, 0], [[0, 0.2, 0, 2, 0.4, 1, PANTS]]],
+    ["Waist", "Root", [0, 0.4, 0], [[0, 0.8, 0, 2, 1.6, 1, SHIRT]]],
+    ["Neck", "Waist", [0, 1.6, 0], [[0, 0.6, 0, 1.2, 1.2, 1.2, SKIN]]],
+    ["LeftShoulder", "Waist", [-1.5, 1.2, 0], [[0, -0.25, 0, 1, 1, 1, SHIRT]]],
+    ["LeftElbow", "LeftShoulder", [0, -0.75, 0], [[0, -0.45, 0, 1, 0.9, 1, SKIN]]],
+    ["LeftWrist", "LeftElbow", [0, -0.9, 0], [[0, -0.175, 0, 1, 0.35, 1, SKIN]]],
+    ["RightShoulder", "Waist", [1.5, 1.2, 0], [[0, -0.25, 0, 1, 1, 1, SHIRT]]],
+    ["RightElbow", "RightShoulder", [0, -0.75, 0], [[0, -0.45, 0, 1, 0.9, 1, SKIN]]],
+    ["RightWrist", "RightElbow", [0, -0.9, 0], [[0, -0.175, 0, 1, 0.35, 1, SKIN]]],
+    ["LeftHip", "Root", [-0.5, 0, 0], [[0, -0.5, 0, 1, 1, 1, PANTS]]],
+    ["LeftKnee", "LeftHip", [0, -1, 0], [[0, -0.4, 0, 1, 0.8, 1, PANTS]]],
+    ["LeftAnkle", "LeftKnee", [0, -0.8, 0], [[0, -0.1, -0.1, 1, 0.2, 1.2, SHOE]]],
+    ["RightHip", "Root", [0.5, 0, 0], [[0, -0.5, 0, 1, 1, 1, PANTS]]],
+    ["RightKnee", "RightHip", [0, -1, 0], [[0, -0.4, 0, 1, 0.8, 1, PANTS]]],
+    ["RightAnkle", "RightKnee", [0, -0.8, 0], [[0, -0.1, -0.1, 1, 0.2, 1.2, SHOE]]],
+  ];
+  const R6 = [
+    ["RootJoint", null, [0, 0, 0], [[0, 0, 0, 2, 2, 1, SHIRT]]],
+    ["Neck", "RootJoint", [0, 1, 0], [[0, 0.6, 0, 1.2, 1.2, 1.2, SKIN]]],
+    ["Left Shoulder", "RootJoint", [-1, 0.5, 0], [[-0.5, -0.5, 0, 1, 2, 1, SKIN]]],
+    ["Right Shoulder", "RootJoint", [1, 0.5, 0], [[0.5, -0.5, 0, 1, 2, 1, SKIN]]],
+    ["Left Hip", "RootJoint", [-1, -1, 0], [[0.5, -1, 0, 1, 2, 1, PANTS]]],
+    ["Right Hip", "RootJoint", [1, -1, 0], [[-0.5, -1, 0, 1, 2, 1, PANTS]]],
+  ];
+  const FACE = "#222222";
+
+  function buildRider(rig, headJoint) {
+    const root = new THREE.Group();
+    const joints = {};
+    for (const [name, parent, pivot, boxes] of rig) {
+      const joint = new THREE.Group();
+      joint.position.set(...pivot);
+      joint.userData.pivot = pivot;
+      joint.rotation.order = "YXZ";
+      for (const [x, y, z, sx, sy, sz, color] of boxes) {
+        const mesh = new THREE.Mesh(BOX, materialFor(color, "Plastic", 0));
+        mesh.position.set(x, y, z);
+        mesh.scale.set(sx, sy, sz);
+        mesh.castShadow = true;
+        joint.add(mesh);
+      }
+      (parent ? joints[parent] : root).add(joint);
+      joints[name] = joint;
+    }
+    // A face on the front (-z) of the head, so it is clear which way the rider looks.
+    const head = joints[headJoint];
+    for (const x of [-0.25, 0.25]) {
+      const eye = new THREE.Mesh(BOX, materialFor(FACE, "Plastic", 0));
+      eye.position.set(x, 0.72, -0.61);
+      eye.scale.set(0.16, 0.26, 0.04);
+      head.add(eye);
+    }
+    const mouth = new THREE.Mesh(BOX, materialFor(FACE, "Plastic", 0));
+    mouth.position.set(0, 0.35, -0.61);
+    mouth.scale.set(0.4, 0.08, 0.04);
+    head.add(mouth);
+    return { root, joints };
+  }
+
+  const riders = { r15: buildRider(R15, "Neck"), r6: buildRider(R6, "Neck") };
+
+  // ---------------------------------------------------------------- playback
+  const state = { scenario: DATA.scenarios[0], rig: "r15", view: "game", speed: 1, time: 0, distance: 0 };
+  let egg = null;
+  let current = null;
+
+  function setScenario(scenario) {
+    state.scenario = scenario;
+    state.time = 0;
+    if (egg) scene.remove(egg);
+    egg = buildEgg(scenario.egg);
+    scene.add(egg);
+    if (scenario.egg.stick) scene.add(water); else scene.remove(water);
+    document.getElementById("title").textContent = scenario.label;
+    document.getElementById("egg").textContent = scenario.egg.stick
+      ? `${scenario.egg.name} tier`
+      : `${scenario.egg.rarity} ${scenario.egg.name} · ${scenario.egg.speed} studs/s`;
+    document.getElementById("about").textContent = scenario.about;
+    for (const button of document.querySelectorAll("#scenarios button")) {
+      button.setAttribute("aria-pressed", String(button.dataset.id === scenario.id));
+    }
+  }
+  function setRig(rig) {
+    state.rig = rig;
+    if (current) scene.remove(current.root);
+    current = riders[rig];
+    scene.add(current.root);
+  }
+
+  // The pose at time t (seconds), blended between the recorded frames.
+  function applyPose(t) {
+    const frames = state.scenario.frames;
+    const at = (t * DATA.fps) % frames.length;
+    const a = frames[Math.floor(at)], b = frames[(Math.floor(at) + 1) % frames.length];
+    const mix = at - Math.floor(at);
+    const names = state.rig === "r15" ? DATA.joints : DATA.r6Joints;
+    const offset = state.rig === "r15" ? 0 : DATA.joints.length * 4;
+    for (let i = 0; i < names.length; i++) {
+      const joint = current.joints[names[i]];
+      const k = offset + i * 4;
+      const v = (n) => a[k + n] + (b[k + n] - a[k + n]) * mix;
+      joint.rotation.set(v(0), v(1), v(2));
+      joint.position.set(joint.userData.pivot[0], joint.userData.pivot[1] + v(3), joint.userData.pivot[2]);
+    }
+    // After the joints: seconds since being thrown off (or -1), then how far into a training boost (0 to 1).
+    const tumble = a[a.length - 2];
+    state.boost = a[a.length - 1];
+    return tumble >= 0 ? tumble + mix / DATA.fps : -1;
+  }
+
+  const VIEWS = {
+    game: [new THREE.Vector3(0, 14, 21), new THREE.Vector3(0, 7, -6)],
+    side: [new THREE.Vector3(-17, 9, 0), new THREE.Vector3(0, 7.5, 0)],
+    front: [new THREE.Vector3(6, 10, -17), new THREE.Vector3(0, 7.5, 0)],
+  };
+
+  function frame(dt) {
+    state.time += dt * state.speed;
+    const scenario = state.scenario;
+    const info = scenario.egg;
+    const loop = scenario.frames.length / DATA.fps;
+    const t = ((state.time % loop) + loop) % loop;
+    const tumble = applyPose(t);
+
+    if (info.stick) {
+      // The stick stays put and spins under the rider, faster in a boost.
+      state.distance += dt * state.speed * info.spin * 2 * Math.PI * (1 + (DATA.boostSpin - 1) * (state.boost || 0));
+      egg.position.set(0, info.rollHeight, 0);
+      egg.rotation.set(-state.distance, 0, 0);
+      groundTexture.offset.set(0, 0);
+    } else {
+      // The egg rolls on towards -z; the ground slides back under it.
+      state.distance += dt * state.speed * info.speed;
+      egg.position.set(0, info.rollHeight, 0);
+      egg.rotation.set(-state.distance / info.radius, 0, 0);
+      groundTexture.offset.set(0, (state.distance / (TILE * 2)) % 1);
+    }
+
+    // On top of the egg, or flung off its side when thrown off.
+    const top = info.rollHeight + info.radius + 3;
+    const rider = current.root;
+    if (tumble >= 0) {
+      const u = tumble;
+      rider.position.set(7 * u, top + 9 * u - 9 * u * u, 4 * u);
+      rider.rotation.set(-1.4 * u, 0, -2.2 * u);
+    } else {
+      rider.position.set(0, top, 0);
+      rider.rotation.set(0, 0, 0);
+    }
+
+    const [eye, look] = VIEWS[state.view];
+    camera.position.copy(eye).add(new THREE.Vector3(0, info.radius - 3, 0));
+    camera.lookAt(look.clone().add(new THREE.Vector3(0, info.radius - 3, 0)));
+    renderer.render(scene, camera);
+  }
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  // ---------------------------------------------------------------- controls
+  const scenarioRow = document.getElementById("scenarios");
+  const label = document.createElement("span");
+  label.textContent = "Show";
+  scenarioRow.append(label);
+  for (const scenario of DATA.scenarios) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.id = scenario.id;
+    button.textContent = scenario.label;
+    button.setAttribute("aria-pressed", "false");
+    button.addEventListener("click", () => setScenario(scenario));
+    scenarioRow.append(button);
+  }
+  function wire(attribute, apply) {
+    const buttons = document.querySelectorAll(`[data-${attribute}]`);
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+        apply(button.dataset[attribute]);
+      });
+    }
+  }
+  wire("rig", setRig);
+  wire("view", (view) => { state.view = view; });
+  wire("speed", (speed) => { state.speed = Number(speed); });
+
+  // For screenshots and checks: jump to a moment of a scenario.
+  window.riderPreview = {
+    show(id, time, rig, view) {
+      setScenario(DATA.scenarios.find((s) => s.id === id));
+      if (rig) setRig(rig);
+      if (view) state.view = view;
+      state.speed = 0;
+      state.time = time;
+      state.distance = state.scenario.egg.stick ? time * state.scenario.egg.spin * 2 * Math.PI : time * state.scenario.egg.speed;
+      frame(0);
+    },
+  };
+
+  setScenario(state.scenario);
+  setRig("r15");
+  resize();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    state.speed = 0;
+    for (const b of document.querySelectorAll("[data-speed]")) b.setAttribute("aria-pressed", String(b.dataset.speed === "0"));
+  }
+  let last = performance.now();
+  function loop(now) {
+    frame(Math.min(0.1, Math.max(0, (now - last) / 1000)));
+    last = now;
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

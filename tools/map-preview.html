@@ -25,7 +25,10 @@
   const scene = new THREE.Scene();
   const sky = new THREE.Color("#a9d4f2");
   scene.background = sky;
-  scene.fog = new THREE.Fog(sky, 260, 900);
+  // The game's own fog (linear, as Roblox's is), or a light haze for an older export.
+  scene.fog = DATA.fog
+    ? new THREE.Fog(new THREE.Color(DATA.fog.color), DATA.fog.start, DATA.fog.finish)
+    : new THREE.Fog(sky, 260, 900);
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.5, 3000);
 
   scene.add(new THREE.HemisphereLight("#e8f4ff", "#6b5a44", 0.75));

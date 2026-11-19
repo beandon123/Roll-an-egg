@@ -1,4 +1,5 @@
--- Puts the HUD on screen and refreshes the numbers that change every frame (stamina, timers, claim progress).
+-- Puts the HUD on screen and refreshes the numbers that change every frame (stamina, timers, claim progress), and
+-- says so when the runway is about to close and when it closes.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,10 +8,8 @@ local Workspace = game:GetService("Workspace")
 local Load = require(script.Parent.Parent.Load)
 local CycleClock = Load.shared("CycleClock")
 local LuckBoost = Load.shared("LuckBoost")
-local Runway = Load.shared("Runway")
-local Showroom = Load.shared("Showroom")
 local StaminaMath = Load.shared("StaminaMath")
-local Zones = Load.shared("Config", "Zones")
+local Tuning = Load.shared("Config", "Tuning")
 
 local Hud = require(script.Parent.Parent.Ui.Hud)
 local UiState = require(script.Parent.Parent.Ui.UiState)
@@ -18,6 +17,10 @@ local UiState = require(script.Parent.Parent.Ui.UiState)
 local localPlayer = Players.LocalPlayer
 
 local HudController = {}
+
+local CLOSING_COLOR = Color3.fromRGB(255, 170, 70)
+-- The runway's phase last frame, to notice it changing.
+local lastPhase: string? = nil
 
 local function update()
 	local now = Workspace:GetServerTimeNow()
@@ -35,6 +38,15 @@ local function update()
 	UiState.serverEvent:set(if typeof(event) == "string" then event else nil)
 	UiState.cyclePhase:set(cycle.phase)
 	UiState.cycleSeconds:set(math.ceil(if cycle.phase == "Closed" then cycle.untilNextCycle else cycle.untilClose))
+	-- A short message as the runway starts to close, and as it closes (there is no timer on screen).
+	if cycle.phase ~= lastPhase then
+		if lastPhase ~= nil and cycle.phase == "Warning" then
+			UiState.showToast(`Runway closes in {math.ceil(cycle.untilClose)}s!`, CLOSING_COLOR, 3)
+		elseif lastPhase ~= nil and cycle.phase == "Closed" then
+			UiState.showToast(`Runway closed: eggs hatch {Tuning.HATCH_BOOST}x faster!`, CLOSING_COLOR, 4)
+		end
+		lastPhase = cycle.phase
+	end
 	local isDay, untilChange = CycleClock.dayNight(now)
 	UiState.isDay:set(isDay)
 	UiState.dayNightSeconds:set(math.ceil(untilChange))
@@ -63,19 +75,6 @@ local function update()
 	local leapEndsAt = UiState.leapEndsAt
 	if leapEndsAt then
 		UiState.leapSecondsLeft:set(math.max(0, math.ceil((leapEndsAt - os.clock()) * 10) / 10))
-	end
-
-	-- Which zone the player is in.
-	local character = localPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") then
-		local position = root.Position
-		local zoneId = Runway.zoneAt(position.Z)
-		if Showroom.contains(position.X, position.Z) then
-			UiState.zoneName:set("Model Showroom")
-		else
-			UiState.zoneName:set(if zoneId then Zones.List[zoneId].name else "Hub")
-		end
 	end
 end
 

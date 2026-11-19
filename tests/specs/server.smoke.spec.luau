@@ -65,7 +65,9 @@ return function(harness)
 			EggSpec = session:require(folder.EggSpec),
 			EggMotion = session:require(folder.EggMotion),
 			Obstacles = session:require(folder.Obstacles),
+			CycleClock = session:require(folder.CycleClock),
 			Runway = session:require(folder.Runway),
+			StaminaMath = session:require(folder.StaminaMath),
 			Tuning = session:require(folder.Config.Tuning),
 			Zones = session:require(folder.Config.Zones),
 		}
@@ -102,20 +104,18 @@ return function(harness)
 		local modules = shared(session)
 		local spec = modules.EggSpec.get(egg.zone, egg.rarity)
 		local startZ = egg.startZ or spec.startZ
-		local fadeZ = math.min(
-			math.max(modules.Runway.fadeZ(egg.zone), startZ + modules.Runway.ZONE_LENGTH),
-			modules.Runway.LOOP_END - 1
-		)
+		local fadeZ = modules.EggSpec.fadeZ(egg.zone, startZ)
 		local path = modules.Obstacles.planPath(egg.lateral, startZ, fadeZ, spec.halfLength, spec.radius)
 		return path, spec, startZ
 	end
 
-	-- Where an egg (as described in an EggSpawned message) is right now, if nobody has steered it.
+	-- Where an egg (as described in an EggSpawned message) is right now in the world, if nobody has steered it. (Eggs
+	-- are steered in runway space; the runway winds, so world x is its centre line there plus the egg's lateral.)
 	local function eggPosition(session, egg)
 		local modules = shared(session)
 		local path, spec, startZ = eggPath(session, egg)
 		local z = modules.Runway.wrapZ(modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock))
-		local x = modules.Obstacles.lateralAt(path, z)
+		local x = modules.Runway.worldX(modules.Obstacles.lateralAt(path, z), z)
 		return roblox.Vector3.new(x, modules.Runway.surfaceY(z) + spec.radius, z)
 	end
 
@@ -132,9 +132,10 @@ return function(harness)
 	end
 
 	-- Drops an egg of a chosen rarity and returns its EggSpawned message.
-	local function dropEgg(session, zone, rarity)
+	-- `placement` ({ z, lateral }) puts it somewhere other than a random spot at the start of its zone.
+	local function dropEgg(session, zone, rarity, placement)
 		session:clearSent()
-		expect.truthy(runwayService(session).DropEgg(zone, rarity), "DropEgg")
+		expect.truthy(runwayService(session).DropEgg(zone, rarity, nil, placement), "DropEgg")
 		session:heartbeat(1 / 60)
 		for _, entry in session:sent("EggSpawned", "all") do
 			local egg = entry.args[1]
@@ -163,18 +164,29 @@ return function(harness)
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
 			local runway = shared(session).Runway
-			for _, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
-				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height.
+				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height, each row
+				-- centred on the runway where it is (it winds) and reaching a little under the banks.
 				local tiles = 0
 				for _, tile in zone.Ground:GetChildren() do
 					if tile.Size.X == 20 and tile.Size.Z == 20 then
 						tiles += 1
-						expect.near(tile.CFrame.Position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
+						local position = tile.CFrame.Position
+						expect.near(position.Y + tile.Size.Y / 2, runway.BASE_Y, 1e-6)
+						local across = math.abs(runway.lateralOf(position.X, position.Z))
+						expect.truthy(
+							across <= runway.zoneWidth(zoneId) / 2 + 10 + 1e-3,
+							`{zoneName} tile {across} studs out`
+						)
 					end
 				end
-				expect.equal(tiles, (runway.WIDTH / 20) * (runway.ZONE_LENGTH / 20), zoneName .. " tiles")
+				expect.equal(
+					tiles,
+					(runway.zoneWidth(zoneId) / 20 + 1) * (runway.zoneLength(zoneId) / 20),
+					zoneName .. " tiles"
+				)
 				expect.truthy(#zone.Banks:GetChildren() > 50, zoneName .. " banks")
 				expect.truthy(#zone.Backdrop:GetChildren() > 0, zoneName .. " backdrop")
 				expect.equal(#zone.Sign:GetChildren(), 2, zoneName .. " sign faces")
@@ -196,7 +208,13 @@ return function(harness)
 					expect.truthy(model:FindFirstChild("Lid") and model:FindFirstChild("Shell"), "clam")
 				end
 			end
-			expect.truthy(session:service("Lighting"):FindFirstChildOfClass("Atmosphere"), "haze")
+			-- Fog, set in studs: crisp close by, everything far off lost in pale white-blue (no Atmosphere, which would
+			-- hide it).
+			local lighting = session:service("Lighting")
+			expect.equal(lighting:FindFirstChildOfClass("Atmosphere"), nil)
+			expect.truthy(lighting.FogStart > 0 and lighting.FogStart < 100, "fog starts close by")
+			expect.truthy(lighting.FogEnd > lighting.FogStart and lighting.FogEnd <= 800, "and hides what is far off")
+			expect.truthy(lighting.FogColor.R > 0.8 and lighting.FogColor.B > 0.9, "pale white-blue")
 			expect.equal(session:service("Players").RespawnTime, 2)
 			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
 		end)
@@ -241,8 +259,8 @@ return function(harness)
 			local session = startServer()
 			session:heartbeat(0.1, 300)
 			session:clearSent()
-			-- The session starts 5 s into a cycle and the runway closes at 170 s.
-			session:heartbeat(0.5, 280)
+			-- The session starts 5 s into a cycle and the runway closes at 290 s.
+			session:heartbeat(0.5, 520)
 			local closures = 0
 			for _, entry in session:sent("EggRemoved", "all") do
 				if entry.args[2] == "Closure" then
@@ -322,9 +340,10 @@ return function(harness)
 			expect.equal(claimed.args[3], "Common")
 			expect.equal(claimed.args[4], egg.kind)
 
-			-- The player is still on the egg, rolling, and pays no stamina for it.
+			-- The player is still on the egg, rolling, and pays no stamina for it, so they do not look tired.
 			expect.equal(#session:sent("RideEnded", player), 0)
 			expect.truthy(session:lastSent("StaminaChanged", player).args[3] > 0, "stamina regenerates")
+			expect.equal(player:GetAttribute(shared(session).StaminaMath.RUNS_OUT_AT), nil)
 			rideAlongPath(session, player, egg, 3)
 			expect.equal(#session:sent("RideEnded", player), 0)
 
@@ -387,9 +406,18 @@ return function(harness)
 			local egg = mount(session, player, root, 1, "Epic") -- needs 200 stamina; the player has 100
 			expect.truthy(session:lastSent("RideStarted", player), "RideStarted")
 
+			-- Every device is told when the stamina will run out, to show the rider tiring.
+			local runsOutAt = shared(session).StaminaMath.RUNS_OUT_AT
+			expect.near(
+				player:GetAttribute(runsOutAt),
+				session:lastSent("RideStarted", player).args[2].startTime + 7.5,
+				1e-6
+			)
+
 			-- Steering clear of the obstacles, the stamina runs out after 7.5 s.
 			rideAlongPath(session, player, egg, 8)
 			expect.equal(session:lastSent("RideEnded", player).args[1], "ThrownOff")
+			expect.equal(player:GetAttribute(runsOutAt), nil)
 			local left = session:lastSent("EggLeft", "all")
 			expect.equal(left.args[1], egg.id)
 			expect.equal(left.args[4], true, "cracking")
@@ -431,22 +459,29 @@ return function(harness)
 			expect.equal(#session:sent("EggLateral", "all"), 2)
 		end)
 
-		it("checks the obstacle hits a rider reports, and kills riders who hit lava", function()
+		it("checks the obstacle hits a rider reports, and only slows riders who hit lava", function()
 			local session = startServer()
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local modules = shared(session)
+			-- A lava pool well into the Volcano zone, with a row of obstacles before it.
 			local lava
 			for _, obstacle in modules.Obstacles.all() do
-				if obstacle.kind == "LavaPool" then
+				if obstacle.kind == "LavaPool" and obstacle.z > modules.Runway.zoneStartZ(5) + 200 then
 					lava = obstacle
 					break
 				end
 			end
+			local rowsBefore = modules.Obstacles.rowsBetween(lava.z - 200, lava.row.zMin - 0.01)
+			local before = rowsBefore[#rowsBefore]
+			if before == lava.row then
+				before = rowsBefore[#rowsBefore - 1]
+			end
 
-			-- Get on a Volcano egg a few seconds before it reaches the lava pool.
-			local egg = dropEgg(session, 5, "Rare")
+			-- Get on a Volcano egg a few seconds before it reaches the lava pool. It starts in the pool's lane, so
+			-- however wide the zone, the rider has only a short way to steer once past the row before it.
+			local egg = dropEgg(session, 5, "Rare", { lateral = lava.x })
 			local path, spec, startZ = eggPath(session, egg)
 			local arrive = egg.spawnTime + (lava.z - startZ) / spec.rollSpeed
 			while session.clock < arrive - 3 do
@@ -465,10 +500,11 @@ return function(harness)
 
 			-- Steer into the pool once past the row before it (the server only lets the egg move as fast as the
 			-- rider's Agility allows), and report the hit as soon as the egg touches it.
-			while session.clock < arrive - 0.6 do
+			local clearZ = before.zMax + spec.radius + 0.5
+			while session.clock < arrive - 0.3 do
 				session:heartbeat(1 / 30)
 				local z = modules.EggMotion.zAt(egg.spawnTime, startZ, spec.rollSpeed, session.clock)
-				local steer = if session.clock > arrive - 2.2 then lava.x else modules.Obstacles.lateralAt(path, z)
+				local steer = if z > clearZ then lava.x else modules.Obstacles.lateralAt(path, z)
 				session:fromClient("RideLateral", player, steer)
 			end
 			session:fromClient("ReportHit", player, lava.id)
@@ -476,12 +512,17 @@ return function(harness)
 			local hit = session:lastSent("ObstacleHit", player)
 			expect.truthy(hit, "ObstacleHit")
 			expect.equal(hit.args[1], lava.id)
-			expect.equal(hit.args[2], "Lethal")
-			expect.equal(session:lastSent("RideEnded", player).args[1], "Hazard")
-			expect.equal(humanoid.Health, 0)
+			expect.equal(hit.args[2], "Slow")
+			expect.equal(session:lastSent("RideEnded", player), nil, "still riding")
+			expect.equal(humanoid.Health, 100)
+			-- Everyone is told the egg slows down, so every device draws it in the same place.
+			local slowed = session:lastSent("EggSlowed", "all")
+			expect.truthy(slowed, "EggSlowed")
+			expect.equal(slowed.args[1], egg.id)
+			expect.near(slowed.args[2].duration, modules.Tuning.HIT_EFFECTS.Slow.slow)
 		end)
 
-		it("burns players who walk into lava", function()
+		it("never kills a player standing in lava", function()
 			local session = startServer()
 			local _, humanoid, root = session:addPlayer(1, "Tester")
 			local modules = shared(session)
@@ -492,12 +533,9 @@ return function(harness)
 					break
 				end
 			end
-			root.Position = roblox.Vector3.new(lava.x + lava.hx + 4, modules.Runway.BASE_Y + 3, lava.z)
-			task.wait(0.4)
-			expect.equal(humanoid.Health, 100, "safe beside it")
-			root.Position = roblox.Vector3.new(lava.x, modules.Runway.BASE_Y + 3, lava.z)
-			task.wait(0.4)
-			expect.equal(humanoid.Health, 0)
+			root.Position = roblox.Vector3.new(modules.Runway.worldX(lava.x, lava.z), modules.Runway.BASE_Y + 3, lava.z)
+			task.wait(0.6)
+			expect.equal(humanoid.Health, 100)
 		end)
 
 		it("frees the egg when its rider dies or hops off", function()
@@ -521,7 +559,8 @@ return function(harness)
 		end)
 
 		-- Rides a Forest egg into the side of the runway once it is a few studs into the stretch `pick` returns (a
-		-- bank, or a gap), steering toward the side the egg is already nearer. Returns the RideEnded reason.
+		-- bank, or a gap), steering toward the side the egg is already nearer. Returns what happened first: "Edge"
+		-- (it bounced off the side), "Obstacle" (something got in the way first), or a RideEnded reason.
 		local function steerIntoSide(session, player, root, pick)
 			local modules = shared(session)
 			runwayService(session).SetMaxStamina(player, 1e9)
@@ -541,6 +580,10 @@ return function(harness)
 				local ended = session:lastSent("RideEnded", player)
 				if ended then
 					return ended.args[1]
+				elseif session:lastSent("EdgeHit", player) then
+					return "Edge"
+				elseif session:lastSent("ObstacleHit", player) then
+					return "Obstacle"
 				end
 			end
 			error("never reached the side")
@@ -555,35 +598,53 @@ return function(harness)
 			error("no gap")
 		end
 
-		it("kills a rider who steers into a bank", function()
+		it("bounces a rider's egg off a bank, and never kills them", function()
 			local session = startServer()
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			-- The banks in front of the first gap.
-			local ended = steerIntoSide(session, player, root, function(runway, side)
+			local happened = steerIntoSide(session, player, root, function(runway, side)
 				return firstGapStart(runway, side) - 60
 			end)
-			expect.truthy(ended == "HitWall" or ended == "KnockedOff" or ended == "Hazard", ended)
-			if ended == "HitWall" then
-				expect.equal(humanoid.Health, 0)
+			expect.truthy(happened == "Edge" or happened == "Obstacle", happened)
+			if happened == "Edge" then
+				local edge = session:lastSent("EdgeHit", player)
+				expect.equal(typeof(edge.args[1]), "number")
+				expect.truthy(session:lastSent("EggLateral", "all"), "everyone sees it bounce")
 			end
+			task.wait(0.5)
+			expect.equal(humanoid.Health, 100)
+			expect.truthy(runwayService(session).IsRiding(player), "still riding")
 		end)
 
-		it("kills a rider who goes over the edge through a gap, after a short fall", function()
+		it("bounces a rider's egg off the railing across a gap: nobody goes over the edge", function()
 			local session = startServer()
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
-			local ended = steerIntoSide(session, player, root, function(runway, side)
+			local happened = steerIntoSide(session, player, root, function(runway, side)
 				return firstGapStart(runway, side)
 			end)
-			if ended == "FellOff" then
-				expect.equal(humanoid.Health, 100, "still falling")
-				task.wait(shared(session).Tuning.FALL_OFF_TIME + 0.2)
-				expect.equal(humanoid.Health, 0)
-			else
-				-- An obstacle got in the way first.
-				expect.truthy(ended == "KnockedOff" or ended == "Hazard", ended)
+			expect.truthy(happened == "Edge" or happened == "Obstacle", happened)
+			task.wait(0.5)
+			expect.equal(humanoid.Health, 100)
+			expect.truthy(runwayService(session).IsRiding(player), "still riding")
+		end)
+
+		it("checks the side-of-the-runway hits a rider's device reports", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			mount(session, player, root, 1, "Common")
+			expect.truthy(session:lastSent("RideStarted", player), "riding")
+			-- Steered to the middle of the runway (the server only lets it move as fast as the rider can steer), then
+			-- a report of the side: not believed.
+			for _ = 1, 30 do
+				session:heartbeat(0.1)
+				session:fromClient("RideLateral", player, 0)
 			end
+			session:fromClient("ReportEdge", player)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("EdgeHit", player), nil)
 		end)
 
 		it("keeps a rider going far past where the runway used to end", function()
@@ -593,23 +654,37 @@ return function(harness)
 			runwayService(session).SetMaxStamina(player, 1e9)
 			local egg = mount(session, player, root, 6, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 60 s on the fastest egg: several times the length of the last zone. Steer round the obstacles along one
-			-- path planned for the whole ride from where the egg is now. It is planned in distance rolled, not where
-			-- the egg is drawn: the last zone repeats, so the obstacles match.
+			-- 80 s on the fastest egg: from the start of the last zone right through it and past the end of the loop,
+			-- where the rider is carried back. This test is about the loop, so the obstacles are moved out of the way
+			-- (dodging them is tested elsewhere: a path planned for an egg nobody rides swerves faster than a rider
+			-- can steer); the rider just holds their lane, keeping well clear of the walls where they bend in.
+			local seconds = 80
 			local modules = shared(session)
+			modules.Obstacles.hitAt = function()
+				return nil
+			end
+			modules.Obstacles.activeAround = function()
+				return false
+			end
 			local spec = modules.EggSpec.get(6, "Eternal")
 			local function rolledZ()
 				return modules.EggMotion.zAt(egg.spawnTime, egg.startZ, spec.rollSpeed, session.clock)
 			end
 			local fromZ = rolledZ()
-			local lane = modules.Runway.mountLateral(eggPosition(session, egg).X, spec.halfLength)
-			local rideLength = spec.rollSpeed * 60
-			expect.truthy(rideLength > modules.Runway.LOOP_LENGTH * 2, "more than twice round the loop")
-			local path = modules.Obstacles.planPath(lane, fromZ, fromZ + rideLength + 100, spec.halfLength, spec.radius)
-			for _ = 1, 60 * 30 do
-				session:fromClient("RideLateral", player, modules.Obstacles.lateralAt(path, rolledZ()))
+			local at = eggPosition(session, egg)
+			local lane = modules.Runway.mountLateral(modules.Runway.lateralOf(at.X, at.Z), spec.halfLength, at.Z)
+			expect.truthy(fromZ + spec.rollSpeed * seconds > modules.Runway.LOOP_END, "past the end of the loop")
+			local carriedBack = false
+			local lastZ = fromZ
+			for _ = 1, seconds * 30 do
+				local z = modules.Runway.wrapZ(rolledZ())
+				carriedBack = carriedBack or z < lastZ
+				lastZ = z
+				local low, high = modules.Runway.lateralRange(spec.halfLength, z)
+				session:fromClient("RideLateral", player, math.clamp(lane, low + 3, high - 3))
 				session:heartbeat(1 / 30)
 			end
+			expect.truthy(carriedBack, "carried back one loop")
 			local ended = session:lastSent("RideEnded", player)
 			expect.equal(ended, nil, if ended then "ride ended: " .. ended.args[1] else "")
 			expect.equal(humanoid.Health, 100)
@@ -659,11 +734,6 @@ return function(harness)
 		end
 
 		-- Stands the player's character in their pen, at (inward, along), facing up the plot.
-		local function standInPen(session, root, index, inward, along)
-			local x, z = plots(session).point(index, inward, along)
-			root.CFrame = roblox.CFrame.new(x, 13, z)
-		end
-
 		local function lastNotice(session, player)
 			local notice = session:lastSent("Notice", player)
 			return if notice then notice.args[1] else ""
@@ -712,27 +782,33 @@ return function(harness)
 			expect.near(root.CFrame.Position.Z, z, 1e-3)
 		end)
 
-		it("puts an egg down where the player stands in their pen, where it hatches into a pet", function()
+		it("puts an egg down at the spot the player clicks in their pen, where it hatches into a pet", function()
 			local session = startServer()
-			local player, _, root = session:addPlayer(1, "Tester")
+			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local InventoryService = services(session)
 			InventoryService.AddEgg(player, 1, "Common", "Leafy")
 			local data = session.profiles.Player_1.Data
 			local uid = data.Eggs[1].uid
 
-			-- Not in the pen: nothing happens but a hint.
-			session:fromClient("PlaceEgg", player, uid)
+			-- A spot outside their pen (another player's plot), or no spot at all: nothing happens but a hint.
+			local otherX, otherZ = plots(session).point(2, 30, 10)
+			session:fromClient("PlaceEgg", player, uid, otherX, otherZ)
 			expect.equal(#data.Hatching, 0)
-			expect.truthy(string.find(lastNotice(session, player), "Walk into your pen"), lastNotice(session, player))
-
-			standInPen(session, root, 1, 30, 10)
+			expect.truthy(string.find(lastNotice(session, player), "inside your pen"), lastNotice(session, player))
 			session:heartbeat(0.3)
 			session:fromClient("PlaceEgg", player, uid)
+			session:fromClient("PlaceEgg", player, uid, 0 / 0, 5)
+			expect.equal(#data.Hatching, 0)
+
+			-- A spot in their own pen: it goes down there, wherever the player is standing.
+			local spotX, spotZ = plots(session).point(1, 30, 10)
+			session:heartbeat(0.3)
+			session:fromClient("PlaceEgg", player, uid, spotX, spotZ)
 			expect.equal(#data.Eggs, 0)
 			local entry = data.Hatching[1]
-			expect.near(entry.along, 10, 5)
-			expect.near(entry.inward, 30, 5)
+			expect.near(entry.along, 10, 1e-6)
+			expect.near(entry.inward, 30, 1e-6)
 			local egg = plotModel(session, 1).Eggs["Egg_" .. uid]
 			expect.equal(egg:GetAttribute("EggKind"), "Leafy")
 			expect.equal(egg:GetAttribute("EggName"), "Leafy Egg")
@@ -757,22 +833,89 @@ return function(harness)
 			expect.equal(plotModel(session, 1):GetAttribute("Pets"), "Squirrel:" .. pet.variant)
 		end)
 
+		it("puts claimed eggs in the player's Roblox inventory, one tool per kind of egg", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local InventoryService = services(session)
+			local backpack = player:FindFirstChildOfClass("Backpack")
+			local function eggTools()
+				local tools = {}
+				for _, tool in backpack:GetChildren() do
+					if tool:IsA("Tool") and tool:GetAttribute("EggKind") then
+						tools[tool:GetAttribute("EggKind")] = tool
+					end
+				end
+				return tools
+			end
+			expect.equal(next(eggTools()), nil, "no eggs, no tools")
+
+			InventoryService.AddEgg(player, 1, "Common", "Leafy")
+			InventoryService.AddEgg(player, 1, "Rare", "Toadstool")
+			InventoryService.AddEgg(player, 1, "Rare", "Toadstool")
+			local tools = eggTools()
+			expect.equal(tools.Leafy.Name, "Leafy Egg")
+			expect.equal(tools.Toadstool.Name, "Toadstool Egg x2")
+			expect.equal(tools.Toadstool:GetAttribute("EggCount"), 2)
+			expect.equal(tools.Leafy.CanBeDropped, false)
+			-- The egg itself is in the player's hand: its model, welded to the handle.
+			local handle = tools.Leafy:FindFirstChild("Handle")
+			expect.truthy(handle and handle:IsA("BasePart"), "a handle")
+			expect.equal(handle.Anchored, false)
+			local blocks, welded = 0, 0
+			for _, part in handle:GetChildren() do
+				if part:IsA("BasePart") then
+					blocks += 1
+					expect.equal(part.Anchored, false)
+					local weld = part:FindFirstChildOfClass("WeldConstraint")
+					if weld and weld.Part0 == handle and weld.Part1 == part then
+						welded += 1
+					end
+				end
+			end
+			expect.truthy(blocks > 10, "the egg's blocks")
+			expect.equal(welded, blocks, "every block welded to the handle")
+
+			-- Putting one down takes one away; putting the last one down takes the tool away.
+			local data = session.profiles.Player_1.Data
+			local x, z = plots(session).point(1, 30, 0)
+			local leafy
+			for _, egg in data.Eggs do
+				if egg.kind == "Leafy" then
+					leafy = egg.uid
+				end
+			end
+			session:fromClient("PlaceEgg", player, leafy, x, z)
+			tools = eggTools()
+			expect.equal(tools.Leafy, nil)
+			expect.equal(tools.Toadstool.Name, "Toadstool Egg x2")
+
+			-- Respawning empties the Backpack in Roblox; the eggs come back.
+			for _, tool in backpack:GetChildren() do
+				tool:Destroy()
+			end
+			session:fire(player, "CharacterAdded", player.Character)
+			task.wait()
+			expect.equal(eggTools().Toadstool.Name, "Toadstool Egg x2")
+		end)
+
 		it("hatches only as many eggs at once as the pen allows, spaced apart", function()
 			local session = startServer()
-			local player, _, root = session:addPlayer(1, "Tester")
+			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local InventoryService = services(session)
 			for _ = 1, 3 do
 				InventoryService.AddEgg(player, 1, "Rare", "Toadstool")
 			end
 			local data = session.profiles.Player_1.Data
-			standInPen(session, root, 1, 30, 0)
-			session:fromClient("PlaceEgg", player, "not-an-egg")
-			session:fromClient("PlaceEgg", player, 42)
+			-- Three clicks on the same spot.
+			local x, z = plots(session).point(1, 30, 0)
+			session:fromClient("PlaceEgg", player, "not-an-egg", x, z)
+			session:fromClient("PlaceEgg", player, 42, x, z)
 			expect.equal(#data.Hatching, 0)
 			for index = 1, 3 do
 				session:heartbeat(0.3)
-				session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
+				session:fromClient("PlaceEgg", player, data.Eggs[1].uid, x, z)
 				expect.equal(#data.Hatching, math.min(index, 2))
 			end
 			expect.equal(#data.Eggs, 1, "the third egg waits in the inventory")
@@ -815,17 +958,18 @@ return function(harness)
 
 		it("banks the closure's 30x hatching when the next cycle starts", function()
 			local session = startServer()
-			local player, _, root = session:addPlayer(1, "Tester")
+			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			task.wait(0.1)
 			local InventoryService = services(session)
 			InventoryService.AddEgg(player, 1, "Epic", "Bear")
 			local data = session.profiles.Player_1.Data
-			standInPen(session, root, 1, 30, 0)
+			local x, z = plots(session).point(1, 30, 0)
 			-- Put down shortly before the runway closes, then through to the next cycle.
-			local cycleStart = (math.floor(session.clock / 180) + 1) * 180
+			local cycleLength = shared(session).CycleClock.CYCLE_LENGTH
+			local cycleStart = (math.floor(session.clock / cycleLength) + 1) * cycleLength
 			session.clock = cycleStart - 25
-			session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
+			session:fromClient("PlaceEgg", player, data.Eggs[1].uid, x, z)
 			session.clock = cycleStart + 1
 			task.wait(0.6)
 			expect.near(data.Hatching[1].bonus, 29 * 10)
@@ -961,7 +1105,7 @@ return function(harness)
 					expect.truthy(away <= reach, `the pet's {part.Name} is {away} studs from it`)
 				end
 			end
-			expect.equal(humanoid.WalkSpeed, 30 + 4, "an Epic pet, plus Gold")
+			expect.equal(humanoid.WalkSpeed, 45 + 4, "an Epic pet, plus Gold")
 			expect.truthy(humanoid.HipHeight > 2, "lifted onto its back")
 			expect.equal(data.Mount, "steed")
 			expect.equal(session:lastSent("MountChanged", player).args[1], "steed")
@@ -979,10 +1123,8 @@ return function(harness)
 			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
 		end)
 
-		it("sends a ridden pet away while its rider is on an egg, and brings it back after", function()
-			local session = startServer()
-			local player, humanoid, root = session:addPlayer(1, "Tester")
-			session:heartbeat(1 / 60)
+		-- Gives the player a pet to ride.
+		local function giveSteed(session)
 			local data = session.profiles.Player_1.Data
 			table.insert(data.Pets, {
 				uid = "steed",
@@ -994,6 +1136,14 @@ return function(harness)
 				inPen = true,
 				hatchedAt = 0,
 			})
+			return data
+		end
+
+		it("sends a ridden pet away when its rider gets on an egg, and it stays away", function()
+			local session = startServer()
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = giveSteed(session)
 			session:fromClient("RidePet", player, "steed")
 			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
 			mount(session, player, root, 1, "Common")
@@ -1002,19 +1152,65 @@ return function(harness)
 			session:fromClient("RequestDismount", player)
 			session:heartbeat(1 / 60)
 			task.wait(3.3)
-			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1, "back after leaving the egg")
-			expect.equal(humanoid.WalkSpeed, 24)
+			session:heartbeat(1 / 60)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0, "pets never go on the runway")
+			expect.equal(humanoid.WalkSpeed, 16)
+			expect.equal(data.Mount, "steed", "still the pet they ride, for next time")
 
-			-- Selling the pet sends it away for good.
+			-- Selling the pet clears it.
 			session:heartbeat(0.3)
 			session:fromClient("SellPet", player, "steed")
-			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
 			expect.equal(data.Mount, "")
+		end)
+
+		it("costs stamina to ride a pet, and the pet bucks its rider off when it runs out", function()
+			local session = startServer()
+			local tuning = shared(session).Tuning
+			local player, humanoid = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			giveSteed(session)
+			humanoid.WalkSpeed = 16
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
+			-- (Stamina changes go out on the server's next frame.)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[3], -tuning.PET_RIDE_DRAIN, "draining")
+
+			-- 100 stamina lasts 20 s.
+			session:heartbeat(0.5, math.floor(100 / tuning.PET_RIDE_DRAIN * 2) - 1)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1, "still riding")
+			session:heartbeat(0.5, 2)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0, "bucked off")
+			expect.equal(session:lastSent("PetBucked", player).args[1], "Fox")
+			expect.equal(session:lastSent("MountChanged", player).args[1], "")
+			expect.equal(humanoid.WalkSpeed, 16)
+			expect.truthy(session:lastSent("StaminaChanged", player).args[3] > 0, "resting now")
+
+			-- Too tired to get straight back on.
+			session:clearSent()
+			session:heartbeat(0.3)
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			local notice = session:lastSent("Notice", player)
+			expect.truthy(notice and string.find(notice.args[1], "Too tired"), "told why")
+		end)
+
+		it("takes a pet rider off their pet as soon as they reach the runway", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			giveSteed(session)
+			session:fromClient("RidePet", player, "steed")
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 1)
+			root.Position = roblox.Vector3.new(0, 20, 30)
+			session:heartbeat(1 / 60)
+			expect.equal(#session:service("Workspace").Mounts:GetChildren(), 0)
+			expect.equal(session:lastSent("MountChanged", player).args[1], "")
 		end)
 
 		it("can give eggs, pets and dollars and finish hatching from the admin panel", function()
 			local session = startServer()
-			local player, _, root = session:addPlayer(1, "Tester")
+			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			local data = session.profiles.Player_1.Data
 			expect.truthy((admin(session, player, "GiveEgg", { egg = "Treant", count = 2 })))
@@ -1023,8 +1219,8 @@ return function(harness)
 
 			-- Nothing to hatch yet.
 			expect.falsy((admin(session, player, "HatchNow")))
-			standInPen(session, root, 1, 30, 0)
-			session:fromClient("PlaceEgg", player, data.Eggs[1].uid)
+			local x, z = plots(session).point(1, 30, 0)
+			session:fromClient("PlaceEgg", player, data.Eggs[1].uid, x, z)
 			local ok, message = admin(session, player, "HatchNow")
 			expect.truthy(ok, message)
 			expect.equal(message, "Hatched 1 egg.")
@@ -1185,7 +1381,9 @@ return function(harness)
 			expect.equal(egg.zone, 3)
 			expect.equal(egg.rarity, "Secret")
 			expect.equal(egg.startZ, 710)
-			expect.equal(egg.lateral, 10)
+			-- Across the runway from where they stand (it winds, so that is not x itself).
+			local runway = shared(session).Runway
+			expect.near(egg.lateral, runway.lateralOf(10, 710))
 
 			-- Off the runway, "here" falls back to the chute and says so.
 			root.Position = roblox.Vector3.new(0, 13, -100)
@@ -1488,9 +1686,11 @@ return function(harness)
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Zone", zone = 3 })))
 			local position = root.CFrame.Position
-			expect.near(position.Z, 1240, 1e-3)
-			expect.near(position.Y, runway.surfaceY(1240) + 3.5, 1e-3)
-			expect.near(position.X, 0, 1e-3)
+			local landing = runway.zoneStartZ(3) + 40
+			expect.near(position.Z, landing, 1e-3)
+			expect.near(position.Y, runway.surfaceY(landing) + 3.5, 1e-3)
+			-- The middle of the runway there (it winds).
+			expect.near(position.X, runway.centerX(landing), 1e-3)
 
 			expect.truthy((admin(session, player, "Teleport", { to = "Cliff" })))
 			expect.near(root.CFrame.Position.Z, runway.LENGTH - 90, 1e-3)
@@ -1598,12 +1798,12 @@ return function(harness)
 		end)
 
 		it("runs the Egg Avalanche on its own once an hour", function()
-			-- Cycle 1010 is an Avalanche cycle (10 of every 20).
-			local session = startServer({ clock = 180 * 1010 + 5 })
+			-- Cycle 1014 is an Avalanche cycle (6 of every 12; a cycle is 5 minutes).
+			local session = startServer({ clock = 300 * 1014 + 5 })
 			session:heartbeat(1 / 60)
 			expect.equal(session:service("Workspace"):GetAttribute("ServerEvent"), "Avalanche")
 			-- It ends when the runway closes and does not start again in the next cycle.
-			session:heartbeat(1, 180)
+			session:heartbeat(1, 300)
 			expect.equal(session:service("Workspace"):GetAttribute("ServerEvent"), nil)
 		end)
 	end)
@@ -1816,74 +2016,97 @@ return function(harness)
 	end)
 
 	describe("Server: map", function()
-		it("breaks the runway's banks with gaps and paints the start zone", function()
-			local session = startServer()
-			local map = session:service("Workspace").Map
-			local runway = shared(session).Runway
-			for zoneId, zone in shared(session).Zones.List do
-				local folder = map[zone.key]
-				-- No kerb runs across a gap, and every gap has a warning strip along the runway's edge.
-				local gaps = runway.wallGaps(zoneId)
-				local strips, kerbLength = 0, 0
-				for _, part in folder.Ground:GetChildren() do
-					local side = if part.Name == "KerbLeft" then 1 elseif part.Name == "KerbRight" then -1 else nil
-					if side then
-						local center, half = part.CFrame.Position.Z, part.Size.Z / 2
-						kerbLength += half * 2
-						expect.truthy(side * part.CFrame.Position.X > runway.WIDTH / 2, `{zone.key} {part.Name} side`)
-						for _, gap in gaps do
-							if gap.side == side then
-								local overlaps = center + half > gap.startZ + 1e-3 and center - half < gap.endZ - 1e-3
-								expect.falsy(overlaps, `{zone.key} {part.Name} covers a gap`)
-							end
+		it(
+			"follows the winding runway with kerbs, closes every gap with a railing, and paints the start zone",
+			function()
+				local session = startServer()
+				local map = session:service("Workspace").Map
+				local runway = shared(session).Runway
+				for zoneId, zone in shared(session).Zones.List do
+					local folder = map[zone.key]
+					-- A kerb down each edge the whole way, just outside the runway wherever its bends take it.
+					local kerbLength = 0
+					for _, part in folder.Ground:GetChildren() do
+						local side = if part.Name == "KerbLeft" then 1 elseif part.Name == "KerbRight" then -1 else nil
+						if side then
+							local position = part.CFrame.Position
+							kerbLength += part.Size.Z * math.cos(runway.heading(position.Z))
+							local across = side * runway.lateralOf(position.X, position.Z)
+							local half = runway.zoneWidth(zoneId) / 2
+							expect.truthy(across > half, `{zone.key} {part.Name} side`)
+							expect.truthy(across < half + 4, `{zone.key} {part.Name} beside the runway`)
 						end
-					elseif part.Name == "GapWarning" then
-						strips += 1
+						expect.truthy(part.Name ~= "GapWarning", "no warning strips: the gaps are safe")
+					end
+					expect.truthy(kerbLength >= 2 * runway.zoneLength(zoneId) - 1e-3, zone.key .. " kerbs")
+					-- An invisible wall across every gap in the banks (the Ocean's boardwalk has one all the way).
+					if zone.key ~= "Ocean" then
+						for _, gap in runway.wallGaps(zoneId) do
+							local covered = 0
+							for _, part in folder.Banks:GetChildren() do
+								local position = if part:IsA("BasePart")
+									then part.CFrame.Position
+									else roblox.Vector3.zero
+								local across = gap.side * runway.lateralOf(position.X, position.Z)
+								if
+									part.Name == "GapWall"
+									and position.Z > gap.startZ
+									and position.Z < gap.endZ
+									and across > 0
+								then
+									expect.truthy(
+										across > runway.zoneWidth(zoneId) / 2
+											and across < runway.zoneWidth(zoneId) / 2 + 3,
+										"at the edge"
+									)
+									expect.truthy(part.CanCollide, "solid")
+									covered += part.Size.Z * math.cos(runway.heading(position.Z))
+								end
+							end
+							expect.truthy(
+								covered >= gap.endZ - gap.startZ - 1e-3,
+								`{zone.key} gap at {gap.startZ} closed`
+							)
+						end
 					end
 				end
-				expect.equal(strips, #gaps, zone.key .. " warning strips")
-				local gapLength = 0
-				for _, gap in gaps do
-					gapLength += gap.endZ - gap.startZ
-				end
-				expect.near(kerbLength, 2 * runway.ZONE_LENGTH - gapLength, 1e-3)
-			end
 
-			-- No end cliff: the last zone goes on past the end of the runway, obstacles and all.
-			expect.falsy(map:FindFirstChild("End"), "no end cliff")
-			local lastZone = shared(session).Zones.List[runway.ZONE_COUNT]
-			for copy = 1, runway.REPEATS do
-				local repeatFolder = map:FindFirstChild(lastZone.key .. "Repeat" .. copy)
-				expect.truthy(repeatFolder, "copy " .. copy)
-				local sign = repeatFolder:FindFirstChild("SignPost")
-				expect.truthy(sign, "copy " .. copy .. " has its gate")
-				expect.near(sign.CFrame.Position.Z, runway.FINAL_ZONE_START + copy * runway.LOOP_LENGTH, 1e-3)
-			end
-			local beyond = 0
-			for _, obstacle in shared(session).Obstacles.all() do
-				if obstacle.z > runway.LENGTH then
-					beyond += 1
+				-- No end cliff: the last zone goes on past the end of the runway, obstacles and all.
+				expect.falsy(map:FindFirstChild("End"), "no end cliff")
+				local lastZone = shared(session).Zones.List[runway.ZONE_COUNT]
+				for copy = 1, runway.REPEATS do
+					local repeatFolder = map:FindFirstChild(lastZone.key .. "Repeat" .. copy)
+					expect.truthy(repeatFolder, "copy " .. copy)
+					local sign = repeatFolder:FindFirstChild("SignPost")
+					expect.truthy(sign, "copy " .. copy .. " has its gate")
+					expect.near(sign.CFrame.Position.Z, runway.FINAL_ZONE_START + copy * runway.LOOP_LENGTH, 1e-3)
 				end
-			end
-			expect.truthy(beyond > 0, "obstacles past the end")
-			local built = 0
-			for _, model in map.Obstacles:GetChildren() do
-				if
-					model:GetAttribute("ObstacleId")
-					and shared(session).Obstacles.get(model:GetAttribute("ObstacleId")).z > runway.LENGTH
-				then
-					built += 1
+				local beyond = 0
+				for _, obstacle in shared(session).Obstacles.all() do
+					if obstacle.z > runway.LENGTH then
+						beyond += 1
+					end
 				end
-			end
-			expect.equal(built, beyond, "and built")
+				expect.truthy(beyond > 0, "obstacles past the end")
+				local built = 0
+				for _, model in map.Obstacles:GetChildren() do
+					if
+						model:GetAttribute("ObstacleId")
+						and shared(session).Obstacles.get(model:GetAttribute("ObstacleId")).z > runway.LENGTH
+					then
+						built += 1
+					end
+				end
+				expect.equal(built, beyond, "and built")
 
-			local strip = map.StartZone.Strip
-			expect.equal(strip.SurfaceGui.TextLabel.Text, "START ZONE")
-			-- Lying flat, written face up, its top edge pointing down the runway.
-			expect.near(strip.CFrame.LookVector.Y, 1, 1e-6)
-			expect.near(strip.CFrame.UpVector.Z, 1, 1e-6)
-			expect.truthy(strip.CFrame.Position.Z < 0, "on the hub, before the runway")
-		end)
+				local strip = map.StartZone.Strip
+				expect.equal(strip.SurfaceGui.TextLabel.Text, "START ZONE")
+				-- Lying flat, written face up, its top edge pointing down the runway.
+				expect.near(strip.CFrame.LookVector.Y, 1, 1e-6)
+				expect.near(strip.CFrame.UpVector.Z, 1, 1e-6)
+				expect.truthy(strip.CFrame.Position.Z < 0, "on the hub, before the runway")
+			end
+		)
 
 		it("ranks players by eggs claimed on the leaderboard", function()
 			local session = startServer()
@@ -2216,6 +2439,54 @@ return function(harness)
 			expect.truthy(stations.Sell.Counter.CFrame.LookVector.X < -0.99, "Sell faces the middle")
 		end)
 
+		it("lines the runway with tall banks that step out as it widens, zone by zone", function()
+			local session = startServer()
+			local map = session:service("Workspace").Map
+			local runway = shared(session).Runway
+			for zoneId, zone in shared(session).Zones.List do
+				local banks = map[zone.key].Banks
+				local half = runway.zoneWidth(zoneId) / 2
+				if zone.key == "Ocean" then
+					-- A boardwalk: tall railing posts, and a tall invisible wall behind them.
+					local posts, walls = 0, 0
+					for _, part in banks:GetChildren() do
+						if
+							part:IsA("BasePart")
+							and math.abs(part.Size.Y - 7) < 1e-3
+							and math.abs(part.Size.X - 1.2) < 1e-3
+						then
+							posts += 1
+							local position = part.CFrame.Position
+							expect.near(math.abs(runway.lateralOf(position.X, position.Z)), half + 1, 0.2)
+						elseif part.Name == "SeaWall" then
+							walls += 1
+							expect.truthy(part.Size.Y >= 40, "sea wall height")
+						end
+					end
+					expect.truthy(posts > 20, "railing posts")
+					expect.truthy(walls > 0, "sea walls")
+				else
+					-- The grassy (sandy, snowy...) top of the wall beside the runway: its first step, which starts at the
+					-- runway's edge (plus a kerb), wherever the bends take it, and stands 46 to 54 studs high.
+					local caps = 0
+					for _, part in banks:GetChildren() do
+						if part:IsA("BasePart") and math.abs(part.Size.Y - 2) < 1e-3 then
+							local position = part.CFrame.Position
+							local inner = math.abs(runway.lateralOf(position.X, position.Z)) - part.Size.X / 2
+							local top = position.Y + part.Size.Y / 2 - runway.BASE_Y
+							if inner > half and inner < half + 3 and top > 0 then
+								caps += 1
+								expect.truthy(top >= 46 - 1e-3 and top <= 54 + 1e-3, `{zone.key} wall {top} high`)
+							end
+						end
+					end
+					expect.truthy(caps > 20, `{zone.key} has a wall beside its runway ({caps})`)
+				end
+				-- The gate spans the zone's width.
+				expect.near(map[zone.key].Sign.Size.X, runway.zoneWidth(zoneId) + 12, 1e-6)
+			end
+		end)
+
 		it("walls in the hub, leaving only the runway open", function()
 			local session = startServer()
 			local walls = session:service("Workspace").Map.HubWalls
@@ -2226,7 +2497,7 @@ return function(harness)
 			end
 			local left, right = walls.FrontLeft.CFrame.Position, walls.FrontRight.CFrame.Position
 			local gap = (right.X - walls.FrontRight.Size.X / 2) - (left.X + walls.FrontLeft.Size.X / 2)
-			expect.near(gap, shared(session).Runway.WIDTH, 1e-6)
+			expect.near(gap, shared(session).Runway.START_WIDTH, 1e-6)
 		end)
 
 		it("rings the hub with terraced cliffs, a column of solid steps at a time", function()
@@ -2506,6 +2777,292 @@ return function(harness)
 			expect.equal(values.MusicVolume, 0.46)
 			expect.equal(values.ShowMyPets, false)
 			expect.equal(values.Vibration, true)
+		end)
+	end)
+	describe("Server: training stick", function()
+		local CFrame = roblox.CFrame
+
+		local function modules(session)
+			local folder = session:service("ReplicatedStorage").Shared
+			return {
+				Plots = session:require(folder.Plots),
+				Sticks = session:require(folder.Config.Sticks),
+				StickModels = session:require(folder.StickModels),
+				Runway = session:require(folder.Runway),
+			}
+		end
+
+		local function standOf(session, index)
+			return session:service("Workspace").Map.Plots["Plot" .. index].TrainingStick
+		end
+
+		local function signOf(stand)
+			return stand.Sign.Board.Face.Card
+		end
+
+		-- Stands the character in front of its plot's stand and uses the "Start rolling" prompt.
+		local function getOn(session, player, root, index)
+			local spot = modules(session).StickModels.standCFrame(index)
+			root.CFrame = spot * CFrame.new(-8, 3, 0)
+			session:fire(standOf(session, index).Seat.Train, "Triggered", player)
+			session:heartbeat(1 / 60)
+		end
+
+		local function sentCount(session, name, player)
+			return #session:sent(name, player)
+		end
+
+		it("builds a stick in front of every plot: a roller over a trough of water, a sign and a prompt", function()
+			local session = startServer()
+			local m = modules(session)
+			for index = 1, m.Plots.COUNT do
+				local stand = standOf(session, index)
+				expect.truthy(stand, "stand " .. index)
+				expect.equal(stand:GetAttribute("Level"), 1)
+				expect.equal(stand:GetAttribute("Rider"), 0)
+				local x, z = m.Plots.stickSpot(index)
+				local at = stand.Base.Plinth.CFrame.Position
+				expect.near(at.X, x, 1e-3)
+				expect.near(at.Z, z, 1e-3)
+				expect.truthy(stand.Base.Water.Transparency > 0, "water")
+				-- The roller turns on its Root: everything else is welded to it.
+				local roller = stand.Roller
+				expect.equal(roller:GetAttribute("Level"), 1)
+				expect.equal(roller.PrimaryPart.Name, "Root")
+				expect.equal(roller.PrimaryPart.Anchored, true)
+				for _, part in roller:GetDescendants() do
+					if part:IsA("BasePart") and part ~= roller.PrimaryPart then
+						expect.equal(part.Anchored, false, part.Name)
+						expect.truthy(part:FindFirstChildOfClass("WeldConstraint"), part.Name .. " welded")
+					end
+				end
+				local axle = m.StickModels.axleCFrame(index, 1).Position
+				expect.near((roller.PrimaryPart.CFrame.Position - axle).Magnitude, 0, 1e-3)
+				expect.truthy(stand.Seat.Train:IsA("ProximityPrompt"), "Start rolling prompt")
+				expect.equal(stand.Sign.Board.Upgrade:GetAttribute("StickSign"), true)
+				-- Nobody owns these plots yet.
+				expect.equal(signOf(stand).Title.Text, "TRAINING STICK")
+				expect.equal(signOf(stand).Rates.Text, "Free plot")
+			end
+		end)
+
+		it("builds every tier's roller, each its own model", function()
+			local session = startServer()
+			local m = modules(session)
+			local seen = {}
+			for level = 1, m.Sticks.MAX_LEVEL do
+				local roller = m.StickModels.buildRoller(level)
+				expect.equal(roller.Name, m.Sticks.tier(level).id)
+				expect.truthy(roller:FindFirstChild("Axle"), "axle")
+				local parts = 0
+				for _, part in roller:GetDescendants() do
+					if part:IsA("BasePart") then
+						parts += 1
+						expect.equal(part.CanCollide, false, part.Name)
+					end
+				end
+				expect.truthy(parts >= 12, `{roller.Name} has {parts} parts`)
+				expect.falsy(seen[parts .. roller.Name], "unique")
+				seen[parts .. roller.Name] = true
+			end
+		end)
+
+		it("puts the owner on their stick, and builds Max Stamina four times a second", function()
+			local session = startServer()
+			local m = modules(session)
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local stand = standOf(session, 1)
+			expect.equal(signOf(stand).Title.Text, "UPGRADE STICK")
+			expect.equal(signOf(stand).Next.TierName.Text, "Plank")
+			expect.equal(signOf(stand).Rates.Text, "+4/s  ➜  +8/s Stamina")
+			expect.equal(signOf(stand).Buttons.Dollars.Price.Text, "$500")
+
+			-- From far away, nothing happens.
+			session:fire(stand.Seat.Train, "Triggered", player)
+			session:heartbeat(1 / 60)
+			expect.equal(sentCount(session, "TrainingStarted", player), 0)
+
+			getOn(session, player, root, 1)
+			expect.equal(root.Anchored, true)
+			expect.equal(stand:GetAttribute("Rider"), 1)
+			local started = session:lastSent("TrainingStarted", player).args[1]
+			expect.equal(started.level, 1)
+			expect.equal(started.plot, 1)
+			-- Standing on top of the roller, facing the plaza.
+			local spot = m.StickModels.riderCFrame(1, 1, root.Size.Y / 2 + 2)
+			expect.near((root.CFrame.Position - spot.Position).Magnitude, 0, 1e-3)
+			expect.truthy(root.CFrame.LookVector:Dot(spot.LookVector) > 0.999, "facing the plaza")
+
+			-- Four reps in a second, each +1, kept in the save.
+			session:clearSent()
+			session:heartbeat(0.05, 20)
+			local reps = session:sent("TrainingRep", player)
+			expect.equal(#reps, 4)
+			expect.equal(reps[1].args[1], 1)
+			expect.equal(reps[1].args[2], false)
+			expect.equal(dataOf(session, 1).TrainedStamina, 4)
+			-- (The runway sends stamina changes on its next frame.)
+			session:heartbeat(1 / 60)
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 104)
+
+			-- A 2x bubble a moment later; a wrong tap does nothing, the right one doubles the next reps.
+			session:heartbeat(0.05, 22)
+			local bubble = session:lastSent("TrainingBubble", player)
+			expect.truthy(bubble, "a bubble")
+			session:fromClient("ClaimTrainingBoost", player, bubble.args[1] + 1)
+			session:fromClient("ClaimTrainingBoost", player, "junk")
+			expect.equal(sentCount(session, "TrainingBoost", player), 0)
+			session:fromClient("ClaimTrainingBoost", player, bubble.args[1])
+			expect.equal(sentCount(session, "TrainingBoost", player), 1)
+			expect.truthy(stand:GetAttribute("BoostUntil") > session.clock, "others see the boost")
+			session:clearSent()
+			session:heartbeat(0.05, 10)
+			local boosted = session:sent("TrainingRep", player)
+			expect.truthy(#boosted >= 2, "reps")
+			for _, entry in boosted do
+				expect.equal(entry.args[1], 2)
+				expect.equal(entry.args[2], true)
+			end
+
+			-- Getting off: let go, put down in front of the trough, told so.
+			session:fromClient("StopTraining", player)
+			expect.equal(root.Anchored, false)
+			expect.equal(stand:GetAttribute("Rider"), 0)
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Stopped")
+			local position = root.CFrame.Position
+			local inward = m.Plots.toLocal(1, position.X, position.Z)
+			expect.truthy(inward < m.Plots.STICK_SPOT[1] - 4, "in front of the trough")
+			local trained = dataOf(session, 1).TrainedStamina
+			session:heartbeat(0.05, 20)
+			expect.equal(dataOf(session, 1).TrainedStamina, trained, "no reps once off")
+		end)
+
+		it("only lets the owner on, and lets go of riders who die or are teleported", function()
+			local session = startServer({ admins = { 1 } })
+			local player, humanoid, root = session:addPlayer(1, "Tester")
+			local other, _, otherRoot = session:addPlayer(2, "Visitor")
+			session:heartbeat(1 / 60)
+
+			-- Plot 1 is the first player's; the visitor cannot get on it.
+			getOn(session, other, otherRoot, 1)
+			expect.equal(sentCount(session, "TrainingStarted", other), 0)
+			expect.equal(otherRoot.Anchored, false)
+
+			getOn(session, player, root, 1)
+			session:fire(humanoid, "Died")
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Died")
+			expect.equal(standOf(session, 1):GetAttribute("Rider"), 0)
+
+			getOn(session, player, root, 1)
+			expect.equal(root.Anchored, true)
+			local ok = admin(session, player, "Teleport", { to = "Hub" })
+			expect.truthy(ok, "teleported")
+			expect.equal(session:lastSent("TrainingEnded", player).args[1], "Moved")
+			expect.equal(root.Anchored, false)
+		end)
+
+		it("upgrades the stick with dollars or Robux, even mid-roll, up to the last tier", function()
+			local session = startServer()
+			local m = modules(session)
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = dataOf(session, 1)
+			local stand = standOf(session, 1)
+
+			data.Dollars = 300
+			session:fromClient("BuyWithDollars", player, "StickUpgrade")
+			local result = purchaseResult(session, player)
+			expect.equal(result[2], false)
+			expect.equal(result[3], "The Plank costs $500: you have $300")
+			expect.equal(data.StickLevel, 1)
+
+			getOn(session, player, root, 1)
+			local lowY = root.CFrame.Position.Y
+			data.Dollars = 600
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("BuyWithDollars", player, "StickUpgrade")
+			result = purchaseResult(session, player)
+			expect.equal(result[2], true)
+			expect.equal(result[3], "Your stick is now a Plank! +2 Stamina a roll")
+			expect.equal(data.StickLevel, 2)
+			expect.equal(data.Dollars, 100)
+			expect.equal(stand:GetAttribute("Level"), 2)
+			expect.equal(stand.Roller:GetAttribute("Level"), 2)
+			expect.equal(signOf(stand).Next.TierName.Text, "Short Log")
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].stickLevel, 2)
+			-- Still rolling, now on top of the plank (a little higher), and told the new tier.
+			expect.equal(root.Anchored, true)
+			expect.truthy(root.CFrame.Position.Y > lowY, "stood on the plank")
+			expect.equal(session:lastSent("TrainingStarted", player).args[1].level, 2)
+			session:clearSent()
+			session:heartbeat(0.05, 20)
+			expect.equal(session:lastSent("TrainingRep", player).args[1], 2)
+
+			-- With Robux: granted straight away in Studio while there is no product ID...
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(data.StickLevel, 3)
+			expect.truthy(string.find(purchaseResult(session, player)[3], "Short Log", 1, true), "message")
+
+			-- ...and through Roblox's prompt and receipt once it has one, granted once.
+			local shop = shopConfig(session)
+			shop.StickLevels[4].productId = 4004
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(session.prompts[#session.prompts].id, 4004)
+			local receipt = { PlayerId = 1, ProductId = 4004, PurchaseId = "stick-1" }
+			processReceipt(session, receipt)
+			processReceipt(session, receipt)
+			expect.equal(data.StickLevel, 4)
+
+			data.StickLevel = m.Sticks.MAX_LEVEL
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "StickUpgrade")
+			expect.equal(purchaseResult(session, player)[3], "Your stick is as good as it gets!")
+			session:heartbeat(1.1)
+			expect.equal(signOf(stand).Title.Text, "MAX LEVEL!")
+			expect.equal(signOf(stand).Buttons.Dollars.Visible, false)
+		end)
+
+		it("puts the stick back to the first tier when its owner leaves, and keeps what they trained", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			dataOf(session, 1).StickLevel = 5
+			session:heartbeat(1.1)
+			local stand = standOf(session, 1)
+			expect.equal(stand:GetAttribute("Level"), 5)
+			getOn(session, player, root, 1)
+			session:heartbeat(0.05, 20)
+			session:fire(session:service("Players"), "PlayerRemoving", player)
+			player.Parent = nil
+			expect.equal(stand:GetAttribute("Level"), 1)
+			expect.equal(stand:GetAttribute("Rider"), 0)
+			expect.equal(signOf(stand).Rates.Text, "Free plot")
+			local saved = session.saved["Player_1"]
+			expect.equal(saved.StickLevel, 5)
+			expect.equal(saved.TrainedStamina, 4 * 30)
+		end)
+
+		it("lets admins change the stick's tier and clear what was trained", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = dataOf(session, 1)
+			local ok, message = admin(session, player, "Stick", { action = "Max" })
+			expect.truthy(ok)
+			expect.equal(message, "Stick: level 8, Rainbow Crystal.")
+			expect.equal(standOf(session, 1):GetAttribute("Level"), 8)
+			admin(session, player, "Stick", { action = "Down" })
+			expect.equal(data.StickLevel, 7)
+			admin(session, player, "Stick", { action = "Up" })
+			admin(session, player, "Stick", { action = "Up" })
+			expect.equal(data.StickLevel, 8)
+			data.TrainedStamina = 5000
+			admin(session, player, "Stick", { action = "ClearTrained" })
+			expect.equal(data.TrainedStamina, 0)
+			expect.equal((admin(session, player, "Stick", { action = "Nope" })), false)
 		end)
 	end)
 end

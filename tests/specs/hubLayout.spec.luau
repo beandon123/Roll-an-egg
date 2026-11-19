@@ -11,7 +11,7 @@ return function(harness)
 	local Runway = harness.load("src/shared/Runway")
 
 	-- The painted start zone at the front of the hub, and the spawn pad in the middle of the plaza.
-	local START_ZONE = { x = 0, z = -15, sizeX = Runway.WIDTH + 4, sizeZ = 30 }
+	local START_ZONE = { x = 0, z = -15, sizeX = Runway.START_WIDTH + 4, sizeZ = 30 }
 	local SPAWN = { x = 0, z = -Runway.HUB_LENGTH / 2 }
 
 	-- Each player's plot, as big as it gets.
@@ -85,6 +85,62 @@ return function(harness)
 			end
 		end)
 
+		it("stands each plot's training stick in the plaza, clear of everything else", function()
+			local stands = {}
+			for index = 1, Plots.COUNT do
+				local x, z, sizeX, sizeZ = Plots.stickRect(index)
+				table.insert(stands, { index = index, rect = { x = x, z = z, sizeX = sizeX, sizeZ = sizeZ } })
+			end
+			-- The upgrade button beside each gate, and the gate itself with room to walk through it.
+			local function plotFeatures(index)
+				local bx, bz = Plots.point(index, Plots.BUTTON_SPOT[1], Plots.BUTTON_SPOT[2])
+				local g0x, g0z = Plots.point(index, -6, -Plots.GATE_HALF_WIDTH - 1)
+				local g1x, g1z = Plots.point(index, 0, Plots.GATE_HALF_WIDTH + 1)
+				return {
+					{ name = "button", rect = circle(bx, bz, 5) },
+					{
+						name = "gate",
+						rect = {
+							x = (g0x + g1x) / 2,
+							z = (g0z + g1z) / 2,
+							sizeX = math.abs(g1x - g0x),
+							sizeZ = math.abs(g1z - g0z),
+						},
+					},
+				}
+			end
+			for _, stand in stands do
+				local minX, maxX, minZ, maxZ = HubLayout.bounds(stand.rect)
+				expect.truthy(minX >= -HubLayout.HALF_WIDTH and maxX <= HubLayout.HALF_WIDTH, `stand {stand.index} x`)
+				expect.truthy(minZ >= -HubLayout.LENGTH and maxZ <= 0, `stand {stand.index} z`)
+				for index, rect in plotRects() do
+					expect.falsy(HubLayout.rectsOverlap(stand.rect, rect), `stand {stand.index} on plot {index}`)
+					for _, feature in plotFeatures(index) do
+						expect.falsy(
+							HubLayout.rectsOverlap(stand.rect, feature.rect),
+							`stand {stand.index} on plot {index}'s {feature.name}`
+						)
+					end
+				end
+				for _, thing in plazaThings() do
+					expect.falsy(HubLayout.rectsOverlap(stand.rect, thing.rect), `stand {stand.index} on {thing.name}`)
+				end
+				for _, other in stands do
+					if other ~= stand then
+						expect.falsy(
+							HubLayout.rectsOverlap(stand.rect, other.rect),
+							`stands {stand.index}, {other.index}`
+						)
+					end
+				end
+				-- The spot for the stand itself and its sign are inside the ground it takes up.
+				local x, z = Plots.stickSpot(stand.index)
+				expect.near(HubLayout.distanceToRect(x, z, stand.rect), 0)
+				local sx, sz = Plots.point(stand.index, Plots.STICK_SIGN_SPOT[1], Plots.STICK_SIGN_SPOT[2])
+				expect.near(HubLayout.distanceToRect(sx, sz, stand.rect), 0)
+			end
+		end)
+
 		it("keeps the walk from the spawn to the start zone clear", function()
 			-- A strip down the middle of the plaza, beside the fuse machine.
 			local fuse = HubLayout.STATIONS.Fuse
@@ -99,6 +155,11 @@ return function(harness)
 			end
 			for key, station in HubLayout.STATIONS do
 				expect.falsy(HubLayout.rectsOverlap(path, circle(station.x, station.z, HubLayout.STATION_RADIUS)), key)
+			end
+			for index = 1, Plots.COUNT do
+				local x, z, sizeX, sizeZ = Plots.stickRect(index)
+				local stand = { x = x, z = z, sizeX = sizeX, sizeZ = sizeZ }
+				expect.falsy(HubLayout.rectsOverlap(path, stand), "training stick " .. index)
 			end
 		end)
 	end)
