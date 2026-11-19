@@ -119,7 +119,51 @@ local function joined(...: { Wave }): { Wave }
 	return all
 end
 
+-- Four jointed legs stepping in diagonal pairs (the Beast skeleton): each upper leg swings `a`, and its shin folds
+-- back by up to `bend` while that paw is lifted and carried forward, then straightens to take the weight.
+local function jointedLegs(a: number, bend: number, speed: number, bounce: number, sway: boolean?): { Wave }
+	local list = {
+		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
+		wave("Body", "rx", 0.03, speed, { shift = QUARTER }),
+		wave("Head", "rx", 0.06, speed, { shift = QUARTER }),
+		wave("Jaw", "rx", 0.04, speed, { base = 0.04 }),
+		wave("Tail", "ry", 0.3, speed * 0.8),
+		wave("Tail", "rx", 0.06, speed),
+	}
+	for _, leg in { { "FrontLeft", 1 }, { "BackRight", 1 }, { "FrontRight", -1 }, { "BackLeft", -1 } } do
+		local name, side = leg[1], leg[2]
+		table.insert(list, wave(name .. "Leg", "rx", a * side, speed))
+		-- A paw moves forward while its leg's swing runs back towards the front: fold the shin then.
+		table.insert(list, wave(name .. "Shin", "rx", bend, speed, { shift = -QUARTER * side, shape = "lift" }))
+	end
+	if sway then
+		table.insert(list, wave("Body", "rz", 0.04, speed))
+	end
+	return list
+end
+
 PetAnimations.MOVES = {
+	-- Four jointed legs, a jaw and a tail: the big hunters.
+	Beast = {
+		Idle = joined(idle(), {
+			wave("Jaw", "rx", 0.05, 1.6, { base = 0.06 }),
+			wave("Tail", "rx", 0.05, 1.2, { shift = 1 }),
+		}),
+		Walk = jointedLegs(0.42, 0.7, 6, 0.25),
+		Stomp = jointedLegs(0.34, 0.6, 4.2, 0.35, true),
+		-- Rearing back a little, head thrown up, jaws gaping, roaring.
+		Roar = {
+			wave("Body", "rx", 0.03, 8, { base = -0.08 }),
+			wave("Head", "rx", 0.04, 9, { base = -0.3 }),
+			wave("Head", "ry", 0.05, 2),
+			wave("Jaw", "rx", 0.08, 9, { base = 0.6 }),
+			wave("FrontLeftLeg", "rx", 0.02, 8, { base = 0.08 }),
+			wave("FrontRightLeg", "rx", 0.02, 8, { base = 0.08 }),
+			wave("BackLeftShin", "rx", 0.02, 8, { base = 0.12 }),
+			wave("BackRightShin", "rx", 0.02, 8, { base = 0.12 }),
+			wave("Tail", "ry", 0.4, 6),
+		},
+	},
 	Quadruped = {
 		Idle = idle(),
 		Walk = fourLegs(0.45, 6, 0.25),

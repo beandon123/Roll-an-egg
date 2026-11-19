@@ -95,6 +95,23 @@ PetModels.VOXEL = 0.5
 -- the same way. Every limb except Body hangs from Body unless a design says otherwise.
 PetModels.SKELETONS = {
 	Quadruped = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
+	-- Four legs that bend: each leg's lower half (the Shin, from the elbow or knee down) hangs from its upper half,
+	-- so a paw folds up as it steps; and a Jaw hanging from the Head, so it can bare its teeth and roar. For the big
+	-- hunters (wolves, great cats).
+	Beast = {
+		"Body",
+		"Head",
+		"Jaw",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
 	-- Short legs and a long body close to the ground (hedgehogs, lizards).
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
@@ -411,7 +428,8 @@ function PetBuilder.limb(self: PetBuilder, name: string, pivot: { number }, pare
 	return setmetatable({ build = build }, LimbBuilder)
 end
 
--- Draws a left limb with `draw`, then its mirror image as the right limb. The pivot is the left one's.
+-- Draws a left limb with `draw`, then its mirror image as the right limb. The pivot is the left one's. A `parent`
+-- on the left (such as "FrontLeftLeg", for a shin) is mirrored too: the right limb hangs from "FrontRightLeg".
 function PetBuilder.limbPair(
 	self: PetBuilder,
 	leftName: string,
@@ -422,7 +440,8 @@ function PetBuilder.limbPair(
 )
 	local left = self:limb(leftName, pivot, parent)
 	draw(left)
-	local right = self:limb(rightName, { -pivot[1], pivot[2], pivot[3] }, parent)
+	local rightParent = if parent then (string.gsub(parent, "Left", "Right")) else nil
+	local right = self:limb(rightName, { -pivot[1], pivot[2], pivot[3] }, rightParent)
 	-- Replay the left limb's blocks mirrored, keeping paint on top of blocks. A part at an angle is mirrored by
 	-- turning it the mirror-image way round; every shape is symmetrical across its own x, so it looks the same.
 	for index, range in left.build.ranges do

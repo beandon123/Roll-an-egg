@@ -484,320 +484,537 @@ Snow.Reindeer = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Frost Wolf (Epic): a dire wolf of the glaciers, taller than a player at the shoulder, its pale coat darker along
--- the back, a shaggy mane, clusters of ice crystals growing from its shoulders and spine, glowing ice-blue eyes and a
--- snarl of fangs.
+-- Frost Wolf (Epic): a dire wolf of the glaciers, taller than a player at the shoulder. A deep chest and tucked waist
+-- under a thick mane, a dark slate saddle down its back over a pale coat, white bib and legs, a dark mask round
+-- glowing ice-blue eyes with frost markings running back from them, ice crystals growing from its withers, shoulders
+-- and hips, and ice claws. Its legs bend at the elbow, knee and hock, and its jaw opens to snarl.
+
+-- A paw: a pad, three toes in front, and a claw on each, drawn on a limb's clay and parts.
+local function paw(s: Sculpt, limb: Limb?, T: any, at: Vec, size: number, look0: Look, claw: { number }, glow: string?)
+	if limb == nil then
+		s:add(ellipsoid(at, { size * 1.05, size * 0.62, size * 1.25 }), look0)
+		for _, dx in { -0.55, 0, 0.55 } do
+			s:add(
+				ellipsoid(
+					{ at[1] + dx * size, at[2] - size * 0.05, at[3] + size * 0.95 },
+					{ size * 0.36, size * 0.46, size * 0.42 }
+				),
+				look0
+			)
+		end
+		return
+	end
+	for _, dx in { -0.55, 0, 0.55 } do
+		local root = { at[1] + dx * size, at[2] - size * 0.05, at[3] + size * 0.9 }
+		T.taper(
+			limb,
+			root,
+			vadd(root, { dx * 0.15 * size, -size * 0.45, size * 0.75 }),
+			size * 0.3,
+			size * 0.26,
+			{ 0, 1, 0 },
+			claw,
+			glow
+		)
+	end
+end
 
 Snow.FrostWolf = {
 	name = "Frost Wolf",
-	skeleton = "Quadruped",
-	scale = 0.3 * 1.2,
+	skeleton = "Beast",
+	scale = 0.34,
 	draw = function(pet)
-		-- Built in cells 1.2 design units across.
-		local U = 1.2
+		local U = 1
 		local T = inUnits(U)
-		local WOLF = look(178, 198, 224)
-		local WOLF_TOP = look(206, 222, 242)
-		local WOLF_UNDER = look(118, 136, 174)
-		local SADDLE = look(96, 114, 156)
-		local SADDLE_TOP = look(122, 140, 180)
-		local WHITE = look(240, 246, 255)
-		local WHITE_SHADE = look(196, 210, 232)
-		local NOSE = look(32, 36, 52)
-		local MOUTH = look(70, 30, 50)
+		local COAT = look(150, 170, 206)
+		local COAT_TOP = look(178, 196, 226)
+		local COAT_UNDER = look(100, 116, 156)
+		local SADDLE = look(54, 66, 104)
+		local SADDLE_TOP = look(64, 78, 120)
+		local SADDLE_UNDER = look(38, 46, 76)
+		local WHITE = look(238, 244, 254)
+		local WHITE_SHADE = look(190, 204, 228)
+		local MASK = look(44, 54, 86)
+		local NOSE = look(26, 30, 44)
+		local MOUTH = look(96, 36, 60)
+		local TONGUE = rgb(214, 96, 128)
+		local TOOTH = rgb(246, 250, 255)
 		local ICE = rgb(150, 210, 246)
-		local GLOW = rgb(140, 240, 255)
-		local TOOTH = rgb(244, 248, 255)
-		local CLAW = rgb(210, 230, 250)
+		local GLOW = rgb(130, 236, 255)
 
 		local tones = {
-			[WOLF] = { top = WOLF_TOP, under = WOLF_UNDER },
-			[SADDLE] = { top = SADDLE_TOP, under = WOLF_UNDER },
+			[COAT] = { top = COAT_TOP, under = COAT_UNDER },
+			[SADDLE] = { top = SADDLE_TOP, under = SADDLE_UNDER },
 			[WHITE] = { under = WHITE_SHADE },
 		}
 
+		-- Where the dark saddle lies: over the back from the withers to the tail, and down the back of the neck.
+		local function saddle(p: Vec): boolean
+			local x, y, z = math.abs(p[1]), p[2], p[3]
+			if z > 9 then
+				return y > 26.4 and x < 2.4
+			end
+			return y > 21.2 + x * 0.3 + math.max(0, z - 3) * 0.3 and z > -13
+		end
+
+		-- The body: deep chest, tucked waist, high withers, strong hips, a thick neck.
 		local body = newSculpt(U)
-		body:add(ellipsoid({ 0, 17.4, -2 }, { 4.8, 4.8, 10 }), WOLF)
-		body:add(ellipsoid({ 0, 18.4, 5.4 }, { 5, 5.8, 4.6 }), WOLF)
-		body:add(ellipsoid({ 0, 18, -9.4 }, { 4.6, 4.8, 4.2 }), WOLF)
-		body:add(rod({ { 0, 20, 7.6, 4 }, { 0, 23.4, 10.6, 3.2 } }), WOLF)
+		body:add(ellipsoid({ 0, 19.6, 5 }, { 4.6, 6, 5.2 }), COAT)
+		body:add(ellipsoid({ 0, 19.8, 0 }, { 4.4, 5.2, 6 }), COAT)
+		body:add(ellipsoid({ 0, 20.4, -6 }, { 3.6, 3.8, 4.4 }), COAT)
+		body:add(ellipsoid({ 0, 20.6, -10 }, { 4.2, 4.4, 4 }), COAT)
+		body:add(ellipsoid({ 0, 24, 4 }, { 3.6, 2.4, 4 }), COAT)
+		body:add(rod({ { 0, 22, 7, 3.9 }, { 0, 25.6, 10.4, 3.2 } }), COAT)
 		body:coat(function(p, open)
 			local x, y, z = p[1], p[2], p[3]
-			if z > 5 and y < 19.6 and math.abs(x) < 3.4 then
-				return WHITE
-			end
-			if open(0, -1, 0) then
-				return WHITE
-			end
-			if y > 19.4 and patches(p, 3) < 0.7 then
+			if saddle(p) then
 				return SADDLE
+			end
+			-- A white bib down its chest and a pale belly.
+			if (z > 5.6 and y < 22.4 and math.abs(x) < 3.2) or open(0, -1, 0) then
+				return WHITE
 			end
 			return nil
 		end)
 		body:bake(tones)
 
-		-- A long head held low, lips drawn back over its fangs.
+		-- The head: a broad skull, a heavy brow, cheek ruffs, and a long upper jaw (the lower jaw moves).
 		local head = newSculpt(U)
-		head:add(ellipsoid({ 0, 24.4, 12.6 }, { 3.6, 3.2, 3.8 }), WOLF)
+		head:add(ellipsoid({ 0, 27.2, 12.6 }, { 3.3, 3, 3.6 }), COAT)
 		for _, s in { 1, -1 } do
-			head:add(ellipsoid({ 2.6 * s, 23.4, 12.4 }, { 1.8, 2.4, 2.6 }), WOLF)
+			head:add(ellipsoid({ 2.4 * s, 26, 12.6 }, { 1.9, 2.2, 2.6 }), COAT)
 		end
-		head:add(rod({ { 0, 23.6, 14.4, 2.2 }, { 0, 23.2, 19.4, 1.4 } }), WOLF)
-		head:add(rod({ { 0, 21, 14.2, 1.6 }, { 0, 20.8, 18.2, 1.1 } }), WHITE)
-		head:add(ellipsoid({ 0, 23.8, 19.8 }, { 1.2, 0.9, 0.8 }), NOSE)
-		head:carve(ellipsoid({ 0, 22.1, 18.6 }, { 1.6, 0.7, 2.6 }))
+		head:add(ellipsoid({ 0, 28.6, 14.6 }, { 2.8, 1, 1.5 }), COAT)
+		head:add(rod({ { 0, 26.4, 14.6, 2 }, { 0, 26, 19.4, 1.25 } }), COAT)
+		head:add(ellipsoid({ 0, 26.4, 19.8 }, { 1.1, 0.85, 0.75 }), NOSE)
 		head:coat(function(p, open)
-			if p[3] > 15.4 and p[2] > 21.2 and p[2] < 22.8 and math.abs(p[1]) < 1.6 then
-				return MOUTH
+			local x, y, z = p[1], p[2], p[3]
+			-- A dark mask round the eyes, a dark stripe down the top of the muzzle.
+			for _, s in { 1, -1 } do
+				if (x - 1.9 * s) ^ 2 + (y - 27.8) ^ 2 * 1.5 + (z - 15) ^ 2 * 0.6 < 2.2 then
+					return MASK
+				end
 			end
-			if p[2] < 23 and (math.abs(p[1]) > 2.4 or p[3] > 15) and not open(0, 1, 0) then
-				return WHITE
+			if open(0, 1, 0) and math.abs(x) < 0.9 and z > 14 then
+				return MASK
 			end
-			if open(0, 1, 0) and p[3] < 13 then
+			if saddle(p) and z < 13 then
 				return SADDLE
+			end
+			if y < 26.2 and (math.abs(x) > 2 or z > 15) then
+				return WHITE
 			end
 			return nil
 		end)
 		head:bake(tones)
 
-		local function leg(s: Sculpt, top: Vec, knee: Vec, foot: Vec)
-			s:add(
-				rod({
-					{ top[1], top[2], top[3], 2.4 },
-					{ knee[1], knee[2], knee[3], 1.6 },
-					{ foot[1], 1.6, foot[3], 1.3 },
-				}),
-				WOLF
-			)
-			s:add(ellipsoid({ foot[1], 1, foot[3] + 0.6 }, { 1.6, 1, 2 }), WHITE)
+		-- The lower jaw, white below and dark inside.
+		local jaw = newSculpt(U)
+		jaw:add(rod({ { 0, 24.8, 14, 1.35 }, { 0, 24.5, 18.4, 0.85 } }), WHITE)
+		jaw:coat(function(p, open)
+			if open(0, 1, 0) and p[3] > 14.6 and p[3] < 17.6 and math.abs(p[1]) < 0.8 then
+				return MOUTH
+			end
+			return nil
+		end)
+		jaw:bake(tones)
+
+		-- Legs in two halves: shoulder and upper arm, then forearm and paw; thigh, then shank, hock and paw.
+		local front = newSculpt(U)
+		front:add(ellipsoid({ 3.3, 19.2, 5.4 }, { 2.1, 3.8, 2.8 }), COAT)
+		front:add(rod({ { 3.4, 17.6, 5.4, 1.9 }, { 3.4, 13.6, 4.2, 1.7 } }), COAT)
+		local frontShin = newSculpt(U)
+		frontShin:add(rod({ { 3.4, 13.6, 4.2, 1.6 }, { 3.4, 4.2, 5.2, 1.15 }, { 3.4, 1.6, 6, 1.05 } }), WHITE)
+		paw(frontShin, nil, T, { 3.4, 0.9, 6.4 }, 1.5, WHITE, ICE)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 3.5, 17.6, -9.6 }, { 2.5, 4.8, 3.8 }), COAT)
+		back:add(rod({ { 3.6, 15, -8.6, 2 }, { 3.6, 12.2, -7.2, 1.7 } }), COAT)
+		local backShin = newSculpt(U)
+		backShin:add(rod({ { 3.6, 12.2, -7.2, 1.6 }, { 3.6, 6.6, -11.2, 1.15 }, { 3.5, 1.6, -10.2, 1.05 } }), WHITE)
+		paw(backShin, nil, T, { 3.5, 0.9, -9.8 }, 1.45, WHITE, ICE)
+		for _, s in { front, back } do
+			s:coat(function(p)
+				if saddle(p) then
+					return SADDLE
+				end
+				return nil
+			end)
 			s:bake(tones)
 		end
-		local front, back = newSculpt(U), newSculpt(U)
-		leg(front, { 3.2, 17.6, 5.4 }, { 3.4, 9.4, 6 }, { 3.3, 1.4, 6.4 })
-		back:add(ellipsoid({ 3.4, 17, -9.4 }, { 2.6, 4.8, 3.8 }), WOLF)
-		leg(back, { 3.4, 14.4, -10.6 }, { 3.4, 8.6, -12.4 }, { 3.3, 1.4, -10.6 })
+		-- White socks below the wrists and hocks.
+		for _, s in { frontShin, backShin } do
+			s:coat(function(p, open)
+				if p[2] > 5.4 and not open(0, 0, 1) then
+					return COAT
+				end
+				if p[2] > 7 then
+					return COAT
+				end
+				return nil
+			end)
+			s:bake(tones)
+		end
 
+		-- A bushy tail hanging low with a dark top and a dark tip.
 		local spine =
-			{ { 0, 19.6, -12.6, 1.8 }, { 0, 17.4, -16.4, 2.4 }, { 0, 13.6, -18.6, 2.2 }, { 0, 10.6, -19, 1.2 } }
+			{ { 0, 21.4, -13, 1.8 }, { 0, 19.4, -16.4, 2.5 }, { 0, 15.4, -18.4, 2.4 }, { 0, 11.6, -18.6, 1.4 } }
 		local tail = newSculpt(U)
-		tail:add(rod(spine), WOLF)
-		tail:coat(function(p)
-			if p[2] < 12.4 then
-				return WHITE
-			end
-			if p[2] > 15 and patches(p, 2) < 0.5 then
+		tail:add(rod(spine), COAT)
+		tail:coat(function(p, open)
+			if p[2] < 13.4 or (open(0, 1, 0) or p[3] < -17.4) and p[2] > 15 then
 				return SADDLE
+			end
+			if open(0, -1, 0) then
+				return WHITE
 			end
 			return nil
 		end)
 		tail:bake(tones)
 
 		local frontMirror, backMirror = front:mirror(), back:mirror()
-		local bodyLimb = pet:limb("Body", T.at({ 0, 17.4, 0 }))
-		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, WOLF)
-		-- A shaggy mane over its neck and shoulders.
+		local bodyLimb = pet:limb("Body", T.at({ 0, 20, 0 }))
+		body:draw(bodyLimb, { head, jaw, front, frontMirror, back, backMirror, tail }, COAT)
+		-- A thick mane over the neck and withers, lying back.
 		fur(
 			bodyLimb,
 			T,
 			body,
 			function(p, n)
-				return p[3] > 1 and p[2] > 19 and n[2] > -0.2 and noise(vadd(p, { 1, 5, 3 })) < 0.26
+				return p[3] > 3 and p[2] > 22 and n[2] > 0 and noise(vadd(p, { 1, 5, 3 })) < 0.09
 			end,
-			3,
-			1.6,
-			{ 0, -0.2, -1.5 },
+			2.6,
+			1.8,
+			{ 0, -0.4, -1.9 },
 			function(p)
-				return if noise(p) < 0.4 then WHITE.color else WOLF_TOP.color
+				return if saddle(p) then SADDLE_TOP.color else COAT_TOP.color
 			end
 		)
-		-- Ice crystals growing in clusters from its shoulders and along its spine, glowing at their points.
-		for _, s in { 1, -1 } do
-			crystalCluster(bodyLimb, T, { 3 * s, 22.6, 4 }, { 0.5 * s, 1, -0.5 }, 5, 3, ICE, GLOW, nil, NEON, 1 + s)
-		end
-		for i, z in { -2, -5.4, -8.6 } do
-			crystal(bodyLimb, T, { 0, 21.6 - i * 0.2, z }, { 0, 1, -0.6 }, 4.2 - i * 0.6, 1.3, ICE, GLOW, nil, NEON)
-		end
-
-		local headLimb = pet:limb("Head", T.at({ 0, 22.4, 10 }))
-		head:draw(headLimb, { body }, WOLF)
-		Kit.slitEyes(headLimb, head, { 25.6, 16 }, { 26, 13.8 }, 0.9, GLOW, NEON, rgb(30, 34, 56))
-		for _, s in { 1, -1 } do
-			-- Tall pointed ears.
-			T.taper(headLimb, { 2 * s, 27, 11.4 }, { 3 * s, 31.4, 10.6 }, 2.2, 1, { 0, 0, 1 }, SADDLE.color)
-			T.taper(headLimb, { 2.05 * s, 27.3, 11.95 }, { 2.9 * s, 30.4, 11.25 }, 1.2, 0.3, { 0, 0, 1 }, WHITE.color)
-			-- Fangs, top and bottom.
-			T.taper(headLimb, { 1.1 * s, 22.8, 19.4 }, { 1.1 * s, 21.2, 19.6 }, 0.6, 0.6, { 0, 0, 1 }, TOOTH)
-			T.taper(headLimb, { 0.9 * s, 21.4, 18.4 }, { 0.9 * s, 22.6, 18.6 }, 0.5, 0.5, { 0, 0, 1 }, TOOTH)
-			-- A frosty ruff on its cheeks.
-			T.taper(headLimb, { 3.2 * s, 23.2, 12 }, { 5 * s, 22.4, 9.6 }, 1.6, 0.9, { 0, 1, 0 }, WHITE.color)
-		end
-
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.2, 17.6, 5.4 }), function(limb)
-			front:draw(limb, { body }, WOLF)
-			for _, dx in { -0.8, 0, 0.8 } do
-				T.taper(limb, { 3.3 + dx, 0.6, 8 }, { 3.3 + dx * 1.2, 0.2, 9.2 }, 0.45, 0.4, { 0, 1, 0 }, CLAW)
+		-- A shaggy white bib.
+		fur(
+			bodyLimb,
+			T,
+			body,
+			function(p, n)
+				return p[3] > 7 and p[2] < 21 and p[2] > 16 and n[3] > 0.4 and noise(vadd(p, { 3, 2, 6 })) < 0.14
+			end,
+			1.8,
+			1.3,
+			{ 0, -1.8, 0 },
+			function()
+				return WHITE.color
 			end
-		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.4, 17, -9.4 }), function(limb)
-			back:draw(limb, { body }, WOLF)
-		end)
-		tail:draw(pet:limb("Tail", T.at({ 0, 19.4, -12 })), { body }, WOLF)
+		)
+		-- Ice crystals on the withers and hips, and clusters on the shoulders; the back between is left for a rider.
+		crystal(bodyLimb, T, { 0, 25.6, 5.6 }, { 0, 1, 0.2 }, 4.6, 1.5, ICE, GLOW, nil, NEON)
+		crystal(bodyLimb, T, { 0, 25.4, 3.2 }, { 0, 1, -0.3 }, 3.8, 1.3, ICE, GLOW, nil, NEON)
+		crystal(bodyLimb, T, { 0, 24.4, -10 }, { 0, 1, -0.6 }, 3.6, 1.2, ICE, GLOW, nil, NEON)
+		crystal(bodyLimb, T, { 0, 23.6, -12.4 }, { 0, 0.8, -1 }, 3, 1, ICE, GLOW, nil, NEON)
+		for _, s in { 1, -1 } do
+			crystalCluster(bodyLimb, T, { 3.4 * s, 23.4, 5 }, { 0.7 * s, 1, -0.5 }, 4.2, 3, ICE, GLOW, nil, NEON, 1 + s)
+		end
 
-		pet:seat(0, 22.4 / U, -2.4 / U)
+		local headLimb = pet:limb("Head", T.at({ 0, 25, 10 }))
+		head:draw(headLimb, { body, jaw }, COAT)
+		Kit.slitEyes(headLimb, head, { 28.2, 16.2 }, { 28.6, 14 }, 0.8, GLOW, NEON, rgb(24, 28, 46))
+		for _, s in { 1, -1 } do
+			-- Glowing frost markings running back from the eyes.
+			local x = sideOf(head, 28.4, 13) + 0.1
+			T.blade(headLimb, { x * s, 28.6, 13.6 }, { (x - 0.3) * s, 29.4, 11 }, 0.35, 0.3, { s, 0, 0 }, GLOW, NEON)
+			T.blade(
+				headLimb,
+				{ (x - 0.1) * s, 27.4, 13.8 },
+				{ (x - 0.6) * s, 27.2, 11.4 },
+				0.3,
+				0.3,
+				{ s, 0, 0 },
+				GLOW,
+				NEON
+			)
+			-- Tall pointed ears, dark behind, pale inside.
+			T.taper(headLimb, { 2 * s, 29.4, 11.6 }, { 3 * s, 33.6, 10.6 }, 2.4, 1, { 0, 0, 1 }, SADDLE.color)
+			T.taper(headLimb, { 2.05 * s, 29.7, 12.15 }, { 2.9 * s, 32.6, 11.25 }, 1.3, 0.3, { 0, 0, 1 }, WHITE.color)
+			-- A cheek ruff sweeping back.
+			T.taper(headLimb, { 3.6 * s, 25.4, 12.4 }, { 5 * s, 24.6, 10.4 }, 1.8, 1, { 0, 1, 0 }, WHITE.color)
+			-- Upper fangs.
+			T.taper(headLimb, { 1 * s, 25, 18.6 }, { 1 * s, 23.2, 18.8 }, 0.6, 0.6, { 0, 0, 1 }, TOOTH)
+			T.taper(headLimb, { 1.3 * s, 25, 17 }, { 1.3 * s, 24, 17.1 }, 0.45, 0.45, { s, 0, 0 }, TOOTH)
+		end
+
+		local jawLimb = pet:limb("Jaw", T.at({ 0, 24.8, 14 }), "Head")
+		jaw:draw(jawLimb, { head, body }, COAT)
+		for _, s in { 1, -1 } do
+			T.taper(jawLimb, { 0.8 * s, 25, 17.8 }, { 0.8 * s, 26.2, 17.9 }, 0.5, 0.5, { 0, 0, 1 }, TOOTH)
+		end
+		T.ball(jawLimb, { 0, 25, 16.2 }, { 1, 0.35, 2.2 }, TONGUE)
+
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.3, 20.4, 5.4 }), function(limb)
+			front:draw(limb, { body, frontShin }, COAT)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 3.4, 13.6, 4.2 }), function(limb)
+			frontShin:draw(limb, { front }, COAT)
+			paw(frontShin, limb, T, { 3.4, 0.9, 6.4 }, 1.5, WHITE, ICE)
+		end, "FrontLeftLeg")
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.5, 20.4, -9.6 }), function(limb)
+			back:draw(limb, { body, backShin }, COAT)
+		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.6, 12.2, -7.2 }), function(limb)
+			backShin:draw(limb, { back }, COAT)
+			paw(backShin, limb, T, { 3.5, 0.9, -9.8 }, 1.45, WHITE, ICE)
+		end, "BackLeftLeg")
+		tail:draw(pet:limb("Tail", T.at({ 0, 21.4, -12.6 })), { body }, COAT)
+
+		pet:seat(0, 25, -2.6)
 	end,
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Sabertooth Cat (Legendary): a hulking sabretooth, its frosty coat striped with glowing ice-blue, great ivory
--- sabres hanging from its jaw, ice crystals on its shoulders, glowing eyes, and an icy aura.
+-- Sabertooth Cat (Legendary): a hulking frost smilodon, over twice a player's height. Front-heavy, with massive
+-- forelegs and a sloping back, a silver-blue coat striped in navy, a big head under a heavy brow with long flat sabres
+-- frosted at their tips, a jaw that drops wide to roar, glowing eyes and a glowing rune on its brow, and ice-crystal
+-- armour on its shoulders, withers and hips. Its legs bend at the elbow, knee and hock.
 
 Snow.SabertoothCat = {
 	name = "Sabertooth Cat",
-	skeleton = "Quadruped",
+	skeleton = "Beast",
 	gait = "Stomp",
-	scale = 0.43 * 1.2,
+	scale = 0.36 * 1.2,
 	draw = function(pet)
 		-- Built in cells 1.2 design units across.
 		local U = 1.2
 		local T = inUnits(U)
-		local FUR = look(222, 210, 188)
-		local FUR_TOP = look(240, 232, 214)
-		local FUR_UNDER = look(164, 152, 136)
-		local FUR_LOW = look(190, 178, 160)
-		local SLATE = look(60, 72, 102)
-		local STRIPE = look(90, 200, 255, NEON)
-		local NOSE = look(110, 80, 84)
-		local MOUTH = look(70, 40, 56)
-		local IVORY = rgb(250, 242, 218)
-		local ICE = rgb(170, 222, 250)
-		local GLOW = rgb(150, 236, 255)
-		local CLAW = rgb(214, 236, 252)
+		local COAT = look(176, 188, 210)
+		local COAT_TOP = look(204, 214, 232)
+		local COAT_UNDER = look(116, 126, 152)
+		local COAT_LOW = look(150, 160, 184)
+		local CREAM = look(234, 230, 220)
+		local CREAM_SHADE = look(188, 182, 170)
+		local STRIPE = look(48, 58, 90)
+		local STRIPE_TOP = look(60, 72, 108)
+		local NOSE = look(70, 56, 64)
+		local MOUTH = look(96, 40, 62)
+		local IVORY = rgb(250, 244, 226)
+		local IVORY_SHADE = rgb(222, 212, 188)
+		local TONGUE = rgb(214, 100, 128)
+		local ICE = rgb(150, 210, 246)
+		local GLOW = rgb(120, 230, 255)
 
 		local tones = {
-			[FUR] = { top = FUR_TOP, under = FUR_UNDER, low = FUR_LOW, below = 8 },
+			[COAT] = { top = COAT_TOP, under = COAT_UNDER, low = COAT_LOW, below = 9 },
+			[CREAM] = { under = CREAM_SHADE },
+			[STRIPE] = { top = STRIPE_TOP },
 		}
 
-		-- Glowing stripes across its back and flanks, each edged in slate.
-		local function stripes(p: Vec): Look?
-			if p[2] < 17 then
-				return nil
+		-- Tiger stripes: bands across the back that wave as they run down the flanks, narrowing as they go.
+		local bands = { 6.6, 2.4, -1.8, -6, -10.2 }
+		local function striped(p: Vec): boolean
+			local y = p[2]
+			if y < 14.6 then
+				return false
 			end
-			local w = math.sin(p[3] * 0.6 + math.abs(p[1]) * 0.18 + math.sin(p[2] * 0.4) * 0.7)
-			if w > 0.94 then
-				return STRIPE
-			elseif w > 0.6 then
-				return SLATE
+			-- Wide over the back, narrowing to points down the flanks.
+			local w = 0.35 + math.clamp((y - 14.6) / 10, 0, 1) * 1.15
+			for i, c in bands do
+				local centre = c - (26 - y) * 0.14 * (if i % 2 == 0 then 1 else -1)
+				if math.abs(p[3] - centre) < w then
+					return true
+				end
 			end
-			return nil
+			return false
 		end
 
-		-- A powerful body, high and hunched at the shoulders, low at the hips.
+		-- A massive chest and shoulders, a sloping back, narrower hips, a thick neck.
 		local body = newSculpt(U)
-		body:add(ellipsoid({ 0, 18, -2 }, { 5, 5, 9.4 }), FUR)
-		body:add(ellipsoid({ 0, 19, 6 }, { 5.6, 6.2, 5.2 }), FUR)
-		body:add(ellipsoid({ 0, 22.4, 4.4 }, { 4.8, 3, 4.4 }), FUR)
-		body:add(ellipsoid({ 0, 18.2, -9.6 }, { 4.8, 4.8, 4.4 }), FUR)
-		body:add(rod({ { 0, 21, 8.4, 4.4 }, { 0, 22.6, 11, 3.8 } }), FUR)
-		body:coat(function(p)
-			return stripes(p)
+		body:add(ellipsoid({ 0, 20, 5 }, { 5.6, 6.6, 5.6 }), COAT)
+		body:add(ellipsoid({ 0, 24.6, 3.6 }, { 5, 3, 4.6 }), COAT)
+		body:add(ellipsoid({ 0, 19.8, -1 }, { 5, 5.4, 6.4 }), COAT)
+		body:add(ellipsoid({ 0, 19.2, -9 }, { 4.6, 4.8, 4.4 }), COAT)
+		body:add(rod({ { 0, 22, 8.4, 4.6 }, { 0, 24.4, 11.4, 4 } }), COAT)
+		body:coat(function(p, open)
+			local x, y, z = p[1], p[2], p[3]
+			if open(0, -1, 0) or (z > 7 and y < 22 and math.abs(x) < 3.6) then
+				return CREAM
+			end
+			if striped(p) then
+				return STRIPE
+			end
+			return nil
 		end)
 		body:bake(tones)
 
-		-- A big head with a short muzzle and its jaw dropped to bare the sabres.
+		-- The head: broad skull, heavy brow, sideburns, a short muzzle with deep lips where the sabres hang.
 		local head = newSculpt(U)
-		head:add(ellipsoid({ 0, 23.6, 13.4 }, { 4, 3.6, 4 }), FUR)
+		head:add(ellipsoid({ 0, 26.2, 14 }, { 4.2, 3.6, 4.2 }), COAT)
+		head:add(ellipsoid({ 0, 27.8, 16.6 }, { 3.4, 1.1, 1.6 }), COAT)
 		for _, s in { 1, -1 } do
-			head:add(ellipsoid({ 2.8 * s, 22.2, 14 }, { 2, 2.4, 2.4 }), FUR)
-			head:add(ellipsoid({ 3 * s, 26.8, 11.6 }, { 1.3, 1.3, 0.9 }), FUR)
+			head:add(ellipsoid({ 3.2 * s, 24.8, 14 }, { 2.2, 2.8, 2.8 }), COAT)
+			head:add(ellipsoid({ 1.6 * s, 23.6, 17.8 }, { 1.5, 1.3, 1.9 }), CREAM)
+			head:add(ellipsoid({ 3 * s, 29.2, 12.4 }, { 1.3, 1.3, 0.9 }), COAT)
 		end
-		head:add(ellipsoid({ 0, 22, 16.6 }, { 2.8, 2.4, 2.6 }), FUR)
-		head:add(ellipsoid({ 0, 19.4, 15.4 }, { 2, 1.2, 2.2 }), FUR)
-		head:add(ellipsoid({ 0, 23.2, 18.6 }, { 1.1, 0.8, 0.7 }), NOSE)
+		head:add(ellipsoid({ 0, 24.8, 17.4 }, { 2.8, 2.1, 2.6 }), CREAM)
+		head:add(ellipsoid({ 0, 25.8, 19.8 }, { 1.2, 0.9, 0.7 }), NOSE)
 		head:coat(function(p, open)
-			if p[2] < 20.4 and p[2] > 19 and p[3] > 15.6 and math.abs(p[1]) < 1.8 and not open(0, 1, 0) then
-				return MOUTH
+			local x, y, z = p[1], p[2], p[3]
+			-- Dark lines down from the eyes, and stripes on the brow.
+			for _, s in { 1, -1 } do
+				if math.abs(x - 2.4 * s) < 0.5 and y < 26 and y > 23.6 and z > 15.6 then
+					return STRIPE
+				end
 			end
-			if open(0, 1, 0) and p[3] < 14 and math.abs(p[1]) < 1.4 then
+			if open(0, 1, 0) and z < 15 and (math.abs(x) - 1.2) % 2.4 < 0.7 then
 				return STRIPE
+			end
+			if y < 23.4 and not open(0, 1, 0) then
+				return MOUTH
 			end
 			return nil
 		end)
 		head:bake(tones)
 
-		local function leg(s: Sculpt, top: Vec, knee: Vec, foot: Vec, r: number)
-			s:add(
-				rod({
-					{ top[1], top[2], top[3], r },
-					{ knee[1], knee[2], knee[3], r * 0.72 },
-					{ foot[1], 1.8, foot[3], r * 0.62 },
-				}),
-				FUR
-			)
-			s:add(ellipsoid({ foot[1], 1.2, foot[3] + 0.8 }, { r * 0.75, 1.2, r * 0.9 }), FUR)
+		-- The lower jaw and its chin flange.
+		local jaw = newSculpt(U)
+		jaw:add(rod({ { 0, 22.6, 14.6, 1.6 }, { 0, 21.8, 18.4, 1.25 } }), CREAM)
+		jaw:add(ellipsoid({ 0, 21.2, 18 }, { 1.4, 1.2, 1.2 }), CREAM)
+		jaw:coat(function(p, open)
+			if open(0, 1, 0) and p[3] > 15 then
+				return MOUTH
+			end
+			return nil
+		end)
+		jaw:bake(tones)
+
+		-- Massive forelegs; strong hind legs with a high hock.
+		local front = newSculpt(U)
+		front:add(ellipsoid({ 3.8, 20.2, 5.4 }, { 2.8, 4.6, 3.4 }), COAT)
+		front:add(rod({ { 3.9, 18, 5.2, 2.6 }, { 4, 12.6, 3.8, 2.4 } }), COAT)
+		local frontShin = newSculpt(U)
+		frontShin:add(rod({ { 4, 12.6, 3.8, 2.4 }, { 4, 4.2, 5.2, 1.9 }, { 4, 2, 6.2, 1.8 } }), COAT)
+		paw(frontShin, nil, T, { 4, 1.3, 6.8 }, 2.2, COAT, ICE)
+		local back = newSculpt(U)
+		back:add(ellipsoid({ 3.8, 17.6, -9.2 }, { 3, 5.2, 4.2 }), COAT)
+		back:add(rod({ { 3.9, 15, -8.4, 2.4 }, { 3.9, 11.8, -6.8, 2.2 } }), COAT)
+		local backShin = newSculpt(U)
+		backShin:add(rod({ { 3.9, 11.8, -6.8, 2 }, { 3.9, 6.2, -10.6, 1.6 }, { 3.8, 1.8, -9.6, 1.4 } }), COAT)
+		paw(backShin, nil, T, { 3.8, 1.2, -9 }, 2, COAT, ICE)
+		for _, s in { front, back, frontShin, backShin } do
 			s:coat(function(p)
-				return stripes(p)
+				if striped(p) and p[2] > 16 then
+					return STRIPE
+				end
+				return nil
 			end)
 			s:bake(tones)
 		end
-		local front, back = newSculpt(U), newSculpt(U)
-		leg(front, { 3.6, 19, 6 }, { 3.8, 10, 6.8 }, { 3.7, 1.6, 7.2 }, 2.8)
-		back:add(ellipsoid({ 3.6, 18, -9.4 }, { 2.8, 5, 4 }), FUR)
-		leg(back, { 3.6, 15, -10.6 }, { 3.6, 9, -12.4 }, { 3.5, 1.6, -10.6 }, 2.4)
 
+		-- A short bobtail, ringed.
 		local tail = newSculpt(U)
-		tail:add(rod({ { 0, 21.6, -13.4, 1.4 }, { 0, 20.4, -15.6, 1.1 } }), FUR)
+		tail:add(rod({ { 0, 22, -13, 1.5 }, { 0, 19.6, -15.2, 1.2 } }), COAT)
+		tail:coat(function(p)
+			if p[2] < 20.4 then
+				return STRIPE
+			end
+			return nil
+		end)
+		tail:bake(tones)
 
 		local frontMirror, backMirror = front:mirror(), back:mirror()
-		local bodyLimb = pet:limb("Body", T.at({ 0, 18, 0 }))
-		body:draw(bodyLimb, { head, front, frontMirror, back, backMirror, tail }, FUR)
-		-- Ice crystals on its shoulders and along its spine.
+		local bodyLimb = pet:limb("Body", T.at({ 0, 20, 0 }))
+		body:draw(bodyLimb, { head, jaw, front, frontMirror, back, backMirror, tail }, COAT)
+		-- A frosty ruff under the neck and a short mane on the withers.
+		fur(
+			bodyLimb,
+			T,
+			body,
+			function(p, n)
+				return p[3] > 8 and p[2] < 22 and n[2] < 0.3 and n[3] > 0.2 and noise(vadd(p, { 4, 1, 1 })) < 0.16
+			end,
+			2.4,
+			1.6,
+			{ 0, -1.6, 0 },
+			function()
+				return CREAM.color
+			end
+		)
+		-- Ice-crystal armour on the shoulders, withers and hips; the back between is left for a rider.
 		for _, s in { 1, -1 } do
-			crystalCluster(bodyLimb, T, { 3.4 * s, 23.4, 5 }, { 0.6 * s, 1, -0.4 }, 4.4, 3, ICE, GLOW, nil, NEON, 2 + s)
+			crystalCluster(bodyLimb, T, { 4.2 * s, 24, 4.6 }, { 0.8 * s, 1, -0.3 }, 5.4, 4, ICE, GLOW, nil, NEON, 3 + s)
+			crystal(bodyLimb, T, { 3.4 * s, 22, -10.6 }, { 0.6 * s, 1, -0.6 }, 3.6, 1.2, ICE, GLOW, nil, NEON)
 		end
-		for i, z in { -1.6, -4.6, -7.6 } do
-			crystal(bodyLimb, T, { 0, 22.4 - i * 0.3, z }, { 0, 1, -0.5 }, 3.4 - i * 0.4, 1.1, ICE, GLOW, nil, NEON)
-		end
+		crystal(bodyLimb, T, { 0, 27.4, 5.4 }, { 0, 1, 0.1 }, 4.4, 1.5, ICE, GLOW, nil, NEON)
+		crystal(bodyLimb, T, { 0, 27, 2.8 }, { 0, 1, -0.4 }, 3.4, 1.2, ICE, GLOW, nil, NEON)
 
-		local headLimb = pet:limb("Head", T.at({ 0, 22.6, 10.6 }))
-		head:draw(headLimb, { body }, FUR)
-		Kit.slitEyes(headLimb, head, { 25, 16.4 }, { 25.4, 14.4 }, 0.9, GLOW, NEON, rgb(40, 44, 60))
+		local headLimb = pet:limb("Head", T.at({ 0, 24, 11 }))
+		head:draw(headLimb, { body, jaw }, COAT)
+		Kit.slitEyes(headLimb, head, { 27, 17.2 }, { 27.4, 15 }, 0.9, GLOW, NEON, rgb(24, 28, 46))
+		-- A glowing rune on its brow.
+		local brow = Kit.frontOf(head, 0, 28.6)
+		T.taper(headLimb, { 0, 28.6, brow - 0.3 }, { 0, 30.2, brow - 0.9 }, 0.9, 0.4, { 0, 0.4, 1 }, GLOW, NEON)
+		T.taper(headLimb, { 0, 28.6, brow - 0.3 }, { 0, 27.4, brow }, 0.9, 0.4, { 0, 0.4, 1 }, GLOW, NEON)
 		for _, s in { 1, -1 } do
-			-- The sabres: long, flat, curving back, frosted at the tips.
-			local root, mid, tip = { 1.5 * s, 21.4, 17.4 }, { 1.6 * s, 18.2, 17.9 }, { 1.7 * s, 14.6, 17.4 }
-			T.blade(headLimb, root, mid, 1.3, 0.7, { s, 0, 0 }, IVORY)
-			T.taper(headLimb, mid, tip, 1.2, 0.65, { s, 0, 0 }, IVORY)
+			-- The sabres: long, flat and curving back, edged behind, frosted at the tips.
+			local root, mid, tip = { 1.55 * s, 23.2, 18.4 }, { 1.65 * s, 19.6, 18.9 }, { 1.75 * s, 15.6, 18.2 }
+			T.blade(headLimb, root, mid, 1.5, 0.75, { s, 0, 0 }, IVORY)
+			T.taper(headLimb, mid, tip, 1.4, 0.7, { s, 0, 0 }, IVORY)
+			T.blade(
+				headLimb,
+				vadd(root, { 0, 0, -0.55 }),
+				vadd(mid, { 0, 0, -0.55 }),
+				0.45,
+				0.8,
+				{ s, 0, 0 },
+				IVORY_SHADE
+			)
 			T.taper(
 				headLimb,
-				vadd(tip, { 0, 0.9, -0.1 }),
-				vadd(tip, { 0, -0.4, -0.2 }),
-				0.6,
-				0.4,
+				vadd(tip, { 0, 1.2, 0.1 }),
+				vadd(tip, { 0, -0.3, -0.1 }),
+				0.8,
+				0.5,
 				{ s, 0, 0 },
 				GLOW,
 				NEON
 			)
-			-- Whisker-like frost on its cheeks.
-			T.taper(headLimb, { 3.4 * s, 22.4, 14.2 }, { 5.6 * s, 21.6, 12.2 }, 1.6, 0.9, { 0, 1, 0 }, FUR_TOP.color)
+			-- Sideburns of frosty fur.
+			T.taper(headLimb, { 3.8 * s, 24.4, 14.4 }, { 5.8 * s, 23, 12.4 }, 2, 1.1, { 0, 1, 0 }, CREAM.color)
+			T.taper(headLimb, { 3.6 * s, 26.2, 13.6 }, { 5.4 * s, 25.8, 11.8 }, 1.6, 1, { 0, 1, 0 }, COAT_TOP.color)
 		end
 
-		local function claws(limb: Limb, x: number, z: number)
-			for _, dx in { -1.2, -0.4, 0.4, 1.2 } do
-				T.taper(limb, { x + dx, 1, z }, { x + dx * 1.1, 0.2, z + 1.6 }, 0.55, 0.5, { 0, 1, 0 }, CLAW)
+		local jawLimb = pet:limb("Jaw", T.at({ 0, 23, 14.4 }), "Head")
+		jaw:draw(jawLimb, { head, body }, COAT)
+		for _, s in { 1, -1 } do
+			for i = 0, 1 do
+				T.taper(
+					jawLimb,
+					{ 1 * s, 22.8, 17.4 - i * 1.2 },
+					{ 1 * s, 23.8, 17.4 - i * 1.2 },
+					0.5,
+					0.5,
+					{ s, 0, 0 },
+					IVORY
+				)
 			end
 		end
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.6, 19, 6 }), function(limb)
-			front:draw(limb, { body }, FUR)
-			claws(limb, 3.7, 9.4)
+		T.ball(jawLimb, { 0, 22.9, 16.4 }, { 1.8, 0.5, 3 }, TONGUE)
+
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.8, 22, 5.4 }), function(limb)
+			front:draw(limb, { body, frontShin }, COAT)
 		end)
-		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.6, 18, -9.4 }), function(limb)
-			back:draw(limb, { body }, FUR)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 4, 12.6, 3.8 }), function(limb)
+			frontShin:draw(limb, { front }, COAT)
+			paw(frontShin, limb, T, { 4, 1.3, 6.8 }, 2.2, COAT, ICE)
+		end, "FrontLeftLeg")
+		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.8, 21, -9.2 }), function(limb)
+			back:draw(limb, { body, backShin }, COAT)
 		end)
-		tail:draw(pet:limb("Tail", T.at({ 0, 21.6, -13 })), { body }, FUR)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.9, 11.8, -6.8 }), function(limb)
+			backShin:draw(limb, { back }, COAT)
+			paw(backShin, limb, T, { 3.8, 1.2, -9 }, 2, COAT, ICE)
+		end, "BackLeftLeg")
+		tail:draw(pet:limb("Tail", T.at({ 0, 22, -12.6 })), { body }, COAT)
 
 		pet:light(GLOW, 1.8, 18)
 		pet:particles("Snow", rgb(240, 248, 255), 8)
 		pet:aura(rgb(110, 210, 255), rgb(235, 250, 255))
-		pet:seat(0, 23.4 / U, -2.6 / U)
+		pet:seat(0, 25.6 / U, -3 / U)
 	end,
 }
 

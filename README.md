@@ -576,12 +576,16 @@ lune run tools/pet-preview 1
 Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet).
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
-four-legged, winged, dragon (four legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor
-and the T-Rex), six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a
-`Motor6D` at its joint, so pets that share a skeleton can share their animations.
+four-legged, beast (four jointed legs and a jaw: each leg's shin hangs from its upper leg, so the Frost Wolf's and
+Sabertooth Cat's paws fold up as they step, and the jaw hangs from the head, to snarl and roar), winged, dragon (four
+legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor and the T-Rex), six legs, swimmer
+(fins and a tail; these float), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox
+model: every limb turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A
+limb drawn with `limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image
+from the right one.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
-Crawl, Swim, and Roar for theropods), each a set of waves that turn or shift its limbs. Winged pets (the owls and the
+Crawl, Swim, and Roar for theropods and beasts), each a set of waves that turn or shift its limbs. Winged pets (the owls and the
 Pteranodon) and dragons (the Lava and Lunar Dragons) also
 **Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
 on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
