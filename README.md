@@ -536,7 +536,7 @@ glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetMode
 | Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom |
 | Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet |
 | Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers |
-| Secret | Four to eight times (the Yeti, 24 studs; the Kraken, 21 tall and 25 across; the Leviathan, 42 long) | The most of all: the Yeti's crystal clusters, the Kraken's glowing suckers, spots and eyes under a gold crown, the Leviathan's glowing portholes, fins and lure |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
 it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game

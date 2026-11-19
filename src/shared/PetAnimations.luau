@@ -142,6 +142,16 @@ local function jointedLegs(a: number, bend: number, speed: number, bounce: numbe
 	return list
 end
 
+-- Eight tentacles each swaying and lifting a little, `size` radians, each out of step with the last.
+local function writhe(speed: number, size: number): { Wave }
+	local list = {}
+	for i = 1, 8 do
+		table.insert(list, wave("Tentacle" .. i, "rz", size, speed, { shift = i * 0.8 }))
+		table.insert(list, wave("Tentacle" .. i, "rx", size * 0.6, speed * 0.7, { shift = i * 1.3 }))
+	end
+	return list
+end
+
 PetAnimations.MOVES = {
 	-- Four jointed legs, a jaw and a tail: the big hunters.
 	Beast = {
@@ -329,12 +339,17 @@ PetAnimations.MOVES = {
 			wave("Head", "rx", -0.05, 1.6),
 		},
 	},
+	-- Every tentacle writhes slowly, each a little out of step with the next.
 	Tentacled = {
-		Idle = {},
-		Crawl = {
+		Idle = joined({
+			wave("Head", "rz", 0.02, 0.8),
+			wave("Head", "rx", 0.02, 0.6, { shift = 1 }),
+			wave("Body", "py", 0.15, 1),
+		}, writhe(1.1, 0.05)),
+		Crawl = joined({
 			wave("Head", "rz", 0.04, 1.2),
 			wave("Body", "py", 0.3, 1.2, { shape = "bounce" }),
-		},
+		}, writhe(1.8, 0.08)),
 	},
 	-- A ripple runs down the coils from the neck to the tail fin.
 	Serpent = {

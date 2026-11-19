@@ -906,7 +906,7 @@ Ocean.Hippocampus = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Kraken (Secret): a giant crowned octopus, nearly five times a player's height, rearing its mantle over eight thick
+-- Kraken (Secret): a colossal crowned octopus, over six times a player's height, rearing its mantle over eight thick
 -- tentacles curled at glowing tips, glowing suckers among the pale ones, rows of glowing spots, huge glowing eyes, a
 -- gold crown set crooked on its head, and a ship's wheel torn from a wreck held up high.
 
@@ -914,16 +914,16 @@ Ocean.Kraken = {
 	name = "Kraken",
 	skeleton = "Tentacled",
 	gait = "Crawl",
-	scale = 0.62 * 1.2,
+	scale = 0.95 * 1.3,
 	draw = function(pet)
-		-- Built in cells 1.2 design units across, with eyes, beak, crown, suckers, barnacles and its ship's wheel of
-		-- parts at any angle.
-		local U = 1.2
+		-- Built in cells 1.3 design units across, with eyes, beak, crown, suckers, barnacles, its ship's wheel and
+		-- its anchor of parts at any angle.
+		local U = 1.3
 		local T = inUnits(U)
 		local PURPLE = look(104, 42, 134)
 		local PURPLE_TOP = look(132, 64, 164)
 		local PURPLE_DARK = look(64, 22, 90)
-		local PURPLE_LIGHT = look(150, 82, 180)
+		local PURPLE_LIGHT = look(124, 58, 156)
 		local UNDER = look(196, 126, 206)
 		local UNDER_SHADE = look(150, 86, 164)
 		local tones = {
@@ -945,13 +945,14 @@ Ocean.Kraken = {
 		local BARNACLE_DARK = rgb(120, 110, 100)
 		local WOOD = rgb(132, 86, 50)
 		local WOOD_DARK = rgb(96, 60, 36)
+		local IRON = rgb(70, 74, 86)
 
 		-- Mottled light and dark in big soft patches.
 		local function skin(p: Vec): Look?
-			local n = patches(p, 2.6)
-			if n < 0.3 then
+			local n = patches(p, 3.4)
+			if n < 0.32 then
 				return PURPLE_LIGHT
-			elseif n > 0.78 then
+			elseif n > 0.82 then
 				return PURPLE_DARK
 			end
 			return nil
@@ -1005,6 +1006,14 @@ Ocean.Kraken = {
 			)
 		end
 		head:coat(function(p, open)
+			-- Glowing veins winding up the mantle.
+			local zc = ring(p[2])
+			local angle = math.atan2(p[1], p[3] - zc)
+			if p[2] > 13 and p[2] < 27 and math.abs(angle) < 2.2 then
+				if math.abs(math.sin(angle * 4 + p[2] * 0.22 + math.sin(p[2] * 0.5) * 0.6)) < 0.09 then
+					return GLOW
+				end
+			end
 			for _, spot in spots do
 				local dx, dy, dz = p[1] - spot[1], p[2] - spot[2], p[3] - spot[3]
 				if dx * dx + dy * dy + dz * dz < 0.95 then
@@ -1021,14 +1030,14 @@ Ocean.Kraken = {
 		-- Eight thick tentacles, each ending in a glowing curl: two arms raised in front (one brandishing a ship's
 		-- wheel), two sprawled out to the sides, two trailing behind, and two rearing up over its back.
 		local back = andThen(
-			{ { 4, 4, -4, 2.2 }, { 7, 2.2, -7, 1.9 }, { 10, 1.6, -10, 1.5 }, { 12, 1.2, -13, 1.1 } },
+			{ { 4, 4, -4, 2.97 }, { 7, 2.2, -7, 2.56 }, { 10, 1.6, -10, 2.03 }, { 12, 1.2, -13, 1.49 } },
 			curl({
 				centre = { 12, 3.6, -13 },
 				plane = { 3, 2 },
 				from = -math.pi / 2,
 				turns = -0.8,
 				radius = { 2.4, 1.1 },
-				width = { 1.1, 0.5 },
+				width = { 1.49, 0.68 },
 			})
 		)
 		local tentacles = {
@@ -1036,12 +1045,12 @@ Ocean.Kraken = {
 				"Tentacle1",
 				andThen(
 					{
-						{ 3, 5, 4, 2.4 },
-						{ 6, 4, 7.5, 2.2 },
-						{ 9, 5, 9, 1.9 },
-						{ 11.5, 8.5, 9.5, 1.6 },
-						{ 12.5, 12.5, 9, 1.4 },
-						{ 12.5, 16.5, 8.5, 1.2 },
+						{ 3, 5, 4, 3.24 },
+						{ 6, 4, 7.5, 2.97 },
+						{ 9, 5, 9, 2.56 },
+						{ 11.5, 8.5, 9.5, 2.16 },
+						{ 12.5, 12.5, 9, 1.89 },
+						{ 12.5, 16.5, 8.5, 1.62 },
 					},
 					curl({
 						centre = { 15.5, 16.5, 8.5 },
@@ -1049,49 +1058,49 @@ Ocean.Kraken = {
 						from = math.pi,
 						turns = -0.8,
 						radius = { 3, 1.2 },
-						width = { 1.2, 0.5 },
+						width = { 1.62, 0.68 },
 					})
 				),
 			},
 			{
 				"Tentacle2",
 				{
-					{ -4, 5, 4, 2.4 },
-					{ -7, 4, 7.5, 2.2 },
-					{ -10, 5.5, 9, 1.9 },
-					{ -12, 9, 9.5, 1.5 },
-					{ -13, 12.5, 9.5, 1.25 },
-					{ -14, 15, 9.5, 1 },
-					{ -15.5, 16.5, 9.5, 0.8 },
-					{ -16.5, 15.5, 9.5, 0.6 },
-					{ -16, 14, 9.5, 0.5 },
+					{ -4, 5, 4, 3.24 },
+					{ -7, 4, 7.5, 2.97 },
+					{ -10, 5.5, 9, 2.56 },
+					{ -12, 9, 9.5, 2.03 },
+					{ -13, 12.5, 9.5, 1.69 },
+					{ -14, 15, 9.5, 1.35 },
+					{ -15.5, 16.5, 9.5, 1.08 },
+					{ -16.5, 15.5, 9.5, 0.81 },
+					{ -16, 14, 9.5, 0.68 },
 				},
 			},
 			{
 				"Tentacle3",
 				andThen(
-					{ { 5, 4, 0, 2.3 }, { 9, 2.2, 1, 2 }, { 13, 1.8, 1.5, 1.6 }, { 16.5, 1.3, 1.5, 1.2 } },
+					{ { 5, 4, 0, 3.1 }, { 9, 2.2, 1, 2.7 }, { 13, 1.8, 1.5, 2.16 }, { 16.5, 1.3, 1.5, 1.62 } },
 					curl({
 						centre = { 16.5, 4, 1.5 },
 						plane = { 1, 2 },
 						from = -math.pi / 2,
 						turns = 0.8,
 						radius = { 2.7, 1.2 },
-						width = { 1.2, 0.5 },
+						width = { 1.62, 0.68 },
 					})
 				),
 			},
 			{
 				"Tentacle4",
 				andThen(
-					{ { -6, 4, 0, 2.3 }, { -10, 2.2, 0, 2 }, { -14, 1.8, -0.5, 1.6 }, { -17.5, 1.3, -1, 1.2 } },
+					{ { -6, 4, 0, 3.1 }, { -10, 2.2, 0, 2.7 }, { -14, 1.8, -0.5, 2.16 }, { -17.5, 1.3, -1, 1.62 } },
 					curl({
 						centre = { -17.5, 3.8, -1 },
 						plane = { 1, 2 },
 						from = -math.pi / 2,
 						turns = -0.85,
 						radius = { 2.5, 1.1 },
-						width = { 1.2, 0.5 },
+						width = { 1.62, 0.68 },
 					})
 				),
 			},
@@ -1101,12 +1110,12 @@ Ocean.Kraken = {
 				"Tentacle7",
 				andThen(
 					{
-						{ 3, 5, -6, 2.2 },
-						{ 5, 6, -10, 1.9 },
-						{ 8, 9, -12, 1.7 },
-						{ 10, 14, -12, 1.5 },
-						{ 11, 19, -11, 1.3 },
-						{ 11, 24, -10, 1.1 },
+						{ 3, 5, -6, 2.97 },
+						{ 5, 6, -10, 2.56 },
+						{ 8, 9, -12, 2.29 },
+						{ 10, 14, -12, 2.03 },
+						{ 11, 19, -11, 1.76 },
+						{ 11, 24, -10, 1.49 },
 					},
 					curl({
 						centre = { 14, 24, -10 },
@@ -1114,7 +1123,7 @@ Ocean.Kraken = {
 						from = math.pi,
 						turns = -0.75,
 						radius = { 3, 1.2 },
-						width = { 1.1, 0.5 },
+						width = { 1.49, 0.68 },
 					})
 				),
 			},
@@ -1122,12 +1131,12 @@ Ocean.Kraken = {
 				"Tentacle8",
 				andThen(
 					{
-						{ -4, 5, -6, 2.2 },
-						{ -6, 6, -10, 1.9 },
-						{ -9, 10, -12, 1.7 },
-						{ -11, 15, -12, 1.5 },
-						{ -12, 20, -11, 1.3 },
-						{ -12, 25, -10, 1.1 },
+						{ -4, 5, -6, 2.97 },
+						{ -6, 6, -10, 2.56 },
+						{ -9, 10, -12, 2.29 },
+						{ -11, 15, -12, 2.03 },
+						{ -12, 20, -11, 1.76 },
+						{ -12, 25, -10, 1.49 },
 					},
 					curl({
 						centre = { -12, 25, -13 },
@@ -1135,7 +1144,7 @@ Ocean.Kraken = {
 						from = 0,
 						turns = 0.75,
 						radius = { 3, 1.2 },
-						width = { 1.1, 0.5 },
+						width = { 1.49, 0.68 },
 					})
 				),
 			},
@@ -1199,7 +1208,7 @@ Ocean.Kraken = {
 		end
 		-- A king's crown, sat crooked on top: a band of gold set with rubies and emeralds, and points tipped with
 		-- pearls.
-		local crown, radius, tilt = { -0.4, 29.4, -6.3 }, 2.9, 0.24
+		local crown, radius, tilt = { -0.4, 29, -6.3 }, 4.2, 0.24
 		local up = { -math.sin(tilt), math.cos(tilt), 0 }
 		local function rim(index: number): Vec
 			local a = index / 8 * math.pi * 2
@@ -1209,9 +1218,15 @@ Ocean.Kraken = {
 		for index = 0, 7 do
 			local a, b = rim(index), rim(index + 1)
 			local out = vnorm(vsub(vlerp(a, b, 0.5), crown))
-			T.blade(headLimb, a, b, 1.5, 0.5, out, GOLD)
-			T.ball(headLimb, vadd(vlerp(a, b, 0.5), vscale(out, 0.3)), 0.7, if index % 2 == 0 then RUBY else EMERALD)
-			local tall = if index % 2 == 0 then 2.6 else 1.6
+			T.blade(headLimb, a, b, 1.9, 0.6, out, GOLD)
+			T.ball(
+				headLimb,
+				vadd(vlerp(a, b, 0.5), vscale(out, 0.3)),
+				0.8,
+				if index % 2 == 0 then RUBY else EMERALD,
+				NEON
+			)
+			local tall = if index % 2 == 0 then 4.4 else 2.6
 			local base = vadd(a, vscale(up, 0.5))
 			T.taper(
 				headLimb,
@@ -1223,7 +1238,7 @@ Ocean.Kraken = {
 				if index % 2 == 0 then GOLD else GOLD_DARK
 			)
 			if index % 2 == 0 then
-				T.ball(headLimb, vadd(base, vscale(up, tall + 0.2)), 0.6, PEARL)
+				T.ball(headLimb, vadd(base, vscale(up, tall + 0.2)), 0.7, PEARL, NEON)
 			end
 		end
 
@@ -1260,89 +1275,103 @@ Ocean.Kraken = {
 					T.ball(limb, point(k, 6), { 1, 1, 0.8 }, WOOD)
 				end
 				T.ball(limb, hub, { 2, 2, 1.4 }, GOLD)
+			elseif index == 8 then
+				-- An iron anchor hanging from the tentacle that rears up behind it, trimmed in gold.
+				local ring0 = { -12, 23.6, -10.4 }
+				local foot = { -12, 13.6, -10.4 }
+				T.ball(limb, ring0, { 1.6, 1.6, 0.8 }, GOLD)
+				T.blade(limb, ring0, foot, 0.9, 0.9, { 0, 0, 1 }, IRON)
+				T.blade(limb, { -14.2, 21.6, -10.4 }, { -9.8, 21.6, -10.4 }, 0.7, 0.7, { 0, 0, 1 }, IRON)
+				for _, side in { 1, -1 } do
+					local elbow = { -12 + 2.6 * side, 14.4, -10.4 }
+					local tip = { -12 + 3.8 * side, 16.8, -10.4 }
+					T.blade(limb, foot, elbow, 0.9, 0.9, { 0, 0, 1 }, IRON)
+					T.blade(limb, elbow, tip, 0.8, 0.8, { 0, 0, 1 }, IRON)
+					T.taper(limb, tip, vadd(tip, { 0.4 * side, 1.6, 0 }), 1.4, 0.5, { 0, 0, 1 }, GOLD_DARK)
+				end
+				T.ball(limb, foot, { 1.4, 1.4, 1.4 }, GOLD)
 			end
 		end
 
-		pet:light(GLOW.color, 3.4, 30)
-		pet:particles("Bubbles", SUCKER, 16)
+		pet:light(GLOW.color, 4, 46)
+		pet:particles("Bubbles", SUCKER, 20)
 		pet:aura(rgb(200, 80, 255), rgb(255, 190, 236))
 		pet:seat(0, 24 / U, 1 / U)
 	end,
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Leviathan (Secret): a sea serpent of the abyss, rearing out of great coils: deep blue scales, a row of big glowing
--- portholes down each flank, glassy glowing fins, horns, whiskers, jaws of needle fangs on a glowing throat, and a
--- lure arching over its head with a glowing bulb.
+-- Leviathan (Secret): a colossal sea dragon of the abyss, rearing its head eight times a player's height out of
+-- great arching coils as thick as a house. Deep blue scales over a pale banded belly, two rows of big glowing
+-- portholes down its flanks, a glass sail on horn spines along its back, a huge head with heavy brows over glowing
+-- eyes, sweeping horns and glass gill frills, a gaping mouth glowing deep inside and lined with long needle fangs, a
+-- lure arching high over its head to a blazing bulb, and a great forked glass tail fan.
 
 Ocean.Leviathan = {
 	name = "Leviathan",
 	skeleton = "Serpent",
 	gait = "Swim",
-	scale = 0.56 * 1.1,
+	scale = 0.38 * 2.8,
 	draw = function(pet)
-		-- Built in cells 1.1 design units across, with spikes, fins, fangs, horns, whiskers, glowing portholes and its
-		-- lure of parts at any angle.
-		local U = 1.1
+		-- Built in cells 2.8 design units across (about a stud each): it is big enough to keep every detail.
+		local U = 2.8
 		local T = inUnits(U)
-		local SCALE = look(26, 62, 132)
-		local SCALE_TOP = look(42, 90, 168)
-		local SCALE_DARK = look(14, 32, 76)
-		local SCALE_LIGHT = look(58, 120, 190)
+		local SCALE = look(24, 58, 128)
+		local SCALE_TOP = look(42, 88, 170)
+		local SCALE_DARK = look(14, 32, 78)
+		local SCALE_LIGHT = look(54, 112, 190)
 		local BELLY = look(150, 210, 236)
-		local BELLY_DARK = look(104, 160, 200)
-		local GLOW = look(90, 240, 255, NEON)
+		local BELLY_DARK = look(104, 160, 204)
+		local MOUTH = look(46, 14, 52)
+		local THROAT = look(110, 250, 255, NEON)
+		local GLOW = rgb(90, 240, 255)
+		local FIN = rgb(110, 220, 255)
+		local HORN = rgb(220, 232, 240)
+		local HORN_DARK = rgb(120, 140, 160)
+		local FANG = rgb(250, 252, 255)
+		local BULB = rgb(210, 255, 255)
+
 		local tones = {
 			[SCALE] = { top = SCALE_TOP, under = SCALE_DARK },
 			[SCALE_LIGHT] = { under = SCALE },
 		}
-		local MOUTH = look(66, 14, 38)
-		local THROAT = look(190, 255, 240, NEON)
-		local FIN = rgb(90, 220, 210)
-		local HORN = rgb(222, 232, 226)
-		local HORN_DARK = rgb(132, 152, 156)
-		local FANG = rgb(248, 250, 242)
-		local TONGUE = rgb(214, 70, 110)
-
+		-- Scales in big soft patches of lighter and darker blue, like facets catching the light.
 		local function scales(p: Vec): Look?
-			local n = patches(p, 1.8)
-			if n < 0.28 then
+			local n = patches(p, 4.5)
+			if n < 0.3 then
 				return SCALE_LIGHT
-			elseif n > 0.8 then
+			elseif n > 0.78 then
 				return SCALE_DARK
 			end
 			return nil
 		end
 
-		-- The long body in lengths, each a limb of its own so a ripple can run down it: rearing up into a neck at
-		-- the front, then two great arching coils and a tail. Its back faces away from the middle of the arch each
-		-- length is part of (`focus`), or, up the rearing neck, towards the inside of the curve. Each has banded
-		-- plates down its belly and a glowing line down each flank.
-		local lengths = {}
-		local function length(points: { { number } }, focus: Vec, inward: boolean, tailward: number)
+		-- The body in lengths, each a limb of its own so a ripple can run down it. Along each, every sample knows
+		-- which way its back faces (up, or behind where the neck rears), for the belly plates, spines and portholes.
+		type Length = { sculpt: Sculpt, samples: { { any } }, tailward: number }
+		local lengths: { Length } = {}
+		local function length(points: { { number } }, tailward: number): Length
 			local s = newSculpt(U)
 			s:add(rod(points), SCALE)
-			local samples = alongPath(points, 1.2)
+			local samples = alongPath(points, 3.4)
 			for _, sample in samples do
-				local here = sample[1]
-				local away = vnorm({ 0, here[2] - focus[2], here[3] - focus[3] })
-				sample[4] = if inward then vscale(away, -1) else away
+				local run = sample[3]
+				local back = vsub({ 0, 1, 0 }, vscale(run, run[2]))
+				back = if vlength(back) > 0.2 then vnorm(back) else { 0, 0, -1 }
+				sample[4] = back
+				sample[5] = vnorm(Kit.vcross(run, back))
 			end
 			s:coat(function(p)
 				local best, nearest, at = math.huge, samples[1], 1
 				for index, sample in samples do
-					local dist = vlength(vsub(p, sample[1]))
-					if dist < best then
-						best, nearest, at = dist, sample, index
+					local d = vlength(vsub(p, sample[1]))
+					if d < best then
+						best, nearest, at = d, sample, index
 					end
 				end
 				local out = vnorm(vsub(p, nearest[1]))
-				local facing = vdot(out, nearest[4])
-				if facing < -0.55 then
+				if vdot(out, nearest[4]) < -0.5 then
 					return if at % 2 == 0 then BELLY else BELLY_DARK
-				end
-				if math.abs(out[1]) > 0.88 and math.abs(facing) < 0.2 and at % 4 < 2 then
-					return GLOW
 				end
 				return scales(p)
 			end)
@@ -1351,73 +1380,65 @@ Ocean.Leviathan = {
 			table.insert(lengths, entry)
 			return entry
 		end
+		-- Rearing up into the neck at the front; two great arches; a tail lifting to its fan.
 		local neck = length({
-			{ 0, 3, -3, 2.8 },
-			{ 0, 3.2, 1, 2.8 },
-			{ 0, 5.5, 4, 2.6 },
-			{ 0, 10, 5.5, 2.5 },
-			{ 0, 15, 5.5, 2.4 },
-			{ 0, 19, 6.5, 2.2 },
-			{ 0, 21.5, 8.5, 2 },
-		}, { 0, 16, -6 }, true, -1)
+			{ 0, 11.45, -8, 11.25 },
+			{ 0, 11.45, 2, 11.25 },
+			{ 0, 18, 10, 10.75 },
+			{ 0, 34, 14, 10 },
+			{ 0, 50, 15, 9.25 },
+			{ 0, 61, 19, 8.5 },
+		}, -1)
 		local coil1 = length({
-			{ 0, 3, -3, 2.8 },
-			{ 0, 3, -6, 2.8 },
-			{ 0, 7, -9, 2.7 },
-			{ 0, 12, -11.5, 2.6 },
-			{ 0, 13, -14, 2.5 },
-			{ 0, 9, -17, 2.4 },
-			{ 0, 3, -19.5, 2.3 },
-			{ 0, 2.2, -21.5, 2.2 },
-		}, { 0, 2, -12.5 }, false, 1)
+			{ 0, 11.45, -8, 11.25 },
+			{ 3, 11.2, -18, 11 },
+			{ 5, 26, -28, 10.5 },
+			{ 0, 33, -40, 10 },
+			{ 1, 26, -52, 9.5 },
+			{ -2, 9.2, -60, 9 },
+			{ -3, 8.95, -66, 8.75 },
+		}, 1)
 		local coil2 = length({
-			{ 0, 2.2, -21.5, 2.2 },
-			{ -1, 2.4, -24, 2.1 },
-			{ -2, 6, -26.5, 2 },
-			{ -2.5, 9.5, -29, 1.9 },
-			{ -2, 8, -31.5, 1.8 },
-			{ -1, 3, -33.5, 1.7 },
-			{ 0, 2, -35, 1.6 },
-		}, { -2, 1, -28.5 }, false, 1)
+			{ -3, 8.95, -66, 8.75 },
+			{ -5, 8.45, -74, 8.25 },
+			{ -6, 20, -82, 7.75 },
+			{ -5, 25, -92, 7.25 },
+			{ -2, 17, -102, 6.75 },
+			{ 0, 6.45, -108, 6.25 },
+		}, 1)
 		local tail = length({
-			{ 0, 2, -35, 1.6 },
-			{ 1, 1.5, -37.5, 1.3 },
-			{ 1.5, 1.5, -40, 1.1 },
-			{ 1.5, 3, -42, 0.9 },
-			{ 1.5, 5, -43, 0.7 },
-		}, { 1, -20, -39 }, false, 1)
+			{ 0, 6.45, -108, 6.25 },
+			{ 2, 5.2, -116, 5 },
+			{ 3, 6, -123, 3.75 },
+			{ 3, 12, -129, 2.5 },
+		}, 1)
 
-		-- A dragon's head, jaws wide on a glowing throat, under jutting brows, with glowing lines along its jaws.
+		-- The head: huge, a broad skull under heavy brows, a long upper jaw, the lower jaw hanging open on a glowing
+		-- throat.
 		local head = newSculpt(U)
-		head:add(ellipsoid({ 0, 24, 9.6 }, { 3.8, 3.2, 3.8 }), SCALE)
-		head:add(ellipsoid({ 0, 23.6, 16 }, { 2.7, 1.7, 5 }), SCALE)
-		head:add(ellipsoid({ 0, 23.8, 20.6 }, { 1.6, 1.1, 1.6 }), SCALE)
-		head:add(ellipsoid({ 0, 17.8, 15.4 }, { 2.6, 1.1, 4.8 }), SCALE)
-		head:add(ellipsoid({ 0, 19.4, 10 }, { 3.2, 2.4, 2.8 }), SCALE)
+		head:add(ellipsoid({ 0, 69, 26 }, { 13, 11.5, 14 }), SCALE)
 		for _, s in { 1, -1 } do
-			head:add(rod({ { 2.4 * s, 26.6, 9.4, 1 }, { 3.2 * s, 26.9, 13.4, 0.8 } }), SCALE_DARK)
+			head:add(ellipsoid({ 7.6 * s, 78.6, 34 }, { 5.6, 3.2, 6.6 }), SCALE_DARK)
+			head:add(ellipsoid({ 9.6 * s, 62, 26 }, { 5.4, 7, 7 }), SCALE)
 		end
-		head:carve(ellipsoid({ 0, 20.4, 15.6 }, { 2.1, 1.5, 5.2 }))
-		head:paint(ellipsoid({ 0, 20.4, 15.6 }, { 2.6, 2, 5.7 }), MOUTH, nil, true)
-		head:paint(ellipsoid({ 0, 20.4, 11.2 }, { 1.7, 1.3, 1.6 }), THROAT, nil, true)
+		head:add(ellipsoid({ 0, 68, 44 }, { 9.6, 6, 17 }), SCALE)
+		head:add(ellipsoid({ 0, 68.6, 59.6 }, { 6, 4.6, 4 }), SCALE)
+		head:add(rod({ { 0, 56, 28, 8.4 }, { 0, 50.4, 44, 6.4 }, { 0, 48, 57, 4.6 } }), SCALE)
+		head:add(ellipsoid({ 0, 59, 33 }, { 7.4, 5.6, 6.4 }), THROAT)
+		head:carve(ellipsoid({ 0, 58, 47 }, { 8.6, 4.4, 17 }))
 		head:coat(function(p, open)
 			local x, y, z = p[1], p[2], p[3]
-			if
-				(open(1, 0, 0) or open(-1, 0, 0))
-				and z > 12.4
-				and z < 19.6
-				and (math.abs(y - 22.6) < 0.45 or math.abs(y - 17.4) < 0.45)
-			then
-				return GLOW
+			if math.abs(x) < 8.6 and y > 50.5 and y < 64 and z > 37 then
+				return MOUTH
 			end
-			if z > 21.4 and y > 23.8 and math.abs(x) > 0.4 and math.abs(x) < 1.3 then
-				return SCALE_DARK
+			if open(0, -1, 0) and y < 54 then
+				return BELLY
 			end
 			return scales(p)
 		end)
 		head:bake(tones)
 
-		local all = { head }
+		local all: { Sculpt } = { head }
 		for _, entry in lengths do
 			table.insert(all, entry.sculpt)
 		end
@@ -1431,146 +1452,169 @@ Ocean.Leviathan = {
 			return list
 		end
 
-		-- Horn spikes down the spine, tipped back towards the tail, with a glassy fin between them; and a row of big
-		-- glowing portholes down each flank, each in a dark ring.
-		local function spines(limb: Limb, entry: any)
+		-- Along a length: horn spines down its back with a glass sail between them (leaving a gap where a rider
+		-- sits), and two rows of big glowing portholes down each flank, each in a dark ring.
+		local seat = { 0, 43.4, -40 }
+		local function dress(limb: Limb, entry: Length)
 			local samples = entry.samples
-			for k = 2, #samples - 1, 3 do
-				local here, r = samples[k][1], samples[k][2]
-				for _, s in (if r > 1.4 then { 1, -1 } else {}) do
-					local side = { s, 0, 0 }
-					local c = vadd(here, vscale(side, r * 0.86))
-					T.ball(limb, c, { r * 0.3, r * 0.75, r * 0.75 }, SCALE_DARK.color)
-					T.ball(limb, vadd(c, vscale(side, r * 0.14)), { r * 0.24, r * 0.5, r * 0.5 }, GLOW.color, NEON)
-				end
-			end
 			local tips, bases = {}, {}
-			for k = 3, #samples - 2, 2 do
-				local sample = samples[k]
-				local here, r, run, back = sample[1], sample[2], sample[3], sample[4]
-				local base = vadd(here, vscale(back, r * 0.75))
-				local tip = vadd(base, vadd(vscale(back, 1.8 + r * 0.8), vscale(run, 0.9 * entry.tailward)))
-				T.taper(limb, base, tip, 1.1 + r * 0.25, 0.8, { 1, 0, 0 }, HORN)
-				table.insert(bases, base)
-				table.insert(tips, vlerp(base, tip, 0.7))
+			for k = 2, #samples - 1, 2 do
+				local here, r, run, back = samples[k][1], samples[k][2], samples[k][3], samples[k][4]
+				if vlength(vsub(here, { seat[1], here[2], seat[3] })) > 7 then
+					local base = vadd(here, vscale(back, r * 0.8))
+					local tip = vadd(base, vadd(vscale(back, 3 + r * 0.7), vscale(run, 1.6 * entry.tailward)))
+					T.taper(limb, base, tip, 1.8 + r * 0.2, 1.4, Kit.squareTo(back), HORN)
+					table.insert(bases, base)
+					table.insert(tips, vlerp(base, tip, 0.75))
+				else
+					table.insert(bases, false :: any)
+					table.insert(tips, false :: any)
+				end
 			end
 			for k = 1, #bases - 1 do
-				T.triangle(limb, bases[k], tips[k], bases[k + 1], 0.3, FIN, GLASS)
-				T.triangle(limb, tips[k], tips[k + 1], bases[k + 1], 0.3, FIN, GLASS)
-			end
-		end
-
-		-- Front fins: webbed fans of glass on bony rays, glowing at the tips.
-		local finClay = newSculpt(U)
-		finClay:add(rod({ { 2, 3, 1.8, 1.1 }, { 3.8, 3, 1.4, 0.9 } }), SCALE)
-		local finMirror = finClay:mirror()
-		table.insert(all, finClay)
-		table.insert(all, finMirror)
-
-		local bodyLimb = pet:limb("Body", T.at({ 0, 3, -3 }))
-		neck.sculpt:draw(bodyLimb, othersOf(neck.sculpt), SCALE)
-		spines(bodyLimb, neck)
-		local segment1 = pet:limb("Segment1", T.at({ 0, 3, -3 }))
-		coil1.sculpt:draw(segment1, othersOf(coil1.sculpt), SCALE)
-		spines(segment1, coil1)
-		local segment2 = pet:limb("Segment2", T.at({ 0, 2.2, -21.5 }), "Segment1")
-		coil2.sculpt:draw(segment2, othersOf(coil2.sculpt), SCALE)
-		spines(segment2, coil2)
-		local tailLimb = pet:limb("Tail", T.at({ 0, 2, -35 }), "Segment2")
-		tail.sculpt:draw(tailLimb, othersOf(tail.sculpt), SCALE)
-		spines(tailLimb, tail)
-		-- A great forked tail fan of glass, ribbed with bone and glowing at its tips.
-		local root, upper, notch, lower = { 1.5, 5, -43.2 }, { 1.5, 17.6, -50.6 }, { 1.5, 9, -48.4 }, { 1.5, 1.4, -51 }
-		T.triangle(tailLimb, root, upper, notch, 0.4, FIN, GLASS)
-		T.triangle(tailLimb, root, notch, lower, 0.4, FIN, GLASS)
-		for _, ray in { upper, lower, { 1.5, 13.4, -48.2 }, { 1.5, 4.4, -48.8 } } do
-			T.blade(tailLimb, root, ray, 0.5, 0.6, { 1, 0, 0 }, HORN)
-		end
-		T.ball(tailLimb, upper, 1, GLOW.color, NEON)
-		T.ball(tailLimb, lower, 1, GLOW.color, NEON)
-
-		local headLimb = pet:limb("Head", T.at({ 0, 21, 8 }))
-		head:draw(headLimb, othersOf(head), SCALE)
-		Kit.slitEyes(headLimb, head, { 25, 13.2 }, { 25.8, 10.8 }, 0.75, GLOW.color, NEON, SCALE_DARK.color)
-		-- Fangs, a forked tongue, and nubs of horn up the snout.
-		for _, s in { 1, -1 } do
-			for _, z in { 14, 16, 18 } do
-				T.taper(headLimb, { 1.4 * s, 22.6, z }, { 1.35 * s, 20.4, z + 0.2 }, 0.6, 0.5, { 1, 0, 0 }, FANG)
-			end
-			for _, z in { 13, 15, 17 } do
-				T.taper(headLimb, { 1.3 * s, 18.3, z }, { 1.25 * s, 20.1, z + 0.2 }, 0.55, 0.45, { 1, 0, 0 }, FANG)
-			end
-			T.taper(headLimb, { 0.8 * s, 23.2, 19.8 }, { 0.75 * s, 20.4, 20.4 }, 0.8, 0.7, { 1, 0, 0 }, FANG)
-			T.taper(headLimb, { 0, 19.3, 15.4 }, { 0.8 * s, 19.6, 17.6 }, 0.4, 0.3, { 0, 1, 0 }, TONGUE)
-		end
-		T.blade(headLimb, { 0, 19.2, 11.6 }, { 0, 19.3, 15.4 }, 0.9, 0.4, { 0, 1, 0 }, TONGUE)
-		for _, z in { 14, 16, 18, 20 } do
-			local y = Kit.topOf(head, z)
-			T.taper(headLimb, { 0, y - 0.4, z }, { 0, y + 0.8, z - 0.5 }, 0.7, 0.6, { 1, 0, 0 }, HORN)
-		end
-		for _, s in { 1, -1 } do
-			-- Ridged horns sweeping back and up, tipped with light.
-			local horn = {
-				{ 3.5 * s, 27.6, 10 },
-				{ 4.5 * s, 29.6, 7 },
-				{ 5.5 * s, 30.8, 4 },
-				{ 6.5 * s, 31.5, 1 },
-				{ 7.5 * s, 32.5, -1.5 },
-				{ 8 * s, 34, -3 },
-			}
-			T.branch(headLimb, horn, 1.6, { 0, 0, 1 }, HORN)
-			for k = 2, #horn - 1 do
-				T.ball(headLimb, horn[k], 1.7 - k * 0.18, HORN_DARK)
-			end
-			T.ball(headLimb, horn[#horn], 0.7, GLOW.color, NEON)
-			-- Gill fans: glassy frills on bony spines behind the jaw.
-			local gill = { 4.2 * s, 21.6, 8.4 }
-			local spineTips = { { 5.6 * s, 28, 5 }, { 6 * s, 24, 2.4 }, { 5.8 * s, 20.4, 1.4 }, { 5.4 * s, 16.4, 4 } }
-			for k, tip in spineTips do
-				T.blade(headLimb, gill, tip, 0.5, 0.5, { s, 0, 0 }, HORN)
-				T.ball(headLimb, tip, 0.6, GLOW.color, NEON)
-				if k < #spineTips then
-					T.triangle(headLimb, gill, tip, spineTips[k + 1], 0.3, FIN, GLASS)
+				if bases[k] and bases[k + 1] then
+					T.triangle(limb, bases[k], tips[k], bases[k + 1], 0.6, FIN, GLASS)
+					T.triangle(limb, tips[k], tips[k + 1], bases[k + 1], 0.6, FIN, GLASS)
 				end
 			end
-			-- Whiskers drooping from the lip, glowing at the tips.
-			local whisker = {
-				{ 1.3 * s, 23, 19 },
-				{ 4.5 * s, 22.5, 20.5 },
-				{ 5.5 * s, 20.5, 20.5 },
-				{ 6.5 * s, 17.5, 19.5 },
-				{ 6.5 * s, 15.5, 18.5 },
-			}
-			T.branch(headLimb, whisker, 0.55, { 0, 0, 1 }, SCALE_LIGHT.color)
-			T.ball(headLimb, whisker[#whisker], 0.55, GLOW.color, NEON)
+			for k = 2, #samples - 1 do
+				local here, r, side, back = samples[k][1], samples[k][2], samples[k][5], samples[k][4]
+				if r > 3.6 and k % 3 == 2 then
+					for _, s in { 1, -1 } do
+						local dir = vnorm(vadd(vscale(side, s), vscale(back, 0.08)))
+						local c = vadd(here, vscale(dir, r * 0.88))
+						T.ball(limb, c, { r * 0.66, r * 0.66, r * 0.66 }, SCALE_DARK.color)
+						T.ball(limb, vadd(c, vscale(dir, r * 0.14)), { r * 0.5, r * 0.5, r * 0.5 }, GLOW, NEON)
+					end
+				end
+			end
 		end
-		-- The lure: a stalk arching forward from the brow, a glowing bulb hanging in front of its jaws.
-		T.branch(
-			headLimb,
-			{ { 0, 26.2, 11 }, { 0, 31, 14 }, { 0, 32, 16.5 }, { 0, 31, 19 }, { 0, 29.6, 20.6 } },
-			0.55,
-			{ 1, 0, 0 },
-			HORN_DARK
-		)
-		T.ball(headLimb, { 0, 28.4, 21.2 }, 2.2, GLOW.color, NEON)
 
-		pet:limbPair("LeftFin", "RightFin", T.at({ 3, 3, 2 }), function(limb)
-			finClay:draw(limb, othersOf(finClay), SCALE)
-			local finRoot = { 3.6, 3, 1.4 }
-			local rays = { { 6.6, 3.4, 3.6 }, { 8.6, 3.2, 1.4 }, { 9.8, 3, -1.2 }, { 10.6, 2.8, -3.6 } }
-			for k, ray in rays do
-				T.blade(limb, finRoot, ray, 0.45, 0.5, { 0, 1, 0 }, HORN)
-				T.ball(limb, ray, 0.6, GLOW.color, NEON)
-				if k < #rays then
-					T.triangle(limb, finRoot, ray, rays[k + 1], 0.3, FIN, GLASS)
+		local bodyLimb = pet:limb("Body", T.at({ 0, 11.45, -8 }))
+		neck.sculpt:draw(bodyLimb, othersOf(neck.sculpt), SCALE)
+		dress(bodyLimb, neck)
+		local segment1 = pet:limb("Segment1", T.at({ 0, 11.45, -8 }))
+		coil1.sculpt:draw(segment1, othersOf(coil1.sculpt), SCALE)
+		dress(segment1, coil1)
+		local segment2 = pet:limb("Segment2", T.at({ -3, 8.95, -66 }), "Segment1")
+		coil2.sculpt:draw(segment2, othersOf(coil2.sculpt), SCALE)
+		dress(segment2, coil2)
+		local tailLimb = pet:limb("Tail", T.at({ 0, 6.45, -108 }), "Segment2")
+		tail.sculpt:draw(tailLimb, othersOf(tail.sculpt), SCALE)
+		dress(tailLimb, tail)
+		-- A great forked tail fan of glass on bony rays, glowing at its tips.
+		local root = { 3, 12, -129 }
+		local rays = { { 3, 34, -138 }, { 3, 26, -144 }, { 3, 15, -147 }, { 3, 6, -146 }, { 3, 2, -140 } }
+		for k, ray in rays do
+			T.blade(tailLimb, root, ray, 1, 1.2, { 1, 0, 0 }, HORN)
+			T.ball(tailLimb, ray, { 2, 2, 2 }, GLOW, NEON)
+			if k < #rays then
+				T.triangle(tailLimb, root, ray, rays[k + 1], 0.6, FIN, GLASS)
+			end
+		end
+
+		local headLimb = pet:limb("Head", T.at({ 0, 61, 19 }))
+		head:draw(headLimb, othersOf(head), SCALE)
+		-- Big glowing eyes under the brows, slit-pupilled, ringed in dark scale.
+		for _, s in { 1, -1 } do
+			local x = sideOf(head, 73, 37)
+			T.ball(headLimb, { (x - 0.8) * s, 73, 37 }, { 3.2, 7, 8.4 }, SCALE_DARK.color)
+			T.ball(headLimb, { (x - 0.3) * s, 73, 37.2 }, { 2.6, 5.8, 7.2 }, GLOW, NEON)
+			T.blade(
+				headLimb,
+				{ (x + 0.7) * s, 70.6, 37.4 },
+				{ (x + 0.7) * s, 75.4, 37.4 },
+				1.3,
+				0.6,
+				{ s, 0, 0 },
+				SCALE_DARK.color
+			)
+		end
+		-- Rows of long needle fangs along both jaws, longest at the front.
+		for i = 0, 9 do
+			for _, s in { 1, -1 } do
+				local zu = 57 - i * 2.6
+				local xu = sideOf(head, 62.6, zu) - 1.2
+				if xu > 1 then
+					local long = 9.6 - i * 0.55
+					T.taper(
+						headLimb,
+						{ xu * s, 63.6, zu },
+						{ xu * 0.9 * s, 63.6 - long, zu + 1 },
+						1.8,
+						1.5,
+						{ s, 0, 0 },
+						FANG
+					)
+				end
+				local zl = 54 - i * 2.6
+				local xl = sideOf(head, 53.6, zl) - 1.2
+				if xl > 1 then
+					local long = 7.4 - i * 0.45
+					T.taper(
+						headLimb,
+						{ xl * s, 52.6, zl },
+						{ xl * 0.9 * s, 52.6 + long, zl + 0.8 },
+						1.6,
+						1.4,
+						{ s, 0, 0 },
+						FANG
+					)
+				end
+			end
+		end
+		for _, s in { 1, -1 } do
+			-- Great horns sweeping back and up from the skull, ridged, glowing at their tips.
+			local horn =
+				{ { 8 * s, 78, 20 }, { 12 * s, 86, 12 }, { 15 * s, 94, 4 }, { 16 * s, 101, -4 }, { 14 * s, 106, -10 } }
+			T.branch(headLimb, horn, 5, { 0, 0, 1 }, HORN)
+			for k = 2, #horn - 1 do
+				T.ball(headLimb, horn[k], { 5.4 - k * 0.6, 5.4 - k * 0.6, 5.4 - k * 0.6 }, HORN_DARK)
+			end
+			T.ball(headLimb, horn[#horn], { 2.6, 2.6, 2.6 }, GLOW, NEON)
+			-- Glass gill frills fanned out behind the jaw on bony spines, glowing at the tips.
+			local gill = { 11 * s, 64, 20 }
+			local spineTips = { { 19 * s, 80, 13 }, { 22 * s, 70, 8 }, { 22 * s, 59, 8 }, { 18 * s, 48, 13 } }
+			for k, tip in spineTips do
+				T.blade(headLimb, gill, tip, 1.4, 1.4, { s, 0, 0 }, HORN)
+				T.ball(headLimb, tip, { 2.2, 2.2, 2.2 }, GLOW, NEON)
+				if k < #spineTips then
+					T.triangle(headLimb, gill, tip, spineTips[k + 1], 0.8, FIN, GLASS)
+				end
+			end
+			-- Barbels drooping from the snout, glowing at the tips.
+			local barbel = { { 4 * s, 64, 58 }, { 10 * s, 62, 61 }, { 12 * s, 54, 61 }, { 12.6 * s, 46, 58 } }
+			T.branch(headLimb, barbel, 1.5, { 0, 0, 1 }, SCALE_LIGHT.color)
+			T.ball(headLimb, barbel[#barbel], { 2, 2, 2 }, GLOW, NEON)
+		end
+		-- Horn nubs up the snout.
+		for _, z in { 42, 49, 55 } do
+			local y = Kit.topOf(head, z)
+			T.taper(headLimb, { 0, y - 1, z }, { 0, y + 2.8, z - 1.4 }, 2.2, 1.8, { 1, 0, 0 }, HORN)
+		end
+		-- The lure: a stalk arching from the brow high over the head, a blazing bulb hanging in front of the jaws.
+		local lure = { { 0, 77, 30 }, { 0, 94, 40 }, { 0, 104, 50 }, { 0, 104, 62 }, { 0, 96, 70 }, { 0, 89, 72 } }
+		T.branch(headLimb, lure, 2.2, { 1, 0, 0 }, HORN_DARK)
+		T.ball(headLimb, { 0, 84, 72.6 }, { 11, 11, 11 }, FIN, GLASS)
+		T.ball(headLimb, { 0, 84, 72.6 }, { 8.4, 8.4, 8.4 }, BULB, NEON)
+
+		-- Front fins: great webbed fans of glass on bony rays at the base of the neck, glowing at the tips.
+		pet:limbPair("LeftFin", "RightFin", T.at({ 8, 12, 4 }), function(limb)
+			local finRoot = { 8, 12, 4 }
+			local finRays = { { 20, 18, 8 }, { 24, 14, 2 }, { 25, 10, -4 }, { 22, 6, -10 } }
+			for k, ray in finRays do
+				T.blade(limb, finRoot, ray, 1.1, 1.2, { 0, 1, 0 }, HORN)
+				T.ball(limb, ray, { 1.8, 1.8, 1.8 }, GLOW, NEON)
+				if k < #finRays then
+					T.triangle(limb, finRoot, ray, finRays[k + 1], 0.6, FIN, GLASS)
 				end
 			end
 		end)
 
-		pet:light(GLOW.color, 3.4, 30)
-		pet:particles("Bubbles", GLOW.color, 16)
+		pet:light(GLOW, 4, 48)
+		pet:particles("Bubbles", GLOW, 22)
 		pet:aura(rgb(60, 200, 255), rgb(200, 250, 255))
-		pet:seat(0, 16 / U, -13 / U)
+		pet:seat(seat[1] / U, seat[2] / U, seat[3] / U)
 	end,
 }
 
