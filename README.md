@@ -33,7 +33,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated (see below).
+- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below). The
+  Forest's pets are redrawn in the new showpiece style (sculpted voxels, glowing Neon, auras); the other zones follow
+  one at a time.
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -511,8 +513,8 @@ Then open `tools/out/egg-gallery.html` in a browser.
 
 ## Pet models
 
-Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one design per pet. Each egg in
-`Config/Zones.luau` names the pet that hatches from it. Every pet has its model:
+Pets are built the same blocky way, one design per pet. Each egg in `Config/Zones.luau` names the pet that hatches
+from it. Every pet has its model:
 
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
@@ -521,20 +523,50 @@ Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one 
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
 
-The rarer the pet, the more detailed it is. There is no block budget: quality comes first. Secret and Eternal pets
-are the showpieces, built in the finest detail (the tests require at least 150 blocks each).
+**The showpiece style.** Pets are being redrawn, a zone at a time, to look like the big showpiece pets of Roblox
+simulator games: part-built voxel models with real proportions, light baked into their colours (lighter tops,
+darker undersides), crisp angled claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that
+glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau`:
 
-The more common pets are built from blocks placed by hand. The rarer four of each zone (and a few more) are
-sculpted: `newSculpt` models each limb cell by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes
-such as necks, tails and tentacles, with `curl` for a spiral at the end), colours it by rules (`coat` for patterns
-like stripes, dapples, belly plates and lava seams, `trace` for lines), and packs it into as few blocks as it can.
-Thin details leave the grid altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for
-balls and eyes, `triangle` for a flat sheet such as a wing membrane or fin, and `feather` for a banded feather),
-placed in the design's own units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big
-a pet is shown. Some carry Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the
-Chimera's breath, the Volcano Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly
-from angled parts, is shelved for now, its design kept.) `PetRig` builds the angled parts as turned parts,
-`WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
+| Rarity | Size (a player is 5 studs) | What glows |
+| --- | --- | --- |
+| Common, Uncommon | About a player's height | Nothing: natural animals with glossy eyes |
+| Rare | Taller than a player (the Owl, 9 studs) | Neon eyes |
+| Epic | Twice a player's height, long (the Bear, 14 studs long) | Neon eyes and markings (the Bear's claw-mark runes and moss mushrooms) |
+| Legendary | Three times (the Moss Stag, 17 studs to its antler tips) | Neon eyes, markings and tips, a light, fireflies, and an aura swirling at its feet |
+| Mythic | Five times (the Treant, 26 studs) | All of that, more of it: the Treant's cracks, heart, sap knots, eyes and mouth |
+
+Every pet is rideable: a design sets where the rider sits (`pet:seat`), and the mount lifts the rider to it at any
+size. Pets bigger than about 10 studs are built from coarser cells (a design's `U`), so they keep their detail
+with fewer, larger blocks and build quickly: no Forest pet takes more than a second to build or has more than about
+1,000 blocks. The size a pet hatches at (Tiny to Titanic) is not decided yet; the models are built to be scaled.
+
+The drawing tools are in `src/shared/PetModels/Kit.luau`, shared by every design. `newSculpt` models each limb cell
+by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes such as necks, tails and tentacles, with
+`curl` for a spiral at the end), colours it by rules (`coat` for patterns like stripes, belly plates and lava seams,
+`patches` for soft patches of moss or grizzled fur, `nearPath` for the pale fringe of a tail, `trace` for lines, and
+`bake` for the light from above), and packs it into as few blocks as it can. `surface` lists the cells on its
+outside with the way each faces, for setting quills, tufts of fur and moss over it. Thin details leave the grid
+altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for balls and eyes, `triangle`
+for a flat sheet such as a wing membrane or leaf, and `feather` for a banded feather), placed in the design's own
+units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big a pet is shown. Some carry
+Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the Chimera's breath, the Volcano
+Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly from angled parts, is shelved
+for now, its design kept.) `PetRig` builds the angled parts as turned parts, `WedgePart`s, parts with a sphere
+`SpecialMesh`, and small welded parts holding each `Fire`.
+
+Rare pets give off light and particles (`pet:light`, `pet:particles`: sparkles, embers, bubbles, snow, or fireflies
+that blink as they drift), and the rarest an aura (`pet:aura`): wisps of light winding up from a ring round their
+feet, a soft glow pooled under them and sparks thrown up, built by `ModelEffects.addAura` on a flat invisible disc
+welded to the pet's root.
+
+To see a zone's pets without opening Studio, on a grassy stage beside a player, with their glow, flames and auras:
+
+```bash
+lune run tools/pet-preview 1
+```
+
+Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet).
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, winged, dragon (four legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor
@@ -589,6 +621,7 @@ src/client/            StarterPlayerScripts.Client
                          (Theme and Widgets hold the shared look); and the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
+                       pet-preview.luau: a web page that stands a zone's pets on a Roblox-like stage;
                        map-preview.luau: a web page that shows the map in 3D;
                        ui-preview.luau: a web page that sketches the HUD and its panels;
                        rider-preview.luau: a web page that shows riders running on a rolling egg or training stick;

@@ -49,6 +49,8 @@ export type Limb = {
 
 export type Light = { color: Color, brightness: number, range: number }
 export type Particles = { color: Color, style: string, rate: number }
+-- A swirl of light rising round the pet's feet (rare pets): `color`, and `accent` for the sparks in it.
+export type Aura = { color: Color, accent: Color }
 
 export type Model = {
 	kind: string,
@@ -74,6 +76,7 @@ export type Model = {
 	center: { number },
 	light: Light?,
 	particles: Particles?,
+	aura: Aura?,
 	fires: { Fire },
 	-- Blocks not joined to the rest of the pet, which would float in the air. Should always be 0.
 	loose: number,
@@ -379,12 +382,16 @@ export type PetBuilder = typeof(setmetatable(
 		seatPoint: { number }?,
 		lightInfo: Light?,
 		particleInfo: Particles?,
+		auraInfo: Aura?,
 	},
 	PetBuilder
 ))
 
 local function newPet(): PetBuilder
-	return setmetatable({ limbs = {}, byName = {}, seatPoint = nil, lightInfo = nil, particleInfo = nil }, PetBuilder)
+	return setmetatable(
+		{ limbs = {}, byName = {}, seatPoint = nil, lightInfo = nil, particleInfo = nil, auraInfo = nil },
+		PetBuilder
+	)
 end
 
 -- Starts a limb that turns around `pivot` (x, y, z in voxels; halves are fine). `parent` defaults to Body.
@@ -473,6 +480,11 @@ end
 
 function PetBuilder.particles(self: PetBuilder, style: string, color: Color, rate: number?)
 	self.particleInfo = { style = style, color = color, rate = rate or 6 }
+end
+
+-- A swirl of light rising round its feet, in `color` with sparks of `accent` (white if left out).
+function PetBuilder.aura(self: PetBuilder, color: Color, accent: Color?)
+	self.auraInfo = { color = color, accent = accent or { 255, 255, 255 } }
 end
 
 ----------------------------------------------------------------------------------------------------------------
@@ -653,6 +665,7 @@ function PetModels.get(kind: string): Model?
 		center = { (high[1] + low[1]) / 2, (high[2] + low[2]) / 2, (high[3] + low[3]) / 2 },
 		light = pet.lightInfo,
 		particles = pet.particleInfo,
+		aura = pet.auraInfo,
 		fires = fires,
 		loose = countLoose(pet),
 		flicker = 0,

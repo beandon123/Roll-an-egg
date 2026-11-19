@@ -191,7 +191,20 @@ return function(harness)
 			each(function(model)
 				local order = Rarities.Info[model.rarity].order
 				expect.equal(model.light ~= nil, order >= 5, model.name .. " light")
-				expect.equal(model.particles ~= nil, order >= 6, model.name .. " particles")
+				-- Legendary pets may give off particles too (the Moss Stag's fireflies); Mythic and rarer always do.
+				if order >= 6 then
+					expect.truthy(model.particles ~= nil, model.name .. " particles")
+				elseif order < 5 then
+					expect.equal(model.particles, nil, model.name .. " particles")
+				end
+			end)
+		end)
+
+		it("gives only Legendary and rarer pets an aura round their feet", function()
+			each(function(model)
+				if model.aura then
+					expect.truthy(Rarities.Info[model.rarity].order >= 5, model.name .. " aura")
+				end
 			end)
 		end)
 	end)
