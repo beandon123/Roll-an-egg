@@ -1435,55 +1435,133 @@ return function(harness)
 	end)
 
 	describe("Client: rare egg messages", function()
-		local function clockText(time)
-			local date = os.date("*t", math.floor(time))
-			local hour = if date.hour % 12 == 0 then 12 else date.hour % 12
-			return string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
+		-- The lines of the rare-egg alert, top to bottom.
+		local function alertLines(parts)
+			local lines = {}
+			for _, child in hud(parts).Announcements:GetChildren() do
+				if child:IsA("TextLabel") then
+					table.insert(lines, child)
+				end
+			end
+			table.sort(lines, function(a, b)
+				return a.LayoutOrder < b.LayoutOrder
+			end)
+			return lines
+		end
+		local function alertTexts(parts)
+			local texts = {}
+			for _, line in alertLines(parts) do
+				table.insert(texts, line.Text)
+			end
+			return texts
+		end
+		local function expectLines(parts, expected)
+			expect.equal(table.concat(alertTexts(parts), " / "), table.concat(expected, " / "))
 		end
 
-		it("says where and when a Secret or rarer egg spawned", function()
+		it("says what spawned and where, in shiny white lines across the top", function()
 			local session, parts = startClient()
 			local folder = session:service("ReplicatedStorage").Shared
 			local Rarities = session:require(folder.Config.Rarities)
 			local Zones = session:require(folder.Config.Zones)
-			local banner = hud(parts).Announcement
-			expect.equal(banner.Visible, false)
+			local alert = hud(parts).Announcements
+			expect.equal(alert.Visible, false)
+			-- Waits until `seconds` after the first egg spawned (the lines time themselves by the real clock).
+			local start = os.clock()
+			local function waitUntil(seconds)
+				task.wait(math.max(0, start + seconds - os.clock()))
+				session:renderFrame(1 / 60)
+			end
 
-			local secret = eggData(session, 1, 3, "Secret", 0)
-			session:fromServer("EggSpawned", secret, true)
+			session:fromServer("EggSpawned", eggData(session, 1, 5, "Secret", 0), true)
 			session:renderFrame(1 / 60)
-			expect.equal(banner.Visible, true)
-			expect.equal(banner.Title.Text, "SECRET EGG SPAWNED!")
-			expect.equal(banner.Detail.Text, `Start of the {Zones.List[3].name} zone at {clockText(secret.spawnTime)}`)
-			-- In big white letters, with no box behind them.
-			expect.equal(banner.BackgroundTransparency, 1)
-			expect.equal(banner.Title.TextColor3, roblox.Color3.new(1, 1, 1))
-			expect.truthy(banner.Title.TextSize >= 60, "large")
-			expect.equal(banner.Detail.TextColor3, roblox.Color3.new(1, 1, 1))
-			-- And an alert everyone hears.
-			task.wait(1.2)
-			local alert = session:require(folder.Config.Sounds).SECRET_ALERT
-			expect.equal(session.soundsPlayed[alert.id], #alert.notes, "the alert's notes")
-			-- It stays up for five seconds.
-			task.wait(3.5)
-			expect.equal(banner.Visible, true, "still up after 4.7 s")
-			task.wait(0.6)
-			expect.equal(banner.Visible, false, "gone after 5 s")
-			session:fromServer("EggSpawned", eggData(session, 4, 3, "Secret", 0), true)
-			session:renderFrame(1 / 60)
-			expect.equal(banner.Visible, true)
-			expect.truthy(Rarities.Info.Secret.announce)
+			expect.equal(alert.Visible, true)
+			expectLines(parts, { `Secret egg has spawned in {Zones.List[5].name}!` })
+			-- At the top of the screen, with no box behind it.
+			expect.equal(alert.Position.Y.Scale, 0)
+			expect.truthy(alert.Position.Y.Offset < 20, "at the top")
+			expect.equal(alert.BackgroundTransparency, 1)
+			-- White letters with a dark outline, and a glint sweeping across them.
+			local line = alertLines(parts)[1]
+			expect.equal(line.TextColor3, roblox.Color3.new(1, 1, 1))
+			expect.equal(line.BackgroundTransparency, 1)
+			local stroke = line:FindFirstChildOfClass("UIStroke")
+			expect.truthy(stroke and stroke.Color.R < 0.2, "dark outline")
+			local gradient = line:FindFirstChildOfClass("UIGradient")
+			expect.truthy(gradient, "the shine")
+			local glintAt = gradient.Offset.X
+			waitUntil(0.2)
+			expect.truthy(gradient.Offset.X > glintAt, "the glint moves across")
+			expect.equal(line.TextTransparency, 0)
 
-			-- Other messages use the toast and do not hide it.
-			session:fromServer("Announce", "Something else", nil)
-			expect.equal(hud(parts).Toast.Text, "Something else")
-			expect.equal(banner.Visible, true)
+			-- And a sparkle everyone hears.
+			waitUntil(1.2)
+			local sparkle = session:require(folder.Config.Sounds).SECRET_ALERT
+			expect.equal(session.soundsPlayed[sparkle.id], #sparkle.notes, "the sparkle's notes")
 
+			-- Another rare egg goes on a line beneath; the first stays where it is.
 			session:fromServer("EggSpawned", eggData(session, 2, 6, "Eternal", 0), true)
 			session:renderFrame(1 / 60)
-			expect.equal(banner.Title.Text, "ETERNAL EGG SPAWNED!")
-			local prefix = `Start of the {Zones.List[6].name} zone at `
-			expect.truthy(banner.Detail.Text:find(prefix, 1, true) == 1, banner.Detail.Text)
+			expectLines(parts, {
+				`Secret egg has spawned in {Zones.List[5].name}!`,
+				`Eternal egg has spawned in {Zones.List[6].name}!`,
+			})
+			expect.truthy(Rarities.Info.Secret.announce and Rarities.Info.Eternal.announce)
+
+			-- Other messages use the toast, below the lines, and leave them alone.
+			session:fromServer("Announce", "Something else", nil)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Toast.Text, "Something else")
+			expect.equal(#alertLines(parts), 2)
+
+			-- Each line fades over its last moments, and goes after five seconds.
+			waitUntil(4.75)
+			local first = alertLines(parts)[1]
+			expect.truthy(first.TextTransparency > 0 and first.TextTransparency < 1, "fading")
+			waitUntil(5.3)
+			expectLines(parts, { `Eternal egg has spawned in {Zones.List[6].name}!` })
+			expect.equal(alert.Visible, true)
+			waitUntil(6.7)
+			expect.equal(#alertLines(parts), 0)
+			expect.equal(alert.Visible, false)
+		end)
+
+		it("stacks a few lines, oldest dropping off, and pushes the toast down past them", function()
+			local session, parts = startClient()
+			local folder = session:service("ReplicatedStorage").Shared
+			local Zones = session:require(folder.Config.Zones)
+			local toastTop = hud(parts).Toast.Position.Y.Offset
+			-- Several at once (as at sunrise): one sparkle, a line each.
+			for id = 1, 3 do
+				session:fromServer("EggSpawned", eggData(session, id, 2 + id, "Secret", 0), true)
+			end
+			session:renderFrame(1 / 60)
+			expectLines(parts, {
+				`Secret egg has spawned in {Zones.List[3].name}!`,
+				`Secret egg has spawned in {Zones.List[4].name}!`,
+				`Secret egg has spawned in {Zones.List[5].name}!`,
+			})
+			task.wait(1.2)
+			local sparkle = session:require(folder.Config.Sounds).SECRET_ALERT
+			expect.equal(session.soundsPlayed[sparkle.id], #sparkle.notes, "one sparkle")
+			-- The toast moves down out of the way of the lines.
+			local toast = hud(parts).Toast.Position.Y.Offset
+			local lines = alertLines(parts)
+			local last = lines[#lines]
+			expect.truthy(toast > toastTop, "moved down")
+			expect.truthy(
+				toast >= hud(parts).Announcements.Position.Y.Offset + #lines * last.Size.Y.Offset,
+				"below the lines"
+			)
+
+			for id = 4, 6 do
+				session:fromServer("EggSpawned", eggData(session, id, 6, "Eternal", 0), true)
+			end
+			session:renderFrame(1 / 60)
+			local texts = alertTexts(parts)
+			expect.equal(#texts, 4, "four at most")
+			expect.equal(texts[1], `Secret egg has spawned in {Zones.List[5].name}!`, "the oldest dropped off")
+			expect.equal(texts[4], `Eternal egg has spawned in {Zones.List[6].name}!`)
 		end)
 
 		it("says nothing for eggs below Secret, or for a lineup egg's later laps", function()
@@ -1493,7 +1571,8 @@ return function(harness)
 			-- The server only asks for the message on a lineup egg's first lap of the day.
 			session:fromServer("EggSpawned", eggData(session, 3, 3, "Secret", 0), false)
 			session:renderFrame(1 / 60)
-			expect.equal(hud(parts).Announcement.Visible, false)
+			expect.equal(hud(parts).Announcements.Visible, false)
+			expect.equal(#alertLines(parts), 0)
 		end)
 
 		it("does not announce rare eggs that were already rolling when the player joined", function()
@@ -1502,7 +1581,7 @@ return function(harness)
 				{ id = 9, zone = 3, rarity = "Secret", kind = "Yeti", spawnTime = probe.clock - 4, lateral = 0 },
 			})
 			expect.truthy(parts.eggFolder:FindFirstChild("Egg9"))
-			expect.equal(hud(parts).Announcement.Visible, false)
+			expect.equal(hud(parts).Announcements.Visible, false)
 		end)
 	end)
 
@@ -2037,7 +2116,7 @@ return function(harness)
 		it("builds the HUD with Fusion", function()
 			local session, parts = startClient()
 			local root = hud(parts)
-			for _, name in { "Luck", "Tabs", "Wallet", "DayNight", "Toast", "Announcement", "Leap", "Meters" } do
+			for _, name in { "Luck", "Tabs", "Wallet", "DayNight", "Toast", "Announcements", "Leap", "Meters" } do
 				expect.truthy(root:FindFirstChild(name), name)
 			end
 			-- No runway timer or zone name across the top.

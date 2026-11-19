@@ -26,8 +26,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   mid-cycle. There is always an egg at the start of every zone to jump on: one leaves it at least every 4 seconds.
   Rarity sets their size, speed (27 studs a second for a Common egg up to 54 for an Eternal one; walking is 16) and
   stamina requirement. Rolling eggs kick up a thick cloud of dust.
-- When a Secret or Eternal egg spawns, every player sees a big white message for 5 seconds saying where and when,
-  and hears an alert (a lineup egg on its first lap of the day only). Other eggs spawn quietly.
+- When a Secret or Eternal egg spawns, every player sees a line of shiny white text along the top of the screen for
+  5 seconds ("Secret egg has spawned in Volcano!"), each new one beneath any still up, and hears a sparkle (a lineup
+  egg on its first lap of the day only). Other eggs spawn quietly.
 - Zone-themed obstacles on the runway, small and big (giant stumps, rock outcrops, buttes, walls of ice blocks,
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
@@ -68,9 +69,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop at that section), the
   Eggs (an egg), Pets (a paw) and Ride tabs on the right edge, the day and night clock at the bottom right (a moon and
   "in 3m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck boost runs,
-  the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the big white
-  message for Secret and rarer eggs. Nothing runs across the top: a short message says when the runway is about to
-  close, and when it closes.
+  the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the shiny white
+  lines along the top when Secret and rarer eggs spawn. There is no runway timer or zone name across the top: a
+  short message says when the runway is about to close, and when it closes.
 - **Shop** ("Coop Shop"): the next tier of the training stick and the next pen level, each for Robux or dollars (the
   same upgrades as the stick's sign and the pen's green button), x2 / x4
   server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
@@ -477,10 +478,10 @@ lune run tools/ui-preview trails
 ```
 
 Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
-trails), `sell`, `shop`, `eggs` (the Eggs panel), `secret` (the message when a Secret egg spawns), `stick` (the
-training stick's upgrade panel) and `training` (rolling on the stick, with a 2x boost and a bubble). It runs the game's
-own client scripts and draws their GUI objects in HTML, and the models in 3D previews as flat-shaded drawings: a close
-sketch, not Roblox's renderer (fonts and emoji are the browser's).
+trails), `sell`, `shop`, `eggs` (the Eggs panel), `secret` (the shiny lines along the top when Secret and Eternal
+eggs spawn), `stick` (the training stick's upgrade panel) and `training` (rolling on the stick, with a 2x boost and a
+bubble). It runs the game's own client scripts and draws their GUI objects in HTML, and the models in 3D previews as
+flat-shaded drawings: a close sketch, not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models
 
