@@ -1215,6 +1215,60 @@ local function fur(
 	end
 end
 
+-- A crystal (of ice, or any gem) growing from `base` along `dir`, `length` long and `width` across: a four-sided
+-- shaft turned to show an edge, ending in a four-faced point. `tip` colours the point; `material` and `tipMaterial`
+-- (such as "Neon") make them glow. `T` is the design's `inUnits`.
+local function crystal(
+	limb: Limb,
+	T: any,
+	base: Vec,
+	dir: Vec,
+	length: number,
+	width: number,
+	color: Color,
+	tip: Color,
+	material: string?,
+	tipMaterial: string?
+)
+	local d = vnorm(dir)
+	local side = squareTo(d)
+	local edge = vnorm(vadd(side, vcross(d, side)))
+	local shaftEnd = vadd(base, vscale(d, length * 0.66))
+	local point = vadd(base, vscale(d, length))
+	T.blade(limb, vadd(base, vscale(d, -width * 0.4)), shaftEnd, width, width, edge, color, material)
+	T.taper(limb, shaftEnd, point, width, width, edge, tip, tipMaterial)
+	T.taper(limb, shaftEnd, point, width, width, vcross(d, edge), tip, tipMaterial)
+end
+
+-- A cluster of crystals bursting from `base` along about `dir`: one big one and `count` smaller ones leaning out
+-- round it, `size` the length of the biggest. `seed` varies the cluster, so no two look alike.
+local function crystalCluster(
+	limb: Limb,
+	T: any,
+	base: Vec,
+	dir: Vec,
+	size: number,
+	count: number,
+	color: Color,
+	tip: Color,
+	material: string?,
+	tipMaterial: string?,
+	seed: number?
+)
+	local d = vnorm(dir)
+	local side = squareTo(d)
+	local other = vcross(d, side)
+	crystal(limb, T, base, d, size, size * 0.3, color, tip, material, tipMaterial)
+	for i = 1, count do
+		local a = (i / count) * math.pi * 2 + (seed or 0)
+		local lean = 0.45 + 0.35 * noise({ i, seed or 0, 3 })
+		local out = vnorm(vadd(d, vadd(vscale(side, math.cos(a) * lean), vscale(other, math.sin(a) * lean))))
+		local length = size * (0.45 + 0.3 * noise({ seed or 0, i, 7 }))
+		local from = vadd(base, vadd(vscale(side, math.cos(a) * size * 0.12), vscale(other, math.sin(a) * size * 0.12)))
+		crystal(limb, T, from, out, length, length * 0.32, color, tip, material, tipMaterial)
+	end
+end
+
 ----------------------------------------------------------------------------------------------------------------
 
 Kit.rgb = rgb
@@ -1265,5 +1319,7 @@ Kit.alongPath = alongPath
 Kit.nearPath = nearPath
 Kit.glossyEye = glossyEye
 Kit.fur = fur
+Kit.crystal = crystal
+Kit.crystalCluster = crystalCluster
 
 return Kit
