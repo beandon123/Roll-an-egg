@@ -172,19 +172,22 @@ local function buildObstacles(map: Instance)
 	end
 end
 
--- A bright, milky haze: crisp close by, the runway ahead fading into pale white-blue the further off it is, with
--- the sky hazy down to the horizon. The time of day, and the haze's colours with it, are set by each client from the
--- cycle (see the client's DayNightController).
+-- A bright, milky fog, like the owner's reference: crisp close by, then everything fading into pale white-blue from
+-- FOG_START studs away, half gone by about 300 and lost in it by FOG_END. It is Lighting's own fog, which is set in
+-- studs (an Atmosphere's strength can only be judged by eye, and hides this fog, so there is none). The time of day,
+-- and the fog's colour with it, are set by each client from the cycle (see the client's DayNightController).
+local FOG_START = 40
+local FOG_END = 600
 local function setUpSky()
 	Lighting.ClockTime = 14
-	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
-	atmosphere.Density = 0.42
-	atmosphere.Offset = 0.25
-	atmosphere.Haze = 2.2
-	atmosphere.Glare = 0
-	atmosphere.Color = Color3.fromRGB(224, 235, 245)
-	atmosphere.Decay = Color3.fromRGB(206, 222, 236)
-	atmosphere.Parent = Lighting
+	for _, child in Lighting:GetChildren() do
+		if child:IsA("Atmosphere") then
+			child:Destroy()
+		end
+	end
+	Lighting.FogStart = FOG_START
+	Lighting.FogEnd = FOG_END
+	Lighting.FogColor = Color3.fromRGB(220, 233, 245)
 end
 
 -- Sends characters that have fallen out of the world back to the hub.

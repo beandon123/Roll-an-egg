@@ -208,7 +208,13 @@ return function(harness)
 					expect.truthy(model:FindFirstChild("Lid") and model:FindFirstChild("Shell"), "clam")
 				end
 			end
-			expect.truthy(session:service("Lighting"):FindFirstChildOfClass("Atmosphere"), "haze")
+			-- Fog, set in studs: crisp close by, everything far off lost in pale white-blue (no Atmosphere, which would
+			-- hide it).
+			local lighting = session:service("Lighting")
+			expect.equal(lighting:FindFirstChildOfClass("Atmosphere"), nil)
+			expect.truthy(lighting.FogStart > 0 and lighting.FogStart < 100, "fog starts close by")
+			expect.truthy(lighting.FogEnd > lighting.FogStart and lighting.FogEnd <= 800, "and hides what is far off")
+			expect.truthy(lighting.FogColor.R > 0.8 and lighting.FogColor.B > 0.9, "pale white-blue")
 			expect.equal(session:service("Players").RespawnTime, 2)
 			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
 		end)

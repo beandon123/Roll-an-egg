@@ -342,8 +342,9 @@ than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zon
 wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer ones
 more rows, so none is emptier than the first.
 
-A bright, milky haze hangs over everything (an `Atmosphere` in Lighting, set up by `MapService`): close by is crisp,
-and the runway ahead fades into pale white-blue the further off it is. It turns deep blue at night
+A bright, milky fog hangs over everything, like the owner's reference: close by is crisp, and from 40 studs away
+everything fades into pale white-blue, half gone by about 300 studs and lost in it by 600 (Lighting's own fog, set in
+studs by `MapService`; there is no `Atmosphere`, which would hide it). It turns deep blue at night
 (`DayNightController`).
 
 **It winds** like a canyon: its centre line swings out to one side and back, or across from one side to the other

@@ -60,8 +60,8 @@ Original theme, art, and creatures.
     - [ ] Tall walls (decided): the cliff wall beside the runway stands about 46-54 studs high (about 50, varying
           only slightly), with higher steps behind it (28-36 and 38-50 studs more); the Ocean's boardwalk railing is
           7 studs tall
-    - [ ] Fog like the owner's reference screenshots (decided): a bright, milky white-blue haze, crisp close by,
-          the runway ahead fading into pale light; deep blue at night
+    - [ ] Fog like the owner's reference screenshots (decided): a bright, milky white-blue fog, crisp close by,
+          the runway ahead fading into pale light from 40 studs and gone by 600 (proposed); deep blue at night
     - [ ] Natural, fairly large gaps in the walls (decided), looking out over a valley with a low railing across
           (built). Nothing on the runway kills (decided): steering an egg into a wall or a railing bounces it back,
           costing stamina and slowing it for a moment (built)

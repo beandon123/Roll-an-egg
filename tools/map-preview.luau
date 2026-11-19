@@ -9,9 +9,9 @@
 -- #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
 --
 -- It runs the game's own MapService in the Studio stand-in (tests/studio) and copies every part it builds, so the
--- page shows exactly the parts the game makes. Lighting, particles and the client's animations are left out. Each
--- plot's training stick shows a different tier (plot 1 the first, plot 8 the last), and a few have a blocky player
--- rolling on them, posed the way the game poses riders.
+-- page shows exactly the parts the game makes, in the game's fog by day. Lighting, particles and the client's
+-- animations are left out. Each plot's training stick shows a different tier (plot 1 the first, plot 8 the last), and
+-- a few have a blocky player rolling on them, posed the way the game poses riders.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -275,6 +275,16 @@ local data = serde.encode("json", {
 	end)(),
 	baseY = Runway.BASE_Y,
 	zoneLengths = Runway.ZONE_LENGTHS,
+	-- The game's fog by day (MapService), drawn the same way: linear from FogStart to FogEnd.
+	fog = (function()
+		local lighting = session:service("Lighting")
+		local color = lighting.FogColor
+		return {
+			start = lighting.FogStart,
+			finish = lighting.FogEnd,
+			color = string.format("#%02x%02x%02x", color.R * 255 + 0.5, color.G * 255 + 0.5, color.B * 255 + 0.5),
+		}
+	end)(),
 })
 local template = fs.readFile("tools/map-preview.html")
 local page = string.gsub(template, "/%*MAP_DATA%*/null", function()

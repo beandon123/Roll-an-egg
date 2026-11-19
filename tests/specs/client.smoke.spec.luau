@@ -1941,6 +1941,9 @@ return function(harness)
 			session:renderFrame(1 / 60)
 			expect.near(Lighting.ClockTime, 12, 1e-3)
 			local noonBrightness = Lighting.Brightness
+			-- A pale white-blue fog by day.
+			local noonFog = Lighting.FogColor
+			expect.truthy(noonFog.R > 0.8 and noonFog.B > 0.9, "pale fog by day")
 			-- The sun sets as the runway closes, 4:50 in; the afternoon light has already begun to fade.
 			session.clock = cycleStart + CycleClock.CLOSE_AT - 1 / 60
 			session:renderFrame(1 / 60)
@@ -1952,6 +1955,10 @@ return function(harness)
 			session:renderFrame(1 / 60)
 			expect.near(math.min(Lighting.ClockTime, 24 - Lighting.ClockTime), 0, 1e-3)
 			expect.truthy(Lighting.Brightness < sunsetBrightness, "darkest in the night")
+			expect.truthy(
+				Lighting.FogColor.B < 0.5 and Lighting.FogColor.B > Lighting.FogColor.R,
+				"deep blue fog by night"
+			)
 		end)
 	end)
 
