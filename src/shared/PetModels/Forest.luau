@@ -27,78 +27,14 @@ local vadd = Kit.vadd
 local vscale = Kit.vscale
 local vnorm = Kit.vnorm
 local nearPath = Kit.nearPath
+local glossyEye = Kit.glossyEye
+local fur = Kit.fur
 
 local NEON = Kit.NEON
 local EYE = Kit.EYE
 local SHINE = Kit.SHINE
 
 local Forest: { [string]: Design } = {}
-
-----------------------------------------------------------------------------------------------------------------
--- Shared touches
-
--- A glossy round eye set into the side of a sculpted head at (y, z), `size` across: a dark iris ringed in `ring`,
--- with a big glint and a small one. `material` "Neon" makes the iris glow.
-local function glossyEye(
-	limb: Limb,
-	T: any,
-	s: Sculpt,
-	y: number,
-	z: number,
-	size: number,
-	ring: { number }?,
-	iris: { number }?,
-	material: string?,
-	pupil: { number }?
-)
-	local x = sideOf(s, y, z)
-	for _, side in { 1, -1 } do
-		if ring then
-			T.ball(limb, { (x - size * 0.2) * side, y, z }, { size * 0.5, size * 1.12, size * 1.12 }, ring)
-		end
-		T.ball(limb, { (x - size * 0.1) * side, y, z }, { size * 0.5, size, size }, iris or EYE, material)
-		if pupil then
-			T.ball(
-				limb,
-				{ (x + size * 0.02) * side, y, z + size * 0.05 },
-				{ size * 0.32, size * 0.62, size * 0.42 },
-				pupil
-			)
-		end
-		T.ball(
-			limb,
-			{ (x + size * 0.1) * side, y + size * 0.22, z + size * 0.18 },
-			{ size * 0.2, size * 0.3, size * 0.3 },
-			SHINE
-		)
-		T.ball(
-			limb,
-			{ (x + size * 0.08) * side, y - size * 0.2, z - size * 0.18 },
-			{ size * 0.12, size * 0.14, size * 0.14 },
-			SHINE
-		)
-	end
-end
-
--- Wisps of fur standing out of a surface: thin tapers from points on it, along (roughly) its normals, bent by
--- `lean`, `length` long. `pick(point, normal)` chooses where; `color` can depend on the point.
-local function fur(
-	limb: Limb,
-	T: any,
-	s: Sculpt,
-	pick: (Vec, Vec) -> boolean,
-	length: number,
-	width: number,
-	lean: Vec,
-	color: (Vec) -> { number }
-)
-	for _, spot in s:surface(pick) do
-		local p, n = spot[1], spot[2]
-		local dir = vnorm(vadd(n, lean))
-		local tip = vadd(p, vscale(dir, length * (0.75 + 0.5 * noise(vadd(p, { 3, 1, 7 })))))
-		T.taper(limb, vadd(p, vscale(dir, -width * 0.4)), tip, width, width * 0.6, n, color(p))
-	end
-end
 
 ----------------------------------------------------------------------------------------------------------------
 -- Squirrel (Common): a red squirrel about a player's size, crouched on all fours with big haunches, its great

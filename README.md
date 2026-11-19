@@ -34,8 +34,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below). The
-  Forest's pets are redrawn in the new showpiece style (sculpted voxels, glowing Neon, auras); the other zones follow
-  one at a time.
+  Forest's and Desert's pets are redrawn in the new showpiece style (sculpted voxels, glowing Neon, auras, with bloom
+  in the lighting); the other zones follow one at a time.
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -526,15 +526,20 @@ from it. Every pet has its model:
 **The showpiece style.** Pets are being redrawn, a zone at a time, to look like the big showpiece pets of Roblox
 simulator games: part-built voxel models with real proportions, light baked into their colours (lighter tops,
 darker undersides), crisp angled claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that
-glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau`:
+glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau` and
+`PetModels/Desert.luau`:
 
 | Rarity | Size (a player is 5 studs) | What glows |
 | --- | --- | --- |
 | Common, Uncommon | About a player's height | Nothing: natural animals with glossy eyes |
-| Rare | Taller than a player (the Owl, 9 studs) | Neon eyes |
-| Epic | Twice a player's height, long (the Bear, 14 studs long) | Neon eyes and markings (the Bear's claw-mark runes and moss mushrooms) |
-| Legendary | Three times (the Moss Stag, 17 studs to its antler tips) | Neon eyes, markings and tips, a light, fireflies, and an aura swirling at its feet |
-| Mythic | Five times (the Treant, 26 studs) | All of that, more of it: the Treant's cracks, heart, sap knots, eyes and mouth |
+| Rare | Taller than a player (the Owl, 9 studs; the Camel, 10) | A first touch: the Owl's eyes, the Camel's harness jewels |
+| Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom |
+| Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet |
+| Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Golden Scarab and its sun, 15) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc |
+
+The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
+it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game
+without it, delete `Lighting.Bloom` in Studio, or remove it from `MapService`.
 
 Every pet is rideable: a design sets where the rider sits (`pet:seat`), and the mount lifts the rider to it at any
 size. Pets bigger than about 10 studs are built from coarser cells (a design's `U`), so they keep their detail
