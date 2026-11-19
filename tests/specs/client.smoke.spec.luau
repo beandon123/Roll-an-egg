@@ -941,6 +941,74 @@ return function(harness)
 			expect.truthy(released(motors), "joints put back")
 		end)
 
+		-- A character built with Roblox's avatar joint upgrade (the default for new experiences): AnimationConstraints
+		-- between rig attachments instead of Motor6Ds. They are given a plain name here, so they can only be told apart
+		-- by their attachments ("LeftKneeRigAttachment"...).
+		local function rigUpgraded(session, humanoid, root)
+			local RiderPose = session:require(session:service("ReplicatedStorage").Shared.RiderPose)
+			humanoid.RigType = Enum.HumanoidRigType.R15
+			humanoid.HipHeight = 2
+			root.Size = Vector3.new(2, 2, 1)
+			local joints = {}
+			for _, name in RiderPose.JOINTS do
+				local part = roblox.Instance.new("Part")
+				part.Name = name .. "Part"
+				part.Parent = humanoid.Parent
+				local parentSide = roblox.Instance.new("Attachment")
+				parentSide.Name = name .. "RigAttachment"
+				parentSide.Parent = root
+				local childSide = roblox.Instance.new("Attachment")
+				childSide.Name = name .. "RigAttachment"
+				childSide.Parent = part
+				local constraint = roblox.Instance.new("AnimationConstraint")
+				constraint.Name = "AnimationConstraint"
+				constraint.Attachment0 = parentSide
+				constraint.Attachment1 = childSide
+				constraint.IsKinematic = true
+				constraint.Parent = part
+				joints[name] = constraint
+			end
+			return joints
+		end
+
+		it("runs a rider whose character has the avatar joint upgrade, after Roblox's animations", function()
+			local session, parts = startClient()
+			local joints = rigUpgraded(session, parts.humanoid, parts.root)
+			local egg = eggData(session, 1, 1, "Common")
+			session:fromServer("EggSpawned", egg)
+			startRide(session, egg)
+			cameraAt(session, eggCenter(session, egg))
+			session:renderFrame(1 / 60, 20)
+
+			-- Every frame Roblox's animations set each joint's Transform (sitting, here), then the pose replaces it.
+			local most, least = -math.huge, math.huge
+			for _ = 1, 30 do
+				for _, joint in joints do
+					joint.Transform = SITTING
+				end
+				session:renderFrame(1 / 60)
+				expect.truthy(joints.Root.Transform.LookVector.Y < -0.1, "leaning forward")
+				local left = joints.LeftHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+				local right = joints.RightHip.Transform:VectorToWorldSpace(Vector3.new(0, -1, 0))
+				most, least = math.max(most, right.Z - left.Z), math.min(least, right.Z - left.Z)
+			end
+			expect.truthy(most > 0.5 and least < -0.5, `legs take turns: {least} to {most}`)
+
+			-- Hops off: blended back to Roblox's animations, which are then left alone.
+			task.wait(0.6)
+			session:heartbeat(1 / 60)
+			session:fire(session:service("UserInputService"), "JumpRequest")
+			session:fromServer("RideEnded", "Dismount", { eggId = 1, zone = 1, rarity = "Common" })
+			session:fromServer("EggLeft", 1, session.clock, 0, false)
+			session:renderFrame(1 / 60, 30)
+			for _, joint in joints do
+				joint.Transform = SITTING
+			end
+			local animated = joints.LeftHip.Transform
+			session:renderFrame(1 / 60)
+			expect.equal(joints.LeftHip.Transform, animated, "left to Roblox's animations")
+		end)
+
 		it("shows another rider tiring as their stamina is about to run out, on an R6 character", function()
 			local session = startClient()
 			local other, humanoid, root = session:addPlayer(999, "Other")

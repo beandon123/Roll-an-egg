@@ -422,12 +422,19 @@ Everyone riding an egg runs on top of it as it rolls under them, and so does eve
   balance back.
 
 The poses are worked out in `src/shared/RiderPose.luau` (pure math, tested outside Studio). On each device,
-`src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints just before each frame is
-drawn. Roblox's own animations set every joint's `Motor6D.Transform` each frame, and riders are anchored, so the pose
-goes into each joint's `C0` instead, cancelling out whatever those animations are doing; it blends in and out so
-nothing snaps, and every `C0` is put back when the ride is over. Riders stand on the egg (`EggController`), as high
-above it as they would stand above the ground. In Studio, the Output window says so the first time each player is
-posed (for example `[Riding animation] Player1 is running on an egg (R15, 15 of 15 joints)`).
+`src/client/Controllers/RiderAnimationController.luau` sets them on every rider's joints every frame, blending in and
+out so nothing snaps. Characters come with one of two kinds of joint, and both work:
+
+- **AnimationConstraint** (Roblox's avatar joint upgrade, the default for new experiences): the pose is set on each
+  joint's `Transform` in `RunService.PreSimulation`, after Roblox's own animations have set theirs, as Roblox's
+  documentation says to.
+- **Motor6D** (older characters): Roblox's animations set every joint's `Transform` each frame, so the pose goes into
+  each joint's `C0` instead, just before the frame is drawn, cancelling out whatever those animations are doing; every
+  `C0` is put back when the ride is over.
+
+Riders stand on the egg (`EggController`), as high above it as they would stand above the ground. In Studio, the
+Output window says how each rider is posed, for example
+`[Riding animation] Player1 is running on an egg (R15, 15 of 15 joints: AnimationConstraints)`.
 
 To watch it without opening Studio:
 

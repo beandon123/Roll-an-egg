@@ -6,11 +6,15 @@
 -- Players rolling on their training stick run the same way (TrainingController says who, how hard, and how far a
 -- plank or girder rocks them as it turns): a steady run, and a flat-out sprint during a 2x boost.
 --
--- Every device animates every rider it can see, every frame just before it is drawn. Riders are anchored, and
--- Roblox's own animations (the Animate script) set every joint's Motor6D.Transform each frame, so the pose goes into
--- each joint's C0 instead, which nothing else touches, cancelling out whatever those animations are doing: the joint
--- ends up exactly in the pose. It blends in from Roblox's pose when a rider gets on and back out when they get off,
--- and each joint's C0 is put back when they are done. Works on R15 and R6 characters.
+-- Every device animates every rider it can see, every frame. It blends in from Roblox's own animations (the Animate
+-- script) when a rider gets on and back out when they get off. Works on R15 and R6 characters, whichever joints they
+-- were built with:
+--     AnimationConstraint  what characters get from Roblox's avatar joint upgrade (the default for new experiences):
+--                          the pose is set on each joint's Transform in RunService.PreSimulation, after Roblox's
+--                          animations have set theirs, as Roblox's documentation says to.
+--     Motor6D              the older joints: Roblox's animations set every joint's Transform each frame, so the pose
+--                          goes into each joint's C0 instead (just before the frame is drawn), cancelling out whatever
+--                          those animations are doing, and each C0 is put back when the rider is done.
 --
 -- How tired an egg rider looks comes from when their stamina will run out: the local player's from their own stamina
 -- (UiState), anyone else's from the attribute the server keeps on their Player (StaminaMath.RUNS_OUT_AT).
@@ -56,15 +60,20 @@ local STICK_HOLD = 0.1
 type Pose = { [string]: { number } }
 
 type Joint = {
-	motor: Motor6D,
-	-- The pose turns a limb about its parent part's axes; a Motor6D's offsets are in its C0's axes. These turn one
-	-- into the other (C0's rotation, and its inverse).
+	-- A Motor6D, or an AnimationConstraint (`constraint`).
+	instance: Instance,
+	constraint: boolean,
+	-- The pose turns a limb about its parent part's axes; a joint's offsets are in the axes of its C0 (a Motor6D) or
+	-- of its Attachment0 (an AnimationConstraint). These turn one into the other (that rotation, and its inverse).
 	toJoint: CFrame,
 	fromJoint: CFrame,
-	-- The joint's own C0, put back when the rider is done, and the C0 last written here (as Roblox stores it).
+	-- A Motor6D's own C0, put back when the rider is done, and the C0 last written here (as Roblox stores it).
 	rest: CFrame,
 	written: CFrame?,
 }
+
+-- An AnimationConstraint's pose for this frame, set in PreSimulation: `weight` of the way from Roblox's own.
+type Pending = { constraint: AnimationConstraint, target: CFrame, weight: number }
 
 type Rig = {
 	character: Model,
@@ -109,8 +118,11 @@ type Rider = {
 type StickRide = { pace: number, lift: number, seenAt: number }
 
 local riders: { [number]: Rider } = {}
--- In Studio, who has been reported in the Output as running (once each), to show the animation is at work.
-local reported: { [number]: boolean } = {}
+-- In Studio, how many joints each rider was last reported (in the Output) to be posed by, to show the animation is
+-- at work.
+local reported: { [number]: number } = {}
+-- AnimationConstraint poses worked out this frame, waiting for PreSimulation.
+local pending: { Pending } = {}
 -- Seconds of frames so far: what landings, tumbles and looks for joints are timed by.
 local clock = 0
 -- Who is on which egg this frame (filled by visitRider), and who is on their training stick.
@@ -127,16 +139,43 @@ local function ease(current: number, target: number, rate: number, deltaTime: nu
 	return target + (current - target) * math.exp(-rate * deltaTime)
 end
 
+-- Which of the pose's joints `instance` is, if any: a Motor6D by its name, an AnimationConstraint by its name (it
+-- keeps the name of the Motor6D it replaces) or else by its rig attachment ("LeftKneeRigAttachment" is "LeftKnee").
+local function jointName(instance: Instance, wanted: { string }): string?
+	if table.find(wanted, instance.Name) then
+		return instance.Name
+	end
+	if instance:IsA("AnimationConstraint") then
+		for _, attachment in { instance.Attachment1, instance.Attachment0 } do
+			local name = attachment and string.match(attachment.Name, "^(.+)RigAttachment$")
+			if name and table.find(wanted, name) then
+				return name
+			end
+		end
+	end
+	return nil
+end
+
 local function findJoints(rig: Rig)
 	local wanted = if rig.r6 then RiderPose.R6_JOINTS else RiderPose.JOINTS
 	for _, descendant in rig.character:GetDescendants() do
-		if descendant:IsA("Motor6D") and rig.joints[descendant.Name] == nil and table.find(wanted, descendant.Name) then
-			local rotation = descendant.C0.Rotation
-			rig.joints[descendant.Name] = {
-				motor = descendant,
+		local frame: CFrame
+		if descendant:IsA("Motor6D") then
+			frame = descendant.C0
+		elseif descendant:IsA("AnimationConstraint") and descendant.Attachment0 then
+			frame = (descendant.Attachment0 :: Attachment).CFrame
+		else
+			continue
+		end
+		local name = jointName(descendant, wanted)
+		if name and rig.joints[name] == nil then
+			local rotation = frame.Rotation
+			rig.joints[name] = {
+				instance = descendant,
+				constraint = descendant:IsA("AnimationConstraint"),
 				toJoint = rotation:Inverse(),
 				fromJoint = rotation,
-				rest = descendant.C0,
+				rest = frame,
 				written = nil,
 			}
 			rig.count += 1
@@ -289,13 +328,14 @@ end
 
 -- Sets the rider's joints to their pose, `weight` of the way from where Roblox's animations put them.
 --
--- A joint places its limb at Part0 * C0 * Transform * C1:Inverse(). Roblox's animations own Transform (they set it
+-- A Motor6D places its limb at Part0 * C0 * Transform * C1:Inverse(). Roblox's animations own Transform (they set it
 -- every frame), so the pose goes into C0, with their Transform cancelled out: C0 = rest * pose * Transform:Inverse().
+-- An AnimationConstraint's pose waits for PreSimulation (setPending), after Roblox's animations have run.
 local function apply(rig: Rig, pose: Pose, weight: number)
 	local scale = rig.scale
 	for name, joint in rig.joints do
-		local motor = joint.motor
-		if motor.Parent == nil then
+		local instance = joint.instance
+		if instance.Parent == nil then
 			rig.joints[name] = nil
 			rig.count -= 1
 			continue
@@ -304,15 +344,20 @@ local function apply(rig: Rig, pose: Pose, weight: number)
 		if p == nil then
 			continue
 		end
+		local target = joint.toJoint
+			* CFrame.new(p[4] * scale, p[5] * scale, p[6] * scale)
+			* CFrame.fromEulerAnglesYXZ(p[1], p[2], p[3])
+			* joint.fromJoint
+		if joint.constraint then
+			table.insert(pending, { constraint = instance :: AnimationConstraint, target = target, weight = weight })
+			continue
+		end
+		local motor = instance :: Motor6D
 		if joint.written and motor.C0 ~= joint.written then
 			-- Something else moved the joint (the character was rescaled): that is where it rests now.
 			joint.rest = motor.C0
 		end
 		local animated = motor.Transform
-		local target = joint.toJoint
-			* CFrame.new(p[4] * scale, p[5] * scale, p[6] * scale)
-			* CFrame.fromEulerAnglesYXZ(p[1], p[2], p[3])
-			* joint.fromJoint
 		if weight < 1 then
 			target = animated:Lerp(target, weight)
 		end
@@ -322,15 +367,32 @@ local function apply(rig: Rig, pose: Pose, weight: number)
 	end
 end
 
--- Puts every joint of the rider's character back as it was.
+-- After Roblox's animations have set this frame's joints: the AnimationConstraints' poses.
+local function setPending()
+	for _, entry in pending do
+		local constraint = entry.constraint
+		if constraint.Parent then
+			constraint.Transform = if entry.weight < 1
+				then constraint.Transform:Lerp(entry.target, entry.weight)
+				else entry.target
+		end
+	end
+	table.clear(pending)
+end
+
+-- Puts every Motor6D of the rider's character back as it was (Roblox's animations take AnimationConstraints back
+-- themselves, setting their Transform every frame).
 local function release(rider: Rider)
 	local rig = rider.rig
 	if rig == nil then
 		return
 	end
 	for _, joint in rig.joints do
-		if joint.written and joint.motor.C0 == joint.written then
-			joint.motor.C0 = joint.rest
+		if not joint.constraint and joint.written then
+			local motor = joint.instance :: Motor6D
+			if motor.C0 == joint.written then
+				motor.C0 = joint.rest
+			end
 		end
 		joint.written = nil
 	end
@@ -344,13 +406,24 @@ local function animate(rider: Rider, eye: Vector3?)
 	if eye and (rig.root.Position - eye).Magnitude > ANIMATE_DISTANCE then
 		return
 	end
-	if RunService:IsStudio() and not reported[rider.userId] then
-		reported[rider.userId] = true
+	if RunService:IsStudio() and reported[rider.userId] ~= rig.count then
+		reported[rider.userId] = rig.count
 		local wanted = if rig.r6 then #RiderPose.R6_JOINTS else #RiderPose.JOINTS
+		local constraints = 0
+		for _, joint in rig.joints do
+			if joint.constraint then
+				constraints += 1
+			end
+		end
+		local kind = if rig.count == 0
+			then "no joints found"
+			elseif constraints == rig.count then "AnimationConstraints"
+			elseif constraints == 0 then "Motor6Ds"
+			else "Motor6Ds and AnimationConstraints"
 		print(
 			`[Riding animation] {rig.character.Name} is running on {if rider.onStick
 				then "their training stick"
-				else "an egg"}` .. ` ({if rig.r6 then "R6" else "R15"}, {rig.count} of {wanted} joints)`
+				else "an egg"}` .. ` ({if rig.r6 then "R6" else "R15"}, {rig.count} of {wanted} joints: {kind})`
 		)
 	end
 
@@ -383,6 +456,8 @@ end
 
 local function step(deltaTime: number)
 	clock += deltaTime
+	-- Anything a frame without a PreSimulation left behind.
+	table.clear(pending)
 	table.clear(onEgg)
 	EggController.VisitRiders(visitRider)
 	for userId, stick in onStick do
@@ -470,6 +545,8 @@ end
 function RiderAnimationController.Init()
 	-- Last thing before the frame is drawn: after the camera, and after EggController has put riders on their eggs.
 	RunService:BindToRenderStep("RollAnEgg_RiderPose", Enum.RenderPriority.Last.Value, step)
+	-- AnimationConstraints are set after Roblox's animations have set theirs.
+	RunService.PreSimulation:Connect(setPending)
 	Players.PlayerRemoving:Connect(function(player)
 		riders[player.UserId] = nil
 		onStick[player.UserId] = nil
