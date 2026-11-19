@@ -440,9 +440,7 @@ out so nothing snaps. Characters come with one of two kinds of joint, and both w
   each joint's `C0` instead, just before the frame is drawn, cancelling out whatever those animations are doing; every
   `C0` is put back when the ride is over.
 
-Riders stand on the egg (`EggController`), as high above it as they would stand above the ground. In Studio, the
-Output window says how each rider is posed, for example
-`[Riding animation] Player1 is running on an egg (R15, 15 of 15 joints: AnimationConstraints)`.
+Riders stand on the egg (`EggController`), as high above it as they would stand above the ground.
 
 To watch it without opening Studio:
 
