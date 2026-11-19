@@ -34,8 +34,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below). The
-  Forest's, Desert's, Snow zone's and Ocean's pets are redrawn in the new showpiece style (sculpted voxels, glowing
-  Neon, auras, with bloom in the lighting); the other zones follow one at a time.
+  Forest's, Desert's, Snow zone's, Ocean's and Volcano's pets are redrawn in the new showpiece style (sculpted voxels,
+  glowing Neon, auras, with bloom in the lighting); the Prehistoric zone's follow.
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -527,7 +527,7 @@ from it. Every pet has its model:
 simulator games: part-built voxel models with real proportions, light baked into their colours (lighter tops,
 darker undersides), crisp angled claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that
 glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau`,
-`PetModels/Desert.luau`, `PetModels/Snow.luau` and `PetModels/Ocean.luau`:
+`PetModels/Desert.luau`, `PetModels/Snow.luau`, `PetModels/Ocean.luau` and `PetModels/Volcano.luau`:
 
 | Rarity | Size (a player is 5 studs) | What glows |
 | --- | --- | --- |
@@ -536,7 +536,8 @@ glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetMode
 | Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom |
 | Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet |
 | Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers |
-| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads |
+| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65) | Lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
 it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game
@@ -550,7 +551,8 @@ with fewer, larger blocks and build quickly: no Forest pet takes more than a sec
 The drawing tools are in `src/shared/PetModels/Kit.luau`, shared by every design. `newSculpt` models each limb cell
 by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes such as necks, tails and tentacles, with
 `curl` for a spiral at the end), colours it by rules (`coat` for patterns like stripes, belly plates and lava seams,
-`patches` for soft patches of moss or grizzled fur, `nearPath` for the pale fringe of a tail, `trace` for lines, and
+`patches` for soft patches of moss or grizzled fur, `cracks` for the seams between plates (lava glowing between plates
+of rock), `nearPath` for the pale fringe of a tail, `trace` for lines, and
 `bake` for the light from above), and packs it into as few blocks as it can. `surface` lists the cells on its
 outside with the way each faces, for setting quills, tufts of fur and moss over it. `crystal` and `crystalCluster`
 grow faceted shards of ice (or any gem), glowing at their points if a design asks. Thin details leave the grid

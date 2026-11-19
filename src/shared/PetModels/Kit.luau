@@ -962,6 +962,34 @@ local function patches(p: Vec, size: number): number
 	)
 end
 
+-- Whether a point lies on a crack between plates: space is split into irregular plates about `spacing` design units
+-- across (round points scattered on a jittered grid, each claiming what is nearest it), and a point is on a crack
+-- when it is nearly as near its second-nearest plate as its nearest, within `width`. Gives an even network of thin
+-- seams, like lava glowing between plates of cooled rock, or the joins between plates of armour. Also returns how
+-- far into the crack the point is, from 0 at its edge to 1 down its middle, so a design can make the middle hotter.
+local function cracks(p: Vec, spacing: number, width: number): (boolean, number)
+	local gx, gy, gz = math.floor(p[1] / spacing), math.floor(p[2] / spacing), math.floor(p[3] / spacing)
+	local best, second = math.huge, math.huge
+	for dx = -1, 1 do
+		for dy = -1, 1 do
+			for dz = -1, 1 do
+				local cx, cy, cz = gx + dx, gy + dy, gz + dz
+				local sx = (cx + noise({ cx, cy, cz })) * spacing
+				local sy = (cy + noise({ cy, cz, cx + 7 })) * spacing
+				local sz = (cz + noise({ cz, cx, cy + 13 })) * spacing
+				local d = math.sqrt((p[1] - sx) ^ 2 + (p[2] - sy) ^ 2 + (p[3] - sz) ^ 2)
+				if d < best then
+					best, second = d, best
+				elseif d < second then
+					second = d
+				end
+			end
+		end
+	end
+	local gap = second - best
+	return gap < width, math.max(0, 1 - gap / width)
+end
+
 -- How far the clay reaches out to the pet's left at a height and depth (design units): where its surface is.
 local function sideOf(s: Sculpt, y: number, z: number): number
 	local u = s.unit
@@ -1308,6 +1336,7 @@ Kit.feather = feather
 Kit.look = look
 Kit.noise = noise
 Kit.patches = patches
+Kit.cracks = cracks
 Kit.sideOf = sideOf
 Kit.frontOf = frontOf
 Kit.bottomOf = bottomOf
