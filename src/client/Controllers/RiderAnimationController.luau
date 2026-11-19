@@ -118,9 +118,6 @@ type Rider = {
 type StickRide = { pace: number, lift: number, seenAt: number }
 
 local riders: { [number]: Rider } = {}
--- In Studio, how many joints each rider was last reported (in the Output) to be posed by, to show the animation is
--- at work.
-local reported: { [number]: number } = {}
 -- AnimationConstraint poses worked out this frame, waiting for PreSimulation.
 local pending: { Pending } = {}
 -- Seconds of frames so far: what landings, tumbles and looks for joints are timed by.
@@ -405,26 +402,6 @@ local function animate(rider: Rider, eye: Vector3?)
 	end
 	if eye and (rig.root.Position - eye).Magnitude > ANIMATE_DISTANCE then
 		return
-	end
-	if RunService:IsStudio() and reported[rider.userId] ~= rig.count then
-		reported[rider.userId] = rig.count
-		local wanted = if rig.r6 then #RiderPose.R6_JOINTS else #RiderPose.JOINTS
-		local constraints = 0
-		for _, joint in rig.joints do
-			if joint.constraint then
-				constraints += 1
-			end
-		end
-		local kind = if rig.count == 0
-			then "no joints found"
-			elseif constraints == rig.count then "AnimationConstraints"
-			elseif constraints == 0 then "Motor6Ds"
-			else "Motor6Ds and AnimationConstraints"
-		print(
-			`[Riding animation] {rig.character.Name} is running on {if rider.onStick
-				then "their training stick"
-				else "an egg"}` .. ` ({if rig.r6 then "R6" else "R15"}, {rig.count} of {wanted} joints: {kind})`
-		)
 	end
 
 	local pose
