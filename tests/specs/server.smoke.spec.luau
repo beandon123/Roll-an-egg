@@ -132,9 +132,10 @@ return function(harness)
 	end
 
 	-- Drops an egg of a chosen rarity and returns its EggSpawned message.
-	local function dropEgg(session, zone, rarity)
+	-- `placement` ({ z, lateral }) puts it somewhere other than a random spot at the start of its zone.
+	local function dropEgg(session, zone, rarity, placement)
 		session:clearSent()
-		expect.truthy(runwayService(session).DropEgg(zone, rarity), "DropEgg")
+		expect.truthy(runwayService(session).DropEgg(zone, rarity, nil, placement), "DropEgg")
 		session:heartbeat(1 / 60)
 		for _, entry in session:sent("EggSpawned", "all") do
 			local egg = entry.args[1]
@@ -472,8 +473,9 @@ return function(harness)
 				before = rowsBefore[#rowsBefore - 1]
 			end
 
-			-- Get on a Volcano egg a few seconds before it reaches the lava pool.
-			local egg = dropEgg(session, 5, "Rare")
+			-- Get on a Volcano egg a few seconds before it reaches the lava pool. It starts in the pool's lane, so
+			-- however wide the zone, the rider has only a short way to steer once past the row before it.
+			local egg = dropEgg(session, 5, "Rare", { lateral = lava.x })
 			local path, spec, startZ = eggPath(session, egg)
 			local arrive = egg.spawnTime + (lava.z - startZ) / spec.rollSpeed
 			while session.clock < arrive - 3 do
@@ -2459,7 +2461,7 @@ return function(harness)
 					expect.truthy(walls > 0, "sea walls")
 				else
 					-- The grassy (sandy, snowy...) top of the wall beside the runway: its first step, which starts at the
-					-- runway's edge (plus a kerb), wherever the bends take it, and stands 16 to 34 studs high.
+					-- runway's edge (plus a kerb), wherever the bends take it, and stands 46 to 54 studs high.
 					local caps = 0
 					for _, part in banks:GetChildren() do
 						if part:IsA("BasePart") and math.abs(part.Size.Y - 2) < 1e-3 then
@@ -2468,7 +2470,7 @@ return function(harness)
 							local top = position.Y + part.Size.Y / 2 - runway.BASE_Y
 							if inner > half and inner < half + 3 and top > 0 then
 								caps += 1
-								expect.truthy(top >= 16 - 1e-3 and top <= 34 + 1e-3, `{zone.key} wall {top} high`)
+								expect.truthy(top >= 46 - 1e-3 and top <= 54 + 1e-3, `{zone.key} wall {top} high`)
 							end
 						end
 					end

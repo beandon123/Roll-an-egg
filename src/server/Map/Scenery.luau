@@ -566,15 +566,15 @@ end
 local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, side: number, random: Random): { Top }
 	local phase = random() * 10
 	local tops: { Top } = {}
-	-- Each step's width and height at `z`, rising and falling gently along the runway. The wall beside the runway stands
-	-- 16 to 34 studs high, well above the head of anyone riding even the biggest egg; the step behind it climbs 12 to
-	-- 20 studs more, and the back step 14 to 30 more again.
+	-- Each step's width and height at `z`, rising and falling a little along the runway. The wall beside the runway
+	-- stands 46 to 54 studs high, towering over anyone riding even the biggest egg; the step behind it climbs 28 to 36
+	-- studs more, and the back step 38 to 50 more again.
 	local function layoutAt(z: number)
 		local w1 = 12 + 4 * wave(z, phase + 3)
 		local w2 = 14 + 4 * wave(z, phase + 5)
-		local h1 = steps(25 + 9 * wave(z, phase), 2)
-		local h2 = h1 + steps(16 + 4 * wave(z, phase + 1), 2)
-		local h3 = h2 + steps(22 + 8 * wave(z, phase + 2), 2)
+		local h1 = steps(50 + 4 * wave(z, phase), 2)
+		local h2 = h1 + steps(32 + 4 * wave(z, phase + 1), 2)
+		local h3 = h2 + steps(44 + 6 * wave(z, phase + 2), 2)
 		return {
 			{ inner = 2, width = w1, top = h1 },
 			{ inner = 2 + w1, width = w2, top = h2 },
@@ -623,7 +623,12 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 				local band = index % #palette.bands
 				local x = side * (spec.inner + spec.width / 2)
 				while y < spec.top - CAP - 0.5 do
-					local height = math.min(spec.top - CAP - y, 5 + (band % 2) * 2)
+					local left = spec.top - CAP - y
+					local height = 5 + (band % 2) * 2
+					if left - height < 3 then
+						-- The last stripe under the cap takes up what is left, rather than leave a thin sliver.
+						height = left
+					end
 					block(
 						folder,
 						Vector3.new(spec.width, height, segment),
@@ -1006,8 +1011,8 @@ local function staminaRange(zone): (number, number)
 	return low, high
 end
 
--- High enough that the arch stands well clear of the banks either side of it.
-local GATE_HEIGHT = 46
+-- High enough that the arch stands well clear of the banks either side of it (their first step is up to 54 studs).
+local GATE_HEIGHT = 66
 
 local function buildGate(folder: Instance, zoneId: number)
 	local zone = Zones.List[zoneId]

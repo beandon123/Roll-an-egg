@@ -24,8 +24,9 @@
 -- (see Logic/RunwaySim), which costs its rider some stamina.
 --
 -- The runway gets longer and wider the further it goes: each zone is longer than the one before (ZONE_LENGTHS, 800
--- studs in the Forest up to 2,600 in the Prehistoric zone) and WIDTH_STEP studs wider, the banks stepping out at
--- its gate. The last zone is the widest, and keeps that width all the way through its endless repeats.
+-- studs in the Forest up to 2,600 in the Prehistoric zone) and wider (zoneWidth: 120, 140 and 160 studs, then a
+-- quarter wider each zone: 200, 260 and 320), the banks stepping out at its gate. The last zone is the widest, and
+-- keeps that width all the way through its endless repeats.
 -- Because the zones differ in width, where an egg may be side to side depends on how far down the runway it is:
 -- lateralRange says, at a distance down it.
 
@@ -47,10 +48,32 @@ do
 end
 -- The first zone's width: wide enough for a whole server to chase eggs side by side. Cliff banks run down both sides.
 Runway.START_WIDTH = 120
--- How much wider each zone is than the one before (a multiple of the 20-stud ground tiles).
+-- The next zones are each WIDTH_STEP studs wider than the one before. From zone GROWTH_FROM on, each is GROWTH times
+-- as wide as the one before instead, up to zone GROWTH_UNTIL; any zones after that are as wide as it. Every zone's
+-- width is rounded to a whole number of the 20-stud ground tiles.
 Runway.WIDTH_STEP = 20
--- The last zone's width, which its endless repeats keep.
-Runway.MAX_WIDTH = Runway.START_WIDTH + Runway.WIDTH_STEP * (Runway.ZONE_COUNT - 1)
+Runway.GROWTH_FROM = 4
+Runway.GROWTH = 1.25
+Runway.GROWTH_UNTIL = 7
+local GROUND_TILE = 20
+
+local zoneWidths: { number } = {}
+do
+	local exact = Runway.START_WIDTH
+	for zoneId = 1, Runway.ZONE_COUNT do
+		-- Zone 1 is START_WIDTH wide, and any zone past GROWTH_UNTIL as wide as the one before it.
+		if zoneId > 1 and zoneId <= Runway.GROWTH_UNTIL then
+			if zoneId >= Runway.GROWTH_FROM then
+				exact *= Runway.GROWTH
+			else
+				exact += Runway.WIDTH_STEP
+			end
+		end
+		zoneWidths[zoneId] = math.round(exact / GROUND_TILE) * GROUND_TILE
+	end
+end
+-- The last zone's width, which its endless repeats keep: the widest.
+Runway.MAX_WIDTH = zoneWidths[Runway.ZONE_COUNT]
 
 -- Height of the walking surface, at the hub and all the way down the runway.
 Runway.BASE_Y = 10
@@ -214,7 +237,7 @@ end
 
 -- How wide a zone's stretch of runway is. Copies of the last zone (zone ids past ZONE_COUNT) are as wide as it.
 function Runway.zoneWidth(zoneId: number): number
-	return Runway.START_WIDTH + Runway.WIDTH_STEP * (math.clamp(zoneId, 1, Runway.ZONE_COUNT) - 1)
+	return zoneWidths[math.clamp(zoneId, 1, Runway.ZONE_COUNT)]
 end
 
 -- How wide the runway is at a distance down it. Behind the start (where it leaves the hub) it is the first zone's

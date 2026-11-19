@@ -160,6 +160,12 @@ return function(harness)
 				)
 				expect.equal(Runway.zoneWidth(zoneId) % 20, 0, "a whole number of ground tiles")
 			end
+			-- 20 studs wider for the first few zones, then a quarter wider each zone (to whole ground tiles).
+			local widths = {}
+			for zoneId = 1, Runway.ZONE_COUNT do
+				widths[zoneId] = Runway.zoneWidth(zoneId)
+			end
+			expect.equal(table.concat(widths, ","), "120,140,160,200,260,320")
 			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT), Runway.MAX_WIDTH)
 			-- The last zone's copies, and everywhere an egg can be carried back to, are as wide as it.
 			for _, z in { Runway.FINAL_ZONE_START, Runway.LENGTH, Runway.LOOP_START, Runway.LOOP_END, 1e6 } do

@@ -172,17 +172,18 @@ local function buildObstacles(map: Instance)
 	end
 end
 
--- A soft haze in the distance, as in a big outdoor world. The time of day is set by each client from the cycle
--- (see the client's DayNightController).
+-- A bright, milky haze: crisp close by, the runway ahead fading into pale white-blue the further off it is, with
+-- the sky hazy down to the horizon. The time of day, and the haze's colours with it, are set by each client from the
+-- cycle (see the client's DayNightController).
 local function setUpSky()
 	Lighting.ClockTime = 14
 	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") or Instance.new("Atmosphere")
-	atmosphere.Density = 0.32
-	atmosphere.Offset = 0.15
-	atmosphere.Haze = 1.4
-	atmosphere.Glare = 0.4
-	atmosphere.Color = Color3.fromRGB(199, 220, 236)
-	atmosphere.Decay = Color3.fromRGB(106, 132, 160)
+	atmosphere.Density = 0.42
+	atmosphere.Offset = 0.25
+	atmosphere.Haze = 2.2
+	atmosphere.Glare = 0
+	atmosphere.Color = Color3.fromRGB(224, 235, 245)
+	atmosphere.Decay = Color3.fromRGB(206, 222, 236)
 	atmosphere.Parent = Lighting
 end
 

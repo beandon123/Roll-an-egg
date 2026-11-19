@@ -48,16 +48,20 @@ Original theme, art, and creatures.
     - [ ] Anyone can ride into any zone (decided); the scenery, music, and obstacles change zone by zone
     - [ ] Runway 120 studs wide with walls down both sides, and a painted "START ZONE" where it leaves the hub
           (proposed, from the owner's reference screenshots)
-    - [ ] The runway gets wider the further it goes (decided): each zone is 20 studs wider than the one before
-          (120, 140, 160, 180, 200, 220), the walls stepping out at its gate; the last zone stays at its width
-          through its endless repeats (decided)
+    - [ ] The runway gets wider the further it goes (decided): the first three zones are each 20 studs wider than
+          the one before, then from zone 4 on each is 25% wider than the one before, up to zone 7 (decided), to whole
+          20-stud ground tiles: 120, 140, 160, 200, 260, 320; the walls step out at each gate, and the last zone stays
+          at its width through its endless repeats (decided)
     - [ ] The runway gets longer the further it goes (decided): zones of 800, 1,160, 1,520, 1,880, 2,240 and 2,600
           studs; each zone's bends come round again every 650 studs or so, so the long zones wind as much as the
           short ones (built)
     - [ ] The Ocean stays a boardwalk over the sea (decided): no swimming or drowning; its rope railing closes off
           the gaps like any other (decided)
-    - [ ] Tall walls (decided): the cliff wall beside the runway stands about 16-34 studs high (about 25 on average),
-          with higher steps behind it (12-20 and 14-30 studs more); the Ocean's boardwalk railing is 7 studs tall
+    - [ ] Tall walls (decided): the cliff wall beside the runway stands about 46-54 studs high (about 50, varying
+          only slightly), with higher steps behind it (28-36 and 38-50 studs more); the Ocean's boardwalk railing is
+          7 studs tall
+    - [ ] Fog like the owner's reference screenshots (decided): a bright, milky white-blue haze, crisp close by,
+          the runway ahead fading into pale light; deep blue at night
     - [ ] Natural, fairly large gaps in the walls (decided), looking out over a valley with a low railing across
           (built). Nothing on the runway kills (decided): steering an egg into a wall or a railing bounces it back,
           costing stamina and slowing it for a moment (built)

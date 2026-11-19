@@ -9,7 +9,7 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 
 - The map: the hub with a painted START ZONE where the runway begins, then a level runway that winds through six
   zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) like a canyon, each longer and wider than the one before
-  (800 studs long and 120 wide in the Forest, up to 2,600 by 220 in the Prehistoric zone), each with its own checkered
+  (800 studs long and 120 wide in the Forest, up to 2,600 by 320 in the Prehistoric zone), each with its own checkered
   ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the Ocean),
   plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The cliffs down
   both sides are broken by fairly large gaps that look out over a valley, with a low railing across.
@@ -333,11 +333,18 @@ The runway is level, and gets longer and wider the further it goes, the banks st
 | Forest | 800 | 120 | 11 |
 | Desert | 1,160 | 140 | 15 |
 | Snow | 1,520 | 160 | 20 |
-| Ocean | 1,880 | 180 | 25 |
-| Volcano | 2,240 | 200 | 30 |
-| Prehistoric | 2,600 | 220 | 35 |
+| Ocean | 1,880 | 200 | 25 |
+| Volcano | 2,240 | 260 | 30 |
+| Prehistoric | 2,600 | 320 | 35 |
 
-Wider zones get more obstacles to a row, and longer ones more rows, so none is emptier than the first.
+The first three zones are each 20 studs wider than the one before; from the Ocean (zone 4) on, each is a quarter wider
+than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zones added after that would stay as
+wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer ones
+more rows, so none is emptier than the first.
+
+A bright, milky haze hangs over everything (an `Atmosphere` in Lighting, set up by `MapService`): close by is crisp,
+and the runway ahead fades into pale white-blue the further off it is. It turns deep blue at night
+(`DayNightController`).
 
 **It winds** like a canyon: its centre line swings out to one side and back, or across from one side to the other
 (`Runway.BENDS`), up to about 70 studs, once for every 650 studs or so of each zone, and is back in the middle,
@@ -349,9 +356,9 @@ reaching the end of the loop is carried back one repeat to a spot that looks exa
 eggs there at their copy nearest the player, so nothing seems to move.
 
 **Banks and gaps.** Tall stepped cliffs run down both sides, three steps of stone capped with grass (or sand, snow or
-rock) hanging over their edges: the wall beside the runway stands 16 to 34 studs high, the step behind it 12 to 20
-studs higher and the back step 14 to 30 higher again (the Ocean has a 7-stud boardwalk railing instead). The runway
-widens zone by zone, from 120 studs in the Forest to 220 in the Prehistoric zone, the banks stepping out at each gate.
+rock) hanging over their edges: the wall beside the runway stands 46 to 54 studs high, the step behind it 28 to 36
+studs higher and the back step 38 to 50 higher again (the Ocean has a 7-stud boardwalk railing instead). The runway
+widens zone by zone, from 120 studs in the Forest to 320 in the Prehistoric zone, the banks stepping out at each gate.
 The banks are broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's gate). Each gap looks out over
 a valley, with a low wooden railing across it and an invisible wall above. Nothing at the edge kills: a rider who
 steers their egg into a bank or a railing bounces back off it, losing 10% of the egg's stamina requirement and slowing
