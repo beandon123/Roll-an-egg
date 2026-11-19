@@ -34,8 +34,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below). The
-  Forest's, Desert's and Snow zone's pets are redrawn in the new showpiece style (sculpted voxels, glowing Neon,
-  auras, with bloom in the lighting); the other zones follow one at a time.
+  Forest's, Desert's, Snow zone's and Ocean's pets are redrawn in the new showpiece style (sculpted voxels, glowing
+  Neon, auras, with bloom in the lighting); the other zones follow one at a time.
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -527,7 +527,7 @@ from it. Every pet has its model:
 simulator games: part-built voxel models with real proportions, light baked into their colours (lighter tops,
 darker undersides), crisp angled claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that
 glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau`,
-`PetModels/Desert.luau` and `PetModels/Snow.luau`:
+`PetModels/Desert.luau`, `PetModels/Snow.luau` and `PetModels/Ocean.luau`:
 
 | Rarity | Size (a player is 5 studs) | What glows |
 | --- | --- | --- |
@@ -536,7 +536,7 @@ glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetMode
 | Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom |
 | Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet |
 | Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers |
-| Secret | Five times (the Yeti, 24 studs) | The most of all: the Yeti's crystal clusters on its shoulders, forearms, spine and horns, its eyes, falling snow and an aura |
+| Secret | Four to eight times (the Yeti, 24 studs; the Kraken, 21 tall and 25 across; the Leviathan, 42 long) | The most of all: the Yeti's crystal clusters, the Kraken's glowing suckers, spots and eyes under a gold crown, the Leviathan's glowing portholes, fins and lure |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
 it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game
@@ -579,7 +579,8 @@ Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few sha
 four-legged, beast (four jointed legs and a jaw: each leg's shin hangs from its upper leg, so the Frost Wolf's and
 Sabertooth Cat's paws fold up as they step, and the jaw hangs from the head, to snarl and roar), winged, dragon (four
 legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor and the T-Rex), six legs, swimmer
-(fins and a tail; these float), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox
+(fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that much higher), eight
+tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox
 model: every limb turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A
 limb drawn with `limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image
 from the right one.

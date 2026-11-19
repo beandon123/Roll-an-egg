@@ -642,6 +642,35 @@ function PetModels.get(kind: string): Model?
 	local pet = newPet()
 	design.draw(pet)
 
+	-- A design drawn with a gap under it (a swimmer drawn up off the ground) is moved down to stand on y = 0, and the
+	-- gap added to its hover, so it floats just as high as it was drawn.
+	local lowest = math.huge
+	for _, build in pet.limbs do
+		for _, box in build.boxes do
+			lowest = math.min(lowest, (PetModels.extent(box))[2])
+		end
+	end
+	-- Whole cells only, so blocks stay on the grid the checks below rely on.
+	local gap = if lowest < math.huge then math.max(0, math.floor(lowest + 0.001)) else 0
+	if gap > 0 then
+		for _, build in pet.limbs do
+			build.pivot = { build.pivot[1], build.pivot[2] - gap, build.pivot[3] }
+			for _, box in build.boxes do
+				box.y -= gap
+			end
+			for _, range in build.ranges do
+				range[2] -= gap
+				range[5] -= gap
+			end
+			for _, fire in build.fires do
+				fire.position = { fire.position[1], fire.position[2] - gap, fire.position[3] }
+			end
+		end
+		if pet.seatPoint then
+			pet.seatPoint = { pet.seatPoint[1], pet.seatPoint[2] - gap, pet.seatPoint[3] }
+		end
+	end
+
 	local info = Rarities.Info[rarity]
 	local glow = if rarity == "Secret" then SECRET_GLOW else info.color
 	if info.order >= 5 and pet.lightInfo == nil then
@@ -675,7 +704,7 @@ function PetModels.get(kind: string): Model?
 		rarity = rarity,
 		skeleton = design.skeleton,
 		gait = design.gait or "Walk",
-		hover = design.hover or 0,
+		hover = (design.hover or 0) + gap,
 		scale = design.scale or PetModels.VOXEL,
 		wingSpread = design.wingSpread or 0,
 		limbs = limbs,
