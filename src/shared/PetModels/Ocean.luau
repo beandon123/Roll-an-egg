@@ -1381,36 +1381,37 @@ Ocean.Leviathan = {
 			return entry
 		end
 		-- Rearing up into the neck at the front; two great arches; a tail lifting to its fan.
+		-- The coils are nearly as thick as the skull, so the head sits on a body built to carry it.
 		local neck = length({
-			{ 0, 11.45, -8, 11.25 },
-			{ 0, 11.45, 2, 11.25 },
-			{ 0, 18, 10, 10.75 },
-			{ 0, 34, 14, 10 },
-			{ 0, 50, 15, 9.25 },
-			{ 0, 61, 19, 8.5 },
+			{ 0, 15.2, -8, 15.2 },
+			{ 0, 15.2, 2, 15.2 },
+			{ 0, 21, 10, 14.5 },
+			{ 0, 36, 14, 13.4 },
+			{ 0, 51, 16, 12.4 },
+			{ 0, 61, 19, 11.4 },
 		}, -1)
 		local coil1 = length({
-			{ 0, 11.45, -8, 11.25 },
-			{ 3, 11.2, -18, 11 },
-			{ 5, 26, -28, 10.5 },
-			{ 0, 33, -40, 10 },
-			{ 1, 26, -52, 9.5 },
-			{ -2, 9.2, -60, 9 },
-			{ -3, 8.95, -66, 8.75 },
+			{ 0, 15.2, -8, 15.2 },
+			{ 3, 14.9, -18, 14.8 },
+			{ 5, 30, -28, 14.2 },
+			{ 0, 38, -40, 13.5 },
+			{ 1, 30, -52, 12.8 },
+			{ -2, 12.4, -60, 12.2 },
+			{ -3, 11.9, -66, 11.8 },
 		}, 1)
 		local coil2 = length({
-			{ -3, 8.95, -66, 8.75 },
-			{ -5, 8.45, -74, 8.25 },
-			{ -6, 20, -82, 7.75 },
-			{ -5, 25, -92, 7.25 },
-			{ -2, 17, -102, 6.75 },
-			{ 0, 6.45, -108, 6.25 },
+			{ -3, 11.9, -66, 11.8 },
+			{ -5, 11.2, -74, 11.1 },
+			{ -6, 23, -82, 10.5 },
+			{ -5, 28, -92, 9.8 },
+			{ -2, 20, -102, 9.1 },
+			{ 0, 8.5, -108, 8.4 },
 		}, 1)
 		local tail = length({
-			{ 0, 6.45, -108, 6.25 },
-			{ 2, 5.2, -116, 5 },
-			{ 3, 6, -123, 3.75 },
-			{ 3, 12, -129, 2.5 },
+			{ 0, 8.5, -108, 8.4 },
+			{ 2, 6.8, -116, 6.7 },
+			{ 3, 7, -123, 5 },
+			{ 3, 12.5, -129, 3.3 },
 		}, 1)
 
 		-- The head: huge, a broad skull under heavy brows, a long upper jaw, the lower jaw hanging open on a glowing
@@ -1418,8 +1419,10 @@ Ocean.Leviathan = {
 		local head = newSculpt(U)
 		head:add(ellipsoid({ 0, 69, 26 }, { 13, 11.5, 14 }), SCALE)
 		for _, s in { 1, -1 } do
-			head:add(ellipsoid({ 7.6 * s, 78.6, 34 }, { 5.6, 3.2, 6.6 }), SCALE_DARK)
+			head:add(ellipsoid({ 8.6 * s, 78.6, 35 }, { 6, 3.2, 7 }), SCALE_DARK)
 			head:add(ellipsoid({ 9.6 * s, 62, 26 }, { 5.4, 7, 7 }), SCALE)
+			-- A raised socket for each eye, under the brow where the skull meets the snout.
+			head:add(ellipsoid({ 9.4 * s, 72.4, 38 }, { 3.4, 4.6, 5.8 }), SCALE_DARK)
 		end
 		head:add(ellipsoid({ 0, 68, 44 }, { 9.6, 6, 17 }), SCALE)
 		head:add(ellipsoid({ 0, 68.6, 59.6 }, { 6, 4.6, 4 }), SCALE)
@@ -1454,7 +1457,7 @@ Ocean.Leviathan = {
 
 		-- Along a length: horn spines down its back with a glass sail between them (leaving a gap where a rider
 		-- sits), and two rows of big glowing portholes down each flank, each in a dark ring.
-		local seat = { 0, 43.4, -40 }
+		local seat = { 0, 52, -40 }
 		local function dress(limb: Limb, entry: Length)
 			local samples = entry.samples
 			local tips, bases = {}, {}
@@ -1490,16 +1493,16 @@ Ocean.Leviathan = {
 			end
 		end
 
-		local bodyLimb = pet:limb("Body", T.at({ 0, 11.45, -8 }))
+		local bodyLimb = pet:limb("Body", T.at({ 0, 15.2, -8 }))
 		neck.sculpt:draw(bodyLimb, othersOf(neck.sculpt), SCALE)
 		dress(bodyLimb, neck)
-		local segment1 = pet:limb("Segment1", T.at({ 0, 11.45, -8 }))
+		local segment1 = pet:limb("Segment1", T.at({ 0, 15.2, -8 }))
 		coil1.sculpt:draw(segment1, othersOf(coil1.sculpt), SCALE)
 		dress(segment1, coil1)
-		local segment2 = pet:limb("Segment2", T.at({ -3, 8.95, -66 }), "Segment1")
+		local segment2 = pet:limb("Segment2", T.at({ -3, 11.9, -66 }), "Segment1")
 		coil2.sculpt:draw(segment2, othersOf(coil2.sculpt), SCALE)
 		dress(segment2, coil2)
-		local tailLimb = pet:limb("Tail", T.at({ 0, 6.45, -108 }), "Segment2")
+		local tailLimb = pet:limb("Tail", T.at({ 0, 8.5, -108 }), "Segment2")
 		tail.sculpt:draw(tailLimb, othersOf(tail.sculpt), SCALE)
 		dress(tailLimb, tail)
 		-- A great forked tail fan of glass on bony rays, glowing at its tips.
@@ -1515,20 +1518,22 @@ Ocean.Leviathan = {
 
 		local headLimb = pet:limb("Head", T.at({ 0, 61, 19 }))
 		head:draw(headLimb, othersOf(head), SCALE)
-		-- Big glowing eyes under the brows, slit-pupilled, ringed in dark scale.
+		-- Big glowing eyes bulging from their sockets under the brows: a dark rim, a glowing iris, a slit pupil and a
+		-- glint.
 		for _, s in { 1, -1 } do
-			local x = sideOf(head, 73, 37)
-			T.ball(headLimb, { (x - 0.8) * s, 73, 37 }, { 3.2, 7, 8.4 }, SCALE_DARK.color)
-			T.ball(headLimb, { (x - 0.3) * s, 73, 37.2 }, { 2.6, 5.8, 7.2 }, GLOW, NEON)
+			local x = sideOf(head, 72.4, 38)
+			T.ball(headLimb, { (x - 0.6) * s, 72.4, 38.4 }, { 4.2, 9, 10.6 }, SCALE_DARK.color)
+			T.ball(headLimb, { (x + 0.1) * s, 72.4, 38.6 }, { 3.6, 7.6, 9.2 }, GLOW, NEON)
 			T.blade(
 				headLimb,
-				{ (x + 0.7) * s, 70.6, 37.4 },
-				{ (x + 0.7) * s, 75.4, 37.4 },
-				1.3,
+				{ (x + 1.8) * s, 69.4, 38.8 },
+				{ (x + 1.8) * s, 75.4, 38.8 },
+				1.5,
 				0.6,
 				{ s, 0, 0 },
 				SCALE_DARK.color
 			)
+			T.ball(headLimb, { (x + 1.9) * s, 74.6, 40.4 }, { 0.8, 1.6, 1.6 }, Kit.SHINE)
 		end
 		-- Rows of long needle fangs along both jaws, longest at the front.
 		for i = 0, 9 do
@@ -1599,9 +1604,9 @@ Ocean.Leviathan = {
 		T.ball(headLimb, { 0, 84, 72.6 }, { 8.4, 8.4, 8.4 }, BULB, NEON)
 
 		-- Front fins: great webbed fans of glass on bony rays at the base of the neck, glowing at the tips.
-		pet:limbPair("LeftFin", "RightFin", T.at({ 8, 12, 4 }), function(limb)
-			local finRoot = { 8, 12, 4 }
-			local finRays = { { 20, 18, 8 }, { 24, 14, 2 }, { 25, 10, -4 }, { 22, 6, -10 } }
+		pet:limbPair("LeftFin", "RightFin", T.at({ 12, 15, 4 }), function(limb)
+			local finRoot = { 12, 15, 4 }
+			local finRays = { { 25, 21, 8 }, { 29, 17, 2 }, { 30, 13, -4 }, { 27, 9, -10 } }
 			for k, ray in finRays do
 				T.blade(limb, finRoot, ray, 1.1, 1.2, { 0, 1, 0 }, HORN)
 				T.ball(limb, ray, { 1.8, 1.8, 1.8 }, GLOW, NEON)
