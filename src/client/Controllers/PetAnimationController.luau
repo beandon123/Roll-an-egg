@@ -24,7 +24,7 @@ type Pose = { [string]: { number } }
 
 -- `design` is worked out the first time the pet is close enough to animate (see step). Each pet starts at its own
 -- point in its moves (`offset`, seconds), so pets side by side never move in lockstep. When its move changes, it
--- eases from where it was (`from`, the pose it had then) into the new one over PetAnimations.BLEND_TIME.
+-- eases from where it was (`from`, the pose it had then) into the new one over PetAnimations.blendTime.
 type Tracked = {
 	model: Model,
 	motors: { [string]: Motor6D },
@@ -101,7 +101,7 @@ local function apply(entry: Tracked, time: number)
 	local pose = PetAnimations.pose(design.skeleton, move, t, design.wingSpread, design.size[2])
 	local from = entry.from
 	if from then
-		local progress = (time - entry.since) / PetAnimations.BLEND_TIME
+		local progress = (time - entry.since) / PetAnimations.blendTime(design.skeleton)
 		if progress >= 1 then
 			entry.from = nil
 		else

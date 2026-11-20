@@ -347,7 +347,7 @@ function start(DATA) {
     if (userData.move !== undefined && userData.move !== move) { userData.from = userData.last; userData.since = now; }
     userData.move = move;
     if (userData.from) {
-      const t = (now - userData.since) / BLEND;
+      const t = (now - userData.since) / ((userData.pet && userData.pet.blend) || BLEND);
       if (t >= 1) userData.from = null;
       else pose = blendPoses(userData.from, pose, t);
     }

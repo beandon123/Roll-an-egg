@@ -357,9 +357,84 @@ local BEAST_ROAR = {
 	wave("Tail", "ry", 0.4, 6),
 }
 
+-- A great land snake (the Snake skeleton: the Titan Anaconda) is drawn lying coiled: behind its neck (Body), its
+-- body is a chain of eight lengths on the ground, Segment1 to Segment7 and the Tail, each hanging from the one
+-- before at a joint, so it can uncoil. SNAKE_COIL gives the way each length runs as drawn, in radians turned to the
+-- pet's left from straight ahead (the first runs back to the right, and each turns 40 degrees further round, the
+-- coil looping round behind the neck and back up its left side, the tail tucked in).
+local SNAKE_LENGTHS = { "Segment1", "Segment2", "Segment3", "Segment4", "Segment5", "Segment6", "Segment7", "Tail" }
+local SNAKE_COIL = {}
+for k = 1, 7 do
+	SNAKE_COIL[k] = math.rad(-119 - 40 * (k - 1))
+end
+SNAKE_COIL[8] = math.rad(-370)
+PetAnimations.SNAKE_COIL = SNAKE_COIL
+
+-- An angle turned to the nearest equal one between -pi and pi.
+local function wrapped(angle: number): number
+	return (angle + math.pi) % (2 * math.pi) - math.pi
+end
+
+-- Lying coiled: a slow ripple runs round the coils from the neck to the tail, each length a beat behind the one
+-- before, the whole snake breathing, the head steadying itself and looking about.
+local function coiled(): { Wave }
+	local list = {
+		wave("Body", "ry", 0.05, 3, { shift = 0.9 }),
+		wave("Body", "py", 0.08, 6, { shape = "bounce" }),
+		wave("Head", "ry", -0.07, 3, { shift = 1.6 }),
+		wave("Head", "ry", 0.08, 0.7),
+		wave("Head", "rx", 0.03, 1.5, { shift = 1 }),
+	}
+	for k, name in SNAKE_LENGTHS do
+		table.insert(list, wave(name, "ry", 0.03 + 0.005 * k, 3, { shift = -0.7 * k }))
+	end
+	return list
+end
+
+-- Slithering: the coils open out into an S trailing straight back from the neck, and a wave runs down it from the
+-- neck to the tail, so the S itself flows backwards along the body, the way a snake pushes itself forward. Each
+-- length's heading swings SLITHER_SWING either side of straight back, a beat (SLITHER_STEP) behind the one in front;
+-- a joint turns by the difference between its length's heading and the one before, less the turn it was drawn
+-- with. The neck sways a little with the S while the head holds steady and looks ahead.
+local SLITHER_SWING, SLITHER_STEP, SLITHER_SPEED = 0.75, 0.95, 5
+local function slither(): { Wave }
+	local list = {
+		wave("Body", "ry", 0.05, SLITHER_SPEED, { shift = 0.4 }),
+		wave("Head", "ry", -0.06, SLITHER_SPEED, { shift = 0.2 }),
+		wave("Head", "ry", 0.03, 1.1),
+		wave("Head", "rx", 0.025, SLITHER_SPEED * 2, { shift = 1 }),
+	}
+	for k, name in SNAKE_LENGTHS do
+		local drawn = SNAKE_COIL[k] - (SNAKE_COIL[k - 1] or 0)
+		if k == 1 then
+			-- Straight back from the neck, swinging.
+			table.insert(
+				list,
+				wave(
+					name,
+					"ry",
+					SLITHER_SWING,
+					SLITHER_SPEED,
+					{ base = wrapped(math.pi - drawn), shift = -SLITHER_STEP }
+				)
+			)
+		else
+			-- In line with the length before, give or take the difference in their swings.
+			table.insert(
+				list,
+				wave(name, "ry", 2 * SLITHER_SWING * math.sin(SLITHER_STEP / 2), SLITHER_SPEED, {
+					base = wrapped(-drawn),
+					shift = -(k - 0.5) * SLITHER_STEP - QUARTER,
+				})
+			)
+		end
+	end
+	return list
+end
+
 -- On the ground: a ripple runs down a long body's lengths from the neck to the tail, side to side only, flat along
 -- the ground, each length a beat behind the one before, the head steadying itself and looking about, the front pair
--- of legs (or fins) paddling. A centipede crawls with it; a coiled snake breathes with it as it rests.
+-- of legs (or fins) paddling. A centipede crawls with it.
 local function groundRipple(): { Wave }
 	return {
 		wave("Body", "ry", 0.05, 3, { shift = 0.9 }),
@@ -680,28 +755,10 @@ PetAnimations.MOVES = {
 			wave("RightFin", "ry", -0.12, 2.4, { shift = math.pi }),
 		},
 	},
-	-- A great land snake lying in coils, its neck reared (the Titan Anaconda): the ground ripple as it rests.
-	-- Slithering, a quicker, deeper wave rolls down the coils from the neck to the tail, swinging them wide from
-	-- side to side; the neck leans forward and sways, rolling into each sway, while the head holds steady and looks
-	-- ahead, the body surging forward with each push and the moss on its neck stirring.
+	-- A great land snake, its neck reared (the Titan Anaconda): it rests coiled, and uncoils into an S to slither.
 	Snake = {
-		Idle = groundRipple(),
-		Slither = {
-			wave("Body", "ry", 0.08, 5.5, { shift = 0.9 }),
-			wave("Body", "rz", 0.05, 5.5, { shift = 0.9 + QUARTER }),
-			wave("Body", "rx", 0.02, 11, { base = 0.1 }),
-			wave("Body", "pz", 0.25, 11, { shape = "bounce" }),
-			-- (The coils hang from the neck at the same joint: they turn back level as it leans.)
-			wave("Segment1", "rx", -0.02, 11, { base = -0.1 }),
-			wave("Segment1", "ry", 0.17, 5.5, { shift = -0.9 }),
-			wave("Segment2", "ry", 0.22, 5.5, { shift = -1.8 }),
-			wave("Tail", "ry", 0.28, 5.5, { shift = -2.7 }),
-			wave("Head", "ry", -0.07, 5.5, { shift = 0.6 }),
-			wave("Head", "ry", 0.04, 1.1),
-			wave("Head", "rx", 0.03, 11, { base = -0.1, shift = 1 }),
-			wave("LeftFin", "ry", 0.3, 11),
-			wave("RightFin", "ry", 0.3, 11, { shift = math.pi }),
-		},
+		Idle = coiled(),
+		Slither = slither(),
 	},
 	ManyLegged = {
 		Idle = {
@@ -804,6 +861,13 @@ end
 
 -- How long (seconds) a pet takes to ease from one move into the next.
 PetAnimations.BLEND_TIME = 0.4
+-- Snakes take longer: the time it takes to uncoil into the slither, or coil back up.
+local SLOW_BLENDS: { [string]: number } = { Snake = 1.2 }
+
+-- How long (seconds) a pet with this skeleton takes to ease from one move into the next.
+function PetAnimations.blendTime(skeleton: string): number
+	return SLOW_BLENDS[skeleton] or PetAnimations.BLEND_TIME
+end
 
 -- A pose part way from `from` to `to`: `t` from 0 (all `from`) to 1 (all `to`), eased in and out, so a pet settles
 -- into a new move rather than snapping to it. A limb in only one of them eases from (or to) where it rests.

@@ -592,10 +592,11 @@ hang from the body and move on their own: Cerberus), winged, dragon (four legs t
 wings), two legs, giant (two legs and two arms that bend at the knee and elbow: the Yeti, Treant and Lava Golem),
 theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and a jaw, for the T-Rex), six
 legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that
-much higher), eight tentacles, serpent (a chain of coils), or snake (a serpent that lives on land: the Titan
-Anaconda). `Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its joint, so pets that share a
-skeleton can share their animations. A limb drawn with `limbPair` and a parent on the left (a left shin hanging from
-the left leg) hangs its mirror image from the right one.
+much higher), eight tentacles, serpent (a chain of coils), or snake (a neck and head, and behind them a chain of eight
+lengths on the ground, each hanging from the one before, drawn coiled so it can uncoil: the Titan Anaconda).
+`Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its joint, so pets that share a skeleton
+can share their animations. A limb drawn with `limbPair` and a parent on the left (a left shin hanging from the left
+leg) hangs its mirror image from the right one.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop, Crawl,
 Swim, Slither, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged
@@ -605,19 +606,21 @@ beat). A winged design says how far its wings turn out to be spread (`wingSpread
 their sides open them to fly. The Leviathan swims with a wave rolling down its coils to the tail fan, from side to
 side and up and down, rising off the ground and riding up and down with each stroke while its fins row; the Kraken
 hauls itself along, the four tentacles on the ground reaching forward and dragging back in diagonal pairs while the
-four raised ones lash and curl and its body heaves with each pull. The Titan Anaconda rests in its coils with a slow
-ripple running down them, and slithers when it moves: a quicker, deeper wave swings its coils wide from side to side
-while its neck leans forward and sways, its head holding steady and looking ahead. Moves are layered so pets look
-alive rather than mechanical: a limb's motion is usually several waves at speeds that never quite line up (a standing
-pet breathes, shifts its weight, and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off
-a limb follows it a little late (a head steadies itself against the body's bob, a tail swings after it, a forearm
-bends as its arm swings forward), steps and hops are eased in and out with no jerk where a foot leaves the ground or
-lands, and wings beat with a quicker downstroke than recovery and twist through each stroke. The same moves drive the
-gallery (pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on
-rigged pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it
-can fly and walks (or swims, crawls or slithers) on the spot if not. Each pet starts at its own point in its moves, so
-a pen of pets never moves in lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it
-eases from where it was into the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
+four raised ones lash and curl and its body heaves with each pull. The Titan Anaconda rests coiled, a slow ripple
+running round its coils; when it moves it uncoils into an S trailing straight back from its reared neck, and a wave
+runs down the S from the neck to the tail, so the curves flow backwards along its body the way a real snake pushes
+itself along, its head held steady, looking ahead. Moves are layered so pets look alive rather than mechanical: a
+limb's motion is usually several waves at speeds that never quite line up (a standing pet breathes, shifts its weight,
+and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off a limb follows it a little late
+(a head steadies itself against the body's bob, a tail swings after it, a forearm bends as its arm swings forward),
+steps and hops are eased in and out with no jerk where a foot leaves the ground or lands, and wings beat with a
+quicker downstroke than recovery and twist through each stroke. The same moves drive the gallery (pick one with the
+buttons under a pet) and the game: `PetAnimationController` on the client plays them on rigged pets by setting each
+joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can fly and walks (or swims,
+crawls or slithers) on the spot if not. Each pet starts at its own point in its moves, so a pen of pets never moves in
+lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it eases from where it was into
+the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping; a snake takes 1.2 seconds, so you see it
+uncoil as it sets off and coil back up as it stops (`PetAnimations.blendTime`).
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window

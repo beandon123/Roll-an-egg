@@ -196,8 +196,20 @@ PetModels.SKELETONS = {
 	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
 	-- a ripple can run down it.
 	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
-	-- A serpent that lives on land and slithers (the same limbs; the fins can be anything on its neck).
-	Snake = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
+	-- A great snake on land: its neck (Body) and head, and behind them a chain of eight lengths on the ground, each
+	-- hanging from the one before, drawn coiled so it can uncoil to slither (see PetAnimations.SNAKE_COIL).
+	Snake = {
+		"Body",
+		"Head",
+		"Segment1",
+		"Segment2",
+		"Segment3",
+		"Segment4",
+		"Segment5",
+		"Segment6",
+		"Segment7",
+		"Tail",
+	},
 	-- Four legs that bend at the knee (each Shin hanging from its leg) and a pair of wings (dragons).
 	Dragon = {
 		"Body",

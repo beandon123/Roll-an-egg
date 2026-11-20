@@ -6,6 +6,7 @@
 -- See PetModels/Kit for the drawing tools and PetModels/Designs for how a design is laid out.
 
 local Kit = require(script.Parent.Kit)
+local PetAnimations = require(script.Parent.Parent.PetAnimations)
 
 type Design = Kit.Design
 type Limb = Kit.Limb
@@ -898,13 +899,22 @@ Jungle.TitanAnaconda = {
 			return nil
 		end
 
-		-- A great coiled pile: the neck rears from the front, the coils loop round behind, the tail tucked beside.
-		local paths = {
-			{ { 0, 6.2, -4, 6.2 }, { 0, 7, 4, 6 }, { 0, 14, 10, 5.6 }, { 0, 24, 13, 5 }, { 0, 31, 15, 4.6 } },
-			{ { 0, 6.2, -4, 6.2 }, { -9, 6.2, -9, 6.2 }, { -13, 6.2, -19, 6 }, { -7, 6.2, -28, 6 } },
-			{ { -7, 6.2, -28, 6 }, { 5, 6, -30, 5.6 }, { 12, 6, -22, 5.4 }, { 11, 5.6, -12, 5 } },
-			{ { 11, 5.6, -12, 5 }, { 15, 4.8, -4, 4 }, { 19, 3.6, 2, 2.8 }, { 20, 2.6, 8, 1.6 } },
-		}
+		-- A great coiled pile: the neck rears from the front, and behind it the body is a chain of lengths on the
+		-- ground, jointed so it can uncoil into an S to slither (see PetAnimations.SNAKE_COIL). It is drawn coiled,
+		-- looping round behind the neck and back up its left side, the tail tucked in.
+		local neck = { { 0, 6.2, -4, 6.2 }, { 0, 7, 4, 6 }, { 0, 14, 10, 5.6 }, { 0, 24, 13, 5 }, { 0, 31, 15, 4.6 } }
+		local LENGTH = 10.5
+		local RADII = { 6.2, 6.2, 6, 5.8, 5.5, 5, 4.4, 3.4, 1.4 }
+		local joints = { { 0, RADII[1], -4 } }
+		for k, heading in PetAnimations.SNAKE_COIL do
+			local last = joints[k]
+			joints[k + 1] = { last[1] + math.sin(heading) * LENGTH, RADII[k + 1], last[3] + math.cos(heading) * LENGTH }
+		end
+		local paths = { neck }
+		for k = 1, #PetAnimations.SNAKE_COIL do
+			local a, b = joints[k], joints[k + 1]
+			table.insert(paths, { { a[1], a[2], a[3], RADII[k] }, { b[1], b[2], b[3], RADII[k + 1] } })
+		end
 		local sculpts = lengths(U, paths, OLIVE, function(s)
 			s:coat(scales)
 			s:bake(tones)
@@ -923,7 +933,10 @@ Jungle.TitanAnaconda = {
 			return scales(p, open, n)
 		end)
 		head:bake(tones)
-		local all = { head, sculpts[1], sculpts[2], sculpts[3], sculpts[4] }
+		local all = { head }
+		for _, sculpt in sculpts do
+			table.insert(all, sculpt)
+		end
 
 		-- Ferns and glowing flowers in the moss on its coils.
 		local function garden(limb: Limb, s: Sculpt, path: { { number } })
@@ -956,17 +969,19 @@ Jungle.TitanAnaconda = {
 			end
 		end
 
-		local bodyLimb = pet:limb("Body", T.at({ 0, 6.2, -4 }))
+		local bodyLimb = pet:limb("Body", T.at(joints[1]))
 		sculpts[1]:draw(bodyLimb, others(all, sculpts[1]), OLIVE)
 		garden(bodyLimb, sculpts[1], paths[1])
-		local segment1 = pet:limb("Segment1", T.at({ 0, 6.2, -4 }))
-		sculpts[2]:draw(segment1, others(all, sculpts[2]), OLIVE)
-		garden(segment1, sculpts[2], paths[2])
-		local segment2 = pet:limb("Segment2", T.at({ -7, 6.2, -28 }), "Segment1")
-		sculpts[3]:draw(segment2, others(all, sculpts[3]), OLIVE)
-		garden(segment2, sculpts[3], paths[3])
-		local tailLimb = pet:limb("Tail", T.at({ 11, 5.6, -12 }), "Segment2")
-		sculpts[4]:draw(tailLimb, others(all, sculpts[4]), OLIVE)
+		-- Each length hangs from the one before at the joint between them.
+		local parent = "Body"
+		for k, name in { "Segment1", "Segment2", "Segment3", "Segment4", "Segment5", "Segment6", "Segment7", "Tail" } do
+			local limb = pet:limb(name, T.at(joints[k]), parent)
+			sculpts[k + 1]:draw(limb, others(all, sculpts[k + 1]), OLIVE)
+			if name ~= "Tail" then
+				garden(limb, sculpts[k + 1], paths[k + 1])
+			end
+			parent = name
+		end
 
 		local headLimb = pet:limb("Head", T.at({ 0, 31, 15 }))
 		head:draw(headLimb, others(all, head), OLIVE)
@@ -977,22 +992,22 @@ Jungle.TitanAnaconda = {
 			T.taper(headLimb, { 0, 31.6, 32 }, { 0.9 * s, 31.4, 33.6 }, 0.45, 0.35, { 0, 1, 0 }, TONGUE)
 		end
 
-		-- Clumps of moss and leaves on its neck, stirring as it moves (the Snake skeleton's fins).
-		pet:limbPair("LeftFin", "RightFin", T.at({ 4, 16, 10 }), function(limb)
-			T.ball(limb, { 4, 16, 10 }, { 2.6, 2, 2.6 }, MOSS.color)
+		-- Clumps of moss and leaves on its neck.
+		for _, s in { 1, -1 } do
+			T.ball(bodyLimb, { 4 * s, 16, 10 }, { 2.6, 2, 2.6 }, MOSS.color)
 			for k = 0, 2 do
 				local a = k * 0.9
 				T.taper(
-					limb,
-					{ 4.4, 16.4, 10 },
-					{ 6.4 + math.cos(a), 18 + k * 0.4, 10 + math.sin(a) * 2 },
+					bodyLimb,
+					{ 4.4 * s, 16.4, 10 },
+					{ (6.4 + math.cos(a)) * s, 18 + k * 0.4, 10 + math.sin(a) * 2 },
 					1,
 					0.4,
 					{ 0, 1, 0 },
 					FERN
 				)
 			end
-		end)
+		end
 
 		pet:light(GLOW, 2.6, 30)
 		pet:particles("Fireflies", rgb(255, 220, 120), 12)
