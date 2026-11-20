@@ -5,11 +5,12 @@
 -- Shared/Obstacles. What a rider can hit stays inside that footprint up to riding height; only things well above
 -- the riders (tree canopies) reach past it. The same builders dress the banks beside the runway with scenery.
 --
--- Obstacles that go off now and then (sand geysers, lava vents, giant clams) carry the parts the client animates
--- (see the client's ObstacleController):
+-- Obstacles that go off now and then (sand geysers, lava vents, giant clams and flytraps) carry the parts the client
+-- animates (see the client's ObstacleController):
 --     Burst   a column that shoots up while the obstacle is active (hidden otherwise), maybe with a PointLight
 --     Warn    a ParticleEmitter that puffs while it warns
---     Lid     the clam's top shell, hinged on the back edge of Shell; open when idle, shut when active
+--     Lid     the clam's top shell (or the flytrap's upper jaw), hinged on the back edge of Shell; open when idle,
+--             shut when active
 
 local Build = require(script.Parent.Build)
 
@@ -602,6 +603,257 @@ builders.Snowman = function(model, base, hx, hz, random)
 end
 
 ----------------------------------------------------------------------------------------------------------------
+-- Jungle
+
+local JUNGLE_LEAF = { 52, 138, 56 }
+local JUNGLE_DARK = { 34, 100, 44 }
+local BAMBOO = { 156, 186, 74 }
+local MUD = { 94, 68, 46 }
+local RUIN_STONE = { 126, 132, 114 }
+local VINE = { 46, 112, 48 }
+
+-- A big flat leaf from `root`, `length` long and `width` across, turned `angle` round the vertical and tipped
+-- `lean` down from upright, with a pale rib down its middle.
+local function bigLeaf(
+	model: Model,
+	root: CFrame,
+	angle: number,
+	lean: number,
+	length: number,
+	width: number,
+	color: { number }
+)
+	local frame = root * CFrame.Angles(0, angle, 0) * CFrame.Angles(-lean, 0, 0) * CFrame.new(0, 0, -length / 2)
+	block(model, Vector3.new(width, 0.3, length), frame, color, { material = M.Grass, collide = false })
+	block(
+		model,
+		Vector3.new(0.25, 0.35, length * 0.92),
+		frame * CFrame.new(0, 0.05, 0),
+		shade(color, 0.25),
+		{ material = M.Grass, collide = false }
+	)
+end
+
+-- A vine hanging straight down from `top` for `length` studs, with a leaf every few studs.
+local function vine(model: Model, top: CFrame, length: number, random: Random)
+	block(
+		model,
+		Vector3.new(0.35, length, 0.35),
+		top * CFrame.new(0, -length / 2, 0),
+		vary(random, VINE, 0.08),
+		{ material = M.Grass, collide = false }
+	)
+	local y = -1.5
+	while y > -length + 0.5 do
+		block(
+			model,
+			Vector3.new(0.9, 0.2, 0.6),
+			top * CFrame.new(0.3, y, 0) * CFrame.Angles(0, random() * math.pi, 0.4),
+			vary(random, JUNGLE_LEAF, 0.08),
+			{ material = M.Grass, collide = false }
+		)
+		y -= between(random, 1.6, 2.6)
+	end
+end
+
+-- Giant elephant-ear leaves, fanning out from a clump of stems.
+builders.GiantLeaves = function(model, base, hx, hz, random)
+	local reach = math.min(hx, hz)
+	block(model, Vector3.new(1.6, 1.4, 1.6), at(base, 0, 0.7, 0), vary(random, JUNGLE_DARK, 0.06), {
+		material = M.Grass,
+	})
+	for index = 1, 7 do
+		local angle = index / 7 * math.pi * 2 + random() * 0.5
+		local height = between(random, 1.8, 4.2)
+		local stem = at(base, 0, 0, 0) * CFrame.Angles(0, angle, 0)
+		block(
+			model,
+			Vector3.new(0.3, height, 0.3),
+			stem * CFrame.new(0, height / 2, -0.4) * CFrame.Angles(-0.25, 0, 0),
+			{ 86, 150, 70 },
+			{ collide = false }
+		)
+		bigLeaf(
+			model,
+			stem * CFrame.new(0, height, -0.8),
+			0,
+			between(random, 0.9, 1.25),
+			reach * between(random, 1.05, 1.35),
+			reach * between(random, 0.6, 0.8),
+			vary(random, if index % 2 == 0 then JUNGLE_LEAF else JUNGLE_DARK, 0.06)
+		)
+	end
+end
+
+-- A thicket of tall bamboo: green poles ringed at every joint, sprays of thin leaves high up.
+builders.Bamboo = function(model, base, hx, hz, random)
+	for _ = 1, 9 do
+		local x, z = (random() - 0.5) * hx * 1.5, (random() - 0.5) * hz * 1.5
+		local height = between(random, 14, 24)
+		local thick = between(random, 0.8, 1.2)
+		local green = vary(random, BAMBOO, 0.08)
+		local tilt = CFrame.Angles((random() - 0.5) * 0.12, 0, (random() - 0.5) * 0.12)
+		local foot = at(base, x, 0, z) * tilt
+		column(model, thick, height, foot, green, { material = M.Wood })
+		local y = between(random, 2, 3)
+		while y < height - 1 do
+			column(model, thick * 1.18, 0.3, foot * CFrame.new(0, y, 0), shade(green, -0.18), {
+				material = M.Wood,
+				collide = false,
+			})
+			y += between(random, 2.6, 3.4)
+		end
+		for _ = 1, 3 do
+			local at2 = foot * CFrame.new(0, height * between(random, 0.7, 0.98), 0)
+			bigLeaf(
+				model,
+				at2,
+				random() * math.pi * 2,
+				between(random, 1.1, 1.5),
+				3,
+				0.7,
+				vary(random, JUNGLE_LEAF, 0.08)
+			)
+		end
+	end
+end
+
+-- A tall jungle tree: a smooth pale trunk on great buttress roots, a wide canopy high above in layers, and vines
+-- hanging from it (ending well above anyone riding past).
+builders.JungleTree = function(model, base, hx, hz, random)
+	local radius = math.min(hx, hz) * 0.42
+	local height = between(random, 26, 34)
+	local bark = vary(random, { 156, 140, 112 }, 0.06)
+	column(model, radius * 2, height, base, bark, { material = M.Wood })
+	-- Buttress roots: thin fins flaring out from the trunk down to the ground.
+	for index = 1, 5 do
+		local angle = (index + random() * 0.4) / 5 * math.pi * 2
+		local out = math.min(hx, hz) - radius
+		local tall = between(random, 5, 8)
+		wedge(
+			model,
+			Vector3.new(0.8, tall, out + 0.6),
+			base * CFrame.Angles(0, angle, 0) * CFrame.new(0, tall / 2 - 0.2, -(radius + out / 2 - 0.3)),
+			shade(bark, -0.08),
+			{ material = M.Wood }
+		)
+	end
+	-- The canopy: wide slabs of leaves, each layer smaller and higher.
+	local width = between(random, 16, 22)
+	local y = height - 2
+	for layer = 1, 3 do
+		local slab = width * (1 - 0.25 * (layer - 1))
+		block(
+			model,
+			Vector3.new(slab, 2.6, slab * between(random, 0.8, 1)),
+			at(base, (random() - 0.5) * 2, y, (random() - 0.5) * 2) * CFrame.Angles(0, random() * math.pi, 0),
+			vary(random, if layer % 2 == 0 then JUNGLE_LEAF else JUNGLE_DARK, 0.05),
+			{ material = M.Grass, collide = false }
+		)
+		y += 2.2
+	end
+	-- Branches reaching out under the canopy, and vines hanging from its rim.
+	for index = 1, 3 do
+		local angle = index / 3 * math.pi * 2 + random()
+		block(
+			model,
+			Vector3.new(0.9, 0.9, width * 0.4),
+			base * CFrame.Angles(0, angle, 0) * CFrame.new(0, height - 4, -width * 0.2) * CFrame.Angles(0.35, 0, 0),
+			bark,
+			{ material = M.Wood, collide = false }
+		)
+	end
+	for _ = 1, 7 do
+		local angle = random() * math.pi * 2
+		local out = width * between(random, 0.25, 0.45)
+		local hang = between(random, 4, height - 20)
+		vine(model, at(base, math.cos(angle) * out, height - 3.3, math.sin(angle) * out), hang, random)
+	end
+end
+
+-- A pool of thick brown mud, a few bubbles in it, clods round its rim and reeds at one end.
+builders.MudPit = function(model, base, hx, hz, random)
+	block(
+		model,
+		Vector3.new(hx * 1.85, 0.3, hz * 1.85),
+		at(base, 0, 0.12, 0),
+		vary(random, MUD, 0.04),
+		{ material = M.Mud, collide = false }
+	)
+	for _ = 1, 6 do
+		ball(
+			model,
+			between(random, 0.6, 1.4),
+			(at(base, (random() - 0.5) * hx * 1.4, 0.25, (random() - 0.5) * hz * 1.4)).Position,
+			shade(MUD, 0.12),
+			{ material = M.Mud, collide = false }
+		)
+	end
+	for index = 1, 12 do
+		local angle = index / 12 * math.pi * 2
+		block(
+			model,
+			Vector3.new(between(random, 2, 3.2), between(random, 0.5, 1.1), between(random, 1.4, 2)),
+			at(base, math.cos(angle) * hx, 0.3, math.sin(angle) * hz) * CFrame.Angles(0, -angle, 0),
+			vary(random, shade(MUD, -0.12), 0.08),
+			{ material = M.Mud, collide = false }
+		)
+	end
+	for _ = 1, 5 do
+		local x, z = hx * between(random, 0.55, 0.85), (random() - 0.5) * hz
+		local tall = between(random, 2, 4)
+		block(
+			model,
+			Vector3.new(0.25, tall, 0.25),
+			at(base, x, tall / 2, z) * CFrame.Angles((random() - 0.5) * 0.3, 0, (random() - 0.5) * 0.3),
+			{ 104, 150, 70 },
+			{ collide = false }
+		)
+	end
+end
+
+-- A giant flytrap: a rosette of leaves, its jaw lying open on the ground, lined with spines and red inside. It snaps
+-- shut now and then (the client swings its Lid down onto its Shell, like the giant clam's).
+builders.Flytrap = function(model, base, hx, hz, random)
+	local green = vary(random, { 92, 168, 64 }, 0.05)
+	local width, depth = hx * 1.8, hz * 1.75
+	for index = 1, 6 do
+		bigLeaf(
+			model,
+			at(base, 0, 0.3, 0),
+			index / 6 * math.pi * 2 + random() * 0.3,
+			1.45,
+			math.min(hx, hz) * 1.05,
+			1.6,
+			vary(random, JUNGLE_DARK, 0.06)
+		)
+	end
+	local shell = block(model, Vector3.new(width, 1.6, depth), at(base, 0, 0.8, 0), green, { material = M.Grass })
+	shell.Name = "Shell"
+	block(
+		model,
+		Vector3.new(width * 0.84, 0.3, depth * 0.84),
+		at(base, 0, 1.65, 0),
+		{ 214, 54, 64 },
+		{ material = M.SmoothPlastic, collide = false }
+	)
+	-- Spines round the rim of the open jaw.
+	local count = 7
+	for index = 0, count - 1 do
+		local x = (index / (count - 1) - 0.5) * width * 0.9
+		for _, z in { -depth / 2 + 0.2, depth / 2 - 0.2 } do
+			wedge(model, Vector3.new(0.35, 1.8, 0.35), at(base, x, 2.4, z), { 236, 236, 190 }, { collide = false })
+		end
+	end
+	local lid =
+		block(model, Vector3.new(width, 1.2, depth), at(base, 0, 2.2, 0), shade(green, 0.08), { material = M.Grass })
+	lid.Name = "Lid"
+	-- Open, hinged on the back edge of the jaw; the client snaps it shut when the flytrap goes off.
+	local hinge = shell.CFrame * CFrame.new(0, 0.8, depth / 2)
+	lid.CFrame = hinge * CFrame.Angles(math.rad(60), 0, 0) * CFrame.new(0, 0.6, -depth / 2)
+end
+
+----------------------------------------------------------------------------------------------------------------
 -- Ocean
 
 local CORAL = { { 250, 110, 140 }, { 250, 160, 80 }, { 170, 100, 210 }, { 80, 200, 190 }, { 250, 220, 90 } }
@@ -1190,6 +1442,105 @@ builders.IceBlocks = function(model, base, hx, hz, random)
 			{ material = M.Ice, transparency = 0.1, collide = false }
 		)
 	end
+end
+
+-- A ruined jungle temple: stepped platforms of carved stone gone green with moss, a great stone head staring down
+-- the runway, a broken pillar beside it, and vines trailing over the edges.
+builders.TempleRuin = function(model, base, hx, hz, random)
+	local width, depth = hx * 1.85, hz * 1.8
+	local y = 0
+	for _ = 1, 3 do
+		local height = between(random, 3.2, 4.2)
+		local center = at(base, 0, y + height / 2, 0)
+		block(model, Vector3.new(width, height, depth), center, vary(random, RUIN_STONE, 0.04), { material = M.Slate })
+		-- A carved band round each step, and moss on its edge.
+		block(
+			model,
+			Vector3.new(width + 0.4, 0.6, depth + 0.4),
+			center * CFrame.new(0, height * 0.15, 0),
+			shade(RUIN_STONE, -0.12),
+			{ material = M.Slate, collide = false }
+		)
+		block(
+			model,
+			Vector3.new(width + 0.6, 0.6, depth + 0.6),
+			center * CFrame.new(0, height / 2 + 0.2, 0),
+			vary(random, MOSS, 0.06),
+			{ material = M.Grass, collide = false }
+		)
+		for _ = 1, 2 do
+			local x = (random() - 0.5) * width * 0.8
+			vine(model, center * CFrame.new(x, height / 2, -depth / 2 - 0.3), height * between(random, 0.6, 1), random)
+		end
+		y += height
+		width *= 0.72
+		depth *= 0.72
+	end
+	-- The stone head on top, facing back up the runway at the riders: brow, deep eyes, a broad nose and a slab mouth.
+	local headSize = math.min(width, depth) * 1.1
+	local head = at(base, 0, y + headSize / 2, 0)
+	block(model, Vector3.one * headSize, head, vary(random, shade(RUIN_STONE, 0.04), 0.03), { material = M.Slate })
+	local face = head * CFrame.new(0, 0, -headSize / 2 - 0.2)
+	block(
+		model,
+		Vector3.new(headSize * 1.05, headSize * 0.16, 0.6),
+		face * CFrame.new(0, headSize * 0.24, 0),
+		shade(RUIN_STONE, -0.1),
+		{
+			material = M.Slate,
+			collide = false,
+		}
+	)
+	for _, side in { -1, 1 } do
+		block(
+			model,
+			Vector3.new(headSize * 0.2, headSize * 0.12, 0.5),
+			face * CFrame.new(side * headSize * 0.22, headSize * 0.08, 0.05),
+			{ 30, 34, 30 },
+			{ collide = false }
+		)
+	end
+	block(
+		model,
+		Vector3.new(headSize * 0.2, headSize * 0.3, 0.8),
+		face * CFrame.new(0, -headSize * 0.06, -0.1),
+		shade(RUIN_STONE, -0.05),
+		{
+			material = M.Slate,
+			collide = false,
+		}
+	)
+	block(
+		model,
+		Vector3.new(headSize * 0.5, headSize * 0.1, 0.5),
+		face * CFrame.new(0, -headSize * 0.3, 0.05),
+		{ 40, 44, 38 },
+		{
+			collide = false,
+		}
+	)
+	block(
+		model,
+		Vector3.new(headSize * 0.9, 0.5, headSize * 0.9),
+		head * CFrame.new(0, headSize / 2 + 0.2, 0),
+		vary(random, MOSS, 0.06),
+		{ material = M.Grass, collide = false }
+	)
+	-- A broken pillar at one corner of the base, and a fallen drum of it lying beside.
+	local px, pz = hx * 0.72, hz * 0.6
+	local pillar = between(random, 9, 13)
+	column(model, 2.6, pillar, at(base, px, 0, pz), vary(random, RUIN_STONE, 0.04), { material = M.Slate })
+	block(model, Vector3.new(3.2, 0.8, 3.2), at(base, px, 0.4, pz), shade(RUIN_STONE, -0.1), { material = M.Slate })
+	log(
+		model,
+		2.6,
+		2.6,
+		at(base, -hx * 0.7, 1.3, -hz * 0.65) * CFrame.Angles(0, 0.5, 0),
+		vary(random, RUIN_STONE, 0.04),
+		{
+			material = M.Slate,
+		}
+	)
 end
 
 -- A shipwreck washed up across the boardwalk: a broken wooden hull lying on its side, a snapped mast with a torn

@@ -5,7 +5,7 @@
 -- From the repository root:
 --     lune run tools/map-preview
 -- writes tools/out/map-preview.html. Open it in a browser and drag to look round. Pass a path to write somewhere
--- else. The page reads its camera from the address: map-preview.html#zone=3 looks down the Snow zone, and
+-- else. The page reads its camera from the address: map-preview.html#zone=4 looks down the Jungle, and
 -- #cam=x,y,z,tx,ty,tz puts the camera at x,y,z looking at tx,ty,tz.
 --
 -- It runs the game's own MapService in the Studio stand-in (tests/studio) and copies every part it builds, so the
@@ -51,7 +51,8 @@ local function random()
 	return seed / 2147483647
 end
 for zoneId, zone in Zones.List do
-	for index = 1, 6 do
+	-- (A zone waiting for its creatures has no eggs to show.)
+	for index = 1, if #zone.eggs > 0 then 6 else 0 do
 		local entry = zone.eggs[(index * 3) % #zone.eggs + 1]
 		local spec = EggSpec.get(zoneId, entry.rarity)
 		local startZ = Runway.zoneStartZ(zoneId) + 12

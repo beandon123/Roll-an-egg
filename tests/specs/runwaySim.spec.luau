@@ -10,6 +10,7 @@ return function(harness)
 	local Obstacles = harness.load("src/shared/Obstacles")
 	local Runway = harness.load("src/shared/Runway")
 	local Tuning = harness.load("src/shared/Config/Tuning")
+	local Zones = harness.load("src/shared/Config/Zones")
 
 	local ALICE, BOB = 101, 202
 
@@ -50,17 +51,36 @@ return function(harness)
 		return RunwaySim.new(half)
 	end
 
+	-- Stops mid-cycle drops in every zone.
+	local function noMidCycle(sim)
+		sim.nextWildAt = {}
+		for zoneId = 1, Runway.ZONE_COUNT do
+			sim.nextWildAt[zoneId] = math.huge
+		end
+	end
+
+	-- The zones with eggs (a new zone can stand on the runway before its creatures are chosen).
+	local function zonesWithEggs(): number
+		local count = 0
+		for zoneId = 1, Runway.ZONE_COUNT do
+			if EggSpec.lineupSize(zoneId) > 0 then
+				count += 1
+			end
+		end
+		return count
+	end
+
 	-- Stops the sunrise lineup and mid-cycle drops, for tests that place their own eggs.
 	local function quiet(sim)
 		sim.lineup = {}
-		sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+		noMidCycle(sim)
 		return sim
 	end
 
 	-- Stops mid-cycle drops and the extra eggs that keep every zone's start stocked, for tests about the lineup's own
 	-- laps.
 	local function lapsOnly(sim)
-		sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+		noMidCycle(sim)
 		sim.startEggGap = math.huge
 		return sim
 	end
@@ -89,17 +109,23 @@ return function(harness)
 			local total, longest = 0, 0
 			for zoneId = 1, Runway.ZONE_COUNT do
 				local size = EggSpec.lineupSize(zoneId)
-				expect.equal(size, math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING))
+				local hasEggs = #Zones.List[zoneId].eggs > 0
+				expect.equal(
+					size,
+					if hasEggs then math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING) else 0,
+					"zone " .. zoneId
+				)
 				total += size
 				longest = math.max(longest, (size - 1) * EggSpec.lineupGap(zoneId, 1))
 				-- Out within a lap, a few seconds apart.
 				expect.truthy(EggSpec.lineupGap(zoneId, 1) <= Tuning.LINEUP_LAUNCH_GAP, "gap")
 			end
 			expect.equal(EggSpec.lineupSize(1), 11)
-			expect.equal(EggSpec.lineupSize(Runway.ZONE_COUNT), 35)
+			expect.equal(EggSpec.lineupSize(Runway.ZONE_COUNT), 39)
+			expect.equal(EggSpec.lineupSize(4), 0, "the Jungle has no eggs until its creatures are chosen")
 			expect.equal(#rolled.eggs, total)
-			-- The first egg of every zone leaves straight away.
-			expect.equal(#eventsOfType(events, "EggSpawned"), Runway.ZONE_COUNT)
+			-- The first egg of every zone (with eggs) leaves straight away.
+			expect.equal(#eventsOfType(events, "EggSpawned"), zonesWithEggs())
 
 			for second = 1, math.ceil(longest) + 1 do
 				sim:step(second)
@@ -110,7 +136,7 @@ return function(harness)
 				expect.falsy(egg.wild)
 			end
 			for zoneId = 1, Runway.ZONE_COUNT do
-				expect.equal(perZone[zoneId], EggSpec.lineupSize(zoneId), "zone " .. zoneId)
+				expect.equal(perZone[zoneId] or 0, EggSpec.lineupSize(zoneId), "zone " .. zoneId)
 			end
 		end)
 
@@ -161,8 +187,8 @@ return function(harness)
 		)
 
 		it("fades the last zone's eggs a quarter of the way into its first copy (the runway has no end)", function()
-			expect.equal(Runway.fadeZ(6), Runway.LENGTH + Runway.zoneLength(6) / 4)
-			expect.equal(Runway.fadeZ(5), Runway.zoneStartZ(6) + Runway.zoneLength(6) / 4)
+			expect.equal(Runway.fadeZ(7), Runway.LENGTH + Runway.zoneLength(7) / 4)
+			expect.equal(Runway.fadeZ(6), Runway.zoneStartZ(7) + Runway.zoneLength(7) / 4)
 		end)
 
 		it("brings a claimed lineup egg back on its next lap", function()
@@ -201,7 +227,7 @@ return function(harness)
 
 		it("never leaves the start of a zone without an egg for long, so there is always one to jump on", function()
 			local sim = newSim()
-			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			noMidCycle(sim)
 			local lastAtStart = {}
 			local longest = 0
 			-- A whole day, a tenth of a second at a time, noting every egg that leaves the start of its zone.
@@ -217,9 +243,12 @@ return function(harness)
 						lastAtStart[egg.zone] = egg.spawnTime
 					end
 				end
-				-- And there is always an egg in the first stretch of every zone.
+				-- And there is always an egg in the first stretch of every zone (that has eggs).
 				if now > Tuning.START_EGG_GAP then
 					for zoneId = 1, Runway.ZONE_COUNT do
+						if EggSpec.lineupSize(zoneId) == 0 then
+							continue
+						end
 						local near = false
 						for _, egg in sim.eggs do
 							local _, _, z = sim:eggCenter(egg, now)
@@ -236,7 +265,7 @@ return function(harness)
 
 		it("keeps the lineup's own eggs coming round when it sends one early", function()
 			local sim = newSim()
-			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			noMidCycle(sim)
 			for second = 0, 170 do
 				sim:step(second)
 				sim:takeEvents()
@@ -264,13 +293,17 @@ return function(harness)
 				wild[egg.zone] = egg
 			end
 			for zoneId = 1, Runway.ZONE_COUNT do
-				expect.truthy(wild[zoneId], "zone " .. zoneId)
+				if EggSpec.lineupSize(zoneId) > 0 then
+					expect.truthy(wild[zoneId], "zone " .. zoneId)
+				else
+					expect.falsy(wild[zoneId], "no eggs yet in zone " .. zoneId)
+				end
 			end
 
 			-- It fades at the end of its lap and does not come back.
 			local forest = wild[1]
 			local fadeAt = Tuning.WILD_DROP_INTERVAL + (forest.fadeZ - forest.startZ) / forest.spec.rollSpeed
-			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			noMidCycle(sim)
 			sim:takeEvents()
 			sim:step(fadeAt)
 			expect.falsy(sim:getEgg(forest.id))
@@ -318,22 +351,23 @@ return function(harness)
 			expect.equal(egg.kind, "Cottontail")
 			local spawned = firstOfType(sim:takeEvents(), "EggSpawned")
 			expect.equal(spawned.egg.kind, "Cottontail")
-			expect.equal(sim:spawnEgg(4, 0, "Secret").kind, "Abyss")
+			expect.equal(sim:spawnEgg(5, 0, "Secret").kind, "Abyss")
 
 			-- A particular egg can be dropped by name, in its own zone only.
 			local yeti = sim:spawnEgg(3, 0, nil, "Yeti")
 			expect.equal(yeti.rarity, "Secret")
 			expect.equal(yeti.spec.requirement, 7500)
 			expect.falsy(sim:spawnEgg(1, 0, nil, "Yeti"), "Yeti is a Snow egg")
-			expect.falsy(sim:spawnEgg(5, 0, nil, "MagmaDragon"), "shelved")
+			expect.falsy(sim:spawnEgg(6, 0, nil, "MagmaDragon"), "shelved")
+			expect.falsy(sim:spawnEgg(4, 0, "Rare"), "the Jungle drops nothing until its creatures are chosen")
 			expect.falsy(sim:spawnEgg(1, 0, nil, "NoSuchEgg"))
 		end)
 
 		it("drops an egg somewhere else when told to, keeping its own zone's numbers", function()
 			local sim = newSim()
 			-- A Volcano egg dropped in the Forest, off to one side.
-			local egg = sim:spawnEgg(5, 10, nil, "LavaGolem", { z = 300, lateral = 12 })
-			expect.equal(egg.zone, 5)
+			local egg = sim:spawnEgg(6, 10, nil, "LavaGolem", { z = 300, lateral = 12 })
+			expect.equal(egg.zone, 6)
 			expect.equal(egg.spec.requirement, 100000)
 			local x, _, z = sim:eggCenter(egg, 10)
 			expect.equal(z, 300)
@@ -572,7 +606,7 @@ return function(harness)
 
 		it("brings a cracked lineup egg back sooner than its next lap", function()
 			local sim = newSim()
-			sim.nextWildAt = { math.huge, math.huge, math.huge, math.huge, math.huge, math.huge }
+			noMidCycle(sim)
 			sim:addRider(ALICE, 30, 14, 0) -- not enough for a Common egg (50)
 			sim:step(0)
 			local first
@@ -778,7 +812,7 @@ return function(harness)
 		it("never ends: a ridden egg rolls on through the last zone forever, carried back each loop", function()
 			local sim = quiet(newSim())
 			sim:addRider(ALICE, 1e9, 14, 0)
-			local egg = sim:spawnEgg(6, 0, "Eternal")
+			local egg = sim:spawnEgg(7, 0, "Eternal")
 			sim:requestMount(ALICE, egg.id, 1, true)
 			sim:takeEvents()
 			for second = 2, 600, 2 do
@@ -913,7 +947,7 @@ return function(harness)
 		end)
 
 		it("leaves a gap in every row for the biggest egg", function()
-			local biggest = EggSpec.get(6, "Eternal")
+			local biggest = EggSpec.get(7, "Eternal")
 			for _, row in Obstacles.rowsBetween(-math.huge, math.huge) do
 				local lane = Obstacles.clearLane(row, 0, biggest.halfLength)
 				for _, obstacle in row.obstacles do
@@ -1046,7 +1080,7 @@ return function(harness)
 
 		it("slows the egg in lava or tar, and costs a little stamina, but never kills", function()
 			-- Lava in the Volcano, tar in the Prehistoric zone (whose eggs start at Epic).
-			for zoneId, rarity in { [5] = "Rare", [6] = "Epic" } do
+			for zoneId, rarity in { [6] = "Rare", [7] = "Epic" } do
 				local sim = quiet(newSimWithObstacles())
 				local obstacle = findObstacle(zoneId, "Slow", false)
 				local egg, arrive = rideInto(sim, obstacle, rarity)

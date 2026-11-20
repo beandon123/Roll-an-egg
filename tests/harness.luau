@@ -142,6 +142,12 @@ function harness.describe(name: string, body: () -> ())
 	currentSuite = ""
 end
 
+-- Called after every test, pass or fail (Studio.closeAll, say, to free the worlds a test opened).
+local afterEachTest: { () -> () } = {}
+function harness.afterEach(callback: () -> ())
+	table.insert(afterEachTest, callback)
+end
+
 function harness.it(name: string, body: () -> ())
 	if verbose then
 		print(`  {currentSuite} > {name}`)
@@ -149,6 +155,9 @@ function harness.it(name: string, body: () -> ())
 	local ok, err = xpcall(body, function(message)
 		return debug.traceback(tostring(message), 2)
 	end)
+	for _, callback in afterEachTest do
+		callback()
+	end
 	if ok then
 		results.passed += 1
 	else

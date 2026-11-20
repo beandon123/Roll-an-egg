@@ -255,6 +255,41 @@ return function(harness)
 			expect.equal(#data.Hatching, 2)
 		end)
 
+		it("moves an older save's eggs and pets from the Ocean on one zone along, past the new Jungle", function()
+			local function save()
+				return {
+					Eggs = {
+						{ uid = "e1", zone = 1, rarity = "Common", kind = "Leafy", claimedAt = 0 },
+						{ uid = "e4", zone = 4, rarity = "Rare", kind = "Turtle", claimedAt = 0 },
+					},
+					Hatching = {
+						{ uid = "h5", zone = 5, rarity = "Rare", kind = "Obsidian", placedAt = 0, bonus = 0 },
+					},
+					Pets = {
+						{ uid = "p3", kind = "Yeti", egg = "Yeti", zone = 3, rarity = "Secret", hatchedAt = 1 },
+						{ uid = "p6", kind = "TRex", egg = "TRex", zone = 6, rarity = "Secret", hatchedAt = 1 },
+					},
+				}
+			end
+			-- Saved before the Jungle (version 2, or older saves with no version at all, which count as 1).
+			for _, version in { 1, 2 } do
+				local data = save()
+				Hatchery.migrate(data, version)
+				expect.equal(data.Eggs[1].zone, 1, "Forest egg stays")
+				expect.equal(data.Eggs[2].zone, 5, "Ocean egg")
+				expect.equal(data.Hatching[1].zone, 6, "Volcano egg hatching")
+				expect.equal(data.Pets[1].zone, 3, "Snow pet stays")
+				expect.equal(data.Pets[2].zone, 7, "Prehistoric pet")
+				expect.equal(Hatchery.eggKindOf(data.Eggs[2]), "Turtle", "still a Turtle egg")
+			end
+			-- Saved with the Jungle already in place: nothing moves, however often it loads.
+			local data = save()
+			Hatchery.migrate(data, 3)
+			Hatchery.migrate(data, 3)
+			expect.equal(data.Eggs[2].zone, 4)
+			expect.equal(data.Pets[2].zone, 6)
+		end)
+
 		it("puts an egg down where the player stands, clear of the others", function()
 			local data = newData()
 			addEgg(data, "a", 1, "Rare", "Toadstool")

@@ -10,6 +10,8 @@ local Studio = require("../studio")
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
+	-- Each test opens its own worlds; free them when it is done.
+	harness.afterEach(Studio.closeAll)
 
 	local place, reason = Studio.buildPlace()
 	if place == nil then
@@ -164,7 +166,7 @@ return function(harness)
 			expect.truthy(map.Spawn:IsA("SpawnLocation"))
 			expect.equal(#map.Plots:GetChildren(), 8, "plots")
 			local runway = shared(session).Runway
-			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" } do
+			for zoneId, zoneName in { "Forest", "Desert", "Snow", "Jungle", "Ocean", "Volcano", "Prehistoric" } do
 				local zone = map:FindFirstChild(zoneName)
 				expect.truthy(zone, zoneName)
 				-- A level, checkered runway: 20-stud tiles, all with their tops at the runway's height, each row
@@ -228,6 +230,7 @@ return function(harness)
 				local session = startServer()
 				session:heartbeat(1 / 60)
 				local spawned = session:sent("EggSpawned", "all")
+				-- (The Jungle has no eggs until its creatures are chosen.)
 				expect.equal(#spawned, 6, "the first egg of each zone's lineup")
 				for _, entry in session:sent("Announce", "all") do
 					local text = entry.args[1]
@@ -254,8 +257,15 @@ return function(harness)
 			for _, entry in session:sent("EggSpawned", "all") do
 				zonesSeen[entry.args[1].zone] = true
 			end
-			for zoneId = 1, 5 do
-				expect.truthy(zonesSeen[zoneId], "zone " .. zoneId)
+			-- Every zone but the last (its eggs take longer to come round), except the Jungle, which has no eggs until
+			-- its creatures are chosen.
+			local Zones = shared(session).Zones
+			for zoneId = 1, #Zones.List - 1 do
+				if #Zones.List[zoneId].eggs > 0 then
+					expect.truthy(zonesSeen[zoneId], "zone " .. zoneId)
+				else
+					expect.falsy(zonesSeen[zoneId], "no eggs yet in zone " .. zoneId)
+				end
 			end
 		end)
 
@@ -472,7 +482,7 @@ return function(harness)
 			-- A lava pool well into the Volcano zone, with a row of obstacles before it.
 			local lava
 			for _, obstacle in modules.Obstacles.all() do
-				if obstacle.kind == "LavaPool" and obstacle.z > modules.Runway.zoneStartZ(5) + 200 then
+				if obstacle.kind == "LavaPool" and obstacle.z > modules.Runway.zoneStartZ(6) + 200 then
 					lava = obstacle
 					break
 				end
@@ -485,7 +495,7 @@ return function(harness)
 
 			-- Get on a Volcano egg a few seconds before it reaches the lava pool. It starts in the pool's lane, so
 			-- however wide the zone, the rider has only a short way to steer once past the row before it.
-			local egg = dropEgg(session, 5, "Rare", { lateral = lava.x })
+			local egg = dropEgg(session, 6, "Rare", { lateral = lava.x })
 			local path, spec, startZ = eggPath(session, egg)
 			local arrive = egg.spawnTime + (lava.z - startZ) / spec.rollSpeed
 			while session.clock < arrive - 3 do
@@ -656,13 +666,13 @@ return function(harness)
 			local player, humanoid, root = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
 			runwayService(session).SetMaxStamina(player, 1e9)
-			local egg = mount(session, player, root, 6, "Eternal")
+			local egg = mount(session, player, root, 7, "Eternal")
 			expect.truthy(session:lastSent("RideStarted", player), "on the egg")
-			-- 80 s on the fastest egg: from the start of the last zone right through it and past the end of the loop,
+			-- 100 s on the fastest egg: from the start of the last zone right through it and past the end of the loop,
 			-- where the rider is carried back. This test is about the loop, so the obstacles are moved out of the way
 			-- (dodging them is tested elsewhere: a path planned for an egg nobody rides swerves faster than a rider
 			-- can steer); the rider just holds their lane, keeping well clear of the walls where they bend in.
-			local seconds = 80
+			local seconds = 100
 			local modules = shared(session)
 			modules.Obstacles.hitAt = function()
 				return nil
@@ -670,7 +680,7 @@ return function(harness)
 			modules.Obstacles.activeAround = function()
 				return false
 			end
-			local spec = modules.EggSpec.get(6, "Eternal")
+			local spec = modules.EggSpec.get(7, "Eternal")
 			local function rolledZ()
 				return modules.EggMotion.zAt(egg.spawnTime, egg.startZ, spec.rollSpeed, session.clock)
 			end
@@ -955,7 +965,7 @@ return function(harness)
 			expect.equal(#data.Pets, 1)
 			expect.equal(data.Pets[1].kind, "Bear")
 			expect.equal(data.Nests, nil, "moved over")
-			expect.equal(data.SchemaVersion, 2)
+			expect.equal(data.SchemaVersion, 3)
 			expect.truthy(data.Dollars >= 5)
 			expect.equal(session:lastSent("PetHatched", player).args[1].kind, "Bear")
 		end)
@@ -1418,16 +1428,16 @@ return function(harness)
 			expect.truthy(#droppedKinds(session, 2) >= 1, "a Desert egg dropped")
 
 			session:clearSent()
-			admin(session, player, "DropZoneEggs", { zone = 5 })
 			admin(session, player, "DropZoneEggs", { zone = 6 })
+			admin(session, player, "DropZoneEggs", { zone = 7 })
 			task.wait(6.5)
 			session:heartbeat(1 / 60)
 			expect.equal(
-				table.concat(droppedKinds(session, 5), ","),
+				table.concat(droppedKinds(session, 6), ","),
 				"Obsidian,CinderBoar,VolcanoTortoise,Salamander,Chimera,LavaGolem,Cerberus,LavaDragon"
 			)
 			expect.equal(
-				table.concat(droppedKinds(session, 6), ","),
+				table.concat(droppedKinds(session, 7), ","),
 				"Raptor,Pteranodon,Triceratops,Stegosaurus,Brachiosaurus,TRex,Mosasaurus,LunarDragon"
 			)
 
@@ -1470,7 +1480,7 @@ return function(harness)
 			expect.equal(#data.Pets, 1)
 			local pet = data.Pets[1]
 			expect.equal(pet.kind, "LavaDragon")
-			expect.equal(pet.zone, 5)
+			expect.equal(pet.zone, 6)
 			expect.equal(pet.rarity, "Eternal")
 			expect.equal(pet.variant, "Normal")
 			expect.equal(pet.egg, "LavaDragon")
@@ -1572,7 +1582,7 @@ return function(harness)
 			local session = startServer()
 			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
-			admin(session, player, "ShowZonePets", { zone = 5 })
+			admin(session, player, "ShowZonePets", { zone = 6 })
 			local folder = session:service("Workspace").AdminPets.ZonePets
 			local names = {}
 			for _, pet in folder:GetChildren() do
@@ -1608,7 +1618,7 @@ return function(harness)
 			local session = startServer()
 			local player = session:addPlayer(1, "Tester")
 			session:heartbeat(1 / 60)
-			admin(session, player, "ShowZonePets", { zone = 6 })
+			admin(session, player, "ShowZonePets", { zone = 7 })
 			local folder = session:service("Workspace").AdminPets.ZonePets
 			local names = {}
 			for _, pet in folder:GetChildren() do
@@ -1995,7 +2005,7 @@ return function(harness)
 			end
 			expect.equal(petCount, 48)
 			expect.equal(eggCount, 48)
-			expect.equal(#pets:GetChildren(), 6, "a row per zone")
+			expect.equal(#pets:GetChildren(), 6, "a row per zone with pets (the Jungle's are still to come)")
 
 			-- Forest eggs stand on end on the floor, right of the aisle.
 			local leafy = eggs.Forest["Leafy Egg"]

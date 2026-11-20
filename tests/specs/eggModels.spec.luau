@@ -43,7 +43,7 @@ return function(harness)
 	end
 
 	describe("EggModels", function()
-		it("has a model for every egg in every zone, 8 per zone", function()
+		it("has a model for every egg in every zone, 8 per zone (once its creatures are chosen)", function()
 			local lineup = EggModels.lineup()
 			expect.equal(#lineup, 48)
 			local perZone = {}
@@ -55,8 +55,10 @@ return function(harness)
 				expect.falsy(model.shelved, entry.kind .. " shelved")
 				perZone[entry.zone] = (perZone[entry.zone] or 0) + 1
 			end
-			for zoneId in Zones.List do
-				expect.equal(perZone[zoneId], 8, "zone " .. zoneId)
+			for zoneId, zone in Zones.List do
+				-- (The Jungle has no eggs until its creatures are chosen.)
+				expect.equal(perZone[zoneId] or 0, #zone.eggs, "zone " .. zoneId)
+				expect.equal(#zone.eggs, if zone.key == "Jungle" then 0 else 8, zone.key .. " eggs")
 			end
 			expect.equal(EggModels.get("NoSuchEgg"), nil)
 			expect.equal(EggModels.describe("MossStag").name, "Moss Stag Egg")

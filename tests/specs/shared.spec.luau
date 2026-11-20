@@ -165,7 +165,7 @@ return function(harness)
 			for zoneId = 1, Runway.ZONE_COUNT do
 				widths[zoneId] = Runway.zoneWidth(zoneId)
 			end
-			expect.equal(table.concat(widths, ","), "120,140,160,200,260,320")
+			expect.equal(table.concat(widths, ","), "120,140,160,200,260,320,400")
 			expect.equal(Runway.zoneWidth(Runway.ZONE_COUNT), Runway.MAX_WIDTH)
 			-- The last zone's copies, and everywhere an egg can be carried back to, are as wide as it.
 			for _, z in { Runway.FINAL_ZONE_START, Runway.LENGTH, Runway.LOOP_START, Runway.LOOP_END, 1e6 } do
@@ -181,12 +181,12 @@ return function(harness)
 			expect.equal(Runway.zoneAt(0), 1)
 			expect.equal(Runway.zoneAt(799.9), 1)
 			expect.equal(Runway.zoneAt(800), 2)
-			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6) - 1), 5)
-			expect.equal(Runway.zoneAt(Runway.zoneStartZ(6)), 6)
-			expect.equal(Runway.zoneAt(Runway.LENGTH - 1), 6)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(7) - 1), 6)
+			expect.equal(Runway.zoneAt(Runway.zoneStartZ(7)), 7)
+			expect.equal(Runway.zoneAt(Runway.LENGTH - 1), 7)
 			-- The last zone never ends.
-			expect.equal(Runway.zoneAt(Runway.LENGTH), 6)
-			expect.equal(Runway.zoneAt(50000), 6)
+			expect.equal(Runway.zoneAt(Runway.LENGTH), 7)
+			expect.equal(Runway.zoneAt(50000), 7)
 			expect.equal(Runway.zoneStartZ(3), 1960)
 		end)
 
@@ -512,7 +512,8 @@ return function(harness)
 			-- Luck only reweights what a zone can drop: it never adds a rarity the zone does not have.
 			local Zones = harness.load("src/shared/Config/Zones")
 			for zoneId, zone in Zones.List do
-				for step = 0, 999 do
+				-- (A zone waiting for its creatures has nothing to roll.)
+				for step = 0, if next(zone.weights) then 999 else -1 do
 					local rarity = EggSpec.rollRarity(zoneId, step / 1000, 4)
 					expect.truthy((zone.weights[rarity] or 0) > 0, `{zone.name} {rarity}`)
 				end

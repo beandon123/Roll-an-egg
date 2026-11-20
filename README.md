@@ -7,12 +7,12 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level runway that winds through six
-  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) like a canyon, each longer and wider than the one before
-  (800 studs long and 120 wide in the Forest, up to 2,600 by 320 in the Prehistoric zone), each with its own checkered
-  ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the Ocean),
-  plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The cliffs down
-  both sides are broken by fairly large gaps that look out over a valley, with a low railing across.
+- The map: the hub with a painted START ZONE where the runway begins, then a level runway that winds through seven
+  zones (Forest, Desert, Snow, Jungle, Ocean, Volcano, Prehistoric) like a canyon, each longer and wider than the one
+  before (800 studs long and 120 wide in the Forest, up to 2,960 by 400 in the Prehistoric zone), each with its own
+  checkered ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the
+  Ocean), plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The
+  cliffs down both sides are broken by fairly large gaps that look out over a valley, with a low railing across.
 - The runway never ends. The last zone repeats seamlessly past the end (ground, banks, gate and obstacles), and
   riders are quietly carried back one repeat at a time, so nobody ever reaches an end or sees one.
 - The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
@@ -32,7 +32,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Zone-themed obstacles on the runway, small and big (giant stumps, rock outcrops, buttes, walls of ice blocks,
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
-- Every zone has 8 eggs, each with its own blocky model built from parts (see below).
+- Every zone has 8 eggs, each with its own blocky model built from parts (see below). The Jungle, the newest zone,
+  stands on the runway already but drops no eggs until its creatures are chosen.
 - Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below), every
   zone's drawn in the showpiece style (sculpted voxels, glowing Neon, auras, with bloom in the lighting).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
@@ -61,7 +62,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Ride any of your pets round the hub: it carries you faster than walking, but costs stamina while you ride, and
   bucks you off when your stamina runs out.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
-  saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
+  saved (ProfileStore); older saves are brought up to date as they load (eggs and pets saved before the Jungle
+  went in as zone 4 move one zone along). See [Eggs, pens and pets](#eggs-pens-and-pets).
 - A **training stick** in front of every pen: a roller over a trough of water. Step up and roll on it (birling) for
   as long as you like: every quarter of a second adds Max Stamina for good, with a "+1" floating over your head, and
   "2x" bubbles pop up to tap for a burst of double stamina. Eight tiers, from a twig to a rainbow crystal, bought with
@@ -335,14 +337,15 @@ The runway is level, and gets longer and wider the further it goes, the banks st
 | Forest | 800 | 120 | 11 |
 | Desert | 1,160 | 140 | 15 |
 | Snow | 1,520 | 160 | 20 |
-| Ocean | 1,880 | 200 | 25 |
-| Volcano | 2,240 | 260 | 30 |
-| Prehistoric | 2,600 | 320 | 35 |
+| Jungle | 1,880 | 200 | 25 (once it has eggs) |
+| Ocean | 2,240 | 260 | 30 |
+| Volcano | 2,600 | 320 | 35 |
+| Prehistoric | 2,960 | 400 | 39 |
 
-The first three zones are each 20 studs wider than the one before; from the Ocean (zone 4) on, each is a quarter wider
-than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zones added after that would stay as
-wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer ones
-more rows, so none is emptier than the first.
+The first three zones are each 20 studs wider than the one before; from the Jungle (zone 4) on, each is a quarter
+wider than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zones added after that would stay
+as wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer
+ones more rows, so none is emptier than the first.
 
 A bright, milky fog hangs over everything, like the owner's reference: close by is crisp, and from 40 studs away
 everything fades into pale white-blue, half gone by about 300 studs and lost in it by 600 (Lighting's own fog, set in
@@ -361,7 +364,7 @@ eggs there at their copy nearest the player, so nothing seems to move.
 **Banks and gaps.** Tall stepped cliffs run down both sides, three steps of stone capped with grass (or sand, snow or
 rock) hanging over their edges: the wall beside the runway stands 46 to 54 studs high, the step behind it 28 to 36
 studs higher and the back step 38 to 50 higher again (the Ocean has a 7-stud boardwalk railing instead). The runway
-widens zone by zone, from 120 studs in the Forest to 320 in the Prehistoric zone, the banks stepping out at each gate.
+widens zone by zone, from 120 studs in the Forest to 400 in the Prehistoric zone, the banks stepping out at each gate.
 The banks are broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's gate). Each gap looks out over
 a valley, with a low wooden railing across it and an invisible wall above. Nothing at the edge kills: a rider who
 steers their egg into a bank or a railing bounces back off it, losing 10% of the egg's stamina requirement and slowing
@@ -399,13 +402,14 @@ anyone. What happens to the rider of an egg that hits one (the egg is always kno
 | Forest | fallen logs, stumps, bushes, toadstools | boulders, trees, giant stumps, rock outcrops | |
 | Desert | cacti, tumbleweeds, skulls | sandstone rocks, buttes, sand geysers* | |
 | Snow | snowdrifts, snowmen | pines, ice boulders, walls of ice blocks | |
+| Jungle | giant leaves | bamboo thickets, jungle trees, temple ruins, giant flytraps* | mud pits |
 | Ocean | coral, barrels | sea rocks, shipwrecks, giant clams* | |
 | Volcano | obsidian spikes | basalt columns, smoking rocks, obsidian crags | lava pools, lava vents* |
 | Prehistoric | giant ferns, dinosaur skulls | giant ribcages, mossy boulders, giant stumps, rock outcrops | tar pits |
 
-\* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell), then a burst
-or a snap. They are harmless in between. A slowed egg rolls at 40% of its speed (`Shared/EggMotion` works it out from
-the clock, so every device draws it in the same place). The numbers are `Tuning.HIT_EFFECTS`.
+\* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell or jaw), then a
+burst or a snap. They are harmless in between. A slowed egg rolls at 40% of its speed (`Shared/EggMotion` works it
+out from the clock, so every device draws it in the same place). The numbers are `Tuning.HIT_EFFECTS`.
 
 An egg nobody is riding steers round every obstacle on its own, along a path worked out the same way on the server
 and on every device. A ridden egg goes where its rider steers. The rider's device spots a hit at once and reports
@@ -518,6 +522,7 @@ from it. Every pet has its model:
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
+- Jungle: still being chosen (jungle animals, giant insects and a fantasy Eternal); no eggs drop there until they are
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
@@ -681,7 +686,8 @@ There are two kinds:
   blocks sharing a face (which flicker in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes. Purchases are tested
-  by calling the game's own ProcessReceipt with made-up receipts.
+  by calling the game's own ProcessReceipt with made-up receipts. Each test's worlds are closed when it ends (their
+  scripts stop and their maps are destroyed), so the whole run stays within a few gigabytes of memory.
 
 The tests cannot check anything that needs the real engine: physics, animation, input, how things look and feel.
 Those need a play test in Studio.

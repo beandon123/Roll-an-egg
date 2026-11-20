@@ -14,6 +14,8 @@ local Vector3 = roblox.Vector3
 
 return function(harness)
 	local describe, it, expect = harness.describe, harness.it, harness.expect
+	-- Each test opens its own worlds; free them when it is done.
+	harness.afterEach(Studio.closeAll)
 
 	local place, reason = Studio.buildPlace()
 	if place == nil then
@@ -213,7 +215,7 @@ return function(harness)
 			local session, parts = startClient()
 			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common"))
 			session:fromServer("EggSpawned", eggData(session, 3, 1, "Common", 5, 8))
-			session:fromServer("EggSpawned", eggData(session, 2, 5, "Secret", 5, -8))
+			session:fromServer("EggSpawned", eggData(session, 2, 6, "Secret", 5, -8))
 
 			local EggModels = session:require(session:service("ReplicatedStorage").Shared.EggModels)
 			local common = parts.eggFolder.Egg1
@@ -368,12 +370,12 @@ return function(harness)
 				local session, parts = startClient()
 				local modules = shared(session)
 				local runway = modules.Runway
-				local rarity = firstRarity(session, 6)
-				local spec = modules.EggSpec.get(6, rarity)
+				local rarity = firstRarity(session, 7)
+				local spec = modules.EggSpec.get(7, rarity)
 				-- For a player back at the hub, an egg one loop into the endless last zone is drawn back at the zone's
 				-- start. This one is a stud short of that.
 				local jumpZ = runway.FINAL_ZONE_START + runway.LOOP_LENGTH
-				local egg = eggData(session, 1, 6, rarity, (jumpZ - 1 - spec.startZ) / spec.rollSpeed, 0)
+				local egg = eggData(session, 1, 7, rarity, (jumpZ - 1 - spec.startZ) / spec.rollSpeed, 0)
 				cameraAt(session, Vector3.new(0, 13, jumpZ))
 				session:fromServer("EggSpawned", egg)
 				local model = parts.eggFolder.Egg1
@@ -409,7 +411,7 @@ return function(harness)
 			expect.truthy((session.emitted[puff] or 0) > 0, "a puff where it appears")
 
 			-- No dust for eggs far from the camera.
-			session:fromServer("EggSpawned", eggData(session, 3, 5, firstRarity(session, 5), 5, 0))
+			session:fromServer("EggSpawned", eggData(session, 3, 6, firstRarity(session, 6), 5, 0))
 			session:renderFrame(1 / 60)
 			expect.falsy(parts.eggFolder.Egg3.Dust:FindFirstChildOfClass("ParticleEmitter").Enabled, "far away")
 		end)
@@ -763,7 +765,7 @@ return function(harness)
 
 		it("is slowed by lava, and never killed by it", function()
 			local session, parts = startClient()
-			local lava = findObstacle(session, 5, "Slow", false)
+			local lava = findObstacle(session, 6, "Slow", false)
 			rideTowards(session, lava, "Rare")
 			session:renderFrame(1 / 60, 20)
 			expect.equal(session:lastSent("ReportHit", "server").args[1], lava.id)
@@ -1051,7 +1053,15 @@ return function(harness)
 		it("puts a new egg on the ground at the start of its zone and rolls it without bouncing", function()
 			local session, parts = startClient()
 			local modules = shared(session)
-			for zone = 1, 6 do
+			-- Every zone with eggs (a zone waiting for its creatures has none to draw).
+			local zones = {}
+			local Zones = session:require(session:service("ReplicatedStorage").Shared.Config.Zones)
+			for zoneId, entry in Zones.List do
+				if #entry.eggs > 0 then
+					table.insert(zones, zoneId)
+				end
+			end
+			for _, zone in zones do
 				local rarity = firstRarity(session, zone)
 				session:fromServer("EggSpawned", eggData(session, zone, zone, rarity, 0, 0))
 				local spec = modules.EggSpec.get(zone, rarity)
@@ -1067,7 +1077,7 @@ return function(harness)
 			local firstZ, lastZ = {}, {}
 			for _ = 1, 120 do
 				session:renderFrame(1 / 60)
-				for zone = 1, 6 do
+				for _, zone in zones do
 					local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
 					local position = parts.eggFolder["Egg" .. zone].Root.CFrame.Position
 					local height = modules.Runway.BASE_Y + modules.EggRig.rollHeight(spec.radius)
@@ -1077,7 +1087,7 @@ return function(harness)
 					lastZ[zone] = position.Z
 				end
 			end
-			for zone = 1, 6 do
+			for _, zone in zones do
 				local spec = modules.EggSpec.get(zone, firstRarity(session, zone))
 				expect.truthy(lastZ[zone] - firstZ[zone] > spec.rollSpeed * 1.5, "rolls forward")
 			end
@@ -1106,7 +1116,7 @@ return function(harness)
 			cameraAt(session, Vector3.new(0, 13, 0))
 			session:fromServer("EggSpawned", eggData(session, 1, 1, "Common", 1, 0))
 			session:fromServer("EggSpawned", eggData(session, 2, 2, "Common", 1, 0))
-			session:fromServer("EggSpawned", eggData(session, 3, 6, firstRarity(session, 6), 1, 0))
+			session:fromServer("EggSpawned", eggData(session, 3, 7, firstRarity(session, 7), 1, 0))
 			local roots = {
 				near = parts.eggFolder.Egg1.Root,
 				mid = parts.eggFolder.Egg2.Root,
@@ -1134,7 +1144,7 @@ return function(harness)
 
 			-- However rarely it is redrawn, each egg ends up where it should be, to within one redraw.
 			local modules = shared(session)
-			local farSpec = modules.EggSpec.get(6, firstRarity(session, 6))
+			local farSpec = modules.EggSpec.get(7, firstRarity(session, 7))
 			local behind = farSpec.startZ + farSpec.rollSpeed * (1 + frames / 60) - roots.far.CFrame.Position.Z
 			expect.truthy(behind >= 0 and behind < farSpec.rollSpeed * 0.25, `the far egg is {behind} studs behind`)
 
@@ -1367,7 +1377,7 @@ return function(harness)
 			local runway = modules.Runway
 			-- The rider's Eternal egg (21 studs/s) is 10 studs from the end of the loop, in a lane clear of obstacles
 			-- there (and so, the last zone repeating, one loop back too).
-			local mineSpec = modules.EggSpec.get(6, "Eternal")
+			local mineSpec = modules.EggSpec.get(7, "Eternal")
 			local lane
 			for x = -50, 50, 2 do
 				local path = modules.Obstacles.planPath(
@@ -1384,12 +1394,12 @@ return function(harness)
 			end
 			expect.truthy(lane, "a clear lane")
 			local mine =
-				eggData(session, 1, 6, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / mineSpec.rollSpeed, lane)
+				eggData(session, 1, 7, "Eternal", (runway.LOOP_END - 10 - mineSpec.startZ) / mineSpec.rollSpeed, lane)
 			mine.rider = LOCAL_USER_ID
 			-- Someone else's slower Epic egg has already been carried back, to just past the start of the loop.
-			local otherSpec = modules.EggSpec.get(6, "Epic")
+			local otherSpec = modules.EggSpec.get(7, "Epic")
 			local other =
-				eggData(session, 2, 6, "Epic", (runway.LOOP_END + 20 - otherSpec.startZ) / otherSpec.rollSpeed, 10)
+				eggData(session, 2, 7, "Epic", (runway.LOOP_END + 20 - otherSpec.startZ) / otherSpec.rollSpeed, 10)
 			other.rider = 999
 			session:fromServer("EggSpawned", mine)
 			session:fromServer("EggSpawned", other)
@@ -1531,15 +1541,15 @@ return function(harness)
 			local folder = session:service("ReplicatedStorage").Shared
 			local Zones = session:require(folder.Config.Zones)
 			local toastTop = hud(parts).Toast.Position.Y.Offset
-			-- Several at once (as at sunrise): one sparkle, a line each.
-			for id = 1, 3 do
-				session:fromServer("EggSpawned", eggData(session, id, 2 + id, "Secret", 0), true)
+			-- Several at once (as at sunrise): one sparkle, a line each. (Snow, Ocean and Volcano have Secret eggs.)
+			for id, zoneId in { 3, 5, 6 } do
+				session:fromServer("EggSpawned", eggData(session, id, zoneId, "Secret", 0), true)
 			end
 			session:renderFrame(1 / 60)
 			expectLines(parts, {
 				`Secret egg has spawned in {Zones.List[3].name}!`,
-				`Secret egg has spawned in {Zones.List[4].name}!`,
 				`Secret egg has spawned in {Zones.List[5].name}!`,
+				`Secret egg has spawned in {Zones.List[6].name}!`,
 			})
 			task.wait(1.2)
 			local sparkle = session:require(folder.Config.Sounds).SECRET_ALERT
@@ -1560,7 +1570,7 @@ return function(harness)
 			session:renderFrame(1 / 60)
 			local texts = alertTexts(parts)
 			expect.equal(#texts, 4, "four at most")
-			expect.equal(texts[1], `Secret egg has spawned in {Zones.List[5].name}!`, "the oldest dropped off")
+			expect.equal(texts[1], `Secret egg has spawned in {Zones.List[6].name}!`, "the oldest dropped off")
 			expect.equal(texts[4], `Eternal egg has spawned in {Zones.List[6].name}!`)
 		end)
 
@@ -2330,7 +2340,7 @@ return function(harness)
 			expect.equal(sent[#sent].command, "GivePet")
 			click(session, body(parts).PetActions.Buttons.ShowZone)
 			expect.equal(sent[#sent].command, "ShowZonePets")
-			expect.equal(sent[#sent].args.zone, 5)
+			expect.equal(sent[#sent].args.zone, 6)
 		end)
 
 		it("flies, sets speeds and stamina, and lists the inventory", function()
@@ -2406,7 +2416,7 @@ return function(harness)
 			expect.equal(sent[#sent].args.to, "Showroom")
 			click(session, body(parts).Zones.Buttons.Ocean)
 			expect.equal(sent[#sent].args.to, "Zone")
-			expect.equal(sent[#sent].args.zone, 4)
+			expect.equal(sent[#sent].args.zone, 5)
 			expect.truthy(body(parts).Players:FindFirstChild("Nobody"), "nobody else to go to yet")
 
 			local friend = roblox.Instance.new("Player")

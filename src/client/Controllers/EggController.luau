@@ -103,6 +103,7 @@ local DUST_COLORS = {
 	{ 182, 160, 118 }, -- Forest: dry earth
 	{ 236, 208, 152 }, -- Desert: sand
 	{ 246, 250, 255 }, -- Snow: powder
+	{ 104, 116, 64 }, -- Jungle: leaf litter
 	{ 214, 236, 248 }, -- Ocean: spray off the boardwalk
 	{ 112, 102, 102 }, -- Volcano: ash
 	{ 176, 156, 116 }, -- Prehistoric: dirt

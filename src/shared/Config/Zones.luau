@@ -4,7 +4,8 @@
 --
 -- eggs:    the zone's 8 eggs, from the most common to the rarest. `egg` names a design in Shared/EggModels/Designs;
 --          `pet` is the pet that hatches from it (a design in Shared/PetModels/Designs, once it has a model).
---          A zone can have two eggs of the same rarity.
+--          A zone can have two eggs of the same rarity. A new zone can stand on the runway before its creatures are
+--          chosen: with no eggs (and so no stamina or weights) it drops none yet.
 -- stamina: the stamina requirement of each egg rarity that can drop in the zone.
 --          A rarity missing from this table cannot drop there.
 -- weights: relative drop odds for each rarity in the zone. A drop first picks a rarity with these odds, then one
@@ -92,7 +93,19 @@ local list: { ZoneInfo } = {
 		weights = { Uncommon = 27, Rare = 14, Epic = 6.5, Legendary = 2, Mythic = 0.45, Secret = 0.05 },
 	},
 	{
+		-- Dense jungle: its creatures (jungle animals, giant insects and a fantasy Eternal) are still being chosen,
+		-- so it drops no eggs yet.
 		id = 4,
+		key = "Jungle",
+		name = "Jungle",
+		ground = { 58, 122, 50 },
+		accent = { 206, 64, 70 },
+		eggs = {},
+		stamina = {},
+		weights = {},
+	},
+	{
+		id = 5,
 		key = "Ocean",
 		name = "Ocean",
 		ground = { 240, 222, 170 },
@@ -117,7 +130,7 @@ local list: { ZoneInfo } = {
 		weights = { Rare = 14, Epic = 6.5, Legendary = 2, Mythic = 0.45, Secret = 0.05 },
 	},
 	{
-		id = 5,
+		id = 6,
 		key = "Volcano",
 		name = "Volcano",
 		ground = { 74, 60, 60 },
@@ -150,7 +163,7 @@ local list: { ZoneInfo } = {
 		},
 	},
 	{
-		id = 6,
+		id = 7,
 		key = "Prehistoric",
 		name = "Prehistoric",
 		ground = { 128, 138, 72 },

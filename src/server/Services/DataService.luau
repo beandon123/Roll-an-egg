@@ -18,7 +18,8 @@ local STORE_NAME = "PlayerData_v1"
 
 -- What a brand-new player starts with. Fields added here later are filled in for existing players on load.
 local TEMPLATE = {
-	SchemaVersion = 2,
+	-- 3: the Jungle became zone 4, so saves from before it count the Ocean and later zones one too low.
+	SchemaVersion = 3,
 	-- The currency.
 	Dollars = 0,
 	-- upgradeId -> level bought
@@ -167,8 +168,10 @@ local function onPlayerAdded(player: Player)
 	end
 
 	profile:AddUserId(player.UserId)
+	-- Saves from before SchemaVersion was kept count as version 1. Read it before Reconcile fills in the template's.
+	local savedVersion = profile.Data.SchemaVersion or 1
 	profile:Reconcile()
-	Hatchery.migrate(profile.Data)
+	Hatchery.migrate(profile.Data, savedVersion)
 	profile.Data.SchemaVersion = TEMPLATE.SchemaVersion
 
 	profile.OnSessionEnd:Connect(function()
