@@ -398,31 +398,6 @@ function Sculpt.mirror(self: Sculpt): Sculpt
 	return copy
 end
 
--- Recolours the cells that show by a rule: `rule` is given each one's middle (in design units) and a test of
--- whether the cell beside it in a direction is empty (so which way it faces), and returns a look or nil to leave it.
-function Sculpt.coat(self: Sculpt, rule: (point: { number }, open: (number, number, number) -> boolean) -> Look?)
-	local unit = self.unit
-	local changes = {}
-	for key in self.cells do
-		local x, y, z = cellAt(key)
-		if self:showing(x, y, z) then
-			local look = rule({ (x + 0.5) * unit, (y + 0.5) * unit, (z + 0.5) * unit }, function(dx, dy, dz)
-				return not self:has(x + dx, y + dy, z + dz)
-			end)
-			if look then
-				changes[key] = look
-			end
-		end
-	end
-	for key, look in changes do
-		self.cells[key] = look
-	end
-end
-
--- How a look is shaded by light from above (see Sculpt.bake): `top` for cells facing up, `under` for cells facing
--- down, and `low` for every cell lower than `below` (design units) that does not face up, such as the shins.
-export type Tone = { top: Look?, under: Look?, low: Look?, below: number? }
-
 -- Which way the clay faces at a cell, out from it, worked out from the empty cells round it (so a staircase of
 -- cells on a slope faces along the slope, not up). Zero if no side shows.
 local function normalAt(self: Sculpt, x: number, y: number, z: number): Vec
@@ -445,6 +420,35 @@ local function normalAt(self: Sculpt, x: number, y: number, z: number): Vec
 	end
 	return { n[1] / length, n[2] / length, n[3] / length }
 end
+
+-- Recolours the cells that show by a rule: `rule` is given each one's middle (in design units), a test of
+-- whether the cell beside it in a direction is empty, and which way the clay faces there (see normalAt), and
+-- returns a look or nil to leave it.
+function Sculpt.coat(
+	self: Sculpt,
+	rule: (point: { number }, open: (number, number, number) -> boolean, normal: Vec) -> Look?
+)
+	local unit = self.unit
+	local changes = {}
+	for key in self.cells do
+		local x, y, z = cellAt(key)
+		if self:showing(x, y, z) then
+			local look = rule({ (x + 0.5) * unit, (y + 0.5) * unit, (z + 0.5) * unit }, function(dx, dy, dz)
+				return not self:has(x + dx, y + dy, z + dz)
+			end, normalAt(self, x, y, z))
+			if look then
+				changes[key] = look
+			end
+		end
+	end
+	for key, look in changes do
+		self.cells[key] = look
+	end
+end
+
+-- How a look is shaded by light from above (see Sculpt.bake): `top` for cells facing up, `under` for cells facing
+-- down, and `low` for every cell lower than `below` (design units) that does not face up, such as the shins.
+export type Tone = { top: Look?, under: Look?, low: Look?, below: number? }
 
 -- Bakes light from above into the clay, the way the showpiece pets are shaded: each showing cell of a look in
 -- `tones` takes that look's top tone where the surface faces well up, its under tone where it faces down, and its
@@ -1090,6 +1094,7 @@ end
 -- numbers for its clay and its parts.
 local function inUnits(u: number)
 	local t = {}
+	t.unit = u
 	function t.at(p: Vec): Vec
 		return { p[1] / u, p[2] / u, p[3] / u }
 	end

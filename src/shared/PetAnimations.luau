@@ -142,6 +142,29 @@ local function jointedLegs(a: number, bend: number, speed: number, bounce: numbe
 	return list
 end
 
+-- Two jointed legs striding (the Tyrant skeleton): each thigh swings `a`, and its shin folds back by up to `bend`
+-- while that foot is lifted and carried forward, then straightens to take the weight. The body rocks over the
+-- stepping leg, the tail swings against it, and the head bobs with each step.
+local function stride(a: number, bend: number, speed: number, bounce: number): { Wave }
+	local list = {
+		wave("Body", "rz", 0.05, speed),
+		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
+		wave("Tail", "ry", 0.16, speed, { shift = math.pi }),
+		wave("Tail", "rx", 0.04, speed * 2),
+		wave("Head", "rx", 0.05, speed * 2, { shift = QUARTER }),
+		wave("Head", "ry", 0.08, speed, { shift = math.pi }),
+		wave("Jaw", "rx", 0.04, speed * 2, { base = 0.04 }),
+		wave("LeftArm", "rx", 0.12, speed),
+		wave("RightArm", "rx", -0.12, speed),
+	}
+	for _, leg in { { "Left", 1 }, { "Right", -1 } } do
+		local name, side = leg[1], leg[2]
+		table.insert(list, wave(name .. "Leg", "rx", a * side, speed))
+		table.insert(list, wave(name .. "Shin", "rx", bend, speed, { shift = -QUARTER * side, shape = "lift" }))
+	end
+	return list
+end
+
 -- Eight tentacles each swaying and lifting a little, `size` radians, each out of step with the last.
 local function writhe(speed: number, size: number): { Wave }
 	local list = {}
@@ -320,6 +343,30 @@ PetAnimations.MOVES = {
 			wave("RightArm", "rz", -0.06, 9, { base = -0.25 }),
 			wave("Tail", "ry", 0.25, 3.5),
 			wave("Tail", "rx", 0.06, 9, { base = 0.1 }),
+		},
+	},
+	-- A theropod built to be huge, with knees and a jaw: a heavy stride, and a roar with its jaws flung open.
+	Tyrant = {
+		Idle = joined(idle(), {
+			wave("Jaw", "rx", 0.05, 1.6, { base = 0.06 }),
+			wave("LeftArm", "rx", 0.08, 1.6),
+			wave("RightArm", "rx", 0.08, 1.6, { shift = 0.4 }),
+			wave("Tail", "rx", 0.04, 1.6, { shift = 1 }),
+		}),
+		Walk = stride(0.36, 0.6, 5, 0.3),
+		Stomp = stride(0.3, 0.55, 3.6, 0.45),
+		-- Rearing back with its head thrown up and shaking, jaws gaping, arms spread, tail lashing.
+		Roar = {
+			wave("Body", "rx", 0.03, 9, { base = -0.14 }),
+			wave("Head", "rx", 0.04, 18, { base = -0.32 }),
+			wave("Head", "ry", 0.08, 6),
+			wave("Jaw", "rx", 0.06, 18, { base = 0.55 }),
+			wave("LeftArm", "rz", 0.06, 9, { base = 0.25 }),
+			wave("RightArm", "rz", -0.06, 9, { base = -0.25 }),
+			wave("LeftShin", "rx", 0.02, 9, { base = 0.1 }),
+			wave("RightShin", "rx", 0.02, 9, { base = 0.1 }),
+			wave("Tail", "ry", 0.22, 3.5),
+			wave("Tail", "rx", 0.05, 9, { base = 0.08 }),
 		},
 	},
 	-- Floats and swims: a gentle bob, the body rocking, fins sweeping, the tail beating up and down.

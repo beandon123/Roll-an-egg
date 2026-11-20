@@ -33,9 +33,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below). The
-  Forest's, Desert's, Snow zone's, Ocean's and Volcano's pets are redrawn in the new showpiece style (sculpted voxels,
-  glowing Neon, auras, with bloom in the lighting); the Prehistoric zone's follow.
+- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below), every
+  zone's drawn in the showpiece style (sculpted voxels, glowing Neon, auras, with bloom in the lighting).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -523,46 +522,47 @@ from it. Every pet has its model:
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
 
-**The showpiece style.** Pets are being redrawn, a zone at a time, to look like the big showpiece pets of Roblox
-simulator games: part-built voxel models with real proportions, light baked into their colours (lighter tops,
-darker undersides), crisp angled claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that
-glows. Each redrawn zone has its own file beside `Designs.luau`; so far `PetModels/Forest.luau`,
-`PetModels/Desert.luau`, `PetModels/Snow.luau`, `PetModels/Ocean.luau` and `PetModels/Volcano.luau`:
+**The showpiece style.** Pets are drawn to look like the big showpiece pets of Roblox simulator games: part-built
+voxel models with real proportions, light baked into their colours (lighter tops, darker undersides), crisp angled
+claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that glows. Each zone has its own file
+beside `Designs.luau`: `PetModels/Forest.luau`, `PetModels/Desert.luau`, `PetModels/Snow.luau`,
+`PetModels/Ocean.luau`, `PetModels/Volcano.luau` and `PetModels/Prehistoric.luau`:
 
 | Rarity | Size (a player is 5 studs) | What glows |
 | --- | --- | --- |
 | Common, Uncommon | About a player's height | Nothing: natural animals with glossy eyes |
 | Rare | Taller than a player (the Owl, 9 studs; the Camel, 10) | A first touch: the Owl's eyes, the Camel's harness jewels |
-| Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom |
-| Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet |
-| Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers |
-| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads |
-| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65) | Lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws |
+| Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16; the Pteranodon's wings, 27 across) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom, the Velociraptor's crest and sickle claws |
+| Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13; the Stegosaurus, 19 to the tips of its plates) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet: the Triceratops's eye-spotted frill, the Stegosaurus's plates rimmed in light |
+| Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17; the Brachiosaurus, 30) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers, the Brachiosaurus's rows of lights and the glowing mushrooms in the moss on its back |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
+| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65; the Lunar Dragon, 37 tall with wings spanning 67; the Mosasaurus, 83 long) | The Lava Dragon's lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws; the Lunar Dragon's starry scales and wings, glowing mane, crescent moon round its head and blue moonfire; the Mosasaurus's violet lights of the deep |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
 it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game
 without it, delete `Lighting.Bloom` in Studio, or remove it from `MapService`.
 
 Every pet is rideable: a design sets where the rider sits (`pet:seat`), and the mount lifts the rider to it at any
-size. Pets bigger than about 10 studs are built from coarser cells (a design's `U`), so they keep their detail
-with fewer, larger blocks and build quickly: no Forest pet takes more than a second to build or has more than about
-1,000 blocks. The size a pet hatches at (Tiny to Titanic) is not decided yet; the models are built to be scaled.
+size. Pets bigger than about 10 studs are built from coarser cells (a design's `U`), so they keep their detail with
+fewer, larger blocks and build quickly: no Forest pet takes more than a second to build or has more than about 1,000
+blocks, and none in the game more than about 1,400. The size a pet hatches at (Tiny to Titanic) is not decided yet;
+the models are built to be scaled.
 
 The drawing tools are in `src/shared/PetModels/Kit.luau`, shared by every design. `newSculpt` models each limb cell
 by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes such as necks, tails and tentacles, with
 `curl` for a spiral at the end), colours it by rules (`coat` for patterns like stripes, belly plates and lava seams,
-`patches` for soft patches of moss or grizzled fur, `cracks` for the seams between plates (lava glowing between plates
-of rock), `nearPath` for the pale fringe of a tail, `trace` for lines, and
-`bake` for the light from above), and packs it into as few blocks as it can. `surface` lists the cells on its
-outside with the way each faces, for setting quills, tufts of fur and moss over it. `crystal` and `crystalCluster`
-grow faceted shards of ice (or any gem), glowing at their points if a design asks. Thin details leave the grid
-altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for balls and eyes, `triangle`
-for a flat sheet such as a wing membrane or leaf, and `feather` for a banded feather), placed in the design's own
-units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big a pet is shown. Some carry
-Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the Chimera's breath, the Volcano
-Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly from angled parts, is shelved
-for now, its design kept.) `PetRig` builds the angled parts as turned parts, `WedgePart`s, parts with a sphere
-`SpecialMesh`, and small welded parts holding each `Fire`.
+told which way the clay faces at each cell, so a pale belly ends cleanly, `patches` for soft patches of moss or
+grizzled fur, `cracks` for the seams between plates (lava glowing between plates of rock), `nearPath` for the pale
+fringe of a tail, `trace` for lines, and `bake` for the light from above), and packs it into as few blocks as it can.
+`surface` lists the cells on its outside with the way each faces, for setting quills, tufts of fur and moss over it.
+`crystal` and `crystalCluster` grow faceted shards of ice (or any gem), glowing at their points if a design asks.
+Thin details leave the grid altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for
+balls and eyes, `triangle` for a flat sheet such as a wing membrane or leaf, and `feather` for a banded feather),
+placed in the design's own units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big
+a pet is shown. Some carry Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the
+Chimera's breath, the Volcano Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly
+from angled parts, is shelved for now, its design kept.) `PetRig` builds the angled parts as turned parts,
+`WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
 Rare pets give off light and particles (`pet:light`, `pet:particles`: sparkles, embers, bubbles, snow, or fireflies
 that blink as they drift), and the rarest an aura (`pet:aura`): wisps of light winding up from a ring round their
@@ -580,22 +580,22 @@ Then open `tools/out/pet-preview.html` in a browser (leave out the zone number f
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, beast (four jointed legs and a jaw: each leg's shin hangs from its upper leg, so the Frost Wolf's and
 Sabertooth Cat's paws fold up as they step, and the jaw hangs from the head, to snarl and roar), winged, dragon (four
-legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor and the T-Rex), six legs, swimmer
-(fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that much higher), eight
-tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox
-model: every limb turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A
-limb drawn with `limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image
-from the right one.
+legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and
+a jaw, for the T-Rex: its shins hang from its thighs, so its feet fold up as it strides, and its jaw from its head,
+to roar), six legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and
+floats that much higher), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model:
+every limb turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A limb drawn
+with `limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image from the
+right one.
 
-How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
-Crawl, Swim, and Roar for theropods and beasts), each a set of waves that turn or shift its limbs. Winged pets (the owls and the
-Pteranodon) and dragons (the Lava and Lunar Dragons) also
-**Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
-on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
-(`wingSpread`), so owls that fold their wings at their sides open them to fly. The same moves drive the gallery
-(pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on rigged
-pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can
-fly and walks (or swims, or crawls) on the spot if not.
+How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop, Crawl,
+Swim, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged pets (the
+owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped forward,
+wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each beat).
+A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at their
+sides open them to fly. The same moves drive the gallery (pick one with the buttons under a pet) and the game:
+`PetAnimationController` on the client plays them on rigged pets by setting each joint's `Motor6D.Transform`. A pet
+plays its `Move` attribute, or by default hovers if it can fly and walks (or swims, or crawls) on the spot if not.
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window
