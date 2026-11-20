@@ -357,6 +357,24 @@ local BEAST_ROAR = {
 	wave("Tail", "ry", 0.4, 6),
 }
 
+-- On the ground: a ripple runs down a long body's lengths from the neck to the tail, side to side only, flat along
+-- the ground, each length a beat behind the one before, the head steadying itself and looking about, the front pair
+-- of legs (or fins) paddling. A centipede crawls with it; a coiled snake breathes with it as it rests.
+local function groundRipple(): { Wave }
+	return {
+		wave("Body", "ry", 0.05, 3, { shift = 0.9 }),
+		wave("Body", "py", 0.08, 6, { shape = "bounce" }),
+		wave("Segment1", "ry", 0.14, 3, { shift = -0.9 }),
+		wave("Segment2", "ry", 0.18, 3, { shift = -1.8 }),
+		wave("Tail", "ry", 0.24, 3, { shift = -2.7 }),
+		wave("Head", "ry", -0.07, 3, { shift = 1.6 }),
+		wave("Head", "ry", 0.08, 0.7),
+		wave("Head", "rx", 0.03, 1.5, { shift = 1 }),
+		wave("LeftFin", "ry", 0.25, 6),
+		wave("RightFin", "ry", 0.25, 6, { shift = math.pi }),
+	}
+end
+
 PetAnimations.MOVES = {
 	-- Four jointed legs, a jaw and a tail: the big hunters.
 	Beast = {
@@ -637,20 +655,8 @@ PetAnimations.MOVES = {
 			wave("LeftFin", "rx", 0.05, 1.4, { shift = QUARTER }),
 			wave("RightFin", "rx", 0.05, 1.4, { shift = QUARTER }),
 		},
-		-- On the ground (a centipede, an anaconda): the same ripple, side to side only, flat along the ground, the
-		-- head steadying itself and looking about, the front pair of legs (or fins) paddling.
-		Crawl = {
-			wave("Body", "ry", 0.05, 3, { shift = 0.9 }),
-			wave("Body", "py", 0.08, 6, { shape = "bounce" }),
-			wave("Segment1", "ry", 0.14, 3, { shift = -0.9 }),
-			wave("Segment2", "ry", 0.18, 3, { shift = -1.8 }),
-			wave("Tail", "ry", 0.24, 3, { shift = -2.7 }),
-			wave("Head", "ry", -0.07, 3, { shift = 1.6 }),
-			wave("Head", "ry", 0.08, 0.7),
-			wave("Head", "rx", 0.03, 1.5, { shift = 1 }),
-			wave("LeftFin", "ry", 0.25, 6),
-			wave("RightFin", "ry", 0.25, 6, { shift = math.pi }),
-		},
+		-- On the ground (a centipede): the ground ripple.
+		Crawl = groundRipple(),
 		Swim = {
 			wave("Body", "py", 0.8, 2, { base = 4 }),
 			wave("Body", "rx", 0.035, 2, { shift = 0.3 }),
@@ -672,6 +678,29 @@ PetAnimations.MOVES = {
 			wave("RightFin", "rx", 0.15, 2.4, { shift = QUARTER }),
 			wave("LeftFin", "ry", 0.12, 2.4, { shift = math.pi }),
 			wave("RightFin", "ry", -0.12, 2.4, { shift = math.pi }),
+		},
+	},
+	-- A great land snake lying in coils, its neck reared (the Titan Anaconda): the ground ripple as it rests.
+	-- Slithering, a quicker, deeper wave rolls down the coils from the neck to the tail, swinging them wide from
+	-- side to side; the neck leans forward and sways, rolling into each sway, while the head holds steady and looks
+	-- ahead, the body surging forward with each push and the moss on its neck stirring.
+	Snake = {
+		Idle = groundRipple(),
+		Slither = {
+			wave("Body", "ry", 0.08, 5.5, { shift = 0.9 }),
+			wave("Body", "rz", 0.05, 5.5, { shift = 0.9 + QUARTER }),
+			wave("Body", "rx", 0.02, 11, { base = 0.1 }),
+			wave("Body", "pz", 0.25, 11, { shape = "bounce" }),
+			-- (The coils hang from the neck at the same joint: they turn back level as it leans.)
+			wave("Segment1", "rx", -0.02, 11, { base = -0.1 }),
+			wave("Segment1", "ry", 0.17, 5.5, { shift = -0.9 }),
+			wave("Segment2", "ry", 0.22, 5.5, { shift = -1.8 }),
+			wave("Tail", "ry", 0.28, 5.5, { shift = -2.7 }),
+			wave("Head", "ry", -0.07, 5.5, { shift = 0.6 }),
+			wave("Head", "ry", 0.04, 1.1),
+			wave("Head", "rx", 0.03, 11, { base = -0.1, shift = 1 }),
+			wave("LeftFin", "ry", 0.3, 11),
+			wave("RightFin", "ry", 0.3, 11, { shift = math.pi }),
 		},
 	},
 	ManyLegged = {
@@ -732,7 +761,7 @@ function PetAnimations.moveFor(skeleton: string, gait: string): string
 	if moves[gait] then
 		return gait
 	end
-	for _, name in { "Walk", "Swim", "Crawl" } do
+	for _, name in { "Walk", "Swim", "Crawl", "Slither" } do
 		if moves[name] then
 			return name
 		end

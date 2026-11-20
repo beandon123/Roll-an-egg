@@ -5,8 +5,7 @@
 -- eggs:    the zone's 8 eggs, from the most common to the rarest. `egg` names a design in Shared/EggModels/Designs;
 --          `pet` is the pet that hatches from it (a design in Shared/PetModels/Designs, once it has a model).
 --          A zone can have two eggs of the same rarity. A new zone can stand on the runway before its creatures are
---          chosen: with no eggs (and so no stamina or weights) it drops none yet. While its creatures are being
---          compared, a zone can hold more than 8 (the Jungle's candidates, side by side).
+--          chosen: with no eggs (and so no stamina or weights) it drops none yet.
 -- stamina: the stamina requirement of each egg rarity that can drop in the zone.
 --          A rarity missing from this table cannot drop there.
 -- weights: relative drop odds for each rarity in the zone. A drop first picks a rarity with these odds, then one
@@ -103,14 +102,10 @@ local list: { ZoneInfo } = {
 		accent = { 206, 64, 70 },
 		eggs = {
 			{ egg = "DartFrog", rarity = "Uncommon", pet = "PoisonDartFrog" },
-			{ egg = "Chameleon", rarity = "Rare", pet = "Chameleon" },
 			{ egg = "Leafcutter", rarity = "Rare", pet = "GiantLeafcutterAnt" },
 			{ egg = "Centipede", rarity = "Epic", pet = "GiantCentipede" },
 			{ egg = "Hercules", rarity = "Legendary", pet = "HerculesBeetle" },
-			{ egg = "Morpho", rarity = "Mythic", pet = "MorphoQueen" },
 			{ egg = "Anaconda", rarity = "Mythic", pet = "TitanAnaconda" },
-			{ egg = "Silverback", rarity = "Secret", pet = "SilverbackKing" },
-			{ egg = "TitanBeetle", rarity = "Secret", pet = "TitanBeetle" },
 			{ egg = "Mantis", rarity = "Secret", pet = "MantisEmpress" },
 			{ egg = "VineHydra", rarity = "Eternal", pet = "VineHydra" },
 			{ egg = "JadeGuardian", rarity = "Eternal", pet = "JadeTempleGuardian" },

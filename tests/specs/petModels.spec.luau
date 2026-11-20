@@ -19,14 +19,10 @@ return function(harness)
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
 		{
 			"PoisonDartFrog",
-			"Chameleon",
 			"GiantLeafcutterAnt",
 			"GiantCentipede",
 			"HerculesBeetle",
-			"MorphoQueen",
 			"TitanAnaconda",
-			"SilverbackKing",
-			"TitanBeetle",
 			"MantisEmpress",
 			"VineHydra",
 			"JadeTempleGuardian",
@@ -129,7 +125,15 @@ return function(harness)
 					end
 				end
 				expect.truthy(
-					({ Walk = true, Hop = true, Waddle = true, Stomp = true, Swim = true, Crawl = true })[model.gait],
+					({
+						Walk = true,
+						Hop = true,
+						Waddle = true,
+						Stomp = true,
+						Swim = true,
+						Crawl = true,
+						Slither = true,
+					})[model.gait],
 					model.name .. " gait"
 				)
 			end)

@@ -2002,8 +2002,8 @@ return function(harness)
 			for _, zone in eggs:GetChildren() do
 				eggCount += #zone:GetChildren()
 			end
-			expect.equal(petCount, 60)
-			expect.equal(eggCount, 60)
+			expect.equal(petCount, 56)
+			expect.equal(eggCount, 56)
 			expect.equal(#pets:GetChildren(), 7, "a row per zone")
 
 			-- Forest eggs stand on end on the floor, right of the aisle.
@@ -2024,7 +2024,7 @@ return function(harness)
 					labels += 1
 				end
 			end
-			expect.equal(labels, 120, "a name over every model")
+			expect.equal(labels, 112, "a name over every model")
 		end)
 	end)
 

@@ -15,7 +15,7 @@ return function(harness)
 	local COMMON_BUDGET = 70
 	local BUDGET = 230
 
-	-- Every egg with a design: the 60 in the zones' lineups, then the shelved ones.
+	-- Every egg with a design: the 56 in the zones' lineups, then the shelved ones.
 	local function each(body)
 		for _, entry in EggModels.lineup() do
 			body(EggModels.get(entry.kind), entry.rarity)
@@ -43,9 +43,9 @@ return function(harness)
 	end
 
 	describe("EggModels", function()
-		it("has a model for every egg in every zone, 8 per zone (once its creatures are chosen)", function()
+		it("has a model for every egg in every zone, 8 per zone", function()
 			local lineup = EggModels.lineup()
-			expect.equal(#lineup, 60)
+			expect.equal(#lineup, 56)
 			local perZone = {}
 			for _, entry in lineup do
 				local model = EggModels.get(entry.kind)
@@ -56,9 +56,8 @@ return function(harness)
 				perZone[entry.zone] = (perZone[entry.zone] or 0) + 1
 			end
 			for zoneId, zone in Zones.List do
-				-- (The Jungle holds its candidates side by side for now.)
 				expect.equal(perZone[zoneId] or 0, #zone.eggs, "zone " .. zoneId)
-				expect.equal(#zone.eggs, if zone.key == "Jungle" then 12 else 8, zone.key .. " eggs")
+				expect.equal(#zone.eggs, 8, zone.key .. " eggs")
 			end
 			expect.equal(EggModels.get("NoSuchEgg"), nil)
 			expect.equal(EggModels.describe("MossStag").name, "Moss Stag Egg")
@@ -69,7 +68,7 @@ return function(harness)
 			local shelved = EggModels.shelved()
 			expect.equal(
 				table.concat(shelved, ","),
-				"Ash,Seafoam,MagmaToad,KingCrab,FrostDragon,MagmaDragon,EternalPhoenix"
+				"Ash,Seafoam,MagmaToad,Chameleon,KingCrab,Morpho,FrostDragon,MagmaDragon,Silverback,TitanBeetle,EternalPhoenix"
 			)
 			for _, kind in shelved do
 				local model = EggModels.get(kind)

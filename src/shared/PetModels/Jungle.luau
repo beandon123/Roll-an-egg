@@ -1,7 +1,8 @@
 --!strict
 -- The Jungle's pets, in the showpiece style (see PetModels/Forest for what that means): jungle animals and giant
 -- insects in glossy, vivid colours, crisp angled legs, horns, mandibles and wings, and, the rarer they are, more
--- that glows. While the owner chooses, the Mythic, Secret and Eternal candidates are all here side by side.
+-- that glows. Four candidates the owner did not pick are shelved here, kept for later: no egg hatches them (the
+-- Chameleon, Morpho Queen, Silverback King and Titan Beetle; their eggs are shelved too).
 -- See PetModels/Kit for the drawing tools and PetModels/Designs for how a design is laid out.
 
 local Kit = require(script.Parent.Kit)
@@ -48,8 +49,8 @@ local function insectLeg(limb: Limb, T: any, points: { Vec }, widths: { number }
 	end
 end
 
--- A long body in lengths (for the Serpent skeleton: Body, Segment1, Segment2 and Tail, each a limb of its own so a
--- ripple can run down it), from paths of { x, y, z, radius }. `paint(sculpt, path)` colours each one.
+-- A long body in lengths (for the Serpent and Snake skeletons: Body, Segment1, Segment2 and Tail, each a limb of its
+-- own so a ripple can run down it), from paths of { x, y, z, radius }. `paint(sculpt, path)` colours each one.
 local function lengths(
 	U: number,
 	paths: { { { number } } },
@@ -184,9 +185,9 @@ Jungle.PoisonDartFrog = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Chameleon (Rare): taller than a player, its colours shifting in bands from lime through teal to sunset orange,
--- a tall crest down its back, a helmet-shaped casque, turret eyes ringed in light, gripping two-toed feet, and a
--- long tail curled in a spiral.
+-- Chameleon (Rare, shelved): taller than a player, its colours shifting in bands from lime through teal to sunset
+-- orange, a tall crest down its back, a helmet-shaped casque, turret eyes ringed in light, gripping two-toed feet, and
+-- a long tail curled in a spiral.
 
 Jungle.Chameleon = {
 	name = "Chameleon",
@@ -671,9 +672,9 @@ Jungle.HerculesBeetle = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Morpho Queen (Mythic): a butterfly with wings spanning six players, brilliant iridescent blue edged in black
--- with white spots, glowing veins running out through them, a velvety dark body, great glossy eyes, a coiled
--- proboscis, and long clubbed antennae with glowing tips. She hovers on slow, deep wingbeats.
+-- Morpho Queen (Mythic, shelved): a butterfly with wings spanning six players, brilliant iridescent blue edged in black
+-- with white spots, glowing veins running out through them, a velvety dark body, great glossy eyes, a coiled proboscis,
+-- and long clubbed antennae with glowing tips. She hovers on slow, deep wingbeats.
 
 Jungle.MorphoQueen = {
 	name = "Morpho Queen",
@@ -852,8 +853,8 @@ Jungle.MorphoQueen = {
 
 Jungle.TitanAnaconda = {
 	name = "Titan Anaconda",
-	skeleton = "Serpent",
-	gait = "Crawl",
+	skeleton = "Snake",
+	gait = "Slither",
 	scale = 0.42 * 2,
 	draw = function(pet)
 		-- Built in cells 2 design units across.
@@ -976,7 +977,7 @@ Jungle.TitanAnaconda = {
 			T.taper(headLimb, { 0, 31.6, 32 }, { 0.9 * s, 31.4, 33.6 }, 0.45, 0.35, { 0, 1, 0 }, TONGUE)
 		end
 
-		-- Clumps of moss and leaves on its neck, stirring as it moves (the Serpent skeleton's fins).
+		-- Clumps of moss and leaves on its neck, stirring as it moves (the Snake skeleton's fins).
 		pet:limbPair("LeftFin", "RightFin", T.at({ 4, 16, 10 }), function(limb)
 			T.ball(limb, { 4, 16, 10 }, { 2.6, 2, 2.6 }, MOSS.color)
 			for k = 0, 2 do
@@ -1001,8 +1002,8 @@ Jungle.TitanAnaconda = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Silverback King (Secret): a colossal gorilla, six times a player's height: near-black fur with a silver saddle
--- down its broad back, a dark bare chest and face under a heavy brow and tall crest, glowing jade war paint, a
+-- Silverback King (Secret, shelved): a colossal gorilla, six times a player's height: near-black fur with a silver
+-- saddle down its broad back, a dark bare chest and face under a heavy brow and tall crest, glowing jade war paint, a
 -- crown of gold set with glowing jade and ringed with leaves and orchids, gold bands on its huge arms, and great
 -- knuckled fists. Its knees and elbows bend as it walks.
 
@@ -1199,10 +1200,10 @@ Jungle.SilverbackKing = {
 }
 
 ----------------------------------------------------------------------------------------------------------------
--- Titan Beetle (Secret): a colossal beetle, longer than eight players, carrying a ruined jungle temple on its back:
--- glossy bronze wing cases, a dark saw-edged shield, huge curved mandibles lined with teeth, glowing amber eyes,
--- and on its back a stepped pyramid of mossy stone with a glowing jade doorway, vines trailing down, braziers of
--- green fire at its corners, and a glowing jade gem at its peak.
+-- Titan Beetle (Secret, shelved): a colossal beetle, longer than eight players, carrying a ruined jungle temple on its
+-- back: glossy bronze wing cases, a dark saw-edged shield, huge curved mandibles lined with teeth, glowing amber eyes,
+-- and on its back a stepped pyramid of mossy stone with a glowing jade doorway, vines trailing down, braziers of green
+-- fire at its corners, and a glowing jade gem at its peak.
 
 Jungle.TitanBeetle = {
 	name = "Titan Beetle",
@@ -1369,9 +1370,10 @@ Jungle.TitanBeetle = {
 
 ----------------------------------------------------------------------------------------------------------------
 -- Mantis Empress (Secret): a colossal orchid mantis, seven times a player's height to the top of her crown: a
--- pearl-pink body layered like petals, petal-shaped lobes on her walking legs, great scythe arms raised and folded,
--- edged in glowing pink, a wide triangular head with big green eyes, feathery antennae, a gold crown set with
--- gems, and translucent pink wings folded over her curled abdomen.
+-- pearl-pink body banded like petals, a broad flower-like abdomen with flared petal edges curling up behind, great
+-- petal lobes on her thick banded walking legs, heavy scythe arms raised and folded, gold-braceleted and spined in
+-- glowing pink, a wide triangular head with huge green eyes, feathery antennae, a tall gold crown set with gems,
+-- and glass wings lifted in a V, glowing veins down them.
 
 Jungle.MantisEmpress = {
 	name = "Mantis Empress",
@@ -1382,20 +1384,21 @@ Jungle.MantisEmpress = {
 		-- Built in cells 2.4 design units across.
 		local U = 2.4
 		local T = inUnits(U)
-		local PEARL = look(246, 214, 230)
-		local PEARL_TOP = look(255, 240, 248)
-		local PEARL_UNDER = look(206, 160, 190)
-		local PINK = look(236, 140, 196)
-		local DEEP = look(198, 92, 160)
-		local GREEN = look(140, 210, 110)
-		local EYE = rgb(120, 220, 110)
-		local GLOW = rgb(255, 120, 210)
-		local PETAL = rgb(250, 196, 226)
-		local PETAL_DEEP = rgb(232, 120, 186)
-		local WING = rgb(255, 190, 230)
+		local PEARL = look(248, 220, 234)
+		local PEARL_TOP = look(255, 242, 250)
+		local PEARL_UNDER = look(212, 166, 196)
+		local PINK = look(240, 146, 200)
+		local DEEP = look(204, 84, 158)
+		local GREEN = look(150, 214, 120)
+		local EYE = rgb(130, 226, 112)
+		local PUPIL = rgb(36, 92, 44)
+		local GLOW = rgb(255, 110, 205)
+		local PETAL = rgb(252, 200, 228)
+		local PETAL_DEEP = rgb(226, 104, 176)
+		local WING = rgb(255, 196, 234)
 		local GOLD = rgb(246, 200, 70)
 		local GEM = rgb(120, 255, 200)
-		local JOINT = rgb(232, 170, 206)
+		local JOINT = rgb(236, 160, 206)
 
 		local tones = {
 			[PEARL] = { top = PEARL_TOP, under = PEARL_UNDER },
@@ -1406,103 +1409,137 @@ Jungle.MantisEmpress = {
 			if n[2] < -0.5 then
 				return PINK
 			end
-			local band = (p[3] + p[2] * 0.4 + 60) % 5
-			if band < 0.9 then
+			local band = (p[3] + p[2] * 0.4 + 60) % 6
+			if band < 1.1 then
 				return DEEP
-			elseif band < 2 then
+			elseif band < 2.6 then
 				return PINK
 			end
 			return nil
 		end
+		-- A rounded petal lobe off the line from `a` to `b`, reaching `depth` out along `out`: pale, edged in deeper
+		-- pink behind it, a glowing vein down its middle.
+		local function lobe(limb: Limb, a: Vec, b: Vec, out: Vec, depth: number)
+			local steps = 5
+			local function rim(t: number, reach: number): Vec
+				return vadd(vlerp(a, b, t), vscale(out, depth * reach * math.sin(math.pi * t)))
+			end
+			for i = 0, steps - 1 do
+				local t0, t1 = i / steps, (i + 1) / steps
+				local l0, l1 = vlerp(a, b, t0), vlerp(a, b, t1)
+				-- (Each end comes to a point on the line: no triangle there.)
+				for _, layer in { { 1.18, 0.5, PETAL_DEEP }, { 1, 0.9, PETAL } } do
+					local reach, thickness, color = layer[1], layer[2], layer[3]
+					if i > 0 then
+						T.triangle(limb, l0, rim(t0, reach), rim(t1, reach), thickness, color)
+					end
+					if i < steps - 1 then
+						T.triangle(limb, l0, rim(t1, reach), l1, thickness, color)
+					end
+				end
+			end
+			T.blade(limb, vlerp(a, b, 0.5), rim(0.5, 0.9), 0.5, 1.1, vnorm(Kit.vsub(b, a)), GLOW, NEON)
+		end
 
 		-- The middle of the body, and the long neck-like front of it raised high.
 		local body = newSculpt(U)
-		body:add(ellipsoid({ 0, 22, 0 }, { 6, 6, 9 }), PEARL)
-		body:add(rod({ { 0, 24, 6, 4.4 }, { 0, 34, 10, 3.6 }, { 0, 44, 14, 3.2 } }), PEARL)
+		body:add(ellipsoid({ 0, 21, 0 }, { 7, 6, 10 }), PEARL)
+		body:add(rod({ { 0, 23, 7, 4.8 }, { 0, 32, 10, 4.2 }, { 0, 40, 13, 3.8 } }), PEARL)
 		body:coat(petals)
 		body:bake(tones)
-		-- The head: wide and triangular, big eyes at its corners, its mouth pointing down.
+		-- The head: wide and triangular, huge eyes at its corners, its mouth pointing down.
 		local head = newSculpt(U)
-		head:add(ellipsoid({ 0, 48, 16 }, { 8, 4.6, 3.6 }), PEARL)
-		head:add(rod({ { 0, 47, 17, 3 }, { 0, 42, 19, 1.6 } }), PEARL)
+		head:add(ellipsoid({ 0, 45, 15 }, { 10, 5.4, 4.4 }), PEARL)
+		head:add(rod({ { 0, 44, 16.4, 3.4 }, { 0, 38, 19, 1.8 } }), PEARL)
 		head:coat(function(p, _, _)
-			if p[2] < 44 then
+			if p[2] < 41 then
 				return GREEN
 			end
 			return nil
 		end)
 		head:bake(tones)
-		-- The abdomen curling up behind, layered like a flower.
+		-- The abdomen: broad and flower-like, curling up behind.
 		local tail = newSculpt(U)
-		tail:add(rod({ { 0, 22, -7, 5.6 }, { 0, 23, -18, 7.4 }, { 0, 28.6, -28, 6 }, { 0, 36, -32, 3.6 } }), PEARL)
+		tail:add(ellipsoid({ 0, 21, -12 }, { 9, 6, 11 }), PEARL)
+		tail:add(ellipsoid({ 0, 25, -23 }, { 7.6, 6, 7.6 }), PEARL)
+		tail:add(ellipsoid({ 0, 31, -30 }, { 5, 5, 5 }), PEARL)
+		tail:add(ellipsoid({ 0, 37, -32 }, { 3, 3.4, 3 }), PEARL)
 		tail:coat(petals)
 		tail:bake(tones)
 
-		local bodyLimb = pet:limb("Body", T.at({ 0, 22, 0 }))
+		local bodyLimb = pet:limb("Body", T.at({ 0, 21, 0 }))
 		body:draw(bodyLimb, { head, tail }, PEARL)
 
-		local headLimb = pet:limb("Head", T.at({ 0, 44, 14 }))
+		local headLimb = pet:limb("Head", T.at({ 0, 40, 13 }))
 		head:draw(headLimb, { body }, PEARL)
 		for _, s in { 1, -1 } do
-			-- Big rounded eyes at the corners of the head, a glint in each.
-			T.ball(headLimb, { 8 * s, 49, 16 }, { 4.4, 5, 4.4 }, EYE)
-			T.ball(headLimb, { 9 * s, 50.4, 17.4 }, 1.4, SHINE)
+			-- Huge rounded eyes at the corners of the head, a dark pupil and a glint in each.
+			T.ball(headLimb, { 9.6 * s, 46.4, 15 }, { 6, 7, 6 }, EYE)
+			T.ball(headLimb, { 10.4 * s, 46.4, 17.4 }, { 1.6, 2, 1.4 }, PUPIL)
+			T.ball(headLimb, { 10.8 * s, 48.6, 17.4 }, 1.6, SHINE)
 			-- Feathery antennae.
-			local a = { { 2 * s, 51, 17 }, { 5 * s, 58, 20 }, { 9 * s, 62, 18 } }
-			T.branch(headLimb, a, 0.8, { 0, 0, 1 }, JOINT)
+			T.branch(
+				headLimb,
+				{ { 2.4 * s, 49.6, 17 }, { 6 * s, 58, 21 }, { 11 * s, 63, 19 } },
+				0.9,
+				{ 0, 0, 1 },
+				JOINT
+			)
 		end
-		-- A gold crown: a band across the top of the head, five points, a glowing gem in each.
-		for k = -2, 2 do
-			local base = { k * 2.6, 51.6, 15.6 }
-			T.taper(headLimb, base, vadd(base, { k * 0.4, 5 - math.abs(k) * 1.2, 0 }), 2.2, 1, { 0, 0, 1 }, GOLD)
-			T.ball(headLimb, vadd(base, { 0, 1.4, 0.6 }), 1.2, GEM, NEON)
+		-- A tall gold crown: a band across the top of the head, seven points with a glowing gem in each, and a great
+		-- gem at its front.
+		T.blade(headLimb, { -8, 50, 15 }, { 8, 50, 15 }, 2, 2, { 0, 1, 0 }, GOLD)
+		for k = -3, 3 do
+			local base = { k * 2.4, 50.6, 15 }
+			T.taper(headLimb, base, vadd(base, { k * 0.5, 7 - math.abs(k) * 1.4, 0 }), 2.2, 1.2, { 0, 0, 1 }, GOLD)
+			T.ball(headLimb, vadd(base, { 0, 1.6, 0.7 }), 1.3, GEM, NEON)
 		end
-		T.blade(headLimb, { -6, 51.4, 15.6 }, { 6, 51.4, 15.6 }, 1.6, 1.4, { 0, 1, 0 }, GOLD)
+		T.ball(headLimb, { 0, 51.4, 16.4 }, { 2.6, 3, 1.6 }, GEM, NEON)
 
-		-- The scythe arms, raised and folded: a thick spiny upper part, the blade folding back down against it,
-		-- both edged in glowing pink, a hooked claw at the tip.
-		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3, 36, 12 }), function(limb)
-			local hip, elbow, wrist = { 3, 36, 12 }, { 7, 46, 24 }, { 6, 33, 26 }
-			T.blade(limb, hip, elbow, 3.4, 3, { 1, 0, 0 }, PETAL)
-			T.ball(limb, elbow, 3.4, JOINT)
-			T.blade(limb, elbow, wrist, 2.6, 2.2, { 1, 0, 0 }, PETAL)
-			T.taper(limb, wrist, vadd(wrist, { 0, 2.4, 3.4 }), 2, 1.6, { 1, 0, 0 }, PETAL_DEEP)
-			for k = 1, 5 do
-				local q = vlerp(hip, elbow, 0.2 + k * 0.14)
-				T.taper(limb, q, vadd(q, { -0.4, -2.2, 0.6 }), 0.8, 0.6, { 1, 0, 0 }, GLOW, NEON)
-				local b = vlerp(elbow, wrist, k * 0.16)
-				T.taper(limb, b, vadd(b, { -0.2, 0.4, 1.8 }), 0.6, 0.5, { 1, 0, 0 }, GLOW, NEON)
+		-- The scythe arms, raised and folded: a thick spiny upper part with a gold bracelet, the blade folding back
+		-- down against it, both spined in glowing pink, a hooked claw at the tip.
+		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.4, 34, 11 }), function(limb)
+			local hip, elbow, wrist = { 3.4, 34, 11 }, { 8, 46, 23 }, { 7, 31, 27 }
+			T.blade(limb, hip, elbow, 4.4, 3.6, { 1, 0, 0 }, PETAL)
+			T.ball(limb, elbow, 4.4, JOINT)
+			T.blade(limb, elbow, wrist, 3.4, 2.8, { 1, 0, 0 }, PETAL)
+			T.taper(limb, wrist, vadd(wrist, { 0, 3, 4 }), 2.6, 2, { 1, 0, 0 }, PETAL_DEEP)
+			T.blade(limb, vlerp(hip, elbow, 0.74), vlerp(hip, elbow, 0.84), 5.2, 4.4, { 1, 0, 0 }, GOLD)
+			T.ball(limb, vadd(vlerp(hip, elbow, 0.79), { 0, -0.6, 2.2 }), 1.6, GEM, NEON)
+			for k = 1, 6 do
+				local q = vlerp(hip, elbow, 0.1 + k * 0.1)
+				T.taper(limb, q, vadd(q, { -0.4, -3, 0.8 }), 1.1, 0.8, { 1, 0, 0 }, GLOW, NEON)
+				local b = vlerp(elbow, wrist, k * 0.13)
+				T.taper(limb, b, vadd(b, { -0.2, 0.6, 2.6 }), 0.9, 0.7, { 1, 0, 0 }, GLOW, NEON)
 			end
 		end)
 
-		-- Walking legs with broad petal lobes on their upper parts.
+		-- Thick walking legs, crouched: banded deeper pink at the knee, a great petal lobe under each upper leg and a
+		-- smaller one behind each shin, the foot turned out on a short last joint.
 		local function legs(left: string, right: string, z: number, dz: number)
-			pet:limbPair(left, right, T.at({ 4, 20, z }), function(limb)
-				local hip, knee, foot = { 4, 20, z }, { 17, 30, z + dz }, { 22, 0, z + dz * 1.6 }
-				insectLeg(limb, T, { hip, knee, foot }, { 2, 1.5 }, PETAL, JOINT)
-				-- The petal: a rounded lobe hanging under the upper leg, deeper pink at its edge.
-				local m = vlerp(hip, knee, 0.55)
-				T.triangle(limb, vlerp(hip, knee, 0.2), vlerp(hip, knee, 0.9), vadd(m, { 0, -7, 0 }), 0.8, PETAL)
-				T.triangle(
-					limb,
-					vlerp(hip, knee, 0.35),
-					vlerp(hip, knee, 0.75),
-					vadd(m, { 0.3, -8.6, 0 }),
-					0.6,
-					PETAL_DEEP
-				)
-				T.blade(limb, vlerp(hip, knee, 0.2), vadd(m, { 0, -7, 0 }), 0.4, 0.9, { 0, 0, 1 }, GLOW, NEON)
+			pet:limbPair(left, right, T.at({ 5, 19, z }), function(limb)
+				local hip, knee, ankle, toe =
+					{ 5, 19, z }, { 15, 26, z + dz }, { 21, 4.6, z + dz * 1.5 }, { 25, 0.9, z + dz * 1.8 }
+				insectLeg(limb, T, { hip, knee, ankle, toe }, { 3.6, 3, 2.2 }, PETAL, JOINT)
+				T.blade(limb, vlerp(hip, knee, 0.78), vlerp(hip, knee, 0.88), 4.2, 3.8, { 0, 1, 0 }, PETAL_DEEP)
+				T.blade(limb, vlerp(knee, ankle, 0.82), vlerp(knee, ankle, 0.92), 3.4, 3.4, { 0, 1, 0 }, PETAL_DEEP)
+				lobe(limb, vlerp(hip, knee, 0.1), vlerp(hip, knee, 0.95), { 0, -1, 0 }, 9)
+				lobe(limb, vlerp(knee, ankle, 0.12), vlerp(knee, ankle, 0.7), vnorm({ 0.4, 0.2, -1 }), 3.6)
 			end)
 		end
-		legs("MiddleLeftLeg", "MiddleRightLeg", 2, 2)
-		legs("BackLeftLeg", "BackRightLeg", -4, -6)
+		legs("MiddleLeftLeg", "MiddleRightLeg", 2, 3)
+		legs("BackLeftLeg", "BackRightLeg", -5, -6)
 
-		local tailLimb = pet:limb("Tail", T.at({ 0, 22, -6 }))
+		local tailLimb = pet:limb("Tail", T.at({ 0, 21, -6 }))
 		tail:draw(tailLimb, { body }, PEARL)
-		-- Translucent pink wings folded flat over the abdomen, glowing veins down them.
 		for _, s in { 1, -1 } do
-			T.triangle(tailLimb, { 1 * s, 28, -6 }, { 7 * s, 30, -24 }, { 1 * s, 33, -28 }, 0.6, WING, GLASS)
-			T.blade(tailLimb, { 1.4 * s, 28.8, -7 }, { 6 * s, 30.4, -23 }, 0.4, 0.8, { 0, 1, 0 }, GLOW, NEON)
+			-- Flared petal edges along each side of the abdomen, in two layers.
+			lobe(tailLimb, { 8.4 * s, 21, -4 }, { 7 * s, 22, -22 }, vnorm({ s, -0.35, 0 }), 5)
+			lobe(tailLimb, { 6.6 * s, 25, -17 }, { 4.4 * s, 29, -30 }, vnorm({ s, -0.2, 0 }), 4)
+			-- Glass wings lifted in a V, glowing veins down them.
+			T.triangle(tailLimb, { 1.6 * s, 25.6, -5 }, { 13 * s, 37, -24 }, { 2.4 * s, 32, -30 }, 0.6, WING, GLASS)
+			T.blade(tailLimb, { 2 * s, 26.4, -6 }, { 12 * s, 36.4, -23 }, 0.5, 0.9, { 0, 1, 0 }, GLOW, NEON)
+			T.blade(tailLimb, { 2 * s, 27.4, -8 }, { 3.6 * s, 32, -28 }, 0.5, 0.9, { 0, 1, 0 }, GLOW, NEON)
 		end
 
 		pet:light(GLOW, 3.6, 44)

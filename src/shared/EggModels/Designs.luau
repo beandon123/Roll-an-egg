@@ -1266,6 +1266,7 @@ Designs.Chameleon = {
 	name = "Chameleon Egg",
 	hatches = "Chameleon",
 	seed = 62,
+	shelved = "Rare",
 	draw = function(egg)
 		-- Colours shifting from orange at the bottom through lime and green to teal at the top.
 		egg:base(JUNGLE.chamGreen)
@@ -1368,6 +1369,7 @@ Designs.Morpho = {
 	name = "Morpho Egg",
 	hatches = "Morpho Queen",
 	seed = 66,
+	shelved = "Mythic",
 	draw = function(egg)
 		egg:base(JUNGLE.morpho)
 		egg:band(13, 16, JUNGLE.morphoLight)
@@ -1427,6 +1429,7 @@ Designs.Silverback = {
 	name = "Silverback Egg",
 	hatches = "Silverback King",
 	seed = 68,
+	shelved = "Secret",
 	profile = "Round",
 	draw = function(egg)
 		egg:base(JUNGLE.gorilla)
@@ -1468,6 +1471,7 @@ Designs.TitanBeetle = {
 	name = "Titan Beetle Egg",
 	hatches = "Titan Beetle",
 	seed = 69,
+	shelved = "Secret",
 	profile = "Round",
 	draw = function(egg)
 		egg:base(JUNGLE.titan)

@@ -32,10 +32,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Zone-themed obstacles on the runway, small and big (giant stumps, rock outcrops, buttes, walls of ice blocks,
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
-- Every zone has 8 eggs, each with its own blocky model built from parts (see below). The Jungle, the newest zone,
-  has 12 for now: its candidates side by side (two Mythics, three Secrets, two Eternals), to be cut to 8 once the
-  favourites are picked.
-- Blocky pet models for all 60 zone pets, rigged with joints so they can be animated and ridden (see below), every
+- Every zone has 8 eggs, each with its own blocky model built from parts (see below).
+- Blocky pet models for all 56 zone pets, rigged with joints so they can be animated and ridden (see below), every
   zone's drawn in the showpiece style (sculpted voxels, glowing Neon, auras, with bloom in the lighting).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
@@ -504,7 +502,8 @@ picks a rarity with the zone's odds, then one of the zone's eggs of that rarity.
 
 Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom to the point; x and z from -6 to 5).
 On the runway the egg lies on its side and rolls. A design marked `shelved` is out of the game for now (the Frost
-Dragon and Magma Dragon eggs, among others); put it back in a zone's list to bring it back.
+Dragon and Magma Dragon eggs, and the Jungle candidates that were not picked, among others); put it back in a zone's
+list to bring it back.
 
 In the game, the admin panel's Eggs tab drops any egg, or all 8 of a zone's eggs one after another, and the Model
 Showroom stands every egg on end. To see every egg in 3D without opening Studio:
@@ -523,9 +522,8 @@ from it. Every pet has its model:
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
-- Jungle: Poison Dart Frog, Chameleon, Giant Leafcutter Ant, Giant Centipede, Hercules Beetle, Morpho Queen, Titan
-  Anaconda, Silverback King, Titan Beetle, Mantis Empress, Vine Hydra, Jade Temple Guardian (the Mythic, Secret and
-  Eternal candidates side by side, until the favourites are picked)
+- Jungle: Poison Dart Frog, Giant Leafcutter Ant, Giant Centipede, Hercules Beetle, Titan Anaconda, Mantis Empress,
+  Vine Hydra, Jade Temple Guardian (two Eternals)
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
@@ -543,7 +541,7 @@ beside `Designs.luau`: `PetModels/Forest.luau`, `PetModels/Desert.luau`, `PetMod
 | Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16; the Pteranodon's wings, 27 across) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom, the Velociraptor's crest and sickle claws |
 | Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13; the Stegosaurus, 19 to the tips of its plates) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet: the Triceratops's eye-spotted frill, the Stegosaurus's plates rimmed in light |
 | Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17; the Brachiosaurus, 30) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers, the Brachiosaurus's rows of lights and the glowing mushrooms in the moss on its back |
-| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long; the Silverback King, 30 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long; the Mantis Empress, 32 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
 | Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65; the Lunar Dragon, 37 tall with wings spanning 67; the Mosasaurus, 83 long; the Vine Hydra, 36 tall; the Jade Temple Guardian, 45 to the tips of its plumes) | The Lava Dragon's lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws; the Lunar Dragon's starry scales and wings, glowing mane, crescent moon round its head and blue moonfire; the Mosasaurus's violet lights of the deep |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
@@ -594,30 +592,32 @@ hang from the body and move on their own: Cerberus), winged, dragon (four legs t
 wings), two legs, giant (two legs and two arms that bend at the knee and elbow: the Yeti, Treant and Lava Golem),
 theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and a jaw, for the T-Rex), six
 legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that
-much higher), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb
-turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A limb drawn with
-`limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image from the right
-one.
+much higher), eight tentacles, serpent (a chain of coils), or snake (a serpent that lives on land: the Titan
+Anaconda). `Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its joint, so pets that share a
+skeleton can share their animations. A limb drawn with `limbPair` and a parent on the left (a left shin hanging from
+the left leg) hangs its mirror image from the right one.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop, Crawl,
-Swim, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged pets (the
-owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped forward,
-wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each beat).
-A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at their
-sides open them to fly. The Leviathan swims with a wave rolling down its coils to the tail fan, from side to side and
-up and down, rising off the ground and riding up and down with each stroke while its fins row; the Kraken hauls
-itself along, the four tentacles on the ground reaching forward and dragging back in diagonal pairs while the four
-raised ones lash and curl and its body heaves with each pull. Moves are layered so pets look alive rather than
-mechanical: a limb's motion is usually several waves at speeds that never quite line up (a standing pet breathes,
-shifts its weight, and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off a limb
-follows it a little late (a head steadies itself against the body's bob, a tail swings after it, a forearm bends as
-its arm swings forward), steps and hops are eased in and out with no jerk where a foot leaves the ground or lands,
-and wings beat with a quicker downstroke than recovery and twist through each stroke. The same moves drive the
+Swim, Slither, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged
+pets (the owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped
+forward, wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each
+beat). A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at
+their sides open them to fly. The Leviathan swims with a wave rolling down its coils to the tail fan, from side to
+side and up and down, rising off the ground and riding up and down with each stroke while its fins row; the Kraken
+hauls itself along, the four tentacles on the ground reaching forward and dragging back in diagonal pairs while the
+four raised ones lash and curl and its body heaves with each pull. The Titan Anaconda rests in its coils with a slow
+ripple running down them, and slithers when it moves: a quicker, deeper wave swings its coils wide from side to side
+while its neck leans forward and sways, its head holding steady and looking ahead. Moves are layered so pets look
+alive rather than mechanical: a limb's motion is usually several waves at speeds that never quite line up (a standing
+pet breathes, shifts its weight, and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off
+a limb follows it a little late (a head steadies itself against the body's bob, a tail swings after it, a forearm
+bends as its arm swings forward), steps and hops are eased in and out with no jerk where a foot leaves the ground or
+lands, and wings beat with a quicker downstroke than recovery and twist through each stroke. The same moves drive the
 gallery (pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on
 rigged pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it
-can fly and walks (or swims, or crawls) on the spot if not. Each pet starts at its own point in its moves, so a pen
-of pets never moves in lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it eases
-from where it was into the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
+can fly and walks (or swims, crawls or slithers) on the spot if not. Each pet starts at its own point in its moves, so
+a pen of pets never moves in lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it
+eases from where it was into the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window

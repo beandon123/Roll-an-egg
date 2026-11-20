@@ -80,8 +80,7 @@ return function(harness)
 				{ Common = 2, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1 },
 				{ Common = 1, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2 },
 				{ Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2, Secret = 1 },
-				-- The Jungle: its Mythic, Secret and Eternal candidates side by side, until the owner picks.
-				{ Uncommon = 1, Rare = 2, Epic = 1, Legendary = 1, Mythic = 2, Secret = 3, Eternal = 2 },
+				{ Uncommon = 1, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1, Secret = 1, Eternal = 2 },
 				{ Rare = 2, Epic = 2, Legendary = 1, Mythic = 1, Secret = 2 },
 				{ Rare = 1, Epic = 1, Legendary = 2, Mythic = 2, Secret = 1, Eternal = 1 },
 				{ Epic = 2, Legendary = 2, Mythic = 1, Secret = 1, Eternal = 2 },
@@ -91,8 +90,8 @@ return function(harness)
 				for _, count in mixes[index] do
 					wanted += count
 				end
-				expect.equal(#zone.eggs, wanted, zone.name .. " eggs")
-				expect.truthy(wanted == 8 or zone.key == "Jungle", zone.name .. " has 8 eggs")
+				expect.equal(wanted, 8, zone.name .. " mix")
+				expect.equal(#zone.eggs, 8, zone.name .. " eggs")
 				local counts = {}
 				local lastOrder = 0
 				for _, entry in zone.eggs do

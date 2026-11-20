@@ -196,6 +196,8 @@ PetModels.SKELETONS = {
 	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
 	-- a ripple can run down it.
 	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
+	-- A serpent that lives on land and slithers (the same limbs; the fins can be anything on its neck).
+	Snake = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
 	-- Four legs that bend at the knee (each Shin hanging from its leg) and a pair of wings (dragons).
 	Dragon = {
 		"Body",
