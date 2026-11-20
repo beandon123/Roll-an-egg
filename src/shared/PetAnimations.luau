@@ -261,6 +261,60 @@ local function writhe(speed: number, size: number): { Wave }
 	return list
 end
 
+-- Hauling along on eight tentacles (the Kraken): the four lying on the ground (3 to 6: left, right, back left,
+-- back right) reach forward, lifted a little, and drag back flat, in diagonal pairs like a four-legged gait; the
+-- four raised ones (1 and 2 in front, 7 and 8 rearing over the back) lash, reach and curl in the air, each out of
+-- step with the others; the body heaves up and surges forward with each pull and rolls from side to side, and the
+-- mantle on top sways after it. Each tentacle is given by which way it runs out from the body ({ x, z }), so a
+-- lift tips it up along its own length and a sweep swings it forward or back.
+local function haul(speed: number): { Wave }
+	local list = {
+		wave("Body", "py", 0.6, speed, { shape = "bounce" }),
+		wave("Body", "pz", 0.35, speed * 2, { shift = 0.4 }),
+		wave("Body", "rx", 0.05, speed * 2, { shift = QUARTER }),
+		wave("Body", "rz", 0.05, speed),
+		wave("Head", "rx", 0.08, speed * 2, { shift = QUARTER - 0.7 }),
+		wave("Head", "rz", 0.06, speed, { shift = -0.7 }),
+		wave("Head", "ry", 0.08, 0.5),
+		wave("Head", "py", 0.3, speed, { shape = "bounce", shift = -0.6 }),
+	}
+	local function lift(name: string, out: { number }, size: number, extra: { [string]: any })
+		table.insert(list, wave(name, "rx", -out[2] * size, speed, extra))
+		table.insert(list, wave(name, "rz", out[1] * size, speed, extra))
+	end
+	-- On the ground: a tentacle's forward reach is `reach` * sin(speed * time + phase), and it lifts while it
+	-- reaches forward.
+	for _, t in
+		{
+			{ "Tentacle3", { 1, 0.1 }, 0 },
+			{ "Tentacle6", { -0.7, -0.7 }, 0 },
+			{ "Tentacle4", { -1, -0.05 }, math.pi },
+			{ "Tentacle5", { 0.7, -0.7 }, math.pi },
+		}
+	do
+		local name, out, phase = t[1], t[2], t[3]
+		local side = if out[1] > 0 then 1 else -1
+		table.insert(list, wave(name, "ry", -side * 0.3, speed, { shift = phase }))
+		lift(name, out, 0.22, { shift = phase + QUARTER, shape = "lift" })
+	end
+	-- In the air: lashing and reaching, each in its own rhythm.
+	for i, t in
+		{
+			{ "Tentacle1", { 0.9, 0.43 } },
+			{ "Tentacle2", { -0.9, 0.4 } },
+			{ "Tentacle7", { 0.6, -0.8 } },
+			{ "Tentacle8", { -0.6, -0.8 } },
+		}
+	do
+		local name, out = t[1], t[2]
+		lift(name, out, 0.16, { shift = i * 1.7 })
+		table.insert(list, wave(name, "ry", 0.16, speed * 0.7, { shift = i * 2.3 }))
+		table.insert(list, wave(name, "rx", 0.06, speed * 1.6, { shift = i * 0.9 }))
+		table.insert(list, wave(name, "rz", 0.06, speed * 1.3, { shift = i * 1.4 }))
+	end
+	return list
+end
+
 -- The two side heads of a three-headed beast, each with a mind of its own: looking about out of step with the
 -- other heads (a slow turn, a quicker glance, a nod and a tilt), now and then snapping at the air; and, at a walk
 -- (`speed`), bobbing with the stride.
@@ -548,7 +602,8 @@ PetAnimations.MOVES = {
 			wave("Head", "ry", -0.04, 2.4, { shift = 0.4 }),
 		},
 	},
-	-- Every tentacle writhes slowly, each a little out of step with the next.
+	-- Every tentacle writhes slowly, each a little out of step with the next; crawling, it hauls itself along (see
+	-- `haul`).
 	Tentacled = {
 		Idle = joined({
 			wave("Head", "rz", 0.02, 0.8),
@@ -556,33 +611,53 @@ PetAnimations.MOVES = {
 			wave("Head", "ry", 0.04, 0.4, { shift = 2 }),
 			wave("Body", "py", 0.15, 1),
 		}, writhe(1.1, 0.05)),
-		Crawl = joined({
-			wave("Head", "rz", 0.04, 1.2),
-			wave("Head", "ry", 0.05, 0.5),
-			wave("Body", "py", 0.3, 1.2, { shape = "bounce" }),
-		}, writhe(1.8, 0.08)),
+		Crawl = haul(2.4),
 	},
-	-- A ripple runs down the coils from the neck to the tail fin.
+	-- A sea serpent: a wave runs down its coils from the neck to the tail fan, both from side to side and up and
+	-- down, each length a beat behind the one before, and swells towards the tail. Swimming, it rises off the
+	-- ground and rides up and down with each stroke, rearing and dipping its neck, the head steadying itself
+	-- against the neck's sway and looking about, the front fins rowing: sweeping back as they beat down, twisting
+	-- through each stroke.
 	Serpent = {
 		Idle = {
+			wave("Body", "py", 0.4, 0.8, { shape = "bounce" }),
 			wave("Body", "ry", 0.02, 1, { shift = 0.9 }),
 			wave("Segment1", "ry", 0.06, 1, { shift = -0.9 }),
+			wave("Segment1", "rx", 0.02, 1, { base = 0.02, shift = -0.5 }),
 			wave("Segment2", "ry", 0.08, 1, { shift = -1.8 }),
+			wave("Segment2", "rx", 0.025, 1, { base = 0.025, shift = -1.4 }),
 			wave("Tail", "ry", 0.11, 1, { shift = -2.7 }),
+			wave("Tail", "rx", 0.04, 1, { base = 0.04, shift = -2.3 }),
 			wave("Head", "ry", 0.08, 0.9),
+			wave("Head", "ry", 0.04, 2.1, { shift = 1 }),
 			wave("Head", "rx", 0.03, 0.6, { shift = 1 }),
+			wave("Head", "rz", 0.03, 0.5, { shift = 2 }),
 			wave("LeftFin", "rz", 0.08, 1.4, { base = 0.1 }),
 			wave("RightFin", "rz", -0.08, 1.4, { base = -0.1 }),
+			wave("LeftFin", "rx", 0.05, 1.4, { shift = QUARTER }),
+			wave("RightFin", "rx", 0.05, 1.4, { shift = QUARTER }),
 		},
 		Swim = {
-			wave("Body", "ry", 0.04, 2, { shift = 0.9 }),
-			wave("Segment1", "ry", 0.12, 2, { shift = -0.9 }),
-			wave("Segment2", "ry", 0.16, 2, { shift = -1.8 }),
-			wave("Tail", "ry", 0.22, 2, { shift = -2.7 }),
-			wave("Head", "rx", 0.06, 2),
-			wave("Head", "ry", 0.08, 0.9),
-			wave("LeftFin", "rz", 0.25, 2.4, { base = 0.2 }),
-			wave("RightFin", "rz", -0.25, 2.4, { base = -0.2 }),
+			wave("Body", "py", 0.8, 2, { base = 4 }),
+			wave("Body", "rx", 0.035, 2, { shift = 0.3 }),
+			wave("Body", "rz", 0.04, 1),
+			wave("Body", "ry", 0.06, 2, { shift = 0.9 }),
+			wave("Segment1", "ry", 0.16, 2, { shift = -0.9 }),
+			wave("Segment1", "rx", 0.06, 2, { base = 0.04, shift = -0.6 }),
+			wave("Segment2", "ry", 0.2, 2, { shift = -1.8 }),
+			wave("Segment2", "rx", 0.08, 2, { base = 0.03, shift = -1.6 }),
+			wave("Tail", "ry", 0.28, 2, { shift = -2.7 }),
+			wave("Tail", "rx", 0.1, 2, { base = 0.06, shift = -2.6 }),
+			wave("Head", "rx", 0.07, 2, { shift = 2.4 }),
+			wave("Head", "ry", -0.05, 2, { shift = 1.3 }),
+			wave("Head", "ry", 0.1, 0.9),
+			wave("Head", "rz", 0.04, 1, { shift = 1 }),
+			wave("LeftFin", "rz", 0.35, 2.4, { base = 0.2 }),
+			wave("RightFin", "rz", -0.35, 2.4, { base = -0.2 }),
+			wave("LeftFin", "rx", 0.15, 2.4, { shift = QUARTER }),
+			wave("RightFin", "rx", 0.15, 2.4, { shift = QUARTER }),
+			wave("LeftFin", "ry", 0.12, 2.4, { shift = math.pi }),
+			wave("RightFin", "ry", -0.12, 2.4, { shift = math.pi }),
 		},
 	},
 	ManyLegged = {
@@ -599,11 +674,7 @@ PetAnimations.MOVES = {
 
 -- Each tentacle curls and uncurls a little out of step with the next.
 for i = 1, 8 do
-	local name = "Tentacle" .. i
-	local moves = PetAnimations.MOVES.Tentacled
-	table.insert(moves.Crawl, wave(name, "ry", 0.15, 1.8, { shift = i * 0.8 }))
-	table.insert(moves.Crawl, wave(name, "rx", 0.08, 2.34, { shift = i * 1.04 }))
-	table.insert(moves.Idle, wave(name, "ry", 0.07, 0.9, { shift = i * 0.8 }))
+	table.insert(PetAnimations.MOVES.Tentacled.Idle, wave("Tentacle" .. i, "ry", 0.07, 0.9, { shift = i * 0.8 }))
 end
 
 -- Tripod walk: three legs swing forward, lifted, while the other three push back. The body rolls a little over each

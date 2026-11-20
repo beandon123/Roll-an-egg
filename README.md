@@ -596,17 +596,20 @@ Swim, and Roar for theropods, tyrants and beasts), each a set of waves that turn
 owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped forward,
 wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each beat).
 A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at their
-sides open them to fly. Moves are layered so pets look alive rather than mechanical: a limb's motion is usually
-several waves at speeds that never quite line up (a standing pet breathes, shifts its weight, and looks round with a
-slow turn, a quicker glance, a nod and a tilt), what hangs off a limb follows it a little late (a head steadies
-itself against the body's bob, a tail swings after it, a forearm bends as its arm swings forward), steps and hops are
-eased in and out with no jerk where a foot leaves the ground or lands, and wings beat with a quicker downstroke than
-recovery and twist through each stroke. The same moves drive the gallery (pick one with the buttons under a pet) and
-the game: `PetAnimationController` on the client plays them on rigged pets by setting each joint's
-`Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can fly and walks (or swims, or
-crawls) on the spot if not. Each pet starts at its own point in its moves, so a pen of pets never moves in lockstep,
-and when its move changes (a pen pet stopping to rest, a mount setting off) it eases from where it was into the new
-one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
+sides open them to fly. The Leviathan swims with a wave rolling down its coils to the tail fan, from side to side and
+up and down, rising off the ground and riding up and down with each stroke while its fins row; the Kraken hauls
+itself along, the four tentacles on the ground reaching forward and dragging back in diagonal pairs while the four
+raised ones lash and curl and its body heaves with each pull. Moves are layered so pets look alive rather than
+mechanical: a limb's motion is usually several waves at speeds that never quite line up (a standing pet breathes,
+shifts its weight, and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off a limb
+follows it a little late (a head steadies itself against the body's bob, a tail swings after it, a forearm bends as
+its arm swings forward), steps and hops are eased in and out with no jerk where a foot leaves the ground or lands,
+and wings beat with a quicker downstroke than recovery and twist through each stroke. The same moves drive the
+gallery (pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on
+rigged pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it
+can fly and walks (or swims, or crawls) on the spot if not. Each pet starts at its own point in its moves, so a pen
+of pets never moves in lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it eases
+from where it was into the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window
