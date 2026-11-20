@@ -435,7 +435,7 @@ Prehistoric.Pteranodon = {
 
 Prehistoric.Triceratops = {
 	name = "Triceratops",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.42 * 1.2,
 	draw = function(pet)
@@ -521,14 +521,17 @@ Prehistoric.Triceratops = {
 		end)
 		head:bake(tones)
 
-		local front, back = newSculpt(U), newSculpt(U)
+		-- Stout legs in two halves, bending at the knee.
+		local front, frontShin, back, backShin = newSculpt(U), newSculpt(U), newSculpt(U), newSculpt(U)
 		front:add(ellipsoid({ 7, 14, 7 }, { 3.6, 5, 4.4 }), HIDE)
-		front:add(rod({ { 7.4, 12, 7.6, 3.4 }, { 7.6, 3.6, 8.4, 2.9 } }), HIDE)
-		front:add(ellipsoid({ 7.6, 1.8, 9 }, { 3.2, 1.8, 3.6 }), HIDE)
+		front:add(rod({ { 7.4, 12, 7.6, 3.4 }, { 7.5, 7.6, 8, 3.15 } }), HIDE)
+		frontShin:add(rod({ { 7.5, 7.6, 8, 3.1 }, { 7.6, 3.6, 8.4, 2.9 } }), HIDE)
+		frontShin:add(ellipsoid({ 7.6, 1.8, 9 }, { 3.2, 1.8, 3.6 }), HIDE)
 		back:add(ellipsoid({ 7.4, 16, -11 }, { 4, 6.6, 6 }), HIDE)
-		back:add(rod({ { 7.6, 12, -11, 4 }, { 7.8, 3.6, -10, 3.2 } }), HIDE)
-		back:add(ellipsoid({ 7.8, 1.8, -9.4 }, { 3.4, 1.8, 3.8 }), HIDE)
-		for _, s in { front, back } do
+		back:add(rod({ { 7.6, 12, -11, 4 }, { 7.7, 7.6, -10.5, 3.6 } }), HIDE)
+		backShin:add(rod({ { 7.7, 7.6, -10.5, 3.55 }, { 7.8, 3.6, -10, 3.2 } }), HIDE)
+		backShin:add(ellipsoid({ 7.8, 1.8, -9.4 }, { 3.4, 1.8, 3.8 }), HIDE)
+		for _, s in { front, frontShin, back, backShin } do
 			s:coat(hide)
 			s:bake(tones)
 		end
@@ -571,13 +574,19 @@ Prehistoric.Triceratops = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 7, 14, 7 }), function(limb)
-			front:draw(limb, { body }, HIDE)
+			front:draw(limb, { body, frontShin }, HIDE)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 7.5, 7.6, 8 }), function(limb)
+			frontShin:draw(limb, { front }, HIDE)
 			nails(limb, 7.6, 11.6)
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 7.4, 17, -11 }), function(limb)
-			back:draw(limb, { body }, HIDE)
-			nails(limb, 7.8, -6.8)
+			back:draw(limb, { body, backShin }, HIDE)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 7.7, 7.6, -10.5 }), function(limb)
+			backShin:draw(limb, { back }, HIDE)
+			nails(limb, 7.8, -6.8)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 19, -16 })), { body }, HIDE)
 
 		pet:light(GLOW, 2, 22)
@@ -595,7 +604,7 @@ Prehistoric.Triceratops = {
 
 Prehistoric.Stegosaurus = {
 	name = "Stegosaurus",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.42 * 1.2,
 	draw = function(pet)
@@ -651,14 +660,17 @@ Prehistoric.Stegosaurus = {
 		end)
 		head:bake(tones)
 
-		local front, back = newSculpt(U), newSculpt(U)
+		-- Legs in two halves, bending at the knee: short in front, long behind.
+		local front, frontShin, back, backShin = newSculpt(U), newSculpt(U), newSculpt(U), newSculpt(U)
 		front:add(ellipsoid({ 6, 13, 7 }, { 3.2, 4.4, 3.8 }), HIDE)
-		front:add(rod({ { 6.4, 11, 7.6, 3 }, { 6.6, 3.4, 8.4, 2.6 } }), HIDE)
-		front:add(ellipsoid({ 6.6, 1.6, 9 }, { 2.8, 1.6, 3.2 }), HIDE)
+		front:add(rod({ { 6.4, 11, 7.6, 3 }, { 6.5, 7, 8, 2.8 } }), HIDE)
+		frontShin:add(rod({ { 6.5, 7, 8, 2.75 }, { 6.6, 3.4, 8.4, 2.6 } }), HIDE)
+		frontShin:add(ellipsoid({ 6.6, 1.6, 9 }, { 2.8, 1.6, 3.2 }), HIDE)
 		back:add(ellipsoid({ 6.8, 19, -10 }, { 4, 7.6, 6.4 }), HIDE)
-		back:add(rod({ { 7, 14, -10, 4 }, { 7.2, 3.6, -9, 3.2 } }), HIDE)
-		back:add(ellipsoid({ 7.2, 1.8, -8.4 }, { 3.4, 1.8, 3.8 }), HIDE)
-		for _, s in { front, back } do
+		back:add(rod({ { 7, 14, -10, 4 }, { 7.1, 8.6, -9.5, 3.6 } }), HIDE)
+		backShin:add(rod({ { 7.1, 8.6, -9.5, 3.55 }, { 7.2, 3.6, -9, 3.2 } }), HIDE)
+		backShin:add(ellipsoid({ 7.2, 1.8, -8.4 }, { 3.4, 1.8, 3.8 }), HIDE)
+		for _, s in { front, frontShin, back, backShin } do
 			s:coat(hide)
 			s:bake(tones)
 		end
@@ -713,13 +725,19 @@ Prehistoric.Stegosaurus = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 6, 14, 7 }), function(limb)
-			front:draw(limb, { body }, HIDE)
+			front:draw(limb, { body, frontShin }, HIDE)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 6.5, 7, 8 }), function(limb)
+			frontShin:draw(limb, { front }, HIDE)
 			nails(limb, 6.6, 11.4)
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 6.8, 19, -10 }), function(limb)
-			back:draw(limb, { body }, HIDE)
-			nails(limb, 7.2, -5.4)
+			back:draw(limb, { body, backShin }, HIDE)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 7.1, 8.6, -9.5 }), function(limb)
+			backShin:draw(limb, { back }, HIDE)
+			nails(limb, 7.2, -5.4)
+		end, "BackLeftLeg")
 
 		local tailLimb = pet:limb("Tail", T.at({ 0, 21, -18 }))
 		tail:draw(tailLimb, { body }, HIDE)
@@ -748,7 +766,7 @@ Prehistoric.Stegosaurus = {
 
 Prehistoric.Brachiosaurus = {
 	name = "Brachiosaurus",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.42 * 1.6,
 	draw = function(pet)
@@ -821,14 +839,17 @@ Prehistoric.Brachiosaurus = {
 		end)
 		head:bake(tones)
 
-		local front, back = newSculpt(U), newSculpt(U)
+		-- Pillar legs in two halves, bending at the knee.
+		local front, frontShin, back, backShin = newSculpt(U), newSculpt(U), newSculpt(U), newSculpt(U)
 		front:add(ellipsoid({ 8, 31, 9 }, { 5, 7, 5.6 }), HIDE)
-		front:add(rod({ { 8.4, 26, 9.4, 4.6 }, { 8.6, 4, 10.6, 3.8 } }), HIDE)
-		front:add(ellipsoid({ 8.6, 2, 11.4 }, { 4.2, 2, 4.6 }), HIDE)
+		front:add(rod({ { 8.4, 26, 9.4, 4.6 }, { 8.5, 15, 10, 4.2 } }), HIDE)
+		frontShin:add(rod({ { 8.5, 15, 10, 4.15 }, { 8.6, 4, 10.6, 3.8 } }), HIDE)
+		frontShin:add(ellipsoid({ 8.6, 2, 11.4 }, { 4.2, 2, 4.6 }), HIDE)
 		back:add(ellipsoid({ 8, 28, -11 }, { 5.4, 8, 7 }), HIDE)
-		back:add(rod({ { 8.4, 22, -11, 5 }, { 8.6, 4, -10, 4 } }), HIDE)
-		back:add(ellipsoid({ 8.6, 2, -9.2 }, { 4.4, 2, 4.8 }), HIDE)
-		for _, s in { front, back } do
+		back:add(rod({ { 8.4, 22, -11, 5 }, { 8.5, 13, -11.6, 4.5 } }), HIDE)
+		backShin:add(rod({ { 8.5, 13, -11.6, 4.45 }, { 8.6, 4, -10, 4 } }), HIDE)
+		backShin:add(ellipsoid({ 8.6, 2, -9.2 }, { 4.4, 2, 4.8 }), HIDE)
+		for _, s in { front, frontShin, back, backShin } do
 			s:coat(hide)
 			s:bake(tones)
 		end
@@ -914,13 +935,19 @@ Prehistoric.Brachiosaurus = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 8, 32, 9 }), function(limb)
-			front:draw(limb, { body }, HIDE)
+			front:draw(limb, { body, frontShin }, HIDE)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 8.5, 15, 10 }), function(limb)
+			frontShin:draw(limb, { front }, HIDE)
 			nails(limb, 8.6, 13.6)
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 8, 29, -11 }), function(limb)
-			back:draw(limb, { body }, HIDE)
-			nails(limb, 8.6, -6.6)
+			back:draw(limb, { body, backShin }, HIDE)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 8.5, 13, -11.6 }), function(limb)
+			backShin:draw(limb, { back }, HIDE)
+			nails(limb, 8.6, -6.6)
+		end, "BackLeftLeg")
 
 		local tailLimb = pet:limb("Tail", T.at({ 0, 31, -16 }))
 		tail:draw(tailLimb, { body }, HIDE)
@@ -1493,24 +1520,21 @@ Prehistoric.LunarDragon = {
 		end)
 		head:bake(tones)
 
-		local function leg(s: Sculpt, top: Vec, knee: Vec, foot: Vec, r: number)
-			s:add(
-				rod({
-					{ top[1], top[2], top[3], r },
-					{ knee[1], knee[2], knee[3], r * 0.8 },
-					{ foot[1], 4, foot[3], r * 0.7 },
-				}),
-				NIGHT
-			)
-			s:add(ellipsoid({ foot[1], 2.4, foot[3] + 1.6 }, { r * 0.9, 2.4, r * 1.1 }), NIGHT)
+		-- Long, slender legs in two halves, bending at the knee: the front legs' elbows behind, the hind legs'
+		-- knees in front and hocks behind.
+		local front, frontShin, back, backShin = newSculpt(U), newSculpt(U), newSculpt(U), newSculpt(U)
+		front:add(ellipsoid({ 8, 30, 9 }, { 4.6, 7.4, 5.6 }), NIGHT)
+		front:add(rod({ { 8.2, 26, 9, 4 }, { 8.6, 16, 6, 3.4 } }), NIGHT)
+		frontShin:add(rod({ { 8.6, 16, 6, 3.3 }, { 8.6, 4, 10, 2.9 } }), NIGHT)
+		frontShin:add(ellipsoid({ 8.6, 2.4, 11.6 }, { 3.6, 2.4, 4.4 }), NIGHT)
+		back:add(ellipsoid({ 8, 29, -18 }, { 5.6, 9, 7.6 }), NIGHT)
+		back:add(rod({ { 8.4, 24, -19, 4.4 }, { 8.6, 15, -14, 3.6 } }), NIGHT)
+		backShin:add(rod({ { 8.6, 15, -14, 3.5 }, { 8.6, 8, -21, 3 }, { 8.6, 4, -18.4, 3 } }), NIGHT)
+		backShin:add(ellipsoid({ 8.6, 2.4, -16.4 }, { 4, 2.4, 4.8 }), NIGHT)
+		for _, s in { front, frontShin, back, backShin } do
 			s:coat(scales)
 			s:bake(tones)
 		end
-		local front, back = newSculpt(U), newSculpt(U)
-		front:add(ellipsoid({ 8, 30, 9 }, { 4.6, 7.4, 5.6 }), NIGHT)
-		leg(front, { 8.2, 26, 9 }, { 8.6, 15, 7 }, { 8.6, 4, 10 }, 4)
-		back:add(ellipsoid({ 8, 29, -18 }, { 5.6, 9, 7.6 }), NIGHT)
-		leg(back, { 8.4, 24, -19 }, { 8.6, 14, -22 }, { 8.6, 4, -17 }, 4.4)
 
 		local spine =
 			{ { 0, 30, -24, 6.2 }, { 2, 27, -36, 4.8 }, { 6, 21, -48, 3.6 }, { 9, 16, -60, 2.4 }, { 9, 15, -72, 1.4 } }
@@ -1610,13 +1634,19 @@ Prehistoric.LunarDragon = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 8, 34, 9 }), function(limb)
-			front:draw(limb, { body }, NIGHT)
-			talons(limb, 8.6, 14.6)
+			front:draw(limb, { body, frontShin }, NIGHT)
 		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 8.6, 16, 6 }), function(limb)
+			frontShin:draw(limb, { front }, NIGHT)
+			talons(limb, 8.6, 13.8)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 8, 34, -18 }), function(limb)
-			back:draw(limb, { body }, NIGHT)
-			talons(limb, 8.6, -12.6)
+			back:draw(limb, { body, backShin }, NIGHT)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 8.6, 15, -14 }), function(limb)
+			backShin:draw(limb, { back }, NIGHT)
+			talons(limb, 8.6, -14.2)
+		end, "BackLeftLeg")
 
 		local tailLimb = pet:limb("Tail", T.at({ 0, 30, -24 }))
 		tail:draw(tailLimb, { body }, NIGHT)

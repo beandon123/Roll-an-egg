@@ -6,9 +6,14 @@
 -- A wave turns or shifts one limb, in the design's own space (x to the pet's left, y up, z forward; turns in
 -- radians about those axes, shifts in voxels):
 --     value = base + spread * the pet's wing spread + size * shape(speed * time + shift)
--- where shape is "sin" (a plain wave), "lift" (only the upper half of one: a step or a hop) or "bounce" (both
--- halves upwards: a bob on every step). Winged pets fold their wings differently, so a design gives how far its wings
--- must turn out to be spread for flight (`wingSpread`), and the flying moves add it.
+-- where shape is "sin" (a plain wave), "lift" (only the upper half of one, eased in and out: a step or a hop) or
+-- "bounce" (both halves upwards, rounded: a bob on every step). Winged pets fold their wings differently, so a design
+-- gives how far its wings must turn out to be spread for flight (`wingSpread`), and the flying moves add it.
+--
+-- Moves are layered to look alive rather than mechanical: a limb's motion is usually several waves at speeds that
+-- never quite line up, and what hangs off a limb (a head, a tail, an arm) follows it a little late. In the game,
+-- PetAnimationController starts each pet at its own point in its moves, so a pen of pets never moves in lockstep, and
+-- eases from one move into the next (see `blend`).
 
 local PetAnimations = {}
 
@@ -35,11 +40,15 @@ local CHANNELS = { rx = 1, ry = 2, rz = 3, px = 4, py = 5, pz = 6 }
 
 local SHAPES: { [string]: (number) -> number } = {
 	sin = math.sin,
+	-- The upper half of a wave, eased in and out, so a foot leaves the ground and lands without a jerk.
 	lift = function(x: number): number
-		return math.max(0, math.sin(x))
+		local s = math.max(0, math.sin(x))
+		return s * s
 	end,
+	-- A bob on every half wave, rounded at the bottom (sine squared).
 	bounce = function(x: number): number
-		return math.abs(math.sin(x))
+		local s = math.sin(x)
+		return s * s
 	end,
 }
 
@@ -53,64 +62,6 @@ local function wave(limb: string, channel: string, size: number, speed: number, 
 	return w
 end
 
--- A gentle breath and a look round, for any pet standing still (with a swish of its tail, if it has one).
-local function idle(tail: boolean?): { Wave }
-	local list = {
-		wave("Body", "py", 0.12, 1.6),
-		wave("Head", "ry", 0.15, 0.7),
-		wave("Head", "rx", 0.03, 1.6, { shift = QUARTER }),
-	}
-	if tail ~= false then
-		table.insert(list, wave("Tail", "ry", 0.2, 1.2))
-	end
-	return list
-end
-
--- Four legs stepping in diagonal pairs: `a` how far each swings, `bounce` how high the body bobs.
-local function fourLegs(a: number, speed: number, bounce: number, sway: boolean?): { Wave }
-	local list = {
-		wave("FrontLeftLeg", "rx", a, speed),
-		wave("BackRightLeg", "rx", a, speed),
-		wave("FrontRightLeg", "rx", -a, speed),
-		wave("BackLeftLeg", "rx", -a, speed),
-		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
-		wave("Head", "rx", 0.05, speed, { shift = QUARTER }),
-		wave("Tail", "ry", 0.35, speed * 0.8),
-	}
-	if sway then
-		table.insert(list, wave("Body", "rz", 0.04, speed))
-	end
-	return list
-end
-
-local function hop(): { Wave }
-	return {
-		wave("Body", "py", 1.6, 6.5, { shape = "lift" }),
-		wave("FrontLeftLeg", "rx", -0.5, 6.5),
-		wave("FrontRightLeg", "rx", -0.5, 6.5),
-		wave("BackLeftLeg", "rx", 0.6, 6.5),
-		wave("BackRightLeg", "rx", 0.6, 6.5),
-		wave("Head", "rx", -0.08, 6.5),
-		wave("Tail", "ry", 0.35, 5.2),
-	}
-end
-
--- Wings beating: `beat` radians per second, `stroke` how far each beat swings, `lift` the wings' resting angle up,
--- `sweep` how far they sweep back as they rise. Both wings swing together, mirrored. With `spread`, they are first
--- turned out to be spread for flight.
-local function beating(beat: number, stroke: number, lift: number, sweep: number, spread: boolean): { Wave }
-	local out = if spread then 1 else 0
-	local list = {
-		wave("LeftWing", "rz", stroke, beat, { base = lift, spread = out }),
-		wave("RightWing", "rz", -stroke, beat, { base = -lift, spread = -out }),
-	}
-	if sweep ~= 0 then
-		table.insert(list, wave("LeftWing", "ry", sweep, beat, { shift = QUARTER }))
-		table.insert(list, wave("RightWing", "ry", -sweep, beat, { shift = QUARTER }))
-	end
-	return list
-end
-
 local function joined(...: { Wave }): { Wave }
 	local all = {}
 	for _, list in { ... } do
@@ -119,43 +70,135 @@ local function joined(...: { Wave }): { Wave }
 	return all
 end
 
--- Four jointed legs stepping in diagonal pairs (the Beast skeleton): each upper leg swings `a`, and its shin folds
--- back by up to `bend` while that paw is lifted and carried forward, then straightens to take the weight.
-local function jointedLegs(a: number, bend: number, speed: number, bounce: number, sway: boolean?): { Wave }
+-- Standing still: breathing (the body rising and falling, the chest tipping with each breath), the weight shifting
+-- slowly from side to side, and looking round (a slow turn with a quicker glance over it, a slow nod and a tilt of
+-- the head, at speeds that never quite line up, so it never looks like a loop); and a lazy swish of the tail, with a
+-- flick riding on it, if it has one.
+local function idle(tail: boolean?): { Wave }
 	local list = {
-		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
-		wave("Body", "rx", 0.03, speed, { shift = QUARTER }),
-		wave("Head", "rx", 0.06, speed, { shift = QUARTER }),
-		wave("Jaw", "rx", 0.04, speed, { base = 0.04 }),
-		wave("Tail", "ry", 0.3, speed * 0.8),
-		wave("Tail", "rx", 0.06, speed),
+		wave("Body", "py", 0.12, 1.6),
+		wave("Body", "rx", 0.012, 1.6, { shift = QUARTER }),
+		wave("Body", "rz", 0.012, 0.5),
+		wave("Head", "ry", 0.15, 0.6),
+		wave("Head", "ry", 0.05, 1.7, { shift = 1 }),
+		wave("Head", "rx", 0.035, 0.45, { shift = 2 }),
+		wave("Head", "rx", 0.02, 1.6, { shift = QUARTER }),
+		wave("Head", "rz", 0.03, 0.6, { shift = 0.5 }),
 	}
+	if tail ~= false then
+		table.insert(list, wave("Tail", "ry", 0.18, 1.1))
+		table.insert(list, wave("Tail", "ry", 0.05, 2.7, { shift = 1 }))
+		table.insert(list, wave("Tail", "rx", 0.05, 0.8, { shift = 1.4 }))
+	end
+	return list
+end
+
+-- What a four-legged body does over its legs at a walk: it bobs on each footfall and pitches a little with it, and
+-- rolls over the legs taking its weight (more with `sway`, for heavy pets); the head bobs against it (steadying
+-- itself), sways a little and looks about now and then; the tail swings behind, lagging the body, and bounces.
+local function carried(speed: number, bounce: number, sway: boolean?): { Wave }
+	return {
+		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
+		wave("Body", "rx", 0.015, speed * 2, { shift = 0.4 }),
+		wave("Body", "rz", if sway then 0.045 else 0.02, speed),
+		wave("Head", "rx", 0.05, speed * 2, { shift = QUARTER + 0.6 }),
+		wave("Head", "ry", 0.05, speed, { shift = 1 }),
+		wave("Head", "ry", 0.08, 0.5),
+		wave("Tail", "ry", 0.3, speed, { shift = -1.2 }),
+		wave("Tail", "rx", 0.06, speed * 2, { shift = 1 }),
+	}
+end
+
+-- Four legs stepping in diagonal pairs: `a` how far each swings, `bounce` how high the body bobs.
+local function fourLegs(a: number, speed: number, bounce: number, sway: boolean?): { Wave }
+	return joined({
+		wave("FrontLeftLeg", "rx", a, speed),
+		wave("BackRightLeg", "rx", a, speed),
+		wave("FrontRightLeg", "rx", -a, speed),
+		wave("BackLeftLeg", "rx", -a, speed),
+	}, carried(speed, bounce, sway))
+end
+
+-- A hop: springing up nose first and landing nose down, the hind legs kicking back, the tail flicking after.
+local function hop(): { Wave }
+	return {
+		wave("Body", "py", 1.6, 6.5, { shape = "lift" }),
+		wave("Body", "rx", -0.1, 6.5, { shift = -0.5 }),
+		wave("FrontLeftLeg", "rx", -0.5, 6.5),
+		wave("FrontRightLeg", "rx", -0.5, 6.5),
+		wave("BackLeftLeg", "rx", 0.6, 6.5),
+		wave("BackRightLeg", "rx", 0.6, 6.5),
+		wave("Head", "rx", -0.08, 6.5),
+		wave("Head", "ry", 0.08, 0.6),
+		wave("Tail", "ry", 0.35, 5.2),
+		wave("Tail", "rx", 0.12, 6.5, { shift = -0.8 }),
+	}
+end
+
+-- Four legs that bend (the Beast, Strider, ThreeHeaded and Dragon skeletons) stepping in diagonal pairs: each upper
+-- leg swings `a`, and its shin folds back by up to `bend` while that foot is lifted and carried forward, then
+-- straightens to take the weight. With `jaw`, the jaw hangs a little open, working with each step.
+local function jointedLegs(
+	a: number,
+	bend: number,
+	speed: number,
+	bounce: number,
+	sway: boolean?,
+	jaw: boolean?
+): { Wave }
+	local list = carried(speed, bounce, sway)
+	if jaw then
+		table.insert(list, wave("Jaw", "rx", 0.04, speed, { base = 0.04 }))
+	end
 	for _, leg in { { "FrontLeft", 1 }, { "BackRight", 1 }, { "FrontRight", -1 }, { "BackLeft", -1 } } do
 		local name, side = leg[1], leg[2]
 		table.insert(list, wave(name .. "Leg", "rx", a * side, speed))
-		-- A paw moves forward while its leg's swing runs back towards the front: fold the shin then.
+		-- A foot moves forward while its leg's swing runs back towards the front: fold the shin then.
 		table.insert(list, wave(name .. "Shin", "rx", bend, speed, { shift = -QUARTER * side, shape = "lift" }))
 	end
-	if sway then
-		table.insert(list, wave("Body", "rz", 0.04, speed))
+	return list
+end
+
+-- Wings beating: `beat` radians per second, `stroke` how far each beat swings, `lift` the wings' resting angle up,
+-- `sweep` how far they sweep back as they rise. Both wings swing together, mirrored; a smaller wave at twice the
+-- speed makes each downstroke quicker than the recovery, and the wings twist a little through each stroke. With
+-- `spread`, they are first turned out to be spread for flight.
+local function beating(beat: number, stroke: number, lift: number, sweep: number, spread: boolean): { Wave }
+	local out = if spread then 1 else 0
+	local list = {
+		wave("LeftWing", "rz", stroke, beat, { base = lift, spread = out }),
+		wave("RightWing", "rz", -stroke, beat, { base = -lift, spread = -out }),
+		wave("LeftWing", "rz", stroke * 0.2, beat * 2),
+		wave("RightWing", "rz", -stroke * 0.2, beat * 2),
+		wave("LeftWing", "rx", stroke * 0.12, beat, { shift = QUARTER }),
+		wave("RightWing", "rx", stroke * 0.12, beat, { shift = QUARTER }),
+	}
+	if sweep ~= 0 then
+		table.insert(list, wave("LeftWing", "ry", sweep, beat, { shift = QUARTER }))
+		table.insert(list, wave("RightWing", "ry", -sweep, beat, { shift = QUARTER }))
 	end
 	return list
 end
 
 -- Two jointed legs striding (the Tyrant skeleton): each thigh swings `a`, and its shin folds back by up to `bend`
 -- while that foot is lifted and carried forward, then straightens to take the weight. The body rocks over the
--- stepping leg, the tail swings against it, and the head bobs with each step.
+-- stepping leg and its hips twist, the tail swings against it, lagging, and the head bobs with each step and holds
+-- steady against the twist.
 local function stride(a: number, bend: number, speed: number, bounce: number): { Wave }
 	local list = {
 		wave("Body", "rz", 0.05, speed),
+		wave("Body", "ry", 0.03, speed, { shift = QUARTER }),
+		wave("Body", "rx", 0.015, speed * 2, { shift = 0.4 }),
 		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
-		wave("Tail", "ry", 0.16, speed, { shift = math.pi }),
-		wave("Tail", "rx", 0.04, speed * 2),
-		wave("Head", "rx", 0.05, speed * 2, { shift = QUARTER }),
+		wave("Tail", "ry", 0.16, speed, { shift = math.pi - 0.8 }),
+		wave("Tail", "rx", 0.04, speed * 2, { shift = 1 }),
+		wave("Head", "rx", 0.05, speed * 2, { shift = QUARTER + 0.6 }),
 		wave("Head", "ry", 0.08, speed, { shift = math.pi }),
+		wave("Head", "ry", -0.03, speed, { shift = QUARTER }),
+		wave("Head", "ry", 0.08, 0.5),
 		wave("Jaw", "rx", 0.04, speed * 2, { base = 0.04 }),
-		wave("LeftArm", "rx", 0.12, speed),
-		wave("RightArm", "rx", -0.12, speed),
+		wave("LeftArm", "rx", 0.12, speed, { shift = -0.5 }),
+		wave("RightArm", "rx", -0.12, speed, { shift = -0.5 }),
 	}
 	for _, leg in { { "Left", 1 }, { "Right", -1 } } do
 		local name, side = leg[1], leg[2]
@@ -163,6 +206,49 @@ local function stride(a: number, bend: number, speed: number, bounce: number): {
 		table.insert(list, wave(name .. "Shin", "rx", bend, speed, { shift = -QUARTER * side, shape = "lift" }))
 	end
 	return list
+end
+
+-- Two legs walking upright (the Biped skeleton): the arms swing against the legs, lagging a little and swinging
+-- out on each step; the body rolls over the planted foot (`lean`), twists with the arms and bobs; the head holds
+-- steady against the twist, nods with each step and looks about slowly.
+local function biped(a: number, arm: number, speed: number, bounce: number, lean: number): { Wave }
+	return {
+		wave("LeftLeg", "rx", a, speed),
+		wave("RightLeg", "rx", -a, speed),
+		wave("LeftArm", "rx", -arm, speed, { shift = -0.3 }),
+		wave("RightArm", "rx", arm, speed, { shift = -0.3 }),
+		wave("LeftArm", "rz", 0.05, speed, { shape = "bounce" }),
+		wave("RightArm", "rz", -0.05, speed, { shape = "bounce" }),
+		wave("Body", "rz", lean, speed),
+		wave("Body", "ry", 0.05, speed),
+		wave("Body", "py", bounce, speed, { shift = QUARTER, shape = "bounce" }),
+		wave("Head", "ry", -0.05, speed, { shift = 0.2 }),
+		wave("Head", "ry", 0.1, 0.6),
+		wave("Head", "rx", 0.03, speed * 2, { shift = QUARTER }),
+	}
+end
+
+-- A big two-legged walker with knees and elbows (the Giant skeleton): walking as `biped` does, each shin folding
+-- back by up to `bend` while its foot is carried forward, and each forearm hanging a little bent and bending more
+-- as its arm swings forward, a beat behind it.
+local function giant(a: number, arm: number, speed: number, bounce: number, lean: number, bend: number): { Wave }
+	local list = biped(a, arm, speed, bounce, lean)
+	for _, side in { { "Left", 1 }, { "Right", -1 } } do
+		local name, s = side[1], side[2]
+		table.insert(list, wave(name .. "Shin", "rx", bend, speed, { shift = -QUARTER * s, shape = "lift" }))
+		table.insert(list, wave(name .. "Forearm", "rx", -0.14 * s, speed, { base = -0.14, shift = -0.7 }))
+	end
+	return list
+end
+
+-- A lizard's wiggle over its legs (the LowSlung skeleton): the body bends from side to side, the head and tail
+-- swinging against it, the tail lagging.
+local function wiggle(size: number, speed: number): { Wave }
+	return {
+		wave("Body", "ry", size, speed),
+		wave("Head", "ry", -size * 1.2, speed, { shift = 0.3 }),
+		wave("Tail", "ry", -size * 2, speed, { shift = -0.6 }),
+	}
 end
 
 -- Eight tentacles each swaying and lifting a little, `size` radians, each out of step with the last.
@@ -175,27 +261,72 @@ local function writhe(speed: number, size: number): { Wave }
 	return list
 end
 
+-- The two side heads of a three-headed beast, each with a mind of its own: looking about out of step with the
+-- other heads (a slow turn, a quicker glance, a nod and a tilt), now and then snapping at the air; and, at a walk
+-- (`speed`), bobbing with the stride.
+local function sideHeads(speed: number?): { Wave }
+	local list = {}
+	for _, head in { { "LeftHead", 1, 1.3 }, { "RightHead", -1, 3.4 } } do
+		local name, side, phase = head[1], head[2], head[3]
+		table.insert(list, wave(name, "ry", 0.22 * side, 0.55 + side * 0.06, { shift = phase }))
+		table.insert(list, wave(name, "ry", 0.07, 1.9, { shift = phase * 1.7 }))
+		table.insert(list, wave(name, "rx", 0.07, 0.7, { shift = phase + 2 }))
+		table.insert(list, wave(name, "rz", 0.06 * side, 0.5, { shift = phase * 0.6 }))
+		table.insert(list, wave(name, "rx", 0.15, 1.3 + side * 0.15, { shape = "lift", shift = phase * 2.3 }))
+		if speed then
+			table.insert(list, wave(name, "rx", 0.05, speed * 2, { shift = QUARTER + phase }))
+		end
+	end
+	return list
+end
+
+-- Roaring with all three heads: the side heads thrown up and out, shaking, out of step with each other.
+local function sideHeadsRoar(): { Wave }
+	return {
+		wave("LeftHead", "rx", 0.05, 15, { base = -0.22 }),
+		wave("LeftHead", "ry", 0.06, 5, { base = 0.16 }),
+		wave("RightHead", "rx", 0.05, 17, { base = -0.22, shift = 1 }),
+		wave("RightHead", "ry", -0.06, 5.5, { base = -0.16, shift = 2 }),
+	}
+end
+
+-- Beasts' roar: rearing back a little, head thrown up, jaws gaping, roaring.
+local BEAST_ROAR = {
+	wave("Body", "rx", 0.03, 8, { base = -0.08 }),
+	wave("Head", "rx", 0.04, 9, { base = -0.3 }),
+	wave("Head", "ry", 0.05, 2),
+	wave("Jaw", "rx", 0.08, 9, { base = 0.6 }),
+	wave("FrontLeftLeg", "rx", 0.02, 8, { base = 0.08 }),
+	wave("FrontRightLeg", "rx", 0.02, 8, { base = 0.08 }),
+	wave("BackLeftShin", "rx", 0.02, 8, { base = 0.12 }),
+	wave("BackRightShin", "rx", 0.02, 8, { base = 0.12 }),
+	wave("Tail", "ry", 0.4, 6),
+}
+
 PetAnimations.MOVES = {
 	-- Four jointed legs, a jaw and a tail: the big hunters.
 	Beast = {
 		Idle = joined(idle(), {
 			wave("Jaw", "rx", 0.05, 1.6, { base = 0.06 }),
-			wave("Tail", "rx", 0.05, 1.2, { shift = 1 }),
 		}),
-		Walk = jointedLegs(0.42, 0.7, 6, 0.25),
-		Stomp = jointedLegs(0.34, 0.6, 4.2, 0.35, true),
-		-- Rearing back a little, head thrown up, jaws gaping, roaring.
-		Roar = {
-			wave("Body", "rx", 0.03, 8, { base = -0.08 }),
-			wave("Head", "rx", 0.04, 9, { base = -0.3 }),
-			wave("Head", "ry", 0.05, 2),
-			wave("Jaw", "rx", 0.08, 9, { base = 0.6 }),
-			wave("FrontLeftLeg", "rx", 0.02, 8, { base = 0.08 }),
-			wave("FrontRightLeg", "rx", 0.02, 8, { base = 0.08 }),
-			wave("BackLeftShin", "rx", 0.02, 8, { base = 0.12 }),
-			wave("BackRightShin", "rx", 0.02, 8, { base = 0.12 }),
-			wave("Tail", "ry", 0.4, 6),
-		},
+		Walk = jointedLegs(0.42, 0.75, 6, 0.25, false, true),
+		Stomp = jointedLegs(0.34, 0.65, 4.2, 0.35, true, true),
+		Roar = BEAST_ROAR,
+	},
+	-- A beast with three heads (Cerberus): the middle one with its jaw, the other two each moving on its own.
+	ThreeHeaded = {
+		Idle = joined(idle(), sideHeads(), {
+			wave("Jaw", "rx", 0.05, 1.6, { base = 0.06 }),
+		}),
+		Walk = joined(jointedLegs(0.42, 0.75, 6, 0.25, false, true), sideHeads(6)),
+		Stomp = joined(jointedLegs(0.34, 0.65, 4.2, 0.35, true, true), sideHeads(4.2)),
+		Roar = joined(BEAST_ROAR, sideHeadsRoar()),
+	},
+	-- Four long legs that bend at the knee (deer, camels, elephants, sauropods).
+	Strider = {
+		Idle = idle(),
+		Walk = jointedLegs(0.4, 0.7, 5.5, 0.25),
+		Stomp = jointedLegs(0.32, 0.6, 4, 0.35, true),
 	},
 	Quadruped = {
 		Idle = idle(),
@@ -205,76 +336,92 @@ PetAnimations.MOVES = {
 	},
 	LowSlung = {
 		Idle = idle(),
-		Walk = fourLegs(0.6, 6, 0.25),
-		Crawl = fourLegs(0.6, 4.5, 0.12),
-		Stomp = fourLegs(0.5, 4, 0.3, true),
+		Walk = joined(fourLegs(0.6, 6, 0.25), wiggle(0.05, 6)),
+		Crawl = joined(fourLegs(0.6, 4.5, 0.12), wiggle(0.08, 4.5)),
+		Stomp = joined(fourLegs(0.5, 4, 0.3, true), wiggle(0.05, 4)),
 		Hop = hop(),
 	},
 	Winged = {
 		Idle = joined(idle(), {
 			wave("LeftWing", "rz", 0.05, 1.6),
 			wave("RightWing", "rz", -0.05, 1.6),
+			wave("LeftWing", "rx", 0.03, 0.8, { shift = 1 }),
+			wave("RightWing", "rx", 0.03, 0.8, { shift = 1 }),
 		}),
-		-- Walking with wings half-raised for balance.
+		-- Walking with wings half-raised for balance, the head bobbing back and forth with each step.
 		Walk = joined({
 			wave("Body", "rz", 0.12, 6),
 			wave("Body", "py", 0.3, 6, { shape = "bounce" }),
 			wave("LeftLeg", "rx", 0.4, 6),
 			wave("RightLeg", "rx", -0.4, 6),
-			wave("Tail", "ry", 0.2, 6, { shift = QUARTER }),
+			wave("Tail", "ry", 0.2, 6, { shift = QUARTER - 0.6 }),
+			wave("Head", "rx", 0.06, 12, { shift = 0.6 }),
+			wave("Head", "ry", 0.08, 0.6),
 		}, beating(9.6, 0.25, 0.2, 0, false)),
 		-- Flying on the spot, as if gliding forward through the air: up off the ground and tipped forward, wings
 		-- beating in long strokes, legs tucked back, tail lifted level, head raised to look ahead, banking gently.
 		Fly = joined({
-			wave("Body", "py", 0.4, 5, { base = 6, tall = true }),
+			wave("Body", "py", 0.4, 5, { base = 6, tall = true, shift = math.pi }),
 			wave("Body", "rx", 0.05, 5, { base = 0.35 }),
 			wave("Body", "rz", 0.08, 1.2),
-			wave("LeftLeg", "rx", 0.05, 5, { base = 1.1 }),
-			wave("RightLeg", "rx", 0.05, 5, { base = 1.1 }),
+			wave("LeftLeg", "rx", 0.05, 5, { base = 1.1, shift = -0.8 }),
+			wave("RightLeg", "rx", 0.05, 5, { base = 1.1, shift = -0.8 }),
 			wave("Tail", "rx", 0.1, 5, { base = -0.35, shift = 1.5 }),
 			wave("Tail", "ry", 0.1, 2.5),
 			wave("Head", "rx", 0.04, 5, { base = -0.35, shift = math.pi }),
+			wave("Head", "ry", 0.06, 0.7),
 		}, beating(5, 0.7, 0.1, 0.18, true)),
 		-- Hovering in place: held upright off the ground, rising a little with each quick, deep beat, legs hanging,
 		-- tail fanning, head looking round.
 		Hover = joined({
 			wave("Body", "py", 0.6, 6.5, { base = 5, shift = math.pi, tall = true }),
 			wave("Body", "rx", 0.04, 6.5, { base = -0.08 }),
-			wave("LeftLeg", "rx", 0.08, 3.25, { base = 0.35 }),
-			wave("RightLeg", "rx", 0.08, 3.25, { base = 0.35 }),
+			wave("LeftLeg", "rx", 0.08, 3.25, { base = 0.35, shift = -0.6 }),
+			wave("RightLeg", "rx", 0.08, 3.25, { base = 0.35, shift = -0.6 }),
 			wave("Tail", "rx", 0.12, 6.5, { base = -0.1, shift = 1 }),
 			wave("Head", "rx", 0.05, 6.5),
 			wave("Head", "ry", 0.15, 0.8),
 		}, beating(6.5, 0.55, 0.15, 0.12, true)),
 	},
-	-- Four legs and a pair of wings: a heavy tread on the ground, and in the air the same wingbeats as birds.
+	-- Four legs that bend at the knee and a pair of wings: a heavy tread on the ground, and in the air the same
+	-- wingbeats as birds, legs folded up under it in flight and hanging, swaying, as it hovers.
 	Dragon = {
 		Idle = joined(idle(), {
 			wave("LeftWing", "rz", 0.04, 1.6),
 			wave("RightWing", "rz", -0.04, 1.6),
-			wave("Tail", "rx", 0.04, 1.2, { shift = 1 }),
+			wave("LeftWing", "ry", 0.03, 0.7, { shift = 1 }),
+			wave("RightWing", "ry", -0.03, 0.7, { shift = 1 }),
 		}),
-		Walk = joined(fourLegs(0.4, 5, 0.25), beating(5, 0.06, 0, 0, false)),
-		Stomp = joined(fourLegs(0.32, 4, 0.35, true), beating(4, 0.06, 0, 0, false)),
+		Walk = joined(jointedLegs(0.36, 0.65, 5, 0.25), beating(5, 0.06, 0, 0, false)),
+		Stomp = joined(jointedLegs(0.3, 0.6, 4, 0.35, true), beating(4, 0.06, 0, 0, false)),
 		Fly = joined({
-			wave("Body", "py", 0.4, 4.5, { base = 6, tall = true }),
+			wave("Body", "py", 0.4, 4.5, { base = 6, tall = true, shift = math.pi }),
 			wave("Body", "rx", 0.04, 4.5, { base = 0.15 }),
 			wave("Body", "rz", 0.06, 1),
-			wave("FrontLeftLeg", "rx", 0.05, 4.5, { base = 0.9 }),
-			wave("FrontRightLeg", "rx", 0.05, 4.5, { base = 0.9 }),
-			wave("BackLeftLeg", "rx", 0.05, 4.5, { base = 1.1 }),
-			wave("BackRightLeg", "rx", 0.05, 4.5, { base = 1.1 }),
+			wave("FrontLeftLeg", "rx", 0.05, 4.5, { base = -0.5, shift = -0.8 }),
+			wave("FrontRightLeg", "rx", 0.05, 4.5, { base = -0.5, shift = -0.8 }),
+			wave("FrontLeftShin", "rx", 0.05, 4.5, { base = 1.3, shift = -1.4 }),
+			wave("FrontRightShin", "rx", 0.05, 4.5, { base = 1.3, shift = -1.4 }),
+			wave("BackLeftLeg", "rx", 0.05, 4.5, { base = 0.7, shift = -0.8 }),
+			wave("BackRightLeg", "rx", 0.05, 4.5, { base = 0.7, shift = -0.8 }),
+			wave("BackLeftShin", "rx", 0.06, 4.5, { base = 0.6, shift = -1.4 }),
+			wave("BackRightShin", "rx", 0.06, 4.5, { base = 0.6, shift = -1.4 }),
 			wave("Tail", "rx", 0.08, 4.5, { base = -0.1, shift = 1.5 }),
 			wave("Tail", "ry", 0.15, 2),
 			wave("Head", "rx", 0.04, 4.5, { base = -0.15, shift = math.pi }),
+			wave("Head", "ry", 0.06, 0.6),
 		}, beating(4.5, 0.6, 0.1, 0.15, true)),
 		Hover = joined({
 			wave("Body", "py", 0.5, 5.5, { base = 5, shift = math.pi, tall = true }),
 			wave("Body", "rx", 0.04, 5.5, { base = -0.05 }),
-			wave("FrontLeftLeg", "rx", 0.06, 2.75, { base = 0.3 }),
-			wave("FrontRightLeg", "rx", 0.06, 2.75, { base = 0.3 }),
-			wave("BackLeftLeg", "rx", 0.06, 2.75, { base = 0.45 }),
-			wave("BackRightLeg", "rx", 0.06, 2.75, { base = 0.45 }),
+			wave("FrontLeftLeg", "rx", 0.06, 2.75, { base = 0.1, shift = -0.6 }),
+			wave("FrontRightLeg", "rx", 0.06, 2.75, { base = 0.1, shift = -0.6 }),
+			wave("FrontLeftShin", "rx", 0.08, 2.75, { base = 0.35, shift = -1.2 }),
+			wave("FrontRightShin", "rx", 0.08, 2.75, { base = 0.35, shift = -1.2 }),
+			wave("BackLeftLeg", "rx", 0.06, 2.75, { base = 0.3, shift = -0.6 }),
+			wave("BackRightLeg", "rx", 0.06, 2.75, { base = 0.3, shift = -0.6 }),
+			wave("BackLeftShin", "rx", 0.08, 2.75, { base = 0.25, shift = -1.2 }),
+			wave("BackRightShin", "rx", 0.08, 2.75, { base = 0.25, shift = -1.2 }),
 			wave("Tail", "ry", 0.2, 1.5),
 			wave("Tail", "rx", 0.06, 5.5, { shift = 1 }),
 			wave("Head", "ry", 0.15, 0.7),
@@ -282,44 +429,48 @@ PetAnimations.MOVES = {
 		}, beating(5.5, 0.5, 0.15, 0.1, true)),
 	},
 	Biped = {
-		Idle = joined(idle(false), { wave("LeftArm", "rz", 0.04, 1.6), wave("RightArm", "rz", -0.04, 1.6) }),
-		Walk = {
-			wave("LeftLeg", "rx", 0.35, 6),
-			wave("RightLeg", "rx", -0.35, 6),
-			wave("LeftArm", "rx", -0.4, 6),
-			wave("RightArm", "rx", 0.4, 6),
-			wave("Body", "rz", 0.05, 6),
-			wave("Body", "py", 0.3, 6, { shift = QUARTER, shape = "bounce" }),
-			wave("Head", "ry", 0.12, 1.3),
-		},
-		Stomp = {
-			wave("LeftLeg", "rx", 0.3, 4),
-			wave("RightLeg", "rx", -0.3, 4),
-			wave("LeftArm", "rx", -0.35, 4),
-			wave("RightArm", "rx", 0.35, 4),
-			wave("Body", "rz", 0.06, 4),
-			wave("Body", "py", 0.35, 4, { shift = QUARTER, shape = "bounce" }),
-			wave("Head", "ry", 0.12, 1.3),
-		},
+		Idle = joined(idle(false), {
+			wave("LeftArm", "rz", 0.04, 1.6),
+			wave("RightArm", "rz", -0.04, 1.6),
+			wave("LeftArm", "rx", 0.03, 0.8, { shift = 0.5 }),
+			wave("RightArm", "rx", 0.03, 0.8, { shift = 1.1 }),
+		}),
+		Walk = biped(0.35, 0.4, 6, 0.3, 0.05),
+		Stomp = biped(0.3, 0.35, 4, 0.35, 0.06),
 	},
-	-- Two strong legs, small arms and a long tail held out behind for balance (raptors, tyrannosaurs): the body
-	-- tips side to side over the stepping leg, the tail swings the other way, and the head bobs with each step.
+	Giant = {
+		Idle = joined(idle(false), {
+			wave("LeftArm", "rz", 0.04, 1.6),
+			wave("RightArm", "rz", -0.04, 1.6),
+			wave("LeftArm", "rx", 0.03, 0.8, { shift = 0.5 }),
+			wave("RightArm", "rx", 0.03, 0.8, { shift = 1.1 }),
+			wave("LeftForearm", "rx", 0.04, 1.6, { base = -0.1, shift = 0.6 }),
+			wave("RightForearm", "rx", 0.04, 1.6, { base = -0.1, shift = 0.9 }),
+		}),
+		Walk = giant(0.35, 0.4, 5, 0.3, 0.05, 0.55),
+		Stomp = giant(0.3, 0.35, 3.6, 0.4, 0.06, 0.5),
+	},
+	-- Two strong legs, small arms and a long tail held out behind for balance (raptors): the body tips side to side
+	-- over the stepping leg and its hips twist, the tail swings the other way, lagging, and the head bobs with each
+	-- step and holds steady against the twist.
 	Theropod = {
 		Idle = joined(idle(), {
 			wave("LeftArm", "rx", 0.08, 1.6),
 			wave("RightArm", "rx", 0.08, 1.6, { shift = 0.4 }),
-			wave("Tail", "rx", 0.05, 1.6, { shift = 1 }),
 		}),
 		Walk = {
 			wave("LeftLeg", "rx", 0.5, 7),
 			wave("RightLeg", "rx", -0.5, 7),
 			wave("Body", "rz", 0.06, 7),
+			wave("Body", "ry", 0.03, 7, { shift = QUARTER }),
 			wave("Body", "py", 0.3, 7, { shift = QUARTER, shape = "bounce" }),
-			wave("Tail", "ry", 0.18, 7, { shift = math.pi }),
-			wave("Tail", "rx", 0.05, 14),
-			wave("Head", "rx", 0.06, 14, { shift = QUARTER }),
-			wave("LeftArm", "rx", 0.15, 7),
-			wave("RightArm", "rx", -0.15, 7),
+			wave("Tail", "ry", 0.18, 7, { shift = math.pi - 0.8 }),
+			wave("Tail", "rx", 0.05, 14, { shift = 1 }),
+			wave("Head", "rx", 0.06, 14, { shift = QUARTER + 0.6 }),
+			wave("Head", "ry", -0.04, 7, { shift = QUARTER }),
+			wave("Head", "ry", 0.08, 0.6),
+			wave("LeftArm", "rx", 0.15, 7, { shift = -0.5 }),
+			wave("RightArm", "rx", -0.15, 7, { shift = -0.5 }),
 		},
 		Stomp = {
 			wave("LeftLeg", "rx", 0.38, 4),
@@ -327,12 +478,12 @@ PetAnimations.MOVES = {
 			wave("Body", "rz", 0.08, 4),
 			wave("Body", "ry", 0.05, 4),
 			wave("Body", "py", 0.45, 4, { shift = QUARTER, shape = "bounce" }),
-			wave("Tail", "ry", 0.25, 4, { shift = math.pi }),
-			wave("Tail", "rx", 0.06, 8),
+			wave("Tail", "ry", 0.25, 4, { shift = math.pi - 0.8 }),
+			wave("Tail", "rx", 0.06, 8, { shift = 1 }),
 			wave("Head", "ry", 0.12, 4, { shift = math.pi }),
-			wave("Head", "rx", 0.06, 8, { shift = QUARTER }),
-			wave("LeftArm", "rx", 0.12, 4),
-			wave("RightArm", "rx", -0.12, 4),
+			wave("Head", "rx", 0.06, 8, { shift = QUARTER + 0.6 }),
+			wave("LeftArm", "rx", 0.12, 4, { shift = -0.5 }),
+			wave("RightArm", "rx", -0.12, 4, { shift = -0.5 }),
 		},
 		-- Rearing back with its head thrown up and shaking, arms spread, tail lashing.
 		Roar = {
@@ -351,10 +502,9 @@ PetAnimations.MOVES = {
 			wave("Jaw", "rx", 0.05, 1.6, { base = 0.06 }),
 			wave("LeftArm", "rx", 0.08, 1.6),
 			wave("RightArm", "rx", 0.08, 1.6, { shift = 0.4 }),
-			wave("Tail", "rx", 0.04, 1.6, { shift = 1 }),
 		}),
-		Walk = stride(0.36, 0.6, 5, 0.3),
-		Stomp = stride(0.3, 0.55, 3.6, 0.45),
+		Walk = stride(0.36, 0.65, 5, 0.3),
+		Stomp = stride(0.3, 0.6, 3.6, 0.45),
 		-- Rearing back with its head thrown up and shaking, jaws gaping, arms spread, tail lashing.
 		Roar = {
 			wave("Body", "rx", 0.03, 9, { base = -0.14 }),
@@ -369,21 +519,33 @@ PetAnimations.MOVES = {
 			wave("Tail", "rx", 0.05, 9, { base = 0.08 }),
 		},
 	},
-	-- Floats and swims: a gentle bob, the body rocking, fins sweeping, the tail beating up and down.
+	-- Floats and swims: a gentle bob, the body rocking and bending a little from side to side, the head turning
+	-- against it, fins sweeping and twisting, the tail beating up and down and swinging after the body.
 	Swimmer = {
 		Idle = {
 			wave("Body", "py", 0.3, 1.2),
+			wave("Body", "rx", 0.03, 1.2, { shift = QUARTER }),
+			wave("Body", "ry", 0.03, 0.5),
+			wave("Head", "ry", 0.05, 0.6, { shift = 1 }),
 			wave("LeftFin", "rz", 0.15, 1.8, { base = 0.15 }),
 			wave("RightFin", "rz", -0.15, 1.8, { base = -0.15 }),
+			wave("LeftFin", "rx", 0.08, 1.8, { shift = QUARTER }),
+			wave("RightFin", "rx", 0.08, 1.8, { shift = QUARTER }),
 			wave("Tail", "rx", 0.12, 1.8, { shift = -0.8 }),
+			wave("Tail", "ry", 0.06, 0.5, { shift = -1 }),
 		},
 		Swim = {
 			wave("Body", "py", 0.5, 1.6),
 			wave("Body", "rx", 0.06, 1.6),
+			wave("Body", "ry", 0.04, 2.4),
 			wave("LeftFin", "rz", 0.3, 2.4, { base = 0.25 }),
 			wave("RightFin", "rz", -0.3, 2.4, { base = -0.25 }),
+			wave("LeftFin", "rx", 0.12, 2.4, { shift = QUARTER }),
+			wave("RightFin", "rx", 0.12, 2.4, { shift = QUARTER }),
 			wave("Tail", "rx", 0.3, 2.4, { shift = -0.8 }),
+			wave("Tail", "ry", 0.1, 2.4, { shift = -1.2 }),
 			wave("Head", "rx", -0.05, 1.6),
+			wave("Head", "ry", -0.04, 2.4, { shift = 0.4 }),
 		},
 	},
 	-- Every tentacle writhes slowly, each a little out of step with the next.
@@ -391,22 +553,29 @@ PetAnimations.MOVES = {
 		Idle = joined({
 			wave("Head", "rz", 0.02, 0.8),
 			wave("Head", "rx", 0.02, 0.6, { shift = 1 }),
+			wave("Head", "ry", 0.04, 0.4, { shift = 2 }),
 			wave("Body", "py", 0.15, 1),
 		}, writhe(1.1, 0.05)),
 		Crawl = joined({
 			wave("Head", "rz", 0.04, 1.2),
+			wave("Head", "ry", 0.05, 0.5),
 			wave("Body", "py", 0.3, 1.2, { shape = "bounce" }),
 		}, writhe(1.8, 0.08)),
 	},
 	-- A ripple runs down the coils from the neck to the tail fin.
 	Serpent = {
 		Idle = {
+			wave("Body", "ry", 0.02, 1, { shift = 0.9 }),
 			wave("Segment1", "ry", 0.06, 1, { shift = -0.9 }),
 			wave("Segment2", "ry", 0.08, 1, { shift = -1.8 }),
 			wave("Tail", "ry", 0.11, 1, { shift = -2.7 }),
 			wave("Head", "ry", 0.08, 0.9),
+			wave("Head", "rx", 0.03, 0.6, { shift = 1 }),
+			wave("LeftFin", "rz", 0.08, 1.4, { base = 0.1 }),
+			wave("RightFin", "rz", -0.08, 1.4, { base = -0.1 }),
 		},
 		Swim = {
+			wave("Body", "ry", 0.04, 2, { shift = 0.9 }),
 			wave("Segment1", "ry", 0.12, 2, { shift = -0.9 }),
 			wave("Segment2", "ry", 0.16, 2, { shift = -1.8 }),
 			wave("Tail", "ry", 0.22, 2, { shift = -2.7 }),
@@ -417,7 +586,13 @@ PetAnimations.MOVES = {
 		},
 	},
 	ManyLegged = {
-		Idle = { wave("Body", "py", 0.08, 1.6), wave("Head", "ry", 0.06, 0.8), wave("Tail", "rx", 0.06, 1.2) },
+		Idle = {
+			wave("Body", "py", 0.08, 1.6),
+			wave("Head", "ry", 0.06, 0.8),
+			wave("Head", "rx", 0.03, 0.5, { shift = 1 }),
+			wave("Tail", "rx", 0.06, 1.2),
+			wave("Tail", "ry", 0.06, 0.6, { shift = 2 }),
+		},
 		Walk = {},
 	},
 }
@@ -431,7 +606,8 @@ for i = 1, 8 do
 	table.insert(moves.Idle, wave(name, "ry", 0.07, 0.9, { shift = i * 0.8 }))
 end
 
--- Tripod walk: three legs swing forward, lifted, while the other three push back.
+-- Tripod walk: three legs swing forward, lifted, while the other three push back. The body rolls a little over each
+-- tripod, and the tail (a scorpion's sting) sways after it.
 do
 	local walk = PetAnimations.MOVES.ManyLegged.Walk
 	for _, leg in
@@ -449,8 +625,10 @@ do
 		table.insert(walk, wave(name, "rz", 0.3 * side, 6, { shift = QUARTER * group, shape = "lift" }))
 	end
 	table.insert(walk, wave("Body", "py", 0.15, 6, { shift = QUARTER, shape = "bounce" }))
+	table.insert(walk, wave("Body", "rz", 0.02, 6))
 	table.insert(walk, wave("Head", "ry", 0.06, 6))
-	table.insert(walk, wave("Tail", "rx", 0.08, 6))
+	table.insert(walk, wave("Tail", "rx", 0.08, 6, { shift = -0.6 }))
+	table.insert(walk, wave("Tail", "ry", 0.08, 3, { shift = 1 }))
 end
 
 -- The names of the moves a skeleton has.
@@ -506,6 +684,35 @@ function PetAnimations.pose(skeleton: string, move: string, time: number, wingSp
 		end
 		local channel = CHANNELS[w.channel]
 		limb[channel] += value
+	end
+	return pose
+end
+
+-- How long (seconds) a pet takes to ease from one move into the next.
+PetAnimations.BLEND_TIME = 0.4
+
+-- A pose part way from `from` to `to`: `t` from 0 (all `from`) to 1 (all `to`), eased in and out, so a pet settles
+-- into a new move rather than snapping to it. A limb in only one of them eases from (or to) where it rests.
+function PetAnimations.blend(from: Pose, to: Pose, t: number): Pose
+	local k = math.clamp(t, 0, 1)
+	k = k * k * (3 - 2 * k)
+	local pose: Pose = {}
+	for name, p in to do
+		local a = from[name]
+		local limb = table.create(6, 0)
+		for i = 1, 6 do
+			limb[i] = (if a then a[i] else 0) * (1 - k) + p[i] * k
+		end
+		pose[name] = limb
+	end
+	for name, a in from do
+		if pose[name] == nil then
+			local limb = table.create(6, 0)
+			for i = 1, 6 do
+				limb[i] = a[i] * (1 - k)
+			end
+			pose[name] = limb
+		end
 	end
 	return pose
 end

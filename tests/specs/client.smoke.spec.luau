@@ -2042,42 +2042,51 @@ return function(harness)
 	end)
 
 	describe("Client: HUD", function()
-		it("animates rigged pets: winged ones hover, beating their wings, and play the move they are given", function()
-			local session = startClient()
-			local workspace = session:service("Workspace")
-			local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
-			-- Pets spawned from the admin panel.
-			local folder = roblox.Instance.new("Folder")
-			folder.Name = "AdminPets"
-			folder.Parent = workspace
-			session:fire(workspace, "ChildAdded", folder)
-			local phoenix = PetRig.build("LavaDragon")
-			phoenix.Parent = folder
-			session:fire(folder, "DescendantAdded", phoenix)
-			local fox = PetRig.build("Fox")
-			fox.Parent = folder
-			session:fire(folder, "DescendantAdded", fox)
+		it(
+			"animates rigged pets: winged ones hover, beating their wings, and ease into the move they are given",
+			function()
+				local session = startClient()
+				local workspace = session:service("Workspace")
+				local PetRig = session:require(session:service("ReplicatedStorage").Shared.PetRig)
+				-- Pets spawned from the admin panel.
+				local folder = roblox.Instance.new("Folder")
+				folder.Name = "AdminPets"
+				folder.Parent = workspace
+				session:fire(workspace, "ChildAdded", folder)
+				local phoenix = PetRig.build("LavaDragon")
+				phoenix.Parent = folder
+				session:fire(folder, "DescendantAdded", phoenix)
+				local fox = PetRig.build("Fox")
+				fox.Parent = folder
+				session:fire(folder, "DescendantAdded", fox)
 
-			session:renderFrame(0.1, 3)
-			local lift = phoenix.Root.Body.Transform.Position.Y
-			expect.truthy(lift > 1, "the phoenix rises off the ground to hover: " .. lift)
-			local wing = phoenix.Body.LeftWing.Transform
-			session:renderFrame(0.1)
-			expect.truthy(phoenix.Body.LeftWing.Transform ~= wing, "its wings beat")
-			-- The fox walks on the spot: its legs swing.
-			local leg = fox.Body.FrontLeftLeg.Transform
-			session:renderFrame(0.1)
-			expect.truthy(fox.Body.FrontLeftLeg.Transform ~= leg, "the fox's legs swing")
+				session:renderFrame(0.1, 3)
+				local lift = phoenix.Root.Body.Transform.Position.Y
+				expect.truthy(lift > 1, "the phoenix rises off the ground to hover: " .. lift)
+				local wing = phoenix.Body.LeftWing.Transform
+				session:renderFrame(0.1)
+				expect.truthy(phoenix.Body.LeftWing.Transform ~= wing, "its wings beat")
+				-- The fox walks on the spot: its legs swing.
+				local leg = fox.Body.FrontLeftLeg.Transform
+				session:renderFrame(0.1)
+				expect.truthy(fox.Body.FrontLeftLeg.Transform ~= leg, "the fox's legs swing")
 
-			phoenix:SetAttribute("Move", "Idle")
-			session:renderFrame(0.1)
-			expect.truthy(phoenix.Root.Body.Transform.Position.Y < 0.5, "standing idle, it is back on the ground")
-			phoenix:SetAttribute("Move", "Fly")
-			session:renderFrame(0.1)
-			local _, _, _, _, _, _, _, _, _, _, forward = phoenix.Root.Body.Transform:GetComponents()
-			expect.truthy(phoenix.Root.Body.Transform.Position.Y > 1, "flying, it is up in the air")
-			expect.truthy(forward < 0.99, "and tipped forward")
-		end)
+				-- A new move is eased into, not snapped to: a tenth of a second after landing it is still coming down.
+				phoenix:SetAttribute("Move", "Idle")
+				session:renderFrame(0.1)
+				expect.truthy(
+					phoenix.Root.Body.Transform.Position.Y > 0.5,
+					"it eases down to land, rather than dropping"
+				)
+				session:renderFrame(0.1, 5)
+				expect.truthy(phoenix.Root.Body.Transform.Position.Y < 0.5, "standing idle, it is back on the ground")
+				phoenix:SetAttribute("Move", "Fly")
+				session:renderFrame(0.1, 5)
+				local _, _, _, _, _, _, _, _, _, _, forward = phoenix.Root.Body.Transform:GetComponents()
+				expect.truthy(phoenix.Root.Body.Transform.Position.Y > 1, "flying, it is up in the air")
+				expect.truthy(forward < 0.99, "and tipped forward")
+			end
+		)
 
 		it("animates the pets in the Model Showroom, but not ones too far away to see", function()
 			local session = startClient()

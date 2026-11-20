@@ -325,14 +325,43 @@ function start(DATA) {
     } };
   }
 
-  const SHAPES = { sin: Math.sin, lift: (x) => Math.max(0, Math.sin(x)), bounce: (x) => Math.abs(Math.sin(x)) };
+  // Shapes as in PetAnimations: "lift" is the upper half of a wave, eased in and out; "bounce" is sine squared.
+  const SHAPES = {
+    sin: Math.sin,
+    lift: (x) => { const s = Math.max(0, Math.sin(x)); return s * s; },
+    bounce: (x) => { const s = Math.sin(x); return s * s; },
+  };
+  // Like PetAnimations.blend: a pet eases into a new move over BLEND seconds, from the pose it had.
+  const BLEND = 0.4;
+  function blendPoses(from, to, t) {
+    const k = t * t * (3 - 2 * t);
+    const out = {};
+    for (const [name, p] of Object.entries(to)) {
+      const a = from[name] || [0, 0, 0, 0, 0, 0];
+      out[name] = p.map((v, i) => a[i] * (1 - k) + v * k);
+    }
+    for (const [name, a] of Object.entries(from)) if (!out[name]) out[name] = a.map((v) => v * (1 - k));
+    return out;
+  }
+  function easeInto(userData, move, pose, now) {
+    if (userData.move !== undefined && userData.move !== move) { userData.from = userData.last; userData.since = now; }
+    userData.move = move;
+    if (userData.from) {
+      const t = (now - userData.since) / BLEND;
+      if (t >= 1) userData.from = null;
+      else pose = blendPoses(userData.from, pose, t);
+    }
+    userData.last = pose;
+    return pose;
+  }
   const CHANNELS = { rx: 0, ry: 1, rz: 2, px: 3, py: 4, pz: 5 };
-  function animatePet(model, t, move) {
+  function animatePet(model, t, move, now) {
     const { pet, groups, base } = model.userData;
     for (const g of Object.values(groups)) { g.position.copy(base.get(g)); g.rotation.set(0, 0, 0); }
     const moves = (DATA.moves || {})[pet.skeleton] || {};
-    const waves = moves[move] || moves[pet.move] || [];
-    const pose = {};
+    const name = moves[move] ? move : pet.move;
+    const waves = moves[name] || [];
+    let pose = {};
     for (const w of arr(waves)) {
       const limb = pose[w.limb] || (pose[w.limb] = [0, 0, 0, 0, 0, 0]);
       const shape = SHAPES[w.shape || "sin"];
@@ -340,8 +369,9 @@ function start(DATA) {
       if (w.tall) value *= pet.size[1] / 20;
       limb[CHANNELS[w.channel]] += value;
     }
-    for (const [name, p] of Object.entries(pose)) {
-      const g = groups[name];
+    pose = easeInto(model.userData, name, pose, now);
+    for (const [limbName, p] of Object.entries(pose)) {
+      const g = groups[limbName];
       if (!g) continue;
       g.rotation.set(p[0], p[1], p[2]);
       g.position.x += p[3]; g.position.y += p[4]; g.position.z += p[5];
@@ -482,7 +512,7 @@ function start(DATA) {
       root.position.x = x + width / 2;
       root.position.z = -pet.center[2] * pet.scale;
       scene.add(root);
-      shown.push({ root, pet, label: addLabel(pet), width });
+      shown.push({ root, pet, label: addLabel(pet), width, offset: Math.random() * 30 });
       x += width + gap;
     }
     const total = x - gap;
@@ -578,7 +608,8 @@ function start(DATA) {
   function frame(time) {
     const t = still ? Number(params.get("t")) : reduceMotion ? 0.4 : time / 1000;
     for (const s of shown) {
-      animatePet(s.root, t, view.move);
+      // Each pet at its own point in its moves, as in the game (unless the view is held still for a picture).
+      animatePet(s.root, t + (still ? 0 : s.offset), view.move, time / 1000);
       for (const f of arr(s.root.userData.fires)) updateFire(f, t);
       for (const e of s.root.userData.effects) e.update(t);
     }

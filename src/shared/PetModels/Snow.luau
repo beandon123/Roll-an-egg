@@ -307,7 +307,7 @@ Snow.ArcticFox = {
 
 Snow.Reindeer = {
 	name = "Reindeer",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	scale = 0.3,
 	draw = function(pet)
 		local U = 1
@@ -385,15 +385,19 @@ Snow.Reindeer = {
 		end)
 		head:bake(tones)
 
-		local front = newSculpt(U)
-		front:add(rod({ { 3.2, 18.4, 6, 2.4 }, { 3.4, 10.6, 6.8, 1.6 }, { 3.3, 1.6, 6.8, 1.3 } }), FUR)
-		front:add(ellipsoid({ 3.3, 0.9, 7.4 }, { 1.6, 0.9, 1.9 }), HOOF)
-		front:bake(tones)
-		local back = newSculpt(U)
+		-- Each leg in two halves, bending at the knee (or, behind, the hock).
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 3.2, 18.4, 6, 2.4 }, { 3.4, 10.6, 6.8, 1.6 } }), FUR)
+		frontShin:add(rod({ { 3.4, 10.6, 6.8, 1.55 }, { 3.3, 1.6, 6.8, 1.3 } }), FUR)
+		frontShin:add(ellipsoid({ 3.3, 0.9, 7.4 }, { 1.6, 0.9, 1.9 }), HOOF)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 3.4, 18, -8.4 }, { 2.6, 5, 4 }), FUR)
-		back:add(rod({ { 3.4, 14, -9.8, 2 }, { 3.4, 8.6, -11, 1.5 }, { 3.3, 1.6, -9.6, 1.3 } }), FUR)
-		back:add(ellipsoid({ 3.3, 0.9, -9 }, { 1.6, 0.9, 1.9 }), HOOF)
-		back:bake(tones)
+		back:add(rod({ { 3.4, 14, -9.8, 2 }, { 3.4, 8.6, -11, 1.5 } }), FUR)
+		backShin:add(rod({ { 3.4, 8.6, -11, 1.45 }, { 3.3, 1.6, -9.6, 1.3 } }), FUR)
+		backShin:add(ellipsoid({ 3.3, 0.9, -9 }, { 1.6, 0.9, 1.9 }), HOOF)
+		for _, s in { front, frontShin, back, backShin } do
+			s:bake(tones)
+		end
 
 		local tail = newSculpt(U)
 		tail:add(ellipsoid({ 0, 21, -13 }, { 1.3, 1.6, 1.2 }), CREAM)
@@ -472,11 +476,17 @@ Snow.Reindeer = {
 		end
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.2, 18.4, 6 }), function(limb)
-			front:draw(limb, { body }, FUR)
+			front:draw(limb, { body, frontShin }, FUR)
 		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 3.4, 10.6, 6.8 }), function(limb)
+			frontShin:draw(limb, { front }, FUR)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.4, 18, -8.4 }), function(limb)
-			back:draw(limb, { body }, FUR)
+			back:draw(limb, { body, backShin }, FUR)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.4, 8.6, -11 }), function(limb)
+			backShin:draw(limb, { back }, FUR)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 21, -12.4 })), { body }, FUR)
 
 		pet:seat(0, 23.4, -1)
@@ -1223,7 +1233,7 @@ Snow.AuroraOwl = {
 
 Snow.WoollyMammoth = {
 	name = "Woolly Mammoth",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.32 * 1.5,
 	draw = function(pet)
@@ -1286,15 +1296,19 @@ Snow.WoollyMammoth = {
 		end)
 		head:bake(tones)
 
-		local front = newSculpt(U)
-		front:add(rod({ { 7, 28, 8, 5 }, { 7.4, 14, 9, 4.6 }, { 7.4, 4, 9, 4.6 } }), WOOL)
-		front:add(ellipsoid({ 7.4, 2.4, 9.6 }, { 4.8, 2.4, 5 }), SKIN)
-		front:bake(tones)
-		local back = newSculpt(U)
+		-- Pillar legs in two halves, bending at the knee.
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 7, 28, 8, 5 }, { 7.4, 14, 9, 4.6 } }), WOOL)
+		frontShin:add(rod({ { 7.4, 14, 9, 4.55 }, { 7.4, 4, 9, 4.6 } }), WOOL)
+		frontShin:add(ellipsoid({ 7.4, 2.4, 9.6 }, { 4.8, 2.4, 5 }), SKIN)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 7, 28, -13 }, { 5, 8, 6 }), WOOL)
-		back:add(rod({ { 7.2, 20, -14, 4.8 }, { 7.4, 4, -13, 4.6 } }), WOOL)
-		back:add(ellipsoid({ 7.4, 2.4, -12.4 }, { 4.8, 2.4, 5 }), SKIN)
-		back:bake(tones)
+		back:add(rod({ { 7.2, 20, -14, 4.8 }, { 7.3, 12.4, -13.6, 4.7 } }), WOOL)
+		backShin:add(rod({ { 7.3, 12.4, -13.6, 4.65 }, { 7.4, 4, -13, 4.6 } }), WOOL)
+		backShin:add(ellipsoid({ 7.4, 2.4, -12.4 }, { 4.8, 2.4, 5 }), SKIN)
+		for _, s in { front, frontShin, back, backShin } do
+			s:bake(tones)
+		end
 
 		local tail = newSculpt(U)
 		tail:add(rod({ { 0, 33, -19.6, 1.4 }, { 0, 26, -21, 1.1 } }), WOOL)
@@ -1374,14 +1388,20 @@ Snow.WoollyMammoth = {
 		)
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 7, 28, 8 }), function(limb)
-			front:draw(limb, { body }, WOOL)
+			front:draw(limb, { body, frontShin }, WOOL)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 7.4, 14, 9 }), function(limb)
+			frontShin:draw(limb, { front }, WOOL)
 			for _, dx in { -2.4, 0, 2.4 } do
 				T.ball(limb, { 7.4 + dx, 1.6, 13.4 + math.abs(dx) * -0.2 }, { 1.8, 1.4, 1.4 }, IVORY)
 			end
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 7, 28, -13 }), function(limb)
-			back:draw(limb, { body }, WOOL)
+			back:draw(limb, { body, backShin }, WOOL)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 7.3, 12.4, -13.6 }), function(limb)
+			backShin:draw(limb, { back }, WOOL)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 33, -19 })), { body }, WOOL)
 
 		pet:light(GLOW, 2.4, 26)
@@ -1398,7 +1418,7 @@ Snow.WoollyMammoth = {
 
 Snow.Yeti = {
 	name = "Yeti",
-	skeleton = "Biped",
+	skeleton = "Giant",
 	gait = "Stomp",
 	scale = 0.32 * 1.5,
 	draw = function(pet)
@@ -1458,30 +1478,36 @@ Snow.Yeti = {
 		head:bake(tones)
 
 		-- Arms: thick upper arms, huge forearms with navy gauntlets of hide, great fists.
-		local arm = newSculpt(U)
+		-- The forearm (from the elbow down) and the shin (from the knee down) are limbs of their own, so they bend.
+		local arm, forearm = newSculpt(U), newSculpt(U)
 		arm:add(ellipsoid({ 12.6, 48, 0 }, { 6, 5.6, 6 }), FUR)
 		arm:add(rod({ { 13, 46, 0.4, 5 }, { 17, 36, 2, 4.4 } }), FUR)
-		arm:add(rod({ { 17, 36, 2, 4.6 }, { 19, 26, 4.6, 6 }, { 19.6, 19, 6, 5.6 } }), FUR)
-		arm:add(ellipsoid({ 19.8, 14, 7 }, { 5.6, 5, 5.8 }), NAVY)
-		arm:coat(function(p)
-			if p[2] < 29 and p[2] > 16 and (math.floor(p[2] / 3) % 2 == 0 or p[1] > 20.6) then
-				return NAVY
-			end
-			return nil
-		end)
-		arm:bake(tones)
+		forearm:add(rod({ { 17, 36, 2, 4.6 }, { 19, 26, 4.6, 6 }, { 19.6, 19, 6, 5.6 } }), FUR)
+		forearm:add(ellipsoid({ 19.8, 14, 7 }, { 5.6, 5, 5.8 }), NAVY)
+		for _, s in { arm, forearm } do
+			s:coat(function(p)
+				if p[2] < 29 and p[2] > 16 and (math.floor(p[2] / 3) % 2 == 0 or p[1] > 20.6) then
+					return NAVY
+				end
+				return nil
+			end)
+			s:bake(tones)
+		end
 
 		-- Short, thick legs on broad feet.
-		local leg = newSculpt(U)
-		leg:add(rod({ { 7, 26, 0, 6 }, { 8, 14, 2, 5.2 }, { 8.4, 5, 2, 5 } }), FUR)
-		leg:add(ellipsoid({ 8.6, 2.6, 4.6 }, { 5.4, 2.6, 7 }), NAVY)
-		leg:coat(function(p)
-			if p[2] < 13 then
-				return NAVY
-			end
-			return nil
-		end)
-		leg:bake(tones)
+		local leg, shin = newSculpt(U), newSculpt(U)
+		leg:add(rod({ { 7, 26, 0, 6 }, { 8, 14, 2, 5.2 } }), FUR)
+		shin:add(rod({ { 8, 14, 2, 5.15 }, { 8.4, 5, 2, 5 } }), FUR)
+		shin:add(ellipsoid({ 8.6, 2.6, 4.6 }, { 5.4, 2.6, 7 }), NAVY)
+		for _, s in { leg, shin } do
+			s:coat(function(p)
+				if p[2] < 13 then
+					return NAVY
+				end
+				return nil
+			end)
+			s:bake(tones)
+		end
 
 		local armMirror, legMirror = arm:mirror(), leg:mirror()
 		local bodyLimb = pet:limb("Body", T.at({ 0, 26, 0 }))
@@ -1564,21 +1590,27 @@ Snow.Yeti = {
 			crystal(headLimb, T, horn[#horn], { -0.5 * s, 0.6, 0.6 }, 5.4, 1.6, ICE, GLOW, NEON, NEON)
 		end
 
+		-- Crystal clusters on its shoulder and the outside of its forearm, and claws on its fists and feet.
 		pet:limbPair("LeftArm", "RightArm", T.at({ 12.6, 48, 0 }), function(limb)
-			arm:draw(limb, { body }, NAVY)
-			-- Crystal clusters on its shoulder and the outside of its forearm.
+			arm:draw(limb, { body, forearm }, NAVY)
 			crystalCluster(limb, T, { 14, 53, -1 }, { 0.6, 1, -0.3 }, 10, 4, ICE, GLOW, NEON, NEON, 5)
+		end)
+		pet:limbPair("LeftForearm", "RightForearm", T.at({ 17, 36, 2 }), function(limb)
+			forearm:draw(limb, { arm }, NAVY)
 			crystalCluster(limb, T, { 24, 26, 3.6 }, { 1, 0.5, -0.4 }, 8, 4, ICE, GLOW, NEON, NEON, 7)
 			for _, dz in { -1.8, -0.6, 0.6, 1.8 } do
 				T.taper(limb, { 19.8 + dz, 11.4, 10 }, { 20 + dz * 1.2, 8.6, 13 }, 1.1, 1, { 0, 1, 0 }, CLAW)
 			end
-		end)
+		end, "LeftArm")
 		pet:limbPair("LeftLeg", "RightLeg", T.at({ 7, 26, 0 }), function(limb)
-			leg:draw(limb, { body }, NAVY)
+			leg:draw(limb, { body, shin }, NAVY)
+		end)
+		pet:limbPair("LeftShin", "RightShin", T.at({ 8, 14, 2 }), function(limb)
+			shin:draw(limb, { leg }, NAVY)
 			for _, dx in { -2.6, 0, 2.6 } do
 				T.taper(limb, { 8.6 + dx, 1.4, 10.6 }, { 8.6 + dx * 1.1, 0.3, 12.6 }, 1.2, 1, { 0, 1, 0 }, CLAW)
 			end
-		end)
+		end, "LeftLeg")
 
 		pet:light(GLOW, 3.4, 32)
 		pet:particles("Snow", rgb(240, 250, 255), 18)

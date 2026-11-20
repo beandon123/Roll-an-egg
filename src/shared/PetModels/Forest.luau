@@ -819,7 +819,7 @@ Forest.Owl = {
 
 Forest.Bear = {
 	name = "Bear",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.3 * 1.25,
 	draw = function(pet)
@@ -903,15 +903,19 @@ Forest.Bear = {
 		head:bake(tones)
 
 		-- Pillar legs with dark lower legs and broad paws.
-		local front = newSculpt(U)
-		front:add(rod({ { 5.4, 19, 7, 3.8 }, { 5.8, 10, 8, 3.5 }, { 5.8, 3.6, 8.8, 3 } }), FUR)
-		front:add(ellipsoid({ 5.8, 1.8, 10 }, { 3.4, 1.8, 3.9 }), FUR)
-		front:bake(tones)
-		local back = newSculpt(U)
+		-- Each in two halves, bending at the elbow (or, behind, the knee).
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 5.4, 19, 7, 3.8 }, { 5.8, 10, 8, 3.5 } }), FUR)
+		frontShin:add(rod({ { 5.8, 10, 8, 3.45 }, { 5.8, 3.6, 8.8, 3 } }), FUR)
+		frontShin:add(ellipsoid({ 5.8, 1.8, 10 }, { 3.4, 1.8, 3.9 }), FUR)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 5.4, 17, -12 }, { 3.6, 6.4, 5.4 }), FUR)
-		back:add(rod({ { 5.6, 11, -13.2, 3.3 }, { 5.8, 3.4, -12, 2.9 } }), FUR)
-		back:add(ellipsoid({ 5.8, 1.8, -10.6 }, { 3.3, 1.8, 3.9 }), FUR)
-		back:bake(tones)
+		back:add(rod({ { 5.6, 11, -13.2, 3.3 }, { 5.7, 7.6, -12.8, 3.1 } }), FUR)
+		backShin:add(rod({ { 5.7, 7.6, -12.8, 3.05 }, { 5.8, 3.4, -12, 2.9 } }), FUR)
+		backShin:add(ellipsoid({ 5.8, 1.8, -10.6 }, { 3.3, 1.8, 3.9 }), FUR)
+		for _, s in { front, frontShin, back, backShin } do
+			s:bake(tones)
+		end
 
 		local tail = newSculpt(U)
 		tail:add(ellipsoid({ 0, 22, -18.6 }, { 1.8, 1.8, 1.6 }), FUR)
@@ -1002,13 +1006,19 @@ Forest.Bear = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 5.4, 19, 7 }), function(limb)
-			front:draw(limb, { body }, FUR)
+			front:draw(limb, { body, frontShin }, FUR)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 5.8, 10, 8 }), function(limb)
+			frontShin:draw(limb, { front }, FUR)
 			claws(limb, 5.8, 12.6, 1)
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 5.4, 18, -12 }), function(limb)
-			back:draw(limb, { body }, FUR)
-			claws(limb, 5.8, -8, 1)
+			back:draw(limb, { body, backShin }, FUR)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 5.7, 7.6, -12.8 }), function(limb)
+			backShin:draw(limb, { back }, FUR)
+			claws(limb, 5.8, -8, 1)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 22, -17.6 })), { body }, FUR)
 
 		pet:seat(0, 26.4 / U, -4 / U)
@@ -1022,7 +1032,7 @@ Forest.Bear = {
 
 Forest.MossStag = {
 	name = "Moss Stag",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	scale = 0.3,
 	draw = function(pet)
 		local U = 1
@@ -1088,27 +1098,19 @@ Forest.MossStag = {
 		end)
 		head:bake(tones)
 
-		-- Long slender legs on dark hooves.
-		local front = newSculpt(U)
-		front:add(
-			rod({ { 3.4, 22, 7, 2.4 }, { 3.6, 13, 7.8, 1.6 }, { 3.5, 4.6, 7.2, 1.2 }, { 3.5, 1.6, 7.6, 1.15 } }),
-			COAT
-		)
-		front:add(ellipsoid({ 3.5, 0.9, 7.9 }, { 1.4, 0.9, 1.5 }), HOOF)
-		front:bake(tones)
-		local back = newSculpt(U)
+		-- Long slender legs on dark hooves, each in two halves that bend at the knee (or, behind, the hock).
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 3.4, 22, 7, 2.4 }, { 3.6, 13, 7.8, 1.6 } }), COAT)
+		frontShin:add(rod({ { 3.6, 13, 7.8, 1.55 }, { 3.5, 4.6, 7.2, 1.2 }, { 3.5, 1.6, 7.6, 1.15 } }), COAT)
+		frontShin:add(ellipsoid({ 3.5, 0.9, 7.9 }, { 1.4, 0.9, 1.5 }), HOOF)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 3.6, 21.6, -10 }, { 2.5, 5.2, 4.2 }), COAT)
-		back:add(
-			rod({
-				{ 3.6, 17, -11.6, 2.2 },
-				{ 3.6, 9.6, -13.4, 1.5 },
-				{ 3.5, 4.6, -12.2, 1.2 },
-				{ 3.5, 1.6, -11.6, 1.15 },
-			}),
-			COAT
-		)
-		back:add(ellipsoid({ 3.5, 0.9, -11.3 }, { 1.4, 0.9, 1.5 }), HOOF)
-		back:bake(tones)
+		back:add(rod({ { 3.6, 17, -11.6, 2.2 }, { 3.6, 9.6, -13.4, 1.5 } }), COAT)
+		backShin:add(rod({ { 3.6, 9.6, -13.4, 1.45 }, { 3.5, 4.6, -12.2, 1.2 }, { 3.5, 1.6, -11.6, 1.15 } }), COAT)
+		backShin:add(ellipsoid({ 3.5, 0.9, -11.3 }, { 1.4, 0.9, 1.5 }), HOOF)
+		for _, s in { front, frontShin, back, backShin } do
+			s:bake(tones)
+		end
 
 		local tail = newSculpt(U)
 		tail:add(rod({ { 0, 25.4, -14.6, 1.3 }, { 0, 24.2, -16.2, 1.1 } }), COAT)
@@ -1246,11 +1248,17 @@ Forest.MossStag = {
 		end
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.4, 22, 7 }), function(limb)
-			front:draw(limb, { body }, COAT)
+			front:draw(limb, { body, frontShin }, COAT)
 		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 3.6, 13, 7.8 }), function(limb)
+			frontShin:draw(limb, { front }, COAT)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.6, 22, -10 }), function(limb)
-			back:draw(limb, { body }, COAT)
+			back:draw(limb, { body, backShin }, COAT)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.6, 9.6, -13.4 }), function(limb)
+			backShin:draw(limb, { back }, COAT)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 25, -14 })), { body }, COAT)
 
 		pet:light(GLOW, 1.6, 18)
@@ -1267,7 +1275,7 @@ Forest.MossStag = {
 
 Forest.Treant = {
 	name = "Treant",
-	skeleton = "Biped",
+	skeleton = "Giant",
 	gait = "Stomp",
 	scale = 0.32 * 1.5,
 	draw = function(pet)
@@ -1412,25 +1420,27 @@ Forest.Treant = {
 		head:bake(tones)
 
 		-- Branch arms ending in long twig fingers.
-		local arm = newSculpt(U)
+		-- The forearm (from the elbow down) and the shin (from the knee down) are limbs of their own, so they bend.
+		local arm, forearm = newSculpt(U), newSculpt(U)
 		arm:add(ellipsoid({ 11, 46.6, -0.4 }, { 4.4, 4.6, 4.6 }), BARK)
-		arm:add(
-			rod({ { 11.6, 45, 0, 3.8 }, { 13.4, 36, 1.6, 3.2 }, { 14, 27, 3.6, 2.7 }, { 14, 23.6, 4.6, 2.5 } }),
-			BARK
-		)
-		arm:coat(function(p)
-			if p[2] > 48 and patches(p, 2.5) < 0.6 then
-				return MOSS
-			end
-			return bark(p, { 13, p[2], 2 })
-		end)
-		arm:bake(tones)
+		arm:add(rod({ { 11.6, 45, 0, 3.8 }, { 13.4, 36, 1.6, 3.2 } }), BARK)
+		forearm:add(rod({ { 13.4, 36, 1.6, 3.15 }, { 14, 27, 3.6, 2.7 }, { 14, 23.6, 4.6, 2.5 } }), BARK)
+		for _, s in { arm, forearm } do
+			s:coat(function(p)
+				if p[2] > 48 and patches(p, 2.5) < 0.6 then
+					return MOSS
+				end
+				return bark(p, { 13, p[2], 2 })
+			end)
+			s:bake(tones)
+		end
 
 		-- Root legs on feet of spreading roots.
-		local leg = newSculpt(U)
-		leg:add(rod({ { 5, 20, 0, 4.6 }, { 6, 11, 0.8, 4.2 }, { 6.6, 4.4, 0.4, 4.4 } }), BARK)
+		local leg, shin = newSculpt(U), newSculpt(U)
+		leg:add(rod({ { 5, 20, 0, 4.6 }, { 6, 11, 0.8, 4.2 } }), BARK)
+		shin:add(rod({ { 6, 11, 0.8, 4.15 }, { 6.6, 4.4, 0.4, 4.4 } }), BARK)
 		for _, r in { { 3.6, 4.6 }, { 0.6, 6.6 }, { -2.8, 5 }, { -3.4, -1 }, { 3.6, -4.6 } } do
-			leg:add(
+			shin:add(
 				rod({
 					{ 6.6, 3, 0.4, 2.6 },
 					{ 6.6 + r[1] * 0.6, 1.6, 0.4 + r[2] * 0.6, 1.8 },
@@ -1439,10 +1449,12 @@ Forest.Treant = {
 				BARK
 			)
 		end
-		leg:coat(function(p)
-			return bark(p, { 6.4, p[2], 0.4 })
-		end)
-		leg:bake(tones)
+		for _, s in { leg, shin } do
+			s:coat(function(p)
+				return bark(p, { 6.4, p[2], 0.4 })
+			end)
+			s:bake(tones)
+		end
 
 		local armMirror, legMirror = arm:mirror(), leg:mirror()
 		local bodyLimb = pet:limb("Body", T.at({ 0, 20, 0 }))
@@ -1518,7 +1530,14 @@ Forest.Treant = {
 		end
 
 		pet:limbPair("LeftArm", "RightArm", T.at({ 11, 46, -0.4 }), function(limb)
-			arm:draw(limb, { body }, BARK)
+			arm:draw(limb, { body, forearm }, BARK)
+			-- A leafy twig growing from the elbow.
+			T.branch(limb, { { 14, 37, 0 }, { 17.4, 40.6, -1.6 }, { 18.6, 43.6, -1 } }, 0.9, { 0, 0, 1 }, TWIG)
+			T.triangle(limb, { 18.6, 43.6, -1 }, { 20.4, 45, 0 }, { 18.4, 46, -1.8 }, 0.3, LEAF.color)
+			T.triangle(limb, { 17.4, 40.6, -1.6 }, { 19.6, 40.2, -3.4 }, { 18.6, 42.4, -3.2 }, 0.3, LEAF_TOP.color)
+		end)
+		pet:limbPair("LeftForearm", "RightForearm", T.at({ 13.4, 36, 1.6 }), function(limb)
+			forearm:draw(limb, { arm }, BARK)
 			-- Long twig fingers.
 			for _, f in { { -1.6, -0.6 }, { 0, 0.2 }, { 1.6, -0.4 }, { 1.2, 1.6 } } do
 				local root = { 14 + f[2] * 0.6, 22.6, 4.6 + f[1] }
@@ -1526,14 +1545,13 @@ Forest.Treant = {
 				T.blade(limb, root, knuckle, 1.2, 1.1, { 1, 0, 0 }, TWIG)
 				T.taper(limb, knuckle, vadd(knuckle, { f[2] * 0.6, -3, 1.4 }), 1, 0.9, { 1, 0, 0 }, TWIG)
 			end
-			-- A leafy twig growing from the elbow.
-			T.branch(limb, { { 14, 37, 0 }, { 17.4, 40.6, -1.6 }, { 18.6, 43.6, -1 } }, 0.9, { 0, 0, 1 }, TWIG)
-			T.triangle(limb, { 18.6, 43.6, -1 }, { 20.4, 45, 0 }, { 18.4, 46, -1.8 }, 0.3, LEAF.color)
-			T.triangle(limb, { 17.4, 40.6, -1.6 }, { 19.6, 40.2, -3.4 }, { 18.6, 42.4, -3.2 }, 0.3, LEAF_TOP.color)
-		end)
+		end, "LeftArm")
 		pet:limbPair("LeftLeg", "RightLeg", T.at({ 5, 20, 0 }), function(limb)
-			leg:draw(limb, { body }, BARK)
+			leg:draw(limb, { body, shin }, BARK)
 		end)
+		pet:limbPair("LeftShin", "RightShin", T.at({ 6, 11, 0.8 }), function(limb)
+			shin:draw(limb, { leg }, BARK)
+		end, "LeftLeg")
 
 		pet:light(rgb(150, 255, 130), 2.4, 24)
 		pet:particles("Fireflies", rgb(220, 255, 130), 14)

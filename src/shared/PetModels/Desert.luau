@@ -391,7 +391,7 @@ Desert.FennecFox = {
 
 Desert.Camel = {
 	name = "Camel",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.3,
 	draw = function(pet)
@@ -468,16 +468,20 @@ Desert.Camel = {
 		head:bake(tones)
 
 		-- Long legs with knobbly knees and broad padded feet.
-		local front = newSculpt(U)
-		front:add(rod({ { 3.2, 19, 6.6, 2.6 }, { 3.4, 11, 7.2, 1.4 }, { 3.4, 2, 7, 1.2 } }), COAT)
+		-- Each leg in two halves, bending at the knee (or, behind, the hock).
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 3.2, 19, 6.6, 2.6 }, { 3.4, 11, 7.2, 1.4 } }), COAT)
 		front:add(ellipsoid({ 3.4, 11, 7.4 }, { 1.8, 1.7, 1.8 }), COAT)
-		front:add(ellipsoid({ 3.4, 0.9, 7.6 }, { 1.9, 0.9, 2.2 }), COAT)
-		front:bake(tones)
-		local back = newSculpt(U)
+		frontShin:add(rod({ { 3.4, 11, 7.2, 1.35 }, { 3.4, 2, 7, 1.2 } }), COAT)
+		frontShin:add(ellipsoid({ 3.4, 0.9, 7.6 }, { 1.9, 0.9, 2.2 }), COAT)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 3.4, 18.4, -8.4 }, { 2.6, 5, 3.8 }), COAT)
-		back:add(rod({ { 3.4, 14, -9.6, 2 }, { 3.4, 9.6, -10.6, 1.4 }, { 3.4, 2, -9.4, 1.2 } }), COAT)
-		back:add(ellipsoid({ 3.4, 0.9, -8.8 }, { 1.9, 0.9, 2.2 }), COAT)
-		back:bake(tones)
+		back:add(rod({ { 3.4, 14, -9.6, 2 }, { 3.4, 9.6, -10.6, 1.4 } }), COAT)
+		backShin:add(rod({ { 3.4, 9.6, -10.6, 1.35 }, { 3.4, 2, -9.4, 1.2 } }), COAT)
+		backShin:add(ellipsoid({ 3.4, 0.9, -8.8 }, { 1.9, 0.9, 2.2 }), COAT)
+		for _, s in { front, frontShin, back, backShin } do
+			s:bake(tones)
+		end
 
 		local tail = newSculpt(U)
 		tail:add(rod({ { 0, 22, -10.8, 0.9 }, { 0, 17.4, -12.2, 0.7 } }), COAT)
@@ -571,17 +575,23 @@ Desert.Camel = {
 		T.blade(headLimb, { 0, 27.2, 23.6 }, { 0, 27.4, 21.6 }, 1.4, 0.8, { 0, 1, 0 }, NOSE)
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3.2, 19, 6.6 }), function(limb)
-			front:draw(limb, { body }, COAT)
+			front:draw(limb, { body, frontShin }, COAT)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 3.4, 11, 7.2 }), function(limb)
+			frontShin:draw(limb, { front }, COAT)
 			for _, dx in { -0.7, 0.7 } do
 				T.taper(limb, { 3.4 + dx, 0.6, 9.2 }, { 3.4 + dx, 0.2, 10.2 }, 0.6, 0.5, { 0, 1, 0 }, PAD)
 			end
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.4, 18.4, -8.4 }), function(limb)
-			back:draw(limb, { body }, COAT)
+			back:draw(limb, { body, backShin }, COAT)
+		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.4, 9.6, -10.6 }), function(limb)
+			backShin:draw(limb, { back }, COAT)
 			for _, dx in { -0.7, 0.7 } do
 				T.taper(limb, { 3.4 + dx, 0.6, -7.2 }, { 3.4 + dx, 0.2, -6.2 }, 0.6, 0.5, { 0, 1, 0 }, PAD)
 			end
-		end)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 22, -10.6 })), { body }, COAT)
 
 		pet:seat(0, 26.6, -1)
@@ -783,7 +793,7 @@ Desert.GiantScorpion = {
 
 Desert.PharaohJackal = {
 	name = "Pharaoh Jackal",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	scale = 0.32,
 	draw = function(pet)
 		local U = 1
@@ -852,15 +862,18 @@ Desert.PharaohJackal = {
 			end)
 			s:bake(tones)
 		end
-		local front = newSculpt(U)
-		front:add(rod({ { 3, 21, 6.4, 2.2 }, { 3.2, 12, 7, 1.5 }, { 3.1, 1.4, 7.2, 1.2 } }), BLACK)
-		front:add(ellipsoid({ 3.1, 0.9, 7.8 }, { 1.3, 0.9, 1.7 }), BLACK)
-		bands(front)
-		local back = newSculpt(U)
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 3, 21, 6.4, 2.2 }, { 3.2, 12, 7, 1.5 } }), BLACK)
+		frontShin:add(rod({ { 3.2, 12, 7, 1.45 }, { 3.1, 1.4, 7.2, 1.2 } }), BLACK)
+		frontShin:add(ellipsoid({ 3.1, 0.9, 7.8 }, { 1.3, 0.9, 1.7 }), BLACK)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 3.2, 21, -8.6 }, { 2.4, 5, 3.8 }), BLACK)
-		back:add(rod({ { 3.2, 16.4, -10, 2 }, { 3.2, 9.4, -11.6, 1.4 }, { 3.1, 1.4, -9.8, 1.2 } }), BLACK)
-		back:add(ellipsoid({ 3.1, 0.9, -9.2 }, { 1.3, 0.9, 1.7 }), BLACK)
-		bands(back)
+		back:add(rod({ { 3.2, 16.4, -10, 2 }, { 3.2, 9.4, -11.6, 1.4 } }), BLACK)
+		backShin:add(rod({ { 3.2, 9.4, -11.6, 1.35 }, { 3.1, 1.4, -9.8, 1.2 } }), BLACK)
+		backShin:add(ellipsoid({ 3.1, 0.9, -9.2 }, { 1.3, 0.9, 1.7 }), BLACK)
+		for _, s in { front, frontShin, back, backShin } do
+			bands(s)
+		end
 
 		-- A long tail with a gold ring near the tip.
 		local spine =
@@ -926,11 +939,17 @@ Desert.PharaohJackal = {
 		T.ball(headLimb, { 0, 36.5, 14.3 }, { 0.6, 0.6, 0.8 }, GOLD.color)
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 3, 21, 6.4 }), function(limb)
-			front:draw(limb, { body }, BLACK)
+			front:draw(limb, { body, frontShin }, BLACK)
 		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 3.2, 12, 7 }), function(limb)
+			frontShin:draw(limb, { front }, BLACK)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 3.2, 21, -8.6 }), function(limb)
-			back:draw(limb, { body }, BLACK)
+			back:draw(limb, { body, backShin }, BLACK)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 3.2, 9.4, -11.6 }), function(limb)
+			backShin:draw(limb, { back }, BLACK)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 24, -12 })), { body }, BLACK)
 
 		pet:light(rgb(255, 210, 110), 1.8, 18)
@@ -948,7 +967,7 @@ Desert.PharaohJackal = {
 
 Desert.Sphinx = {
 	name = "Sphinx",
-	skeleton = "Quadruped",
+	skeleton = "Strider",
 	gait = "Stomp",
 	scale = 0.32 * 1.5,
 	draw = function(pet)
@@ -1066,21 +1085,22 @@ Desert.Sphinx = {
 		head:bake(tones)
 
 		-- Thick legs on great paws.
-		local front = newSculpt(U)
-		front:add(rod({ { 7.4, 28, 12, 5 }, { 7.6, 14, 13, 4.2 }, { 7.6, 4, 14, 3.8 } }), STONE)
-		front:add(ellipsoid({ 7.6, 2.6, 16 }, { 4.4, 2.6, 5.4 }), STONE)
-		front:coat(function(p)
-			return stone(p)
-		end)
-		front:bake(tones)
-		local back = newSculpt(U)
+		-- Each leg in two halves, bending at the elbow (or, behind, the hock).
+		local front, frontShin = newSculpt(U), newSculpt(U)
+		front:add(rod({ { 7.4, 28, 12, 5 }, { 7.6, 14, 13, 4.2 } }), STONE)
+		frontShin:add(rod({ { 7.6, 14, 13, 4.1 }, { 7.6, 4, 14, 3.8 } }), STONE)
+		frontShin:add(ellipsoid({ 7.6, 2.6, 16 }, { 4.4, 2.6, 5.4 }), STONE)
+		local back, backShin = newSculpt(U), newSculpt(U)
 		back:add(ellipsoid({ 7.6, 26, -16 }, { 4.8, 9, 7.4 }), STONE)
-		back:add(rod({ { 7.8, 18, -19, 4 }, { 7.8, 4, -16, 3.6 } }), STONE)
-		back:add(ellipsoid({ 7.8, 2.6, -13.6 }, { 4.2, 2.6, 5.2 }), STONE)
-		back:coat(function(p)
-			return stone(p)
-		end)
-		back:bake(tones)
+		back:add(rod({ { 7.8, 18, -19, 4 }, { 7.8, 11, -20.4, 3.8 } }), STONE)
+		backShin:add(rod({ { 7.8, 11, -20.4, 3.7 }, { 7.8, 4, -16, 3.6 } }), STONE)
+		backShin:add(ellipsoid({ 7.8, 2.6, -13.6 }, { 4.2, 2.6, 5.2 }), STONE)
+		for _, s in { front, frontShin, back, backShin } do
+			s:coat(function(p)
+				return stone(p)
+			end)
+			s:bake(tones)
+		end
 
 		local spine = { { 0, 34, -23, 1.6 }, { 0, 30, -27, 1.4 }, { 0, 22, -28, 1.2 }, { 0, 16, -26, 1 } }
 		local tail = newSculpt(U)
@@ -1142,14 +1162,20 @@ Desert.Sphinx = {
 		T.ball(headLimb, { 0, 56, 23 }, { 1, 1.4, 0.4 }, GLOW.color, NEON)
 
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 7.4, 28, 12 }), function(limb)
-			front:draw(limb, { body }, STONE)
+			front:draw(limb, { body, frontShin }, STONE)
+		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 7.6, 14, 13 }), function(limb)
+			frontShin:draw(limb, { front }, STONE)
 			for _, dx in { -2.2, -0.8, 0.8, 2.2 } do
 				T.taper(limb, { 7.6 + dx, 1.6, 20 }, { 7.6 + dx * 1.1, 0.4, 22 }, 1, 0.9, { 0, 1, 0 }, GOLD.color)
 			end
-		end)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 7.6, 28, -16 }), function(limb)
-			back:draw(limb, { body }, STONE)
+			back:draw(limb, { body, backShin }, STONE)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 7.8, 11, -20.4 }), function(limb)
+			backShin:draw(limb, { back }, STONE)
+		end, "BackLeftLeg")
 		tail:draw(pet:limb("Tail", T.at({ 0, 34, -22 })), { body }, STONE)
 
 		pet:light(rgb(110, 255, 236), 2.6, 26)

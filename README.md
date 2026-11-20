@@ -578,24 +578,35 @@ lune run tools/pet-preview 1
 Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet).
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
-four-legged, beast (four jointed legs and a jaw: each leg's shin hangs from its upper leg, so the Frost Wolf's and
-Sabertooth Cat's paws fold up as they step, and the jaw hangs from the head, to snarl and roar), winged, dragon (four
-legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and
-a jaw, for the T-Rex: its shins hang from its thighs, so its feet fold up as it strides, and its jaw from its head,
-to roar), six legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and
-floats that much higher), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model:
-every limb turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A limb drawn
-with `limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image from the
-right one.
+four-legged, strider (four legs that bend: each leg's shin hangs from its upper leg at the knee, or behind at the
+hock, so a hoof or paw folds up as it steps: the Moss Stag, Bear, Camel, Pharaoh Jackal, Sphinx, Reindeer, Woolly
+Mammoth, Triceratops, Stegosaurus and Brachiosaurus), beast (a strider with a jaw hanging from its head, to snarl and
+roar: the Frost Wolf, Sabertooth Cat and Chimera), three-headed (a beast whose two side heads, each with its neck,
+hang from the body and move on their own: Cerberus), winged, dragon (four legs that bend at the knee and a pair of
+wings), two legs, giant (two legs and two arms that bend at the knee and elbow: the Yeti, Treant and Lava Golem),
+theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and a jaw, for the T-Rex), six
+legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that
+much higher), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb
+turns on a `Motor6D` at its joint, so pets that share a skeleton can share their animations. A limb drawn with
+`limbPair` and a parent on the left (a left shin hanging from the left leg) hangs its mirror image from the right
+one.
 
 How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop, Crawl,
 Swim, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged pets (the
 owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped forward,
 wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each beat).
 A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at their
-sides open them to fly. The same moves drive the gallery (pick one with the buttons under a pet) and the game:
-`PetAnimationController` on the client plays them on rigged pets by setting each joint's `Motor6D.Transform`. A pet
-plays its `Move` attribute, or by default hovers if it can fly and walks (or swims, or crawls) on the spot if not.
+sides open them to fly. Moves are layered so pets look alive rather than mechanical: a limb's motion is usually
+several waves at speeds that never quite line up (a standing pet breathes, shifts its weight, and looks round with a
+slow turn, a quicker glance, a nod and a tilt), what hangs off a limb follows it a little late (a head steadies
+itself against the body's bob, a tail swings after it, a forearm bends as its arm swings forward), steps and hops are
+eased in and out with no jerk where a foot leaves the ground or lands, and wings beat with a quicker downstroke than
+recovery and twist through each stroke. The same moves drive the gallery (pick one with the buttons under a pet) and
+the game: `PetAnimationController` on the client plays them on rigged pets by setting each joint's
+`Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can fly and walks (or swims, or
+crawls) on the spot if not. Each pet starts at its own point in its moves, so a pen of pets never moves in lockstep,
+and when its move changes (a pen pet stopping to rest, a mount setting off) it eases from where it was into the new
+one over 0.4 seconds (`PetAnimations.blend`) instead of snapping.
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window

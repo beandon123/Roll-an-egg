@@ -112,10 +112,56 @@ PetModels.SKELETONS = {
 		"BackRightShin",
 		"Tail",
 	},
+	-- The beast with two more heads (Cerberus): each side head (with its neck) hangs from the Body, to move on its own.
+	ThreeHeaded = {
+		"Body",
+		"Head",
+		"Jaw",
+		"LeftHead",
+		"RightHead",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
+	-- Four long legs that bend: each leg's Shin hangs from its upper half, so a hoof or foot folds up as it steps
+	-- (deer, camels, elephants, sauropods).
+	Strider = {
+		"Body",
+		"Head",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
 	-- Short legs and a long body close to the ground (hedgehogs, lizards).
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
 	Biped = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg" },
+	-- Two legs and two arms that bend: each Forearm hangs from its arm at the elbow, each Shin from its leg at the
+	-- knee (the big walkers: yetis, treants, golems).
+	Giant = {
+		"Body",
+		"Head",
+		"LeftArm",
+		"RightArm",
+		"LeftForearm",
+		"RightForearm",
+		"LeftLeg",
+		"RightLeg",
+		"LeftShin",
+		"RightShin",
+	},
 	-- Two legs, small arms and a long tail (raptors).
 	Theropod = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Tail" },
 	-- A theropod built to be huge: each leg's lower half (the Shin, from the knee down) hangs from its upper half, so
@@ -150,7 +196,7 @@ PetModels.SKELETONS = {
 	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
 	-- a ripple can run down it.
 	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
-	-- Four legs and a pair of wings (dragons).
+	-- Four legs that bend at the knee (each Shin hanging from its leg) and a pair of wings (dragons).
 	Dragon = {
 		"Body",
 		"Head",
@@ -158,6 +204,10 @@ PetModels.SKELETONS = {
 		"FrontRightLeg",
 		"BackLeftLeg",
 		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
 		"LeftWing",
 		"RightWing",
 		"Tail",

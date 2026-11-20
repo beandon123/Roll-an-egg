@@ -862,7 +862,7 @@ Volcano.Chimera = {
 
 Volcano.LavaGolem = {
 	name = "Lava Golem",
-	skeleton = "Biped",
+	skeleton = "Giant",
 	gait = "Stomp",
 	scale = 0.34 * 1.5,
 	draw = function(pet)
@@ -919,23 +919,23 @@ Volcano.LavaGolem = {
 		head:bake(tones)
 
 		-- Boulder shoulders, huge arms, cracked fists.
-		local arm = newSculpt(U)
+		-- The forearm (from the elbow down) and the shin (from the knee down) are limbs of their own, so they bend.
+		local arm, forearm = newSculpt(U), newSculpt(U)
 		arm:add(ellipsoid({ 14, 44, 0 }, { 6.4, 6, 6.4 }), ROCK)
 		arm:add(rod({ { 14.6, 42, 0.4, 4.6 }, { 18, 31, 2, 4.4 } }), ROCK)
-		arm:add(rod({ { 18, 31, 2, 5 }, { 19.4, 19, 4, 6 } }), ROCK)
-		arm:add(ellipsoid({ 19.6, 13, 5 }, { 6, 5.6, 6 }), ROCK_DARK)
-		arm:coat(function(p)
-			return basalt(p)
-		end)
-		arm:bake(tones)
+		forearm:add(rod({ { 18, 31, 2, 5 }, { 19.4, 19, 4, 6 } }), ROCK)
+		forearm:add(ellipsoid({ 19.6, 13, 5 }, { 6, 5.6, 6 }), ROCK_DARK)
 
-		local leg = newSculpt(U)
-		leg:add(rod({ { 6, 22, 0, 6 }, { 7, 10, 1, 5.4 }, { 7.4, 5.4, 1.6, 5 } }), ROCK)
-		leg:add(ellipsoid({ 7.6, 2.8, 3 }, { 5.6, 2.8, 7 }), ROCK_DARK)
-		leg:coat(function(p)
-			return basalt(p)
-		end)
-		leg:bake(tones)
+		local leg, shin = newSculpt(U), newSculpt(U)
+		leg:add(rod({ { 6, 22, 0, 6 }, { 7, 10, 1, 5.4 } }), ROCK)
+		shin:add(rod({ { 7, 10, 1, 5.35 }, { 7.4, 5.4, 1.6, 5 } }), ROCK)
+		shin:add(ellipsoid({ 7.6, 2.8, 3 }, { 5.6, 2.8, 7 }), ROCK_DARK)
+		for _, s in { arm, forearm, leg, shin } do
+			s:coat(function(p)
+				return basalt(p)
+			end)
+			s:bake(tones)
+		end
 
 		local armMirror, legMirror = arm:mirror(), leg:mirror()
 		local bodyLimb = pet:limb("Body", T.at({ 0, 22, 0 }))
@@ -979,16 +979,22 @@ Volcano.LavaGolem = {
 			NEON
 		)
 
+		-- Fire burning on its boulder shoulder, obsidian crystals on its forearm, magma dripping from its fist.
 		pet:limbPair("LeftArm", "RightArm", T.at({ 14, 44, 0 }), function(limb)
-			arm:draw(limb, { body }, ROCK)
-			-- Fire burning on its boulder shoulder, obsidian crystals on its forearm, magma dripping from its fist.
+			arm:draw(limb, { body, forearm }, ROCK)
 			limb:fire(T.at({ 14.4, 50.6, 0 }), 4, FLAME, FLAME_HOT)
+		end)
+		pet:limbPair("LeftForearm", "RightForearm", T.at({ 18, 31, 2 }), function(limb)
+			forearm:draw(limb, { arm }, ROCK)
 			crystalCluster(limb, T, { 23, 25, 2.6 }, { 1, 0.4, -0.3 }, 6, 3, OBSIDIAN, GLOW, nil, NEON, 4)
 			T.taper(limb, { 19.6, 8.2, 5 }, { 19.6, 5.4, 5.2 }, 1.2, 1.1, { 0, 0, 1 }, GLOW, NEON)
-		end)
+		end, "LeftArm")
 		pet:limbPair("LeftLeg", "RightLeg", T.at({ 6, 22, 0 }), function(limb)
-			leg:draw(limb, { body }, ROCK)
+			leg:draw(limb, { body, shin }, ROCK)
 		end)
+		pet:limbPair("LeftShin", "RightShin", T.at({ 7, 10, 1 }), function(limb)
+			shin:draw(limb, { leg }, ROCK)
+		end, "LeftLeg")
 
 		pet:light(GLOW, 3, 30)
 		pet:particles("Embers", rgb(255, 180, 60), 16)
@@ -1005,7 +1011,7 @@ Volcano.LavaGolem = {
 
 Volcano.Cerberus = {
 	name = "Cerberus",
-	skeleton = "Beast",
+	skeleton = "ThreeHeaded",
 	gait = "Stomp",
 	scale = 0.42 * 2,
 	draw = function(pet)
@@ -1067,24 +1073,25 @@ Volcano.Cerberus = {
 		body:coat(hide)
 		body:bake(tones)
 
-		-- The necks and heads (the middle head's lower jaw is its own limb).
-		local head = newSculpt(U)
-		for index, h in heads do
+		-- Each head with its neck, a sculpt of its own, so each head moves on its own (the middle head's lower jaw
+		-- is its own limb too). The side heads snarl with their jaws open; each neck wears a spiked iron collar
+		-- three quarters of the way up its first length.
+		local function sculptHead(index: number, h: { centre: Vec, dir: Vec, neck: { { number } } }): Sculpt
+			local s = newSculpt(U)
 			local c, d = h.centre, h.dir
-			head:add(rod(h.neck), HIDE)
-			head:add(ellipsoid(c, { 5.8, 5.2, 6.4 }), HIDE)
-			head:add(ellipsoid(vadd(c, vadd(vscale(d, 4), { 0, 2.2, 0 })), { 4.6, 1.5, 2.2 }), HIDE)
-			head:add(
+			s:add(rod(h.neck), HIDE)
+			s:add(ellipsoid(c, { 5.8, 5.2, 6.4 }), HIDE)
+			s:add(ellipsoid(vadd(c, vadd(vscale(d, 4), { 0, 2.2, 0 })), { 4.6, 1.5, 2.2 }), HIDE)
+			s:add(
 				rod({
 					{ c[1] + d[1] * 4, c[2] - 1, c[3] + d[3] * 4, 3.8 },
 					{ c[1] + d[1] * 13, c[2] - 2, c[3] + d[3] * 13, 2.4 },
 				}),
 				HIDE
 			)
-			head:add(ellipsoid({ c[1] + d[1] * 13.6, c[2] - 1.2, c[3] + d[3] * 13.6 }, { 1.8, 1.3, 1.2 }), HIDE_UNDER)
+			s:add(ellipsoid({ c[1] + d[1] * 13.6, c[2] - 1.2, c[3] + d[3] * 13.6 }, { 1.8, 1.3, 1.2 }), HIDE_UNDER)
 			if index > 1 then
-				-- The side heads snarl with their jaws open.
-				head:add(
+				s:add(
 					rod({
 						{ c[1] + d[1] * 3, c[2] - 5, c[3] + d[3] * 3, 2.8 },
 						{ c[1] + d[1] * 10, c[2] - 7.6, c[3] + d[3] * 10, 2 },
@@ -1092,39 +1099,36 @@ Volcano.Cerberus = {
 					HIDE
 				)
 			end
-		end
-		head:coat(function(p, open)
-			for index, h in heads do
-				local c = h.centre
-				local dz = (p[3] - c[3]) * 1
+			s:coat(function(p, open)
+				local dz = p[3] - c[3]
 				if
 					index > 1
-					and math.abs(p[1] - c[1] - h.dir[1] * dz) < 3
+					and math.abs(p[1] - c[1] - d[1] * dz) < 3
 					and p[2] < c[2] - 2.4
 					and p[2] > c[2] - 6.4
 					and dz > 3
 				then
 					return MOUTH
 				end
-			end
-			-- A spiked collar round each neck, three quarters of the way up its first length.
-			for _, h in heads do
-				local a, b2 = h.neck[1], h.neck[2]
-				local ab = Kit.vsub(b2, a)
-				local t = Kit.vdot(Kit.vsub(p, a), ab) / Kit.vdot(ab, ab)
+				local n1, n2 = h.neck[1], h.neck[2]
+				local ab = Kit.vsub(n2, n1)
+				local t = Kit.vdot(Kit.vsub(p, n1), ab) / Kit.vdot(ab, ab)
 				if t > 0.66 and t < 0.84 then
-					local axis = vlerp(a, b2, t)
-					if Kit.vlength(Kit.vsub(p, axis)) < a[4] + (b2[4] - a[4]) * t + 1.2 then
+					local axis = vlerp(n1, n2, t)
+					if Kit.vlength(Kit.vsub(p, axis)) < n1[4] + (n2[4] - n1[4]) * t + 1.2 then
 						return IRON
 					end
 				end
-			end
-			if open(0, -1, 0) and p[2] < 50 then
-				return nil
-			end
-			return hide(p)
-		end)
-		head:bake(tones)
+				if open(0, -1, 0) and p[2] < 50 then
+					return nil
+				end
+				return hide(p)
+			end)
+			s:bake(tones)
+			return s
+		end
+		local head, leftHead = sculptHead(1, heads[1]), sculptHead(2, heads[2])
+		local rightHead = leftHead:mirror()
 
 		local jaw = newSculpt(U)
 		jaw:add(rod({ { 0, 60.4, 31, 3 }, { 0, 58.6, 38.6, 2.2 } }), HIDE)
@@ -1162,29 +1166,34 @@ Volcano.Cerberus = {
 
 		local frontMirror, backMirror = front:mirror(), back:mirror()
 		local bodyLimb = pet:limb("Body", T.at({ 0, 40, 0 }))
-		body:draw(bodyLimb, { head, jaw, front, frontMirror, back, backMirror, tail }, HIDE)
+		body:draw(bodyLimb, { head, leftHead, rightHead, jaw, front, frontMirror, back, backMirror, tail }, HIDE)
 		-- Obsidian spines along its back, glowing at their points; the middle of the back is left for a rider.
 		for i, z in { 8, 3.4, -18, -23, -28 } do
 			local y = Kit.topOf(body, z)
 			crystal(bodyLimb, T, { 0, y - 1, z }, { 0, 1, -0.4 }, 7 - (i % 2) * 2, 2.2, OBSIDIAN, GLOW, nil, NEON)
 		end
 
-		local headLimb = pet:limb("Head", T.at({ 0, 46, 14 }))
-		head:draw(headLimb, { body, jaw, front, frontMirror }, HIDE)
-		for index, h in heads do
+		-- The details of a head, on its limb: glowing eyes, ears, a mane of fire, fangs, and its collar's spikes, chain
+		-- and gold stud.
+		local function dress(
+			limb: Limb,
+			index: number,
+			h: { centre: Vec, dir: Vec, neck: { { number } } },
+			clay: Sculpt
+		)
 			local c, d = h.centre, h.dir
 			local side = vnorm(Kit.vcross({ 0, 1, 0 }, d))
 			-- Big glowing eyes under the brow, each in a dark socket.
 			for _, s in { 1, -1 } do
 				local eye = vadd(vadd(c, vscale(d, 4.8)), vadd(vscale(side, 3.2 * s), { 0, 1, 0 }))
-				T.ball(headLimb, eye, { 3, 2, 2 }, HIDE_UNDER.color)
-				T.ball(headLimb, vadd(eye, vscale(d, 0.5)), { 2.4, 1.4, 1.4 }, IRIS, NEON)
+				T.ball(limb, eye, { 3, 2, 2 }, HIDE_UNDER.color)
+				T.ball(limb, vadd(eye, vscale(d, 0.5)), { 2.4, 1.4, 1.4 }, IRIS, NEON)
 			end
 			-- Tall pointed ears, and a mane of fire behind them.
 			for _, s in { 1, -1 } do
 				local root = vadd(vadd(c, vscale(side, 3.6 * s)), { 0, 3.4, -0.6 })
 				T.taper(
-					headLimb,
+					limb,
 					root,
 					vadd(root, vadd(vscale(d, -2.4), vadd(vscale(side, 1.4 * s), { 0, 6.4, 0 }))),
 					3,
@@ -1193,7 +1202,7 @@ Volcano.Cerberus = {
 					HIDE.color
 				)
 				T.taper(
-					headLimb,
+					limb,
 					vadd(root, vscale(d, 0.7)),
 					vadd(root, vadd(vscale(d, -1.6), vadd(vscale(side, 1.3 * s), { 0, 5.2, 0 }))),
 					1.6,
@@ -1203,9 +1212,9 @@ Volcano.Cerberus = {
 				)
 			end
 			fur(
-				headLimb,
+				limb,
 				T,
-				head,
+				clay,
 				function(p, n)
 					local dc = vscale(Kit.vsub(p, c), 1)
 					return Kit.vlength(dc) < 8
@@ -1221,7 +1230,7 @@ Volcano.Cerberus = {
 					return if n < 0.35 then FLAME_HOT elseif n < 0.7 then FLAME else MANE
 				end
 			)
-			headLimb:fire(T.at(vadd(vadd(c, vscale(d, -3)), { 0, 5, 0 })), 5, FLAME, FLAME_HOT)
+			limb:fire(T.at(vadd(vadd(c, vscale(d, -3)), { 0, 5, 0 })), 5, FLAME, FLAME_HOT)
 			-- Fangs in the upper jaw, and in the open lower jaws of the side heads.
 			for _, s in { 1, -1 } do
 				for k = 0, 2 do
@@ -1230,13 +1239,13 @@ Volcano.Cerberus = {
 						vadd(c, vscale(d, along)),
 						vadd(vscale(side, (1.6 + k * 0.4) * s), { 0, -3.6 + k * 0.2, 0 })
 					)
-					T.taper(headLimb, base, vadd(base, { 0, -2.6 + k * 0.4, 0 }), 1, 0.9, side, TOOTH)
+					T.taper(limb, base, vadd(base, { 0, -2.6 + k * 0.4, 0 }), 1, 0.9, side, TOOTH)
 					if index > 1 then
 						local low = vadd(
 							vadd(c, vscale(d, along - 1)),
 							vadd(vscale(side, (1.4 + k * 0.4) * s), { 0, -6.6 + k * 0.3, 0 })
 						)
-						T.taper(headLimb, low, vadd(low, { 0, 2.2, 0 }), 0.9, 0.8, side, TOOTH)
+						T.taper(limb, low, vadd(low, { 0, 2.2, 0 }), 0.9, 0.8, side, TOOTH)
 					end
 				end
 			end
@@ -1248,16 +1257,24 @@ Volcano.Cerberus = {
 				local a = k / 6 * math.pi * 2
 				local out = vnorm(vadd(vscale(side, math.cos(a)), { 0, math.sin(a) * 0.8, math.sin(a) * 0.6 }))
 				local base = vadd(mid, vscale(out, r + 0.2))
-				T.taper(headLimb, base, vadd(base, vscale(out, 2.6)), 1.4, 1.4, d, SPIKE)
+				T.taper(limb, base, vadd(base, vscale(out, 2.6)), 1.4, 1.4, d, SPIKE)
 			end
 			local link = vadd(mid, { 0, -r - 0.4, r * 0.5 })
 			for k = 0, 2 do
 				local next = vadd(link, { 0.4 * (k % 2 == 0 and 1 or -1), -2.4, 0.3 })
-				T.blade(headLimb, link, next, 1, 0.6, if k % 2 == 0 then { 1, 0, 0 } else { 0, 0, 1 }, IRON.color)
+				T.blade(limb, link, next, 1, 0.6, if k % 2 == 0 then { 1, 0, 0 } else { 0, 0, 1 }, IRON.color)
 				link = next
 			end
-			T.ball(headLimb, vadd(mid, vscale(d, r + 0.4)), { 1.6, 1.6, 1.6 }, GOLD)
+			T.ball(limb, vadd(mid, vscale(d, r + 0.4)), { 1.6, 1.6, 1.6 }, GOLD)
 		end
+
+		local headLimb = pet:limb("Head", T.at({ 0, 46, 14 }))
+		head:draw(headLimb, { body, jaw, leftHead, rightHead, front, frontMirror }, HIDE)
+		dress(headLimb, 1, heads[1], head)
+		pet:limbPair("LeftHead", "RightHead", T.at({ 6, 45, 13 }), function(limb)
+			leftHead:draw(limb, { body, head, rightHead, front }, HIDE)
+			dress(limb, 2, heads[2], leftHead)
+		end)
 
 		local jawLimb = pet:limb("Jaw", T.at({ 0, 60.4, 31 }), "Head")
 		jaw:draw(jawLimb, { head }, HIDE)
@@ -1273,7 +1290,7 @@ Volcano.Cerberus = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 8.6, 46, 8 }), function(limb)
-			front:draw(limb, { body, frontShin, head }, HIDE)
+			front:draw(limb, { body, frontShin, head, leftHead }, HIDE)
 		end)
 		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 9, 24, 6 }), function(limb)
 			frontShin:draw(limb, { front }, HIDE)
@@ -1373,17 +1390,21 @@ Volcano.LavaDragon = {
 		end)
 		head:bake(tones)
 
-		local function leg(s: Sculpt, top: Vec, foot: Vec, r: number)
-			s:add(rod({ { top[1], top[2] - 4, top[3], r }, { foot[1], 4, foot[3], r * 0.8 } }), SCALE)
-			s:add(ellipsoid({ foot[1], 2.4, foot[3] + 2 }, { r, 2.4, r * 1.2 }), SCALE)
+		-- Legs in two halves, bending at the knee: the front legs' elbows behind, the hind legs' knees in front
+		-- and hocks behind, on broad clawed feet.
+		local front, frontShin, back, backShin = newSculpt(U), newSculpt(U), newSculpt(U), newSculpt(U)
+		front:add(ellipsoid({ 8.4, 30, 9 }, { 5, 8, 6 }), SCALE)
+		front:add(rod({ { 8.6, 27, 9, 4.6 }, { 9, 17, 6, 4.1 } }), SCALE)
+		frontShin:add(rod({ { 9, 17, 6, 4 }, { 9, 4, 10, 3.6 } }), SCALE)
+		frontShin:add(ellipsoid({ 9, 2.4, 12 }, { 4.6, 2.4, 5.4 }), SCALE)
+		back:add(ellipsoid({ 8.6, 28, -19 }, { 6, 9.6, 8 }), SCALE)
+		back:add(rod({ { 9, 24, -19, 5 }, { 9, 16, -14, 4.4 } }), SCALE)
+		backShin:add(rod({ { 9, 16, -14, 4.2 }, { 9, 8, -21, 3.4 }, { 9, 4, -18.6, 3.4 } }), SCALE)
+		backShin:add(ellipsoid({ 9, 2.4, -16 }, { 4.8, 2.4, 5.6 }), SCALE)
+		for _, s in { front, frontShin, back, backShin } do
 			s:coat(scales)
 			s:bake(tones)
 		end
-		local front, back = newSculpt(U), newSculpt(U)
-		front:add(ellipsoid({ 8.4, 30, 9 }, { 5, 8, 6 }), SCALE)
-		leg(front, { 8.6, 30, 9 }, { 9, 4, 11 }, 4.6)
-		back:add(ellipsoid({ 8.6, 28, -19 }, { 6, 9.6, 8 }), SCALE)
-		leg(back, { 9, 24, -21 }, { 9, 4, -18 }, 4.8)
 
 		local spine =
 			{ { 0, 30, -26, 6.4 }, { 2, 26, -38, 5 }, { 6, 18, -50, 3.8 }, { 8, 12, -62, 2.6 }, { 8, 12, -72, 1.6 } }
@@ -1438,13 +1459,19 @@ Volcano.LavaDragon = {
 			end
 		end
 		pet:limbPair("FrontLeftLeg", "FrontRightLeg", T.at({ 8.4, 34, 9 }), function(limb)
-			front:draw(limb, { body }, SCALE)
-			talons(limb, 9, 15)
+			front:draw(limb, { body, frontShin }, SCALE)
 		end)
+		pet:limbPair("FrontLeftShin", "FrontRightShin", T.at({ 9, 17, 6 }), function(limb)
+			frontShin:draw(limb, { front }, SCALE)
+			talons(limb, 9, 14)
+		end, "FrontLeftLeg")
 		pet:limbPair("BackLeftLeg", "BackRightLeg", T.at({ 8.6, 34, -19 }), function(limb)
-			back:draw(limb, { body }, SCALE)
-			talons(limb, 9, -14)
+			back:draw(limb, { body, backShin }, SCALE)
 		end)
+		pet:limbPair("BackLeftShin", "BackRightShin", T.at({ 9, 16, -14 }), function(limb)
+			backShin:draw(limb, { back }, SCALE)
+			talons(limb, 9, -12.6)
+		end, "BackLeftLeg")
 
 		local tailLimb = pet:limb("Tail", T.at({ 0, 30, -25 }))
 		tail:draw(tailLimb, { body }, SCALE)
