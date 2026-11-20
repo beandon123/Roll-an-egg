@@ -122,7 +122,6 @@ return function(harness)
 			end
 			expect.equal(EggSpec.lineupSize(1), 11)
 			expect.equal(EggSpec.lineupSize(Runway.ZONE_COUNT), 39)
-			expect.equal(EggSpec.lineupSize(4), 0, "the Jungle has no eggs until its creatures are chosen")
 			expect.equal(#rolled.eggs, total)
 			-- The first egg of every zone (with eggs) leaves straight away.
 			expect.equal(#eventsOfType(events, "EggSpawned"), zonesWithEggs())
@@ -359,7 +358,6 @@ return function(harness)
 			expect.equal(yeti.spec.requirement, 7500)
 			expect.falsy(sim:spawnEgg(1, 0, nil, "Yeti"), "Yeti is a Snow egg")
 			expect.falsy(sim:spawnEgg(6, 0, nil, "MagmaDragon"), "shelved")
-			expect.falsy(sim:spawnEgg(4, 0, "Rare"), "the Jungle drops nothing until its creatures are chosen")
 			expect.falsy(sim:spawnEgg(1, 0, nil, "NoSuchEgg"))
 		end)
 
@@ -368,7 +366,7 @@ return function(harness)
 			-- A Volcano egg dropped in the Forest, off to one side.
 			local egg = sim:spawnEgg(6, 10, nil, "LavaGolem", { z = 300, lateral = 12 })
 			expect.equal(egg.zone, 6)
-			expect.equal(egg.spec.requirement, 100000)
+			expect.equal(egg.spec.requirement, 250000)
 			local x, _, z = sim:eggCenter(egg, 10)
 			expect.equal(z, 300)
 			-- 12 studs across the runway from its centre line there (it winds).

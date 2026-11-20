@@ -637,6 +637,20 @@ PetAnimations.MOVES = {
 			wave("LeftFin", "rx", 0.05, 1.4, { shift = QUARTER }),
 			wave("RightFin", "rx", 0.05, 1.4, { shift = QUARTER }),
 		},
+		-- On the ground (a centipede, an anaconda): the same ripple, side to side only, flat along the ground, the
+		-- head steadying itself and looking about, the front pair of legs (or fins) paddling.
+		Crawl = {
+			wave("Body", "ry", 0.05, 3, { shift = 0.9 }),
+			wave("Body", "py", 0.08, 6, { shape = "bounce" }),
+			wave("Segment1", "ry", 0.14, 3, { shift = -0.9 }),
+			wave("Segment2", "ry", 0.18, 3, { shift = -1.8 }),
+			wave("Tail", "ry", 0.24, 3, { shift = -2.7 }),
+			wave("Head", "ry", -0.07, 3, { shift = 1.6 }),
+			wave("Head", "ry", 0.08, 0.7),
+			wave("Head", "rx", 0.03, 1.5, { shift = 1 }),
+			wave("LeftFin", "ry", 0.25, 6),
+			wave("RightFin", "ry", 0.25, 6, { shift = math.pi }),
+		},
 		Swim = {
 			wave("Body", "py", 0.8, 2, { base = 4 }),
 			wave("Body", "rx", 0.035, 2, { shift = 0.3 }),

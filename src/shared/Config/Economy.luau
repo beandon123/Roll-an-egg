@@ -64,7 +64,7 @@ Economy.PEN_UPGRADE_COST = {
 }
 
 -- An egg sells at the Sell stall for this fraction of its stamina requirement, so eggs that are harder to hold on
--- to are worth more: a Forest Common sells for $25, a Volcano Eternal for $75K. Far less than the egg's pet earns,
+-- to are worth more: a Forest Common sells for $25, a Volcano Eternal for $187.5K. Far less than the egg's pet earns,
 -- so selling is for eggs a player has no room or use for.
 Economy.EGG_SELL_FRACTION = 0.5
 

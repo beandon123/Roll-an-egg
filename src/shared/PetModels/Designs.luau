@@ -5,7 +5,7 @@
 --     limb:box() draws a solid block, limb:paint() colours the surface of blocks already drawn (eyes, bellies),
 --     and the ...Pair versions mirror across the middle of the pet.
 -- Pets are themed to match their egg. Every pet in the game has a design, zone by zone, each zone in its own file
--- beside this one (Forest.luau, Desert.luau, Snow.luau, Ocean.luau, Volcano.luau and Prehistoric.luau), merged in
+-- beside this one (Forest, Desert, Snow, Jungle, Ocean, Volcano and Prehistoric .luau), merged in
 -- below; this file keeps only shelved designs. The drawing tools are in PetModels/Kit. Pets are sculpted
 -- (`newSculpt`): modelled cell by cell from rounded shapes turned to any angle (`ellipsoid`, `rod`, `curl` for a
 -- spiral to end a rod on), coloured by rules (`coat`, `trace`), then packed into blocks; with thin details (horns,
@@ -47,6 +47,7 @@ for _, zone in
 		require(script.Parent.Forest),
 		require(script.Parent.Desert),
 		require(script.Parent.Snow),
+		require(script.Parent.Jungle),
 		require(script.Parent.Ocean),
 		require(script.Parent.Volcano),
 		require(script.Parent.Prehistoric),

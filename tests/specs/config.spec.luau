@@ -80,14 +80,19 @@ return function(harness)
 				{ Common = 2, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1 },
 				{ Common = 1, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2 },
 				{ Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2, Secret = 1 },
-				-- The Jungle: no eggs until its creatures are chosen.
-				{},
+				-- The Jungle: its Mythic, Secret and Eternal candidates side by side, until the owner picks.
+				{ Uncommon = 1, Rare = 2, Epic = 1, Legendary = 1, Mythic = 2, Secret = 3, Eternal = 2 },
 				{ Rare = 2, Epic = 2, Legendary = 1, Mythic = 1, Secret = 2 },
 				{ Rare = 1, Epic = 1, Legendary = 2, Mythic = 2, Secret = 1, Eternal = 1 },
 				{ Epic = 2, Legendary = 2, Mythic = 1, Secret = 1, Eternal = 2 },
 			}
 			for index, zone in Zones.List do
-				expect.equal(#zone.eggs, if next(mixes[index]) then 8 else 0, zone.name .. " eggs")
+				local wanted = 0
+				for _, count in mixes[index] do
+					wanted += count
+				end
+				expect.equal(#zone.eggs, wanted, zone.name .. " eggs")
+				expect.truthy(wanted == 8 or zone.key == "Jungle", zone.name .. " has 8 eggs")
 				local counts = {}
 				local lastOrder = 0
 				for _, entry in zone.eggs do
@@ -181,7 +186,7 @@ return function(harness)
 			expect.falsy(EggSpec.get(1, "Secret"))
 			expect.falsy(EggSpec.get(3, "Common"))
 			expect.falsy(EggSpec.get(5, "Eternal"))
-			expect.falsy(EggSpec.get(4, "Rare"), "the Jungle drops nothing yet")
+			expect.truthy(EggSpec.get(4, "Eternal"), "the Jungle has Eternals")
 			expect.falsy(EggSpec.get(9, "Common"))
 		end)
 
@@ -256,7 +261,13 @@ return function(harness)
 			)
 			expect.equal(AdminTools.DEFAULT_WALK_SPEED, 16, "Roblox's own walk speed")
 			expect.truthy(AdminTools.MAX_GIVE <= AdminTools.MAX_INVENTORY)
-			expect.truthy(AdminTools.MAX_STAMINA >= 500000, "enough for the hungriest egg")
+			local hungriest = 0
+			for _, zone in Zones.List do
+				for _, requirement in zone.stamina do
+					hungriest = math.max(hungriest, requirement)
+				end
+			end
+			expect.truthy(AdminTools.MAX_STAMINA >= hungriest, "enough for the hungriest egg")
 		end)
 	end)
 

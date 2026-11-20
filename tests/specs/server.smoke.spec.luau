@@ -230,8 +230,7 @@ return function(harness)
 				local session = startServer()
 				session:heartbeat(1 / 60)
 				local spawned = session:sent("EggSpawned", "all")
-				-- (The Jungle has no eggs until its creatures are chosen.)
-				expect.equal(#spawned, 6, "the first egg of each zone's lineup")
+				expect.equal(#spawned, 7, "the first egg of each zone's lineup")
 				for _, entry in session:sent("Announce", "all") do
 					local text = entry.args[1]
 					expect.truthy(string.find(text, "^Sunrise! Rolling today: "), text)
@@ -2003,9 +2002,9 @@ return function(harness)
 			for _, zone in eggs:GetChildren() do
 				eggCount += #zone:GetChildren()
 			end
-			expect.equal(petCount, 48)
-			expect.equal(eggCount, 48)
-			expect.equal(#pets:GetChildren(), 6, "a row per zone with pets (the Jungle's are still to come)")
+			expect.equal(petCount, 60)
+			expect.equal(eggCount, 60)
+			expect.equal(#pets:GetChildren(), 7, "a row per zone")
 
 			-- Forest eggs stand on end on the floor, right of the aisle.
 			local leafy = eggs.Forest["Leafy Egg"]
@@ -2025,7 +2024,7 @@ return function(harness)
 					labels += 1
 				end
 			end
-			expect.equal(labels, 96, "a name over every model")
+			expect.equal(labels, 120, "a name over every model")
 		end)
 	end)
 

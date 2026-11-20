@@ -353,6 +353,66 @@ local SNOW = {
 	wolfDark = rgb(92, 110, 152),
 }
 
+local JUNGLE = {
+	leaf = rgb(92, 178, 70),
+	leafDark = rgb(48, 120, 48),
+	moss = rgb(86, 150, 64),
+	vine = rgb(52, 128, 56),
+	frog = rgb(40, 116, 232),
+	frogDark = rgb(22, 70, 160),
+	frogBlack = rgb(22, 22, 30),
+	chamGreen = rgb(76, 196, 104),
+	chamLime = rgb(196, 226, 70),
+	chamOrange = rgb(250, 140, 50),
+	chamTeal = rgb(46, 172, 190),
+	chamDark = rgb(40, 130, 90),
+	chamEye = rgb(240, 214, 80),
+	ant = rgb(168, 66, 34),
+	antDark = rgb(92, 34, 22),
+	antLight = rgb(212, 106, 60),
+	centipede = rgb(70, 28, 30),
+	centStripe = rgb(196, 54, 36),
+	centLeg = rgb(250, 150, 40),
+	beetle = rgb(34, 30, 28),
+	hercShell = rgb(186, 170, 76),
+	horn = rgb(40, 36, 32),
+	morpho = rgb(30, 110, 240),
+	morphoLight = rgb(70, 170, 255),
+	morphoDark = rgb(18, 26, 60),
+	morphoGlow = rgb(120, 230, 255),
+	white = rgb(246, 246, 240),
+	anaconda = rgb(104, 118, 54),
+	anaSpot = rgb(32, 34, 26),
+	anaBelly = rgb(222, 204, 126),
+	anaBellyDark = rgb(190, 170, 100),
+	anaEye = rgb(250, 200, 50),
+	tongue = rgb(214, 40, 56),
+	gorilla = rgb(46, 42, 48),
+	gorillaDark = rgb(26, 24, 28),
+	silver = rgb(186, 188, 196),
+	face = rgb(76, 68, 70),
+	gold = rgb(246, 196, 62),
+	jade = rgb(62, 172, 112),
+	jadeDark = rgb(32, 112, 76),
+	jadeGlow = rgb(100, 255, 170),
+	titan = rgb(40, 30, 24),
+	titanShell = rgb(120, 76, 40),
+	titanRidge = rgb(160, 110, 58),
+	stone = rgb(150, 150, 130),
+	stoneDark = rgb(116, 118, 102),
+	orchid = rgb(246, 180, 214),
+	orchidLight = rgb(255, 236, 246),
+	orchidDeep = rgb(206, 100, 170),
+	orchidGlow = rgb(255, 150, 220),
+	mantisGreen = rgb(128, 206, 96),
+	mantisEye = rgb(70, 160, 60),
+	root = rgb(104, 76, 50),
+	rootDark = rgb(72, 52, 36),
+	trap = rgb(116, 196, 70),
+	trapRed = rgb(222, 52, 70),
+	seedGlow = rgb(210, 255, 90),
+}
+
 local OCEAN = {
 	aqua = rgb(86, 198, 218),
 	foam = rgb(226, 250, 246),
@@ -1140,6 +1200,387 @@ Designs.FrostWolf = {
 			".WW",
 		}, -4, 20, { -1, 0 }, { W = { SNOW.wolf } }, true)
 		pairCells(egg, { { -3, 17, 1 }, { -3, 18, 1 } }, SNOW.snow)
+	end,
+}
+
+----------------------------------------------------------------------------------------------------------------
+-- Jungle
+
+-- A staircase of cells in the z/y plane at the given xs, from (y, z) stepping `dy` up and `dz` forward each step,
+-- `count` steps: a horn, a stem or a neck, every cell sharing a face with the last.
+local function stair(
+	egg: Egg,
+	xs: { number },
+	y: number,
+	z: number,
+	dy: number,
+	dz: number,
+	count: number,
+	color: Color,
+	material: string?
+)
+	for _ = 1, count do
+		for _, x in xs do
+			egg:set(x, y, z, color, material)
+		end
+		if dy ~= 0 then
+			y += dy
+			for _, x in xs do
+				egg:set(x, y, z, color, material)
+			end
+		end
+		z += dz
+	end
+	return y, z
+end
+
+Designs.DartFrog = {
+	name = "Dart Frog Egg",
+	hatches = "Poison Dart Frog",
+	seed = 61,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(JUNGLE.frog)
+		egg:band(1, 1, JUNGLE.frogDark)
+		-- Black blotches, as on the frog's back.
+		spots(egg, JUNGLE.frogBlack, {
+			{ 3, 30, 2 },
+			{ 4, 160, 2.2 },
+			{ 6, 250, 2.6 },
+			{ 8, 340, 2.2 },
+			{ 9, 120, 2 },
+			{ 11, 210, 2.4 },
+			{ 12, 20, 1.8 },
+			{ 13, 300, 1.8 },
+		})
+		-- Bulging eyes peeping over the top at the front.
+		for _, angle in { 62, 118 } do
+			local x, z = egg:outward(14, angle, 0)
+			egg:set(x, 14, z, JUNGLE.frogBlack)
+			egg:set(x, 15, z, JUNGLE.frogBlack)
+		end
+	end,
+}
+
+Designs.Chameleon = {
+	name = "Chameleon Egg",
+	hatches = "Chameleon",
+	seed = 62,
+	draw = function(egg)
+		-- Colours shifting from orange at the bottom through lime and green to teal at the top.
+		egg:base(JUNGLE.chamGreen)
+		zigzagFill(egg, 4, 1, 7, false, JUNGLE.chamOrange)
+		zigzag(egg, 5, 1, 7, 2, JUNGLE.chamLime)
+		zigzagFill(egg, 12, 1, 7, true, JUNGLE.chamTeal)
+		-- Its curled tail wound round the shell.
+		stripes(egg, 1, 22, JUNGLE.chamDark, 3, 13, 26)
+		-- Turret eyes either side of the front.
+		for _, angle in { 58, 122 } do
+			local x, z = egg:outward(12, angle, 0)
+			egg:set(x, 12, z, JUNGLE.chamEye)
+			local px, pz = egg:outward(12, angle, 1)
+			egg:set(px, 12, pz, JUNGLE.frogBlack)
+		end
+	end,
+}
+
+Designs.Leafcutter = {
+	name = "Leafcutter Egg",
+	hatches = "Giant Leafcutter Ant",
+	seed = 63,
+	draw = function(egg)
+		egg:base(JUNGLE.ant)
+		-- Head, thorax and abdomen: dark joins between them, and a gloss down the back.
+		egg:band(5, 5, JUNGLE.antDark)
+		egg:band(10, 10, JUNGLE.antDark)
+		stripes(egg, 1, 14, JUNGLE.antLight, 2, 14, 0, 262)
+		-- The leaf it carries, held up over its head.
+		local L, V = { JUNGLE.leaf }, { JUNGLE.leafDark }
+		sprite(egg, {
+			"..LL..",
+			".LLLL.",
+			"LLVLLL",
+			".LVLL.",
+			"..V...",
+		}, -3, 21, { 0 }, { L = L, V = V })
+	end,
+}
+
+Designs.Centipede = {
+	name = "Centipede Egg",
+	hatches = "Giant Centipede",
+	seed = 64,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(JUNGLE.centipede)
+		-- A segment every two layers, ringed in red.
+		for layer = 2, 15, 2 do
+			egg:band(layer, layer, JUNGLE.centStripe)
+		end
+		-- Legs: a pair of orange claws out of every segment, alternating forward and back.
+		for layer = 3, 13, 2 do
+			local swing = if layer % 4 == 1 then 15 else -15
+			for _, angle in { 0 + swing, 180 - swing } do
+				local x, z = egg:outward(layer, angle, 0)
+				egg:set(x, layer, z, JUNGLE.centLeg)
+				local fx, fz = egg:outward(layer, angle, 1)
+				egg:set(fx, layer, fz, JUNGLE.centLeg)
+				egg:set(fx, layer - 1, fz, JUNGLE.centLeg)
+			end
+		end
+		-- Long antennae curling up off the top.
+		pairCells(egg, { { -1, 17, 0 }, { -1, 18, 0 }, { -2, 18, 0 }, { -2, 19, 0 }, { -2, 19, 1 } }, JUNGLE.centLeg)
+		-- Venom fangs at the front.
+		for _, angle in { 78, 102 } do
+			local x, z = egg:outward(4, angle, 0)
+			egg:set(x, 4, z, JUNGLE.centLeg)
+			egg:set(x, 3, z, JUNGLE.centLeg)
+		end
+	end,
+}
+
+Designs.Hercules = {
+	name = "Hercules Egg",
+	hatches = "Hercules Beetle",
+	seed = 65,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(JUNGLE.beetle)
+		-- Olive-gold wing cases over the back, split down the middle, freckled dark.
+		egg:paint(function(cell)
+			if cell.y >= 6 and (cell.angle > 150 or cell.angle < 30) then
+				return JUNGLE.hercShell
+			end
+			return nil
+		end)
+		speckle(egg, JUNGLE.beetle, 0.12, 7, 7, 15)
+		stripes(egg, 1, 8, JUNGLE.beetle, 6, 16, 0, 266)
+		-- The great horn sweeping forward and up from the top, glowing at its tip, and a short one under it.
+		local y, z = stair(egg, { -1, 0 }, 16, -1, 1, 1, 5, JUNGLE.horn)
+		egg:set(-1, y, z, JUNGLE.jadeGlow, NEON)
+		egg:set(0, y, z, JUNGLE.jadeGlow, NEON)
+		local _, fz = egg:outward(10, 90, 0)
+		stair(egg, { -1, 0 }, 10, fz, 1, 1, 2, JUNGLE.horn)
+	end,
+}
+
+Designs.Morpho = {
+	name = "Morpho Egg",
+	hatches = "Morpho Queen",
+	seed = 66,
+	draw = function(egg)
+		egg:base(JUNGLE.morpho)
+		egg:band(13, 16, JUNGLE.morphoLight)
+		zigzag(egg, 2, 2, 8, 1, JUNGLE.morphoDark)
+		spots(egg, JUNGLE.white, { { 4, 40, 1.4 }, { 4, 140, 1.4 }, { 4, 220, 1.4 }, { 4, 320, 1.4 } })
+		-- Wings out to both sides, iridescent blue edged in black, glowing at the rim.
+		local B, D, G = { JUNGLE.morphoLight }, { JUNGLE.morphoDark }, { JUNGLE.morphoGlow, NEON }
+		sprite(egg, {
+			"GG...",
+			"GBBD.",
+			"GBBBD",
+			".GBBD",
+			".GBBD",
+			"..GBD",
+			"...GD",
+		}, -10, 14, { 0, -1 }, { B = B, D = D, G = G }, true)
+		-- Feathery antennae.
+		pairCells(egg, { { -1, 17, 0 }, { -1, 18, 0 }, { -2, 18, 0 }, { -2, 19, 0 } }, JUNGLE.morphoDark)
+		pairCells(egg, { { -2, 20, 0 } }, JUNGLE.morphoGlow, NEON)
+	end,
+}
+
+Designs.Anaconda = {
+	name = "Anaconda Egg",
+	hatches = "Titan Anaconda",
+	seed = 67,
+	draw = function(egg)
+		egg:base(JUNGLE.anaconda)
+		-- Big black ovals down its sides, a pale banded belly up the front.
+		spots(egg, JUNGLE.anaSpot, {
+			{ 3, 10, 2.4 },
+			{ 4, 200, 2.8 },
+			{ 6, 300, 2.6 },
+			{ 8, 20, 2.6 },
+			{ 9, 230, 2.4 },
+			{ 11, 330, 2.2 },
+			{ 12, 170, 2.2 },
+			{ 14, 260, 2 },
+		})
+		egg:paint(function(cell)
+			if cell.angle > 65 and cell.angle < 115 and cell.y >= 2 and cell.y <= 13 then
+				return if cell.y % 2 == 0 then JUNGLE.anaBelly else JUNGLE.anaBellyDark
+			end
+			return nil
+		end)
+		-- A coil round the top, and the head rearing up out of it, tongue out.
+		egg:band(15, 16, JUNGLE.anaSpot)
+		local y, z = stair(egg, { -1, 0 }, 17, 0, 1, 1, 2, JUNGLE.anaconda)
+		egg:fill(-2, y, z, 1, y, z + 1, JUNGLE.anaconda)
+		pairCells(egg, { { -2, y + 1, z + 1 } }, JUNGLE.anaEye)
+		egg:set(-1, y, z + 2, JUNGLE.tongue)
+		egg:set(-1, y, z + 3, JUNGLE.tongue)
+	end,
+}
+
+Designs.Silverback = {
+	name = "Silverback Egg",
+	hatches = "Silverback King",
+	seed = 68,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(JUNGLE.gorilla)
+		streaks(egg, JUNGLE.gorillaDark, 12, 3, 4, 15, 3)
+		-- The silver saddle across its back.
+		egg:paint(function(cell)
+			if cell.angle > 200 and cell.angle < 340 and cell.y >= 5 and cell.y <= 11 then
+				return JUNGLE.silver
+			end
+			return nil
+		end)
+		-- A broad face at the front under a heavy brow, with glowing jade war paint.
+		egg:paint(function(cell)
+			if cell.angle > 62 and cell.angle < 118 and cell.y >= 8 and cell.y <= 12 then
+				return JUNGLE.face
+			end
+			return nil
+		end)
+		for angle = 66, 114, 12 do
+			local x, z = egg:outward(13, angle, 0)
+			egg:set(x, 13, z, JUNGLE.gorillaDark)
+		end
+		for _, angle in { 70, 110 } do
+			local x, z = egg:outward(10, angle, 0)
+			egg:set(x, 10, z, JUNGLE.jadeGlow, NEON)
+		end
+		-- A crown of gold set with jade, leaves rising between its points.
+		egg:fill(-2, 17, -2, 1, 17, 1, JUNGLE.gold)
+		egg:fill(-1, 17, -1, 0, 17, 0, JUNGLE.gorilla)
+		for _, corner in { { -2, -2 }, { 1, -2 }, { -2, 1 }, { 1, 1 } } do
+			egg:set(corner[1], 18, corner[2], JUNGLE.gold)
+		end
+		pairCells(egg, { { -1, 18, -2 }, { -1, 18, 1 } }, JUNGLE.jadeGlow, NEON)
+		pairCells(egg, { { -1, 18, 0 }, { -1, 19, 0 } }, JUNGLE.leaf)
+	end,
+}
+
+Designs.TitanBeetle = {
+	name = "Titan Beetle Egg",
+	hatches = "Titan Beetle",
+	seed = 69,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(JUNGLE.titan)
+		-- Bronze wing cases split down the back, with ridges.
+		egg:paint(function(cell)
+			if cell.y >= 4 and (cell.angle > 140 or cell.angle < 40) then
+				return if cell.y % 3 == 0 then JUNGLE.titanRidge else JUNGLE.titanShell
+			end
+			return nil
+		end)
+		stripes(egg, 1, 8, JUNGLE.titan, 4, 16, 0, 266)
+		-- A ruined temple riding on its back: stepped mossy stone, a glowing doorway.
+		egg:fill(-3, 17, -3, 2, 17, 2, JUNGLE.stone)
+		egg:fill(-2, 18, -2, 1, 18, 1, JUNGLE.stoneDark)
+		egg:fill(-1, 19, -1, 0, 20, 0, JUNGLE.stone)
+		egg:set(-1, 18, 2, JUNGLE.jadeGlow, NEON)
+		egg:set(0, 18, 2, JUNGLE.jadeGlow, NEON)
+		pairCells(egg, { { -3, 18, -3 }, { -2, 19, -2 } }, JUNGLE.moss)
+		-- Saw-toothed mandibles at the front.
+		for _, side in { -1, 1 } do
+			local x, z = egg:outward(5, 90 + side * 22, 0)
+			egg:set(x, 5, z, JUNGLE.titanRidge)
+			egg:set(x, 5, z + 1, JUNGLE.titanRidge)
+			egg:set(x - side, 5, z + 1, JUNGLE.titanRidge)
+		end
+	end,
+}
+
+Designs.Mantis = {
+	name = "Mantis Egg",
+	hatches = "Mantis Empress",
+	seed = 70,
+	draw = function(egg)
+		-- Layers of orchid petals, pink and white.
+		egg:base(JUNGLE.orchid)
+		for layer = 2, 14, 4 do
+			zigzag(egg, layer, 2, 6, 1, JUNGLE.orchidLight)
+		end
+		zigzagFill(egg, 3, 1, 6, false, JUNGLE.orchidDeep)
+		-- Folded scythe arms down the front, green with pale spines.
+		for _, x in { -3, 2 } do
+			local _, z = egg:outward(11, if x < 0 then 112 else 68, 0)
+			egg:fill(x, 8, z, x, 11, z, JUNGLE.mantisGreen)
+			egg:set(x, 8, z + 1, JUNGLE.mantisGreen)
+			egg:set(x, 9, z + 1, JUNGLE.white)
+		end
+		-- A triangular head with big green eyes and a little crown, on top.
+		egg:fill(-2, 17, -1, 1, 17, 0, JUNGLE.mantisGreen)
+		pairCells(egg, { { -3, 17, -1 }, { -3, 17, 0 } }, JUNGLE.mantisEye)
+		egg:fill(-1, 18, -1, 0, 18, 0, JUNGLE.mantisGreen)
+		pairCells(egg, { { -1, 19, -1 } }, JUNGLE.gold)
+		pairCells(egg, { { -1, 19, 0 } }, JUNGLE.orchidGlow, NEON)
+	end,
+}
+
+Designs.VineHydra = {
+	name = "Vine Hydra Egg",
+	hatches = "Vine Hydra",
+	seed = 71,
+	profile = "Pointy",
+	draw = function(egg)
+		egg:base(JUNGLE.root)
+		blotches(egg, JUNGLE.rootDark, 0.25, 9, 1, 16)
+		-- Thorny vines winding up round it, and glowing seed pods.
+		stripes(egg, 3, 16, JUNGLE.vine, 1, 15, 22)
+		spots(egg, JUNGLE.seedGlow, { { 4, 60, 1.6 }, { 7, 190, 1.8 }, { 10, 310, 1.6 }, { 12, 100, 1.4 } }, NEON)
+		-- Three flytrap heads rising off the top, jaws open on red, edged with white spines.
+		for _, head in { { -1, 0 }, { -3, -2 }, { 1, -2 } } do
+			local x, z = head[1], head[2]
+			egg:fill(x, 17, z, x, 18, z, JUNGLE.vine)
+			egg:set(x, 19, z, JUNGLE.trapRed)
+			egg:set(x - 1, 19, z, JUNGLE.trap)
+			egg:set(x + 1, 19, z, JUNGLE.trap)
+			egg:set(x - 1, 20, z, JUNGLE.white)
+			egg:set(x + 1, 20, z, JUNGLE.white)
+		end
+		egg:fill(-3, 17, -2, 1, 17, -2, JUNGLE.vine)
+	end,
+}
+
+Designs.JadeGuardian = {
+	name = "Jade Guardian Egg",
+	hatches = "Jade Temple Guardian",
+	seed = 72,
+	profile = "Round",
+	draw = function(egg)
+		egg:base(JUNGLE.jade)
+		blotches(egg, JUNGLE.jadeDark, 0.18, 11, 1, 16)
+		-- Carved gold bands, and vines hanging down it.
+		egg:band(4, 4, JUNGLE.gold)
+		egg:band(14, 14, JUNGLE.gold)
+		streaks(egg, JUNGLE.vine, 8, 13, 9, 13, 5)
+		-- A carved stone face at the front: glowing eyes, a square mouth.
+		for _, angle in { 74, 106 } do
+			local x, z = egg:outward(11, angle, 0)
+			egg:set(x, 11, z, JUNGLE.jadeGlow, NEON)
+		end
+		egg:paint(function(cell)
+			if cell.angle > 80 and cell.angle < 100 and cell.y >= 7 and cell.y <= 8 then
+				return JUNGLE.jadeDark
+			end
+			return nil
+		end)
+		-- A stepped temple headdress, gold and jade, with a plume of glowing feathers.
+		egg:fill(-3, 17, -3, 2, 17, 2, JUNGLE.gold)
+		egg:fill(-2, 18, -2, 1, 18, 1, JUNGLE.jade)
+		egg:fill(-1, 19, -1, 0, 19, 0, JUNGLE.gold)
+		for _, x in { -2, -1, 0, 1 } do
+			egg:set(x, 19, 1, JUNGLE.jadeGlow, NEON)
+			egg:set(x, 20, 1, JUNGLE.jadeGlow, NEON)
+		end
+		egg:set(-1, 21, 1, JUNGLE.gold)
+		egg:set(0, 21, 1, JUNGLE.gold)
 	end,
 }
 

@@ -33,8 +33,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below). The Jungle, the newest zone,
-  stands on the runway already but drops no eggs until its creatures are chosen.
-- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated and ridden (see below), every
+  has 12 for now: its candidates side by side (two Mythics, three Secrets, two Eternals), to be cut to 8 once the
+  favourites are picked.
+- Blocky pet models for all 60 zone pets, rigged with joints so they can be animated and ridden (see below), every
   zone's drawn in the showpiece style (sculpted voxels, glowing Neon, auras, with bloom in the lighting).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
@@ -337,7 +338,7 @@ The runway is level, and gets longer and wider the further it goes, the banks st
 | Forest | 800 | 120 | 11 |
 | Desert | 1,160 | 140 | 15 |
 | Snow | 1,520 | 160 | 20 |
-| Jungle | 1,880 | 200 | 25 (once it has eggs) |
+| Jungle | 1,880 | 200 | 25 |
 | Ocean | 2,240 | 260 | 30 |
 | Volcano | 2,600 | 320 | 35 |
 | Prehistoric | 2,960 | 400 | 39 |
@@ -522,7 +523,9 @@ from it. Every pet has its model:
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
-- Jungle: still being chosen (jungle animals, giant insects and a fantasy Eternal); no eggs drop there until they are
+- Jungle: Poison Dart Frog, Chameleon, Giant Leafcutter Ant, Giant Centipede, Hercules Beetle, Morpho Queen, Titan
+  Anaconda, Silverback King, Titan Beetle, Mantis Empress, Vine Hydra, Jade Temple Guardian (the Mythic, Secret and
+  Eternal candidates side by side, until the favourites are picked)
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
@@ -531,7 +534,7 @@ from it. Every pet has its model:
 voxel models with real proportions, light baked into their colours (lighter tops, darker undersides), crisp angled
 claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that glows. Each zone has its own file
 beside `Designs.luau`: `PetModels/Forest.luau`, `PetModels/Desert.luau`, `PetModels/Snow.luau`,
-`PetModels/Ocean.luau`, `PetModels/Volcano.luau` and `PetModels/Prehistoric.luau`:
+`PetModels/Jungle.luau`, `PetModels/Ocean.luau`, `PetModels/Volcano.luau` and `PetModels/Prehistoric.luau`:
 
 | Rarity | Size (a player is 5 studs) | What glows |
 | --- | --- | --- |
@@ -540,8 +543,8 @@ beside `Designs.luau`: `PetModels/Forest.luau`, `PetModels/Desert.luau`, `PetMod
 | Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16; the Pteranodon's wings, 27 across) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom, the Velociraptor's crest and sickle claws |
 | Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13; the Stegosaurus, 19 to the tips of its plates) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet: the Triceratops's eye-spotted frill, the Stegosaurus's plates rimmed in light |
 | Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17; the Brachiosaurus, 30) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers, the Brachiosaurus's rows of lights and the glowing mushrooms in the moss on its back |
-| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
-| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65; the Lunar Dragon, 37 tall with wings spanning 67; the Mosasaurus, 83 long) | The Lava Dragon's lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws; the Lunar Dragon's starry scales and wings, glowing mane, crescent moon round its head and blue moonfire; the Mosasaurus's violet lights of the deep |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long; the Silverback King, 30 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
+| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65; the Lunar Dragon, 37 tall with wings spanning 67; the Mosasaurus, 83 long; the Vine Hydra, 36 tall; the Jade Temple Guardian, 45 to the tips of its plumes) | The Lava Dragon's lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws; the Lunar Dragon's starry scales and wings, glowing mane, crescent moon round its head and blue moonfire; the Mosasaurus's violet lights of the deep |
 
 The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
 it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game

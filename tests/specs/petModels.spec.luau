@@ -17,8 +17,20 @@ return function(harness)
 		{ "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" },
 		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
-		-- The Jungle: its creatures are still being chosen.
-		{},
+		{
+			"PoisonDartFrog",
+			"Chameleon",
+			"GiantLeafcutterAnt",
+			"GiantCentipede",
+			"HerculesBeetle",
+			"MorphoQueen",
+			"TitanAnaconda",
+			"SilverbackKing",
+			"TitanBeetle",
+			"MantisEmpress",
+			"VineHydra",
+			"JadeTempleGuardian",
+		},
 		{ "SeaTurtle", "Dolphin", "MantaRay", "GreatShark", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
 		{
 			"ObsidianGoat",
