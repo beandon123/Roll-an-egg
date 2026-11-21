@@ -29,7 +29,7 @@ local EVENTS = {
 	"Notice", -- (text, colorRgb?): a message for this player alone
 	"MountChanged", -- (petUid or "", speed): the pet the player is riding now, if any
 	"PetBucked", -- (petKind): the player's stamina ran out on their pet, and it bucked them off
-	"PlayerStateUpdated", -- ({ dollars, penLevel, stickLevel, passes }): sent whenever any of them changes
+	"PlayerStateUpdated", -- ({ dollars, penLevel, stickLevel, staminaMultiplier, passes, packs, revives }): on change
 	"PurchaseResult", -- (itemId, ok, message)
 	"TrailsUpdated", -- (ownedTrailIds, equippedTrailId): "" when none is equipped
 	"TrainingStarted", -- ({ level, plot }): the player is rolling on their training stick (Config/Sticks)
@@ -37,6 +37,8 @@ local EVENTS = {
 	"TrainingRep", -- (gain, boosted): one rep; gain is the Max Stamina it added, multipliers and all
 	"TrainingBubble", -- (bubbleId, endsAt): a "2x" bubble to tap before endsAt (server time)
 	"TrainingBoost", -- (endsAt): the bubble was tapped in time; reps count double until endsAt
+	"ReviveOffer", -- (endsAt or nil): the player may use a revive until endsAt (server time); nil: they have none
+	"Revived", -- (revivesLeft): a revive was used; the player's device puts them back in the air above an egg
 	-- Player -> server
 	"RequestMount", -- (eggId)
 	"RequestDismount", -- ()
@@ -52,6 +54,9 @@ local EVENTS = {
 	"SaveSettings", -- ({ [key]: value }) see Config/Settings
 	"StopTraining", -- (): get off the training stick
 	"ClaimTrainingBoost", -- (bubbleId): the player tapped a "2x" bubble
+	"MissedLeap", -- (): the player's device saw them miss their leap; asks for a revive offer (Logic/Revives)
+	"UseRevive", -- (): yes, use a revive
+	"DeclineRevive", -- (): no thanks; go back to the hub
 }
 
 -- Frequent messages where a lost one does not matter, because a newer one follows.

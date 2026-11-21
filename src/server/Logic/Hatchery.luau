@@ -54,6 +54,9 @@ export type Data = {
 	PenLevel: number,
 	Dollars: number,
 	Mount: string,
+	-- Every pet and variant the player has ever had ("SabertoothCat/Molten" -> true), kept when the pet is sold: the
+	-- Top Collectors board counts them.
+	Discovered: { [string]: boolean }?,
 	-- From older saves (see migrate).
 	Nests: { any }?,
 	NestCount: number?,
@@ -125,6 +128,36 @@ function Hatchery.migrate(data: Data, savedVersion: number?)
 	if choosing then
 		Hatchery.equipBest(data)
 	end
+	-- Saves from before the collection count it from the pets they have.
+	for _, pet in data.Pets do
+		Hatchery.discover(data, pet)
+	end
+end
+
+----------------------------------------------------------------------------------------------------------------
+-- The collection
+
+-- The collection's key for a pet: its kind and variant.
+function Hatchery.discoveryKey(pet: { kind: string, variant: string? }): string
+	return `{pet.kind}/{pet.variant or "Normal"}`
+end
+
+-- Marks a pet's kind and variant as found, for good (selling the pet does not undo it).
+function Hatchery.discover(data: Data, pet: { kind: string, variant: string? })
+	data.Discovered = data.Discovered or {}
+	local discovered = data.Discovered :: { [string]: boolean }
+	discovered[Hatchery.discoveryKey(pet)] = true
+end
+
+-- How many different pets (each kind in each variant) the player has ever had.
+function Hatchery.discoveredCount(data: Data): number
+	local count = 0
+	for _, found in data.Discovered or {} do
+		if found then
+			count += 1
+		end
+	end
+	return count
 end
 
 ----------------------------------------------------------------------------------------------------------------
@@ -267,6 +300,7 @@ function Hatchery.hatch(data: Data, entry: Incubating, now: number, petUid: stri
 		hatchedAt = now,
 	}
 	table.insert(data.Pets, pet)
+	Hatchery.discover(data, pet)
 	return pet
 end
 

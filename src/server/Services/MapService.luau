@@ -173,11 +173,12 @@ local function buildObstacles(map: Instance)
 end
 
 -- A bright, milky fog, like the owner's reference: crisp close by, then everything fading into pale white-blue from
--- FOG_START studs away, half gone by about 300 and lost in it by FOG_END. It is Lighting's own fog, which is set in
--- studs (an Atmosphere's strength can only be judged by eye, and hides this fog, so there is none). The time of day,
--- and the fog's colour with it, are set by each client from the cycle (see the client's DayNightController).
-local FOG_START = 40
-local FOG_END = 600
+-- FOG_START studs away, half gone by about 490 and lost in it by FOG_END (pushed back from 40 and 600, decided:
+-- the owner wanted a little less fog). It is Lighting's own fog, which is set in studs (an Atmosphere's strength
+-- can only be judged by eye, and hides this fog, so there is none). The time of day, and the fog's colour with it,
+-- are set by each client from the cycle (see the client's DayNightController).
+local FOG_START = 80
+local FOG_END = 900
 
 -- Bloom, so Neon glows the way it does round the showpiece pets of other games: their eyes, runes, cracks and auras
 -- throw a soft halo of light. Only light brighter than the threshold blooms, which Neon is and sunlit ground is not.

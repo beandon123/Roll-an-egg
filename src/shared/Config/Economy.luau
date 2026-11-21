@@ -26,14 +26,21 @@ Economy.ZONE_SCALE = 10
 -- What selling a pet pays, in seconds of its income.
 Economy.SELL_SECONDS = 150
 
--- Variants: when an egg hatches, its pet may come out Silver, Gold or Rainbow instead of Normal. Each is rarer and
--- worth more (income and sale price are multiplied) and rides a little faster.
+-- Variants (shown to players as mutations): when an egg hatches, its pet may come out Gold (8%), Diamond (4%) or
+-- Rainbow (1%) instead of Normal (decided, odds and worth too). Each is rarer and worth more (income and sale price are
+-- multiplied) and rides a little faster. Silver is shelved (chance 0): it no longer hatches, but pets that already
+-- have it keep it. Molten and Crystal never hatch either (chance 0): they are only the pets that come in the
+-- shop's packs (Config/Shop).
+-- Rarest hatchable mutation last among the hatchable ones; PetWorth.rollVariant checks the rarest first.
 export type Variant = { name: string, chance: number, worth: number, speedBonus: number }
 Economy.VARIANTS = {
 	{ name = "Normal", chance = 0, worth = 1, speedBonus = 0 },
-	{ name = "Silver", chance = 0.08, worth = 2, speedBonus = 2 },
-	{ name = "Gold", chance = 0.025, worth = 5, speedBonus = 4 },
-	{ name = "Rainbow", chance = 0.005, worth = 15, speedBonus = 6 },
+	{ name = "Silver", chance = 0, worth = 2, speedBonus = 2 },
+	{ name = "Gold", chance = 0.08, worth = 1.5, speedBonus = 4 },
+	{ name = "Diamond", chance = 0.04, worth = 3, speedBonus = 5 },
+	{ name = "Rainbow", chance = 0.01, worth = 10, speedBonus = 6 },
+	{ name = "Molten", chance = 0, worth = 10, speedBonus = 8 },
+	{ name = "Crystal", chance = 0, worth = 10, speedBonus = 8 },
 } :: { Variant }
 
 -- How fast a pet carries its rider round the hub (studs per second; walking is 16), by rarity. Pets never go on the

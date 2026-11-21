@@ -17,6 +17,7 @@ local specs = {
 	"./specs/stalls.spec",
 	"./specs/fuse.spec",
 	"./specs/training.spec",
+	"./specs/packs.spec",
 	"./specs/server.smoke.spec",
 	"./specs/client.smoke.spec",
 }

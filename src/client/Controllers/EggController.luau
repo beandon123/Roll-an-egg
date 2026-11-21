@@ -895,6 +895,24 @@ local function aimTarget(egg: ClientEgg, now: number, referenceZ: number)
 	}
 end
 
+-- The egg nearest `position` across the ground (within `range` studs) that a player could land on, and where it is
+-- as Shared/JumpAim sees it (its middle, the height a rider stands at on it, its speed), or nil. For a revive: the
+-- player is put back in the air just above it.
+function EggController.NearestLandable(position: Vector3, now: number, range: number): (number?, any)
+	local bestId, bestTarget, bestDistance = nil, nil, range * range
+	for _, egg in eggs do
+		if landable(egg, nil) then
+			local target = aimTarget(egg, now, position.Z)
+			local dx, dz = target.x - position.X, target.z - position.Z
+			local distance = dx * dx + dz * dz
+			if distance < bestDistance then
+				bestId, bestTarget, bestDistance = egg.id, target, distance
+			end
+		end
+	end
+	return bestId, bestTarget
+end
+
 -- The closest egg a leaping player at `position` could land on, if any. `ignoreEggId` skips one egg (the one the
 -- player just jumped off). Eggs that are taken, claimed, or cracking are skipped.
 function EggController.FindMountable(position: Vector3, now: number, ignoreEggId: number?): number?

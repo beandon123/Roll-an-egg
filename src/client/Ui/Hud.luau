@@ -13,6 +13,7 @@ local Load = require(script.Parent.Parent.Load)
 local NumberFormat = Load.shared("NumberFormat")
 
 local Panels = require(script.Parent.Panels)
+local ReviveUi = require(script.Parent.ReviveUi)
 local SettingsPanel = require(script.Parent.SettingsPanel)
 local ShopPanel = require(script.Parent.ShopPanel)
 local StationPanels = require(script.Parent.StationPanels)
@@ -26,7 +27,7 @@ local Children = Fusion.Children
 local OnEvent = Fusion.OnEvent
 
 local WHITE = Color3.new(1, 1, 1)
-local PANEL = Color3.fromRGB(26, 28, 36)
+local PANEL = Theme.WELL
 local STAMINA_COLOR = Color3.fromRGB(90, 200, 255)
 local CLAIM_COLOR = Color3.fromRGB(120, 230, 120)
 local DANGER_COLOR = Color3.fromRGB(255, 95, 95)
@@ -77,7 +78,7 @@ local function corner(scope, radius: number)
 end
 
 local function outline(scope)
-	return scope:New("UIStroke")({ Color = Color3.new(0, 0, 0), Thickness = 2, Transparency = 0.5 })
+	return scope:New("UIStroke")({ Color = Theme.INK, Thickness = 2.5 })
 end
 
 -- A progress bar with text over it. `Fill` is a state object from 0 to 1.
@@ -104,11 +105,11 @@ local function bar(scope, props)
 				BackgroundTransparency = 1,
 				Size = UDim2.fromScale(1, 1),
 				ZIndex = 2,
-				Font = Enum.Font.GothamBold,
+				Font = Theme.FONT,
 				Text = props.Text,
 				TextColor3 = WHITE,
 				TextSize = 16,
-				TextStrokeTransparency = 0.4,
+				[Children] = { scope:New("UIStroke")({ Color = Theme.INK, Thickness = 1.5 }) },
 			}),
 		},
 	})
@@ -163,7 +164,7 @@ local function fadeBand(scope, props)
 		AnchorPoint = props.AnchorPoint,
 		Position = props.Position,
 		Size = props.Size,
-		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundColor3 = Theme.BACKDROP,
 		BorderSizePixel = 0,
 		ZIndex = 0,
 		[Children] = {
@@ -611,7 +612,7 @@ function Hud.mount(playerGui: Instance)
 								LayoutOrder = 1,
 								Size = UDim2.new(1, 0, 0, 18),
 								BackgroundTransparency = 1,
-								Font = Enum.Font.GothamBold,
+								Font = Theme.FONT,
 								Text = scope:Computed(function(use)
 									if use(UiState.rideClaimed) then
 										return "In your inventory  -  keep rolling, or jump to leap off"
@@ -671,6 +672,9 @@ function Hud.mount(playerGui: Instance)
 
 					-- Right edge: the Eggs, Pets and Ride tabs, and the panel they open.
 					Panels.build(scope),
+
+					-- Over everything: the revive offer after a missed leap.
+					ReviveUi.build(scope),
 				},
 			}),
 		},

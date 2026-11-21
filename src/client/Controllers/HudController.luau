@@ -77,6 +77,14 @@ local function update()
 		UiState.leapSecondsLeft:set(math.max(0, math.ceil((leapEndsAt - os.clock()) * 10) / 10))
 	end
 
+	-- Time left to answer a revive offer.
+	local reviveEndsAt = UiState.reviveEndsAt
+	if reviveEndsAt then
+		local left = math.max(0, reviveEndsAt - os.clock())
+		UiState.reviveSeconds:set(math.ceil(left))
+		UiState.reviveLeft:set(left / Tuning.REVIVE_OFFER_TIME)
+	end
+
 	-- The rare-egg alert's lines pop in, shine and fade out by this clock.
 	if #UiState.Fusion.peek(UiState.announcements) > 0 then
 		UiState.announceClock:set(os.clock())

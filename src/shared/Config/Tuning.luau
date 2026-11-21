@@ -103,6 +103,17 @@ Tuning.STANDING_HEIGHT = 3.4
 -- player's own device normally does it first, the moment they touch the runway).
 Tuning.LEAP_SERVER_GRACE = 1.5
 
+-- Revives (bought in the shop, and in its packs). A player who misses their leap and has a revive is held where
+-- they fell, and gets REVIVE_OFFER_TIME seconds to use one; if they do, they are put back in the air just above the
+-- nearest egg they could land on (REVIVE_DROP_HEIGHT studs over where they would stand on it), with a fresh leap.
+-- If nobody can be landed on within REVIVE_SEARCH_RANGE studs, they leap again from where they fell, from
+-- REVIVE_LIFT studs up. If they let the time run out, or say no, they go back to the hub as usual. The server
+-- allows LEAP_SERVER_GRACE more before it sends them back itself.
+Tuning.REVIVE_OFFER_TIME = 6
+Tuning.REVIVE_DROP_HEIGHT = 6
+Tuning.REVIVE_SEARCH_RANGE = 160
+Tuning.REVIVE_LIFT = 20
+
 -- Riding a pet (in the hub; never on the runway) costs this much stamina a second, so the more Max Stamina a player
 -- has, the longer they can ride. When it runs out, the pet bucks them off. A player with less than
 -- PET_RIDE_MIN_STAMINA is too tired to get on.

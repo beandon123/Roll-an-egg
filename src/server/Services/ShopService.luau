@@ -7,6 +7,7 @@
 -- Clients only say which item they want (an id from Config/Shop). The server looks up the price, checks it, and
 -- shows Roblox's purchase prompt itself. Clients never send prices, amounts, or product IDs.
 
+local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,11 +18,17 @@ local Shared = ReplicatedStorage.Shared
 local LuckBoost = require(Shared.LuckBoost)
 local Net = require(Shared.Net)
 local NumberFormat = require(Shared.NumberFormat)
+local PetModels = require(Shared.PetModels)
 local Shop = require(Shared.Config.Shop)
+local Trails = require(Shared.Config.Trails)
+
+local Packs = require(script.Parent.Parent.Logic.Packs)
+local Revives = require(script.Parent.Parent.Logic.Revives)
 
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local RunwayService = require(script.Parent.RunwayService)
+local StationService = require(script.Parent.StationService)
 local TrainingService = require(script.Parent.TrainingService)
 
 -- How many granted purchase IDs each player's data remembers.
@@ -63,6 +70,17 @@ local function passList(player: Player): { string }
 	return list
 end
 
+-- The packs a player has bought, in shop order.
+local function packList(data): { string }
+	local list = {}
+	for _, pack in Shop.Packs do
+		if Packs.owns(data, pack.id) then
+			table.insert(list, pack.id)
+		end
+	end
+	return list
+end
+
 -- Everything the shop shows for a player.
 local function stateOf(player: Player)
 	local data = DataService.GetData(player)
@@ -72,6 +90,8 @@ local function stateOf(player: Player)
 		stickLevel = if data then data.StickLevel else 1,
 		staminaMultiplier = if data then data.StaminaMultiplier else 1,
 		passes = passList(player),
+		packs = if data then packList(data) else {},
+		revives = if data then Revives.count(data) else 0,
 	}
 end
 
@@ -143,6 +163,35 @@ local function grant(player: Player, reward: Shop.Grant): string
 		RunwayService.RefreshMaxStamina(player)
 		pushState(player)
 		return `Max Stamina doubled! Now x{data.StaminaMultiplier}.`
+	elseif reward.kind == "Revives" then
+		Revives.add(data, reward.amount)
+		pushState(player)
+		return if reward.amount == 1 then "+1 Revive!" else `+{reward.amount} Revives!`
+	elseif reward.kind == "Pack" then
+		local pack = Shop.PacksById[reward.packId]
+		if pack == nil then
+			error(`unknown pack {reward.packId}`)
+		end
+		local pet = Packs.grant(data, pack, HttpService:GenerateGUID(false), now())
+		if pack.luck then
+			addLuck(pack.luck.multiplier, pack.luck.duration, player)
+		end
+		InventoryService.Changed(player)
+		StationService.RefreshTrails(player)
+		pushState(player)
+		local about = PetModels.describe(pack.pet.kind)
+		local trail = Trails.ById[pack.trail]
+		local parts = {
+			`{pack.pet.variant} {if about then about.name else pack.pet.kind}`,
+			`+${NumberFormat.abbreviate(pack.dollars)}`,
+			`x{pack.stamina} Max Stamina`,
+			if trail then trail.name else pack.trail,
+			`+{pack.revives} Revives`,
+		}
+		if pet == nil then
+			table.remove(parts, 1)
+		end
+		return `{pack.name} unlocked! {table.concat(parts, ", ")}`
 	end
 	error(`unknown grant {reward.kind}`)
 end
@@ -253,6 +302,13 @@ local function onRequestPurchase(player: Player, itemId: unknown)
 			return
 		end
 		productId, reward = next.productId, { kind = "StaminaDoubling" }
+	elseif Shop.PacksById[itemId] then
+		local pack = Shop.PacksById[itemId]
+		if Packs.owns(data, pack.id) then
+			sendResult(player, itemId, false, `You already have the {pack.name}!`)
+			return
+		end
+		productId, reward = pack.productId, { kind = "Pack", packId = pack.id }
 	else
 		local product = Shop.ProductsById[itemId]
 		if product == nil then

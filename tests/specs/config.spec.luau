@@ -277,7 +277,7 @@ return function(harness)
 			for _, name in Shop.Sections do
 				sections[name] = true
 			end
-			local kinds = { Dollars = true, MaxStamina = true, Luck = true }
+			local kinds = { Dollars = true, MaxStamina = true, Luck = true, Revives = true }
 			for _, product in Shop.Products do
 				expect.falsy(seen[product.id], "duplicate id " .. product.id)
 				seen[product.id] = true
@@ -292,12 +292,18 @@ return function(harness)
 				seen[pass.id] = true
 				expect.truthy(pass.robux > 0, pass.id .. " price")
 			end
+			for _, pack in Shop.Packs do
+				expect.falsy(seen[pack.id], "duplicate id " .. pack.id)
+				seen[pack.id] = true
+				expect.truthy(pack.robux > 0, pack.id .. " price")
+				expect.truthy(Shop.PacksById[pack.id] == pack, pack.id .. " lookup")
+			end
 			expect.falsy(seen[Shop.PEN_UPGRADE_ID], "the pen upgrade id is not used by anything else")
 			expect.falsy(seen[Shop.STAMINA_DOUBLING_ID], "the stamina doubling id is not used by anything else")
 		end)
 
 		it("lists each section's products in order, bigger packs costing more", function()
-			for _, section in { "Luck", "Stamina", "Dollars" } do
+			for _, section in { "Luck", "Stamina", "Revives", "Dollars" } do
 				local products = Shop.productsIn(section)
 				expect.truthy(#products >= 2, section)
 				for index = 2, #products do

@@ -41,16 +41,15 @@ local function close()
 	UiState.openPanel:set(nil)
 end
 
--- A cream card for one row of a list.
+-- A card for one row of a list.
 local function row(scope, props)
 	return scope:New("Frame")({
 		Name = props.Name,
 		LayoutOrder = props.LayoutOrder,
 		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
-		BackgroundColor3 = Theme.SHELL,
+		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 18),
-			Widgets.stroke(scope, 3),
+			Widgets.cardSkin(scope, Theme.CARD_EDGE, Theme.CARD, 18),
 			props.Children,
 		},
 	})
@@ -73,14 +72,10 @@ end
 ----------------------------------------------------------------------------------------------------------------
 -- Trails stall
 --
--- A dark panel under a lavender header, with a card for every trail in a row that scrolls sideways: its name, its
+-- The shared panel look (a deep indigo body under a glossy white-to-lavender header), with a card for every trail in a row that scrolls sideways: its name, its
 -- level and rarity, a picture of it streaming behind a runner, its stamina boost, and a big button (its price, or
 -- Equip once owned).
 
-local TRAILS_PANEL = Color3.fromRGB(54, 54, 66)
-local TRAILS_PANEL_DEEP = Color3.fromRGB(38, 38, 48)
-local TRAILS_HEADER = Color3.fromRGB(190, 182, 244)
-local TRAILS_HEADER_DEEP = Color3.fromRGB(132, 120, 212)
 local CARD_WIDTH = 196
 local CARD_HEIGHT = 368
 local BOOST_GREEN = "#8CFF5A"
@@ -259,6 +254,9 @@ local function trailCard(scope, trail, order: number)
 			return "Equipped"
 		elseif use(UiState.trailsOwned)[trail.id] then
 			return "Owned"
+		elseif trail.pack then
+			-- Only the shop's packs give it.
+			return "InPack"
 		elseif use(UiState.dollars) >= trail.price then
 			return "Affordable"
 		end
@@ -325,7 +323,9 @@ local function trailCard(scope, trail, order: number)
 				BackgroundTransparency = 1,
 				Font = Theme.FONT,
 				RichText = true,
-				Text = `Lvl {trail.level} <font color="{hex(rarityColor)}">{trail.rarity}</font>`,
+				Text = if trail.pack
+					then `Pack <font color="{hex(rarityColor)}">{trail.rarity}</font>`
+					else `Lvl {trail.level} <font color="{hex(rarityColor)}">{trail.rarity}</font>`,
 				TextColor3 = Theme.WHITE,
 				TextScaled = true,
 				[Children] = {
@@ -365,6 +365,8 @@ local function trailCard(scope, trail, order: number)
 						return Theme.YOLK
 					elseif current == "TooExpensive" then
 						return BUTTON_GREY
+					elseif current == "InPack" then
+						return Theme.VIOLET
 					end
 					return Theme.GREEN
 				end),
@@ -374,6 +376,8 @@ local function trailCard(scope, trail, order: number)
 						return Theme.YOLK_DEEP
 					elseif current == "TooExpensive" then
 						return BUTTON_GREY_DEEP
+					elseif current == "InPack" then
+						return Theme.VIOLET_DEEP
 					end
 					return Theme.GREEN_DEEP
 				end),
@@ -383,6 +387,8 @@ local function trailCard(scope, trail, order: number)
 						return "Equipped"
 					elseif current == "Owned" then
 						return "Equip"
+					elseif current == "InPack" then
+						return "🎁 In Packs"
 					end
 					return money(trail.price)
 				end),
@@ -392,6 +398,8 @@ local function trailCard(scope, trail, order: number)
 				OnActivated = function()
 					if Fusion.peek(UiState.trailsOwned)[trail.id] then
 						UiState.actions.equipTrail(trail.id)
+					elseif trail.pack then
+						UiState.openShop("Packs")
 					else
 						UiState.actions.buyTrail(trail.id)
 					end
@@ -411,7 +419,8 @@ local function trailsPanel(scope)
 		0.7
 	)
 	local cards = {}
-	for index, trail in Trails.List do
+	-- The stall's nine, then the trails only the shop's packs give.
+	for index, trail in Trails.All do
 		table.insert(cards, trailCard(scope, trail, index))
 	end
 
@@ -426,41 +435,14 @@ local function trailsPanel(scope)
 		[Children] = {
 			scope:New("UIScale")({ Scale = scale }),
 			scope:New("UISizeConstraint")({ MaxSize = Vector2.new(900, 500) }),
-			Widgets.corner(scope, 22),
-			Widgets.gradient(scope, TRAILS_PANEL, TRAILS_PANEL_DEEP),
-			scope:New("UIStroke")({ Color = Color3.fromRGB(214, 210, 240), Thickness = 5 }),
-			Widgets.speckles(scope, {
-				{ 0.04, 0.3, 8 },
-				{ 0.97, 0.42, 6 },
-				{ 0.5, 0.97, 7 },
-				{ 0.22, 0.96, 5 },
-				{ 0.8, 0.95, 9 },
-			}, Color3.new(1, 1, 1), 0.92),
+			Widgets.panelSkin(scope),
 
-			-- The header: a lavender band with the title, a lightning badge on its corner and a red close button.
-			scope:New("Frame")({
-				Name = "TitleBar",
-				Size = UDim2.new(1, 0, 0, 70),
-				BackgroundColor3 = Color3.new(1, 1, 1),
-				[Children] = {
-					Widgets.corner(scope, 22),
-					Widgets.gradient(scope, TRAILS_HEADER, TRAILS_HEADER_DEEP),
-					Widgets.stroke(scope, 4),
-					Widgets.speckles(scope, {
-						{ 0.2, 0.3, 12 },
-						{ 0.27, 0.72, 7 },
-						{ 0.74, 0.32, 16 },
-						{ 0.8, 0.74, 8 },
-					}, Color3.new(1, 1, 1), 0.7),
-					Widgets.text(scope, {
-						Name = "Title",
-						Size = UDim2.fromScale(1, 1),
-						Font = Theme.TITLE_FONT,
-						Text = "TRAILS",
-						TextColor3 = Theme.WHITE,
-						TextSize = 52,
-						Stroke = 4,
-					}),
+			-- The header: the glossy band with the title, a lightning badge on its corner and a red close button.
+			Widgets.titleBand(scope, {
+				Text = "TRAILS",
+				TextSize = 52,
+				Centered = true,
+				Extra = {
 					Widgets.text(scope, {
 						Name = "Badge",
 						AnchorPoint = Vector2.new(0.5, 0.5),
@@ -470,20 +452,7 @@ local function trailsPanel(scope)
 						Text = "⚡",
 						TextSize = 58,
 					}),
-					Widgets.button(scope, {
-						Name = "Close",
-						AnchorPoint = Vector2.new(1, 0),
-						Position = UDim2.new(1, 6, 0, -6),
-						Size = UDim2.fromOffset(60, 60),
-						Color = Theme.CORAL,
-						Deep = Theme.CORAL_DEEP,
-						Radius = UDim.new(0, 10),
-						Text = "X",
-						TextColor3 = Theme.WHITE,
-						TextSize = 36,
-						Stroke = 3,
-						OnActivated = close,
-					}),
+					Widgets.closeButton(scope, close),
 				},
 			}),
 
@@ -503,7 +472,7 @@ local function trailsPanel(scope)
 						CanvasSize = UDim2.new(),
 						ScrollingDirection = Enum.ScrollingDirection.X,
 						ScrollBarThickness = 10,
-						ScrollBarImageColor3 = Color3.fromRGB(200, 200, 214),
+						ScrollBarImageColor3 = Theme.TEXT_SOFT,
 						ScrollBarImageTransparency = 0.2,
 						VerticalScrollBarInset = Enum.ScrollBarInset.None,
 						[Children] = {
@@ -602,7 +571,7 @@ local function eggRow(scope, group, order: number)
 				Size = UDim2.new(1, -330, 0, 24),
 				Font = Theme.SMALL_FONT,
 				Text = `{group.rarity}  x{group.count}   {money(value)} each`,
-				TextColor3 = if rarity then rgb(rarity.color):Lerp(Theme.INK, 0.45) else Theme.INK,
+				TextColor3 = if rarity then rgb(rarity.color):Lerp(Theme.WHITE, 0.3) else Theme.TEXT_SOFT,
 				TextSize = 16,
 				TextXAlignment = Enum.TextXAlignment.Left,
 			}),
@@ -704,10 +673,10 @@ local function fusePanel(scope)
 						Name = "Odds",
 						LayoutOrder = 2,
 						Height = 120,
-						Text = "Mix any variants and sizes. Each pet you put in has a 1 in 3 chance to pass on its "
-							.. "variant, and a 1 in 3 chance to set the size, which then grows one step. Growing past "
+						Text = "Mix any mutations and sizes. Each pet you put in has a 1 in 3 chance to pass on its "
+							.. "mutation, and a 1 in 3 chance to set the size, which then grows one step. Growing past "
 							.. "Big gets harder: 90% to Huge, 80% to Giant, 70% to Colossal, 60% to Titanic.",
-						TextColor3 = Theme.SKY_DEEP,
+						TextColor3 = Theme.SKY,
 						TextSize = 18,
 					}),
 					note(scope, {
@@ -715,7 +684,7 @@ local function fusePanel(scope)
 						LayoutOrder = 3,
 						Height = 60,
 						Text = "The fuse machine is warming up: fusing opens soon!",
-						TextColor3 = Theme.CORAL_DEEP,
+						TextColor3 = Theme.CORAL,
 						TextSize = 20,
 					}),
 				},

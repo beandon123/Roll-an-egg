@@ -91,6 +91,11 @@ elseif scene == "secret" then
 	UiState.showAnnouncement("Eternal egg has spawned in Prehistoric!", 60)
 	UiState.showAnnouncement("Secret egg has spawned in Ocean!", 60)
 	UiState.showToast("Runway closes in 30s!", roblox.Color3.fromRGB(255, 170, 70), 60)
+elseif scene == "revive" then
+	-- Missed the leap with two revives left.
+	session:fromServer("PlayerStateUpdated", { revives = 2 })
+	UiState.reviveEndsAt = os.clock() + 4.4
+	UiState.reviveOffered:set(true)
 elseif scene == "stick" then
 	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
 	UiState.openPanel:set("Stick")

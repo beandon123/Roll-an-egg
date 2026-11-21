@@ -1784,7 +1784,7 @@ return function(harness)
 			local card = page.Pets.Pet_p
 			expect.equal(card.Title.Text, "Bear")
 			expect.equal(card.Rarity.Text, "Gold Epic")
-			expect.equal(card.Income.Text, "$20/s")
+			expect.equal(card.Income.Text, "$6/s")
 			expect.equal(card.Pen.Text, "In pen")
 			expect.equal(page.Pets.Pet_q.Pen.Text, "Put in pen")
 			expect.truthy(panel(parts).Preview:FindFirstChildOfClass("Model"), "pet in the preview")
@@ -2548,14 +2548,22 @@ return function(harness)
 			expect.truthy(string.find(list.Leaf.Boost.Text, "x1.5</font> Stamina", 1, true), list.Leaf.Boost.Text)
 			expect.truthy(string.find(list.Leaf.Level.Text, "^Lvl 1 .*Common"), list.Leaf.Level.Text)
 			expect.truthy(string.find(list.Rainbow.Level.Text, "^Lvl 9 .*Eternal"), list.Rainbow.Level.Text)
-			-- Nine cards, each with a picture of its trail; the plain first trail has no particles in it.
+			-- The stall's nine cards and the packs' two, each with a picture of its trail; the plain first trail has no
+			-- particles in it.
 			local cards = 0
 			for _, child in list:GetChildren() do
 				if child:IsA("Frame") and child:FindFirstChild("Picture") then
 					cards += 1
 				end
 			end
-			expect.equal(cards, 9)
+			expect.equal(cards, 11)
+			-- A pack's trail is not for sale here: its button opens the shop at the packs.
+			expect.truthy(string.find(list.Molten.Level.Text, "^Pack .*Mythic"), list.Molten.Level.Text)
+			expect.equal(buttonText(list.Crystal.Action), "🎁 In Packs")
+			session:fire(list.Crystal.Action, "Activated")
+			expect.equal(hud(parts).ShopPanel.Visible, true)
+			-- Back to the stall.
+			useStation(session, parts, "Trails")
 			expect.truthy(list.Leaf.Picture:FindFirstChild("Ribbon"), "the ribbon")
 			expect.falsy(list.Leaf.Picture:FindFirstChild("Speck1"), "no particles")
 			expect.truthy(list.Rainbow.Picture:FindFirstChild("Halo") and list.Rainbow.Picture.Speck1, "the works")
@@ -2702,12 +2710,14 @@ return function(harness)
 			local session, parts = startClient()
 			local root = hud(parts)
 			local chips = root.ShopPanel.Body.Sections
-			local featuredColor = chips.Featured.Face.BackgroundColor3
+			-- The packs come first, so their chip starts lit.
+			local packsColor = chips.Packs.Face.BackgroundColor3
+			expect.truthy(packsColor ~= chips.Featured.Face.BackgroundColor3, "Packs chip lit")
 			session:fire(root.Wallet.Dollars.Content.Add, "Activated")
 			expect.equal(root.ShopPanel.Visible, true)
 			task.wait(0.1)
 			expect.truthy(chips.Dollars.Face.BackgroundColor3 ~= chips.Luck.Face.BackgroundColor3, "Dollars chip lit")
-			expect.truthy(chips.Featured.Face.BackgroundColor3 ~= featuredColor, "Featured chip no longer lit")
+			expect.truthy(chips.Packs.Face.BackgroundColor3 ~= packsColor, "Packs chip no longer lit")
 			expect.falsy(root.Wallet.Eggs.Content:FindFirstChild("Add"), "eggs cannot be bought")
 		end)
 
@@ -2804,6 +2814,151 @@ return function(harness)
 			session:renderFrame(1, 91)
 			expect.equal(root.Luck.Visible, false)
 			expect.equal(shopBody(parts).Luck.Grid.Luck2.Badge.Label.Text, "15 MIN")
+		end)
+
+		it("shows each pack with its pet, what is in it, what that is worth, and its price", function()
+			local session, parts = startClient()
+			local robux = utf8.char(0xE002)
+			local packs = shopBody(parts).Packs.List
+			local epic = packs.EpicPack
+			expect.equal(epic.Info.Title.Text, "EPIC PACK")
+			expect.equal(epic.Info.PetName.Text, "MOLTEN SABERTOOTH CAT")
+			expect.equal(epic.Badge.Label.Text, "MOST POPULAR")
+			local items = epic.Info.Items
+			expect.equal(items.Pet.Value.Text, "$6.5K/s")
+			expect.equal(items.Cash.Value.Text, "+$250K")
+			expect.equal(items.Stamina.Value.Text, "x8")
+			expect.equal(items.Stamina.Tag.Label.Text, "FOREVER")
+			expect.equal(items.Trail.Value.Text, "MOLTEN")
+			expect.equal(items.Revives.Value.Text, "+2")
+			expect.falsy(items:FindFirstChild("Luck"), "no luck in the Epic Pack")
+			expect.equal(packs.SuperPack.Info.Items.Luck.Tag.Label.Text, "15 MIN")
+			expect.equal(epic.Info.Worth.Old.Text, `{robux} 514`)
+			expect.equal(epic.Info.Discount.Label.Text, "-71%")
+			expect.equal(buttonText(epic.Info.Buy), robux .. " 149")
+			session:fire(epic.Info.Buy, "Activated")
+			expect.equal(session:lastSent("RequestPurchase", "server").args[1], "EpicPack")
+
+			-- Opening the shop puts each pack's pet on its card, turning.
+			session:fire(hud(parts).Tabs.Shop, "Activated")
+			session:renderFrame(1 / 60)
+			expect.truthy(epic.PetView.World:FindFirstChild("SabertoothCat"), "the pet")
+			expect.equal(epic.PetView.World.SabertoothCat:GetAttribute("Variant"), "Molten")
+			expect.truthy(epic.PetView:FindFirstChildOfClass("Camera"), "a camera on it")
+
+			session:fromServer("PlayerStateUpdated", { packs = { "EpicPack" }, revives = 1 })
+			expect.equal(epic.Info.Owned.Visible, true)
+			expect.equal(epic.Info.Buy.Visible, false)
+			expect.equal(packs.SuperPack.Info.Buy.Visible, true)
+			expect.equal(shopBody(parts).Revives.Have.Text, "💖 You have 1 revive")
+			expect.equal(buttonText(shopBody(parts).Revives.Grid.Revives1.Buy), robux .. " 19")
+		end)
+	end)
+
+	describe("Client: revives", function()
+		-- A player in the air over the runway who has `revives` revives, about to touch it.
+		local function aboutToMiss(revives)
+			local session, parts = startClient()
+			session:fromServer("PlayerStateUpdated", { revives = revives })
+			local runway = shared(session).Runway
+			parts.root.Position = Vector3.new(0, 40, 30)
+			session:heartbeat(1 / 60)
+			parts.root.Position = Vector3.new(0, runway.surfaceY(30) + 3, 30)
+			session:heartbeat(1 / 60)
+			session:renderFrame(1 / 60)
+			return session, parts
+		end
+
+		it("offers a revive to a player who misses their leap, holding them where they fell", function()
+			local session, parts = aboutToMiss(2)
+			expect.equal(parts.humanoid.Health, 100)
+			expect.equal(parts.root.Anchored, true)
+			expect.truthy(session:lastSent("MissedLeap", "server"), "asked the server")
+			local revive = hud(parts).Revive
+			expect.equal(revive.Visible, true)
+			expect.equal(revive.Card.Heart.Count.Text, "x2")
+			expect.equal(revive.Card.Question.Text, "Use a revive and carry on?  6")
+			expect.equal(hud(parts).Toast.Text, "Missed the egg!")
+
+			-- REVIVE: the server agrees, and the player is put back in the air just above the nearest egg.
+			local egg = eggData(session, 1, 1, "Common", 2)
+			session:fromServer("EggSpawned", egg)
+			session:fire(revive.Card.Use, "Activated")
+			expect.truthy(session:lastSent("UseRevive", "server"), "asked to use one")
+			session:fromServer("Revived", 1)
+			session:renderFrame(1 / 60)
+			expect.equal(revive.Visible, false)
+			expect.equal(parts.root.Anchored, false)
+			-- (The stand-in keeps Position and CFrame apart; Roblox keeps them in step.)
+			local center = eggCenter(session, egg)
+			local position = parts.root.CFrame.Position
+			expect.near(position.Z, center.Z, 2)
+			expect.near(position.X, center.X, 2)
+			expect.truthy(position.Y > center.Y, "above the egg")
+			expect.truthy(parts.root:FindFirstChild("LeapForce").Enabled, "a fresh leap")
+			expect.equal(parts.humanoid.Health, 100)
+			expect.equal(hud(parts).Toast.Text, "Revived! Land on an egg!")
+		end)
+
+		it("sends the player back to the hub when they say no, or the server has no revive for them", function()
+			local session, parts = aboutToMiss(1)
+			session:fire(hud(parts).Revive.Card.Decline, "Activated")
+			expect.truthy(session:lastSent("DeclineRevive", "server"), "told the server")
+			expect.equal(parts.humanoid.Health, 0)
+			session:renderFrame(1 / 60)
+			expect.equal(hud(parts).Revive.Visible, false)
+
+			session, parts = aboutToMiss(1)
+			session:fromServer("ReviveOffer", nil)
+			expect.equal(parts.humanoid.Health, 0)
+		end)
+
+		it("goes straight back to the hub without a revive", function()
+			local session, parts = aboutToMiss(0)
+			expect.equal(parts.humanoid.Health, 0)
+			expect.falsy(session:lastSent("MissedLeap", "server"))
+			expect.equal(hud(parts).Revive.Visible, false)
+		end)
+	end)
+
+	describe("Client: leaderboards", function()
+		it("writes the player's own score and place under each board", function()
+			local session, parts = startClient()
+			local workspace = session:service("Workspace")
+			local map = workspace:FindFirstChild("Map") or roblox.Instance.new("Folder")
+			map.Name = "Map"
+			map.Parent = workspace
+			local folder = roblox.Instance.new("Folder")
+			folder.Name = "Leaderboards"
+			folder.Parent = map
+			for _, id in { "Stamina", "Collectors", "Earners" } do
+				local model = roblox.Instance.new("Model")
+				model.Name = id
+				local strip = roblox.Instance.new("Part")
+				strip.Name = "YouStrip"
+				strip.Parent = model
+				model.Parent = folder
+			end
+			parts.player:SetAttribute("LeaderboardStaminaScore", 1250)
+			parts.player:SetAttribute("LeaderboardStaminaRank", 4)
+			parts.player:SetAttribute("LeaderboardEarnersScore", 3000)
+			parts.player:SetAttribute("LeaderboardEarnersRank", 250)
+			session:heartbeat(1.1)
+
+			local stamina = parts.playerGui:FindFirstChild("LeaderboardStamina")
+			expect.truthy(stamina, "a strip for the Stamina board")
+			expect.equal(stamina.Adornee, folder.Stamina.YouStrip)
+			expect.equal(stamina.Line.Yours.Text, "YOUR STAMINA")
+			expect.equal(stamina.Line.Value.Text, "1.25K")
+			expect.equal(stamina.Line.Rank.Text, "#4")
+			local earners = parts.playerGui.LeaderboardEarners
+			expect.equal(earners.Line.Value.Text, "$3K")
+			expect.equal(earners.Line.Rank.Text, "#100+")
+			expect.equal(parts.playerGui.LeaderboardCollectors.Line.Rank.Text, "-")
+
+			parts.player:SetAttribute("LeaderboardStaminaRank", 1)
+			session:heartbeat(1.1)
+			expect.equal(stamina.Line.Rank.Text, "#1")
 		end)
 	end)
 

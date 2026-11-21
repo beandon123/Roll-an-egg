@@ -23,6 +23,7 @@ local Zones = require(Shared.Config.Zones)
 local DataService = require(script.Parent.DataService)
 local InventoryService = require(script.Parent.InventoryService)
 local MountService = require(script.Parent.MountService)
+local Revives = require(script.Parent.Parent.Logic.Revives)
 local RunwaySim = require(script.Parent.Parent.Logic.RunwaySim)
 local Stats = require(script.Parent.Parent.Logic.Stats)
 
@@ -41,6 +42,8 @@ local playersByUserId: { [number]: Player } = {}
 local lastLateralAt: { [Player]: number } = {}
 -- When each player was first seen on the runway on foot, without an egg under them (see checkLeaps).
 local offEggSince: { [Player]: number } = {}
+-- Players who missed their leap and are being offered a revive (Logic/Revives), by UserId.
+local reviveOffers: Revives.Offers = {}
 
 -- While a player rides, their character is held in place on their own device, so the server's copy of it stays
 -- where they got on. Streaming would then load the map around the wrong spot. So every player gets an invisible
@@ -285,6 +288,56 @@ local function onRideLateral(player: Player, x: unknown)
 	end
 end
 
+-- Whether the player's character is alive, over the runway (not the hub) and not riding an egg: someone who could
+-- have missed their leap.
+local function isLeaping(player: Player): boolean
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if humanoid == nil or humanoid.Health <= 0 or root == nil or not root:IsA("BasePart") then
+		return false
+	end
+	local position = root.Position
+	return position.Z >= 0
+		and math.abs(Runway.lateralOf(position.X, position.Z)) <= Runway.halfWidthAt(position.Z) + 4
+		and not RunwayService.IsRiding(player)
+end
+
+-- The player's device saw them miss their leap: offer them a revive if they have one (their device holds them where
+-- they fell meanwhile). Without one, they go back to the hub as usual.
+local function onMissedLeap(player: Player)
+	local data = DataService.GetData(player)
+	if data == nil or not isLeaping(player) then
+		Net.ReviveOffer:FireClient(player, nil)
+		return
+	end
+	local time = now()
+	local endsAt = Revives.offer(reviveOffers, data, player.UserId, time)
+	if endsAt then
+		offEggSince[player] = nil
+	end
+	Net.ReviveOffer:FireClient(player, endsAt)
+end
+
+local function onUseRevive(player: Player)
+	local data = DataService.GetData(player)
+	if data == nil or not isLeaping(player) then
+		return
+	end
+	if Revives.use(reviveOffers, data, player.UserId, now()) then
+		-- A fresh leap: the backstop's clock starts again.
+		offEggSince[player] = nil
+		Net.Revived:FireClient(player, Revives.count(data))
+	end
+end
+
+local function onDeclineRevive(player: Player)
+	if reviveOffers[player.UserId] ~= nil then
+		Revives.cancel(reviveOffers, player.UserId)
+		killCharacter(player)
+	end
+end
+
 -- What a client needs when it starts: every egg on the runway and its own numbers.
 local function onGetSnapshot(player: Player)
 	local time = now()
@@ -314,6 +367,7 @@ local function hookCharacter(player: Player, character: Model)
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if humanoid and humanoid:IsA("Humanoid") then
 		humanoid.Died:Connect(function()
+			Revives.cancel(reviveOffers, player.UserId)
 			sim:killRider(player.UserId, now())
 		end)
 	end
@@ -328,6 +382,7 @@ local function onDataLoaded(player: Player, _data)
 		hookCharacter(player, character)
 	end)
 	player.CharacterRemoving:Connect(function()
+		Revives.cancel(reviveOffers, player.UserId)
 		sim:killRider(player.UserId, now())
 	end)
 	if player.Character then
@@ -340,6 +395,7 @@ local function onPlayerRemoving(player: Player)
 	playersByUserId[player.UserId] = nil
 	lastLateralAt[player] = nil
 	offEggSince[player] = nil
+	Revives.cancel(reviveOffers, player.UserId)
 	local part = focusParts[player]
 	if part then
 		focusParts[player] = nil
@@ -352,7 +408,19 @@ end
 -- Each player's own device kills them the moment they touch the runway (see the client's RideController); this is
 -- the server's backstop, in case that does not happen. Only an admin flying (the admin panel) is spared.
 local function checkLeaps(time: number)
+	-- Players offered a revive who let it run out go back to the hub.
+	for _, userId in Revives.expire(reviveOffers, time) do
+		local player = playersByUserId[userId]
+		if player then
+			killCharacter(player)
+		end
+	end
 	for _, player in playersByUserId do
+		if Revives.isWaiting(reviveOffers, player.UserId, time) then
+			-- Held where they fell while they decide.
+			offEggSince[player] = nil
+			continue
+		end
 		local rider = sim:getRider(player.UserId)
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -457,6 +525,9 @@ function RunwayService.Init()
 	Net.ReportHit.OnServerEvent:Connect(onReportHit)
 	Net.ReportEdge.OnServerEvent:Connect(onReportEdge)
 	Net.RideLateral.OnServerEvent:Connect(onRideLateral)
+	Net.MissedLeap.OnServerEvent:Connect(onMissedLeap)
+	Net.UseRevive.OnServerEvent:Connect(onUseRevive)
+	Net.DeclineRevive.OnServerEvent:Connect(onDeclineRevive)
 	Net.GetSnapshot.OnServerInvoke = onGetSnapshot
 
 	DataService.OnLoaded(onDataLoaded)

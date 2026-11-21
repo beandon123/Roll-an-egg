@@ -92,6 +92,8 @@ local mountPendingUntil = 0
 local MOUNT_PENDING_GRACE = 0.5
 -- This character is about to go back to the hub (it missed its leap); nothing more to do.
 local doomed = false
+-- This character missed its leap and is held where it fell while the player decides whether to use a revive.
+local downed = false
 
 local function getCharacter(): (Humanoid?, BasePart?)
 	local character = localPlayer.Character
@@ -173,11 +175,70 @@ local function endLeap(root: BasePart?)
 	end
 end
 
+-- Takes the revive offer off the screen.
+local function closeReviveOffer()
+	downed = false
+	UiState.reviveEndsAt = nil
+	UiState.reviveOffered:set(false)
+end
+
+-- Back to the hub: the leap was missed and no revive is being used.
+local function giveUp()
+	closeReviveOffer()
+	doomed = true
+	local humanoid = getCharacter()
+	if humanoid then
+		humanoid.Health = 0
+	end
+end
+
 local function missedLeap(humanoid: Humanoid, root: BasePart)
 	endLeap(root)
-	doomed = true
 	UiState.showToast("Missed the egg!", OUCH_COLOR)
+	if UiState.Fusion.peek(UiState.revives) > 0 then
+		-- Held where they fell while they choose (the server confirms they have a revive: Net.ReviveOffer).
+		downed = true
+		clearAim()
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.Anchored = true
+		UiState.reviveEndsAt = os.clock() + Tuning.REVIVE_OFFER_TIME
+		UiState.reviveSeconds:set(Tuning.REVIVE_OFFER_TIME)
+		UiState.reviveLeft:set(1)
+		UiState.reviveOffered:set(true)
+		Net.MissedLeap:FireServer()
+		return
+	end
+	doomed = true
 	humanoid.Health = 0
+end
+
+-- The server used one of the player's revives: back in the air with a fresh leap, just above the nearest egg they
+-- could land on (the magnet takes hold at once), or straight up from where they fell if there is none near.
+local function onRevived(revivesLeft: number?)
+	if typeof(revivesLeft) == "number" then
+		UiState.revives:set(revivesLeft)
+	end
+	if not downed then
+		return
+	end
+	closeReviveOffer()
+	local humanoid, root = getCharacter()
+	if humanoid == nil or root == nil or humanoid.Health <= 0 then
+		return
+	end
+	root.Anchored = false
+	local now = Workspace:GetServerTimeNow()
+	local _, target = EggController.NearestLandable(root.Position, now, Tuning.REVIVE_SEARCH_RANGE)
+	local facing = CFrame.Angles(0, math.pi, 0)
+	if target then
+		local position = Vector3.new(target.x, target.seatY + Tuning.REVIVE_DROP_HEIGHT, target.z)
+		root.CFrame = CFrame.new(position) * facing
+		startLeap(humanoid, root, Vector3.new(target.vx or 0, 0, target.speed))
+	else
+		root.CFrame = CFrame.new(root.Position + Vector3.new(0, Tuning.REVIVE_LIFT, 0)) * facing
+		startLeap(humanoid, root, Vector3.new(0, Tuning.LEAP_UP_SPEED * 0.5, Tuning.LEAP_FORWARD_SPEED))
+	end
+	UiState.showToast("Revived! Land on an egg!", Color3.fromRGB(255, 150, 190))
 end
 
 -- Whether a character root at `position` is standing on the runway (rather than in the air above it, or off the
@@ -195,6 +256,15 @@ end
 -- Every frame while not riding an egg: start a leap when the player steps onto the runway, carry a leaping player
 -- back one loop at the end of the endless last zone, and kill them if they touch the runway or run out of time.
 local function updateLeap()
+	if downed then
+		-- Out of time to answer the revive offer.
+		local endsAt = UiState.reviveEndsAt
+		if endsAt and os.clock() >= endsAt then
+			Net.DeclineRevive:FireServer()
+			giveUp()
+		end
+		return
+	end
 	if doomed or UiState.ride ~= nil then
 		return
 	end
@@ -448,7 +518,7 @@ end
 -- Every frame while in the air: pick the egg the player is heading for and circle it, and once they are close enough,
 -- draw them onto it. (A flying admin is not pulled about.)
 local function aim()
-	if UiState.ride ~= nil or doomed then
+	if UiState.ride ~= nil or doomed or downed then
 		clearAim()
 		return
 	end
@@ -507,7 +577,7 @@ end
 
 -- While leaping next to an egg, ask the server to put us on it.
 local function lookForEgg()
-	if UiState.ride ~= nil then
+	if UiState.ride ~= nil or downed then
 		return
 	end
 	local clock = os.clock()
@@ -595,6 +665,7 @@ local function onCharacterAdded(character: Model)
 	stunnedUntil = 0
 	mountPendingUntil = 0
 	doomed = false
+	closeReviveOffer()
 	leapForce = nil
 	endLeap(nil)
 	clearAim()
@@ -603,6 +674,7 @@ local function onCharacterAdded(character: Model)
 	if humanoid and humanoid:IsA("Humanoid") then
 		humanoid.Died:Connect(function()
 			doomed = true
+			closeReviveOffer()
 			endLeap(nil)
 			if UiState.ride ~= nil then
 				UiState.ride = nil
@@ -622,6 +694,26 @@ function RideController.Init()
 	Net.RideStarted.OnClientEvent:Connect(onRideStarted)
 	Net.RideEnded.OnClientEvent:Connect(onRideEnded)
 	Net.EggClaimed.OnClientEvent:Connect(onEggClaimed)
+
+	-- Revives: the server's answer to a missed leap, the buttons on the offer, and a revive used.
+	Net.ReviveOffer.OnClientEvent:Connect(function(endsAt)
+		if downed and typeof(endsAt) ~= "number" then
+			-- No revive after all (the server's count is the one that counts).
+			giveUp()
+		end
+	end)
+	Net.Revived.OnClientEvent:Connect(onRevived)
+	UiState.actions.useRevive = function()
+		if downed then
+			Net.UseRevive:FireServer()
+		end
+	end
+	UiState.actions.declineRevive = function()
+		if downed then
+			Net.DeclineRevive:FireServer()
+			giveUp()
+		end
+	end
 
 	Net.ObstacleHit.OnClientEvent:Connect(function(obstacleId: number, _tier: string, lateral: number)
 		onHit(obstacleId, lateral)

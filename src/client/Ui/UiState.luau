@@ -84,6 +84,15 @@ local UiState = {
 	staminaMultiplier = scope:Value(1),
 	-- passId -> true
 	ownedPasses = scope:Value({} :: { [string]: boolean }),
+	-- packId -> true: the shop's packs bought (each can be bought once).
+	ownedPacks = scope:Value({} :: { [string]: boolean }),
+	-- Revives left (Config/Tuning): each lets the player carry on after missing their leap.
+	revives = scope:Value(0),
+	-- True while the player, having missed their leap, is offered a revive; whole seconds left to answer, and how much
+	-- of the time is left (1 to 0).
+	reviveOffered = scope:Value(false),
+	reviveSeconds = scope:Value(0),
+	reviveLeft = scope:Value(0),
 	-- itemId (or "PenLevel<n>", "StickLevel<n>", "StaminaDoubling<n>") -> Robux price, once loaded from Roblox. Until then the shop
 	-- shows Config/Shop's.
 	prices = scope:Value({} :: { [string]: number }),
@@ -131,6 +140,8 @@ local UiState = {
 	staminaState = { value = 100, time = 0, rate = 0, max = 100 },
 	-- When the current leap runs out (os.clock()), or nil when not leaping.
 	leapEndsAt = nil :: number?,
+	-- When the revive offer runs out (os.clock()), or nil when there is none.
+	reviveEndsAt = nil :: number?,
 	-- The local player's current ride, or nil: { eggId, startTime, claimTime, drain, claimed }
 	ride = nil :: { eggId: number, startTime: number, claimTime: number, drain: number, claimed: boolean }?,
 
@@ -148,6 +159,9 @@ local UiState = {
 		equipBest = function() end,
 		sellPet = function(_uid: string) end,
 		ridePet = function(_uid: string) end,
+		-- Answers a revive offer (RideController).
+		useRevive = function() end,
+		declineRevive = function() end,
 	},
 	-- The server's luck boosts (Shared/LuckBoost); the HUD works the timer out from these each frame.
 	luckBoosts = {} :: { { multiplier: number, endsAt: number } },

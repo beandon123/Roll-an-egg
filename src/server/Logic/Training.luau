@@ -53,9 +53,10 @@ function Training.levelOf(data): number
 	return Sticks.tier(data.StickLevel or 1).level
 end
 
--- What one rep's Max Stamina is multiplied by: the player's stamina doublings and their trail's boost.
+-- What one rep's Max Stamina is multiplied by: the player's stamina doublings, their packs' boost and their trail's
+-- boost.
 function Training.multiplier(data): number
-	return (data.StaminaMultiplier or 1) * Stats.trailMultiplier(data)
+	return (data.StaminaMultiplier or 1) * (data.PackStamina or 1) * Stats.trailMultiplier(data)
 end
 
 -- How much Max Stamina one rep on the player's stick adds, multipliers and all (doubled if `boosted`).

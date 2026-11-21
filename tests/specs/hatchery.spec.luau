@@ -170,8 +170,11 @@ return function(harness)
 			local forestBest = PetWorth.income({ zone = 1, rarity = "Mythic" })
 			local desertCommon = PetWorth.income({ zone = 2, rarity = "Common" })
 			expect.truthy(desertCommon >= forestBest * 0.5 and desertCommon <= forestBest * 2)
-			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Gold" }), 5)
-			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Rainbow" }), 15)
+			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Gold" }), 1.5)
+			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Diamond" }), 3)
+			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Rainbow" }), 10)
+			-- Silver is shelved, but pets that already have it keep their worth.
+			expect.equal(PetWorth.income({ zone = 1, rarity = "Common", variant = "Silver" }), 2)
 			expect.equal(PetWorth.sellPrice({ zone = 1, rarity = "Common" }), Economy.SELL_SECONDS)
 		end)
 
@@ -181,20 +184,27 @@ return function(harness)
 			expect.truthy(PetWorth.mountSpeed({ zone = 6, rarity = "Eternal" }) > slowest)
 			expect.truthy(
 				PetWorth.mountSpeed({ zone = 1, rarity = "Common", variant = "Rainbow" }) > slowest,
-				"variants are a little faster"
+				"mutations are a little faster"
 			)
+			local gold = PetWorth.mountSpeed({ zone = 1, rarity = "Common", variant = "Gold" })
+			local diamond = PetWorth.mountSpeed({ zone = 1, rarity = "Common", variant = "Diamond" })
+			local rainbow = PetWorth.mountSpeed({ zone = 1, rarity = "Common", variant = "Rainbow" })
+			expect.truthy(gold < diamond and diamond < rainbow, "rarer mutations are faster")
 		end)
 
-		it("hatches Silver, Gold and Rainbow pets, each rarer than the last", function()
-			local counts = { Normal = 0, Silver = 0, Gold = 0, Rainbow = 0 }
+		it("hatches Gold, Diamond and Rainbow mutations, each rarer than the last, and no more Silver", function()
+			local counts = { Normal = 0, Gold = 0, Diamond = 0, Rainbow = 0 }
 			local total = 20000
 			for index = 0, total - 1 do
 				local variant = PetWorth.rollVariant((index + 0.5) / total)
+				expect.truthy(counts[variant] ~= nil, "hatched " .. variant)
 				counts[variant] += 1
 			end
-			expect.truthy(counts.Rainbow > 0 and counts.Rainbow < counts.Gold)
-			expect.truthy(counts.Gold < counts.Silver and counts.Silver < counts.Normal)
-			expect.near(counts.Silver / total, 0.08, 0.002)
+			expect.truthy(counts.Rainbow > 0 and counts.Rainbow < counts.Diamond)
+			expect.truthy(counts.Diamond < counts.Gold and counts.Gold < counts.Normal)
+			expect.near(counts.Gold / total, 0.08, 0.002)
+			expect.near(counts.Diamond / total, 0.04, 0.002)
+			expect.near(counts.Rainbow / total, 0.01, 0.002)
 		end)
 
 		it("prices a bigger pen, more for each level, until it is as big as it gets", function()
@@ -342,7 +352,7 @@ return function(harness)
 			expect.equal(#data.Hatching, 0)
 			expect.falsy(Hatchery.hatch(data, entry, OPEN + 31, "again", 0.5), "an egg hatches once")
 
-			for _, case in { { 0.001, "Rainbow" }, { 0.02, "Gold" }, { 0.06, "Silver" } } do
+			for _, case in { { 0.005, "Rainbow" }, { 0.03, "Diamond" }, { 0.1, "Gold" }, { 0.2, "Normal" } } do
 				addEgg(data, "v" .. case[2], 1, "Common", "Leafy")
 				local next = Hatchery.place(data, "v" .. case[2], 30, 0, OPEN)
 				expect.equal(Hatchery.hatch(data, next, OPEN + 30, "pv" .. case[2], case[1]).variant, case[2])

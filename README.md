@@ -19,8 +19,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   multiply your Max Stamina), the **Sell** stall (sell eggs you don't want), and the **fuse machine** (its panel
   explains fusing; fusing itself is not switched on yet). Terraced cliffs of pale stone and grass ring the hub. See
   [Hub stations](#hub-stations).
-- A "Top Egg Claimers" leaderboard board beside the start zone (all servers, from an OrderedDataStore; it falls
-  back to the players in the server when the store cannot be reached).
+- Three leaderboard boards in a row beside the start zone: **Top Stamina**, **Top Collectors** (different pets
+  found, each mutation counting) and **Top Earners** (dollars a second), each ranking every server's best, with your
+  own score and place on a strip under it. See [Leaderboards](#leaderboards).
 - Day and night: each runway cycle is one day. At sunrise every zone rolls a lineup of eggs that appear on the
   ground at the start of their zone and roll down the runway lap after lap; now and then an extra egg drops
   mid-cycle. There is always an egg at the start of every zone to jump on: one leaves it at least every 4 seconds.
@@ -39,6 +40,11 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
   launches the same leap.
+- **Revives**: if you have one when you miss your leap, you are held where you fell and asked "Use a revive and
+  carry on?" for 6 seconds. **REVIVE** puts you back in the air just above the nearest egg, with a fresh leap;
+  **No thanks**, or letting the time run out, sends you back to your plot as usual. Revives are bought in the shop
+  (and come in its packs) and kept until used (`src/server/Logic/Revives.luau`; the numbers are `REVIVE_*` in
+  `Config/Tuning`).
 - On an egg: steer left/right and stay on until the claim meter fills. Steering into the side of the runway (a bank,
   or the railing across a gap) bounces the egg back off it, which costs some stamina.
 - Riders run on top of their egg as it rolls, faster on faster eggs. They lean into their steering and stumble when
@@ -54,7 +60,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   the 10-second night, which clears every egg without a rider.
 - Claimed eggs go into your Roblox inventory (the hotbar at the bottom of the screen, one tool per kind of egg, such
   as "Acorn Egg x3") and the **Eggs** tab on the right. Hold one and click (or tap) a spot in your pen to put it
-  down: it hatches there on a timer, faster while the runway is closed, sometimes into a Silver, Gold or Rainbow pet.
+  down: it hatches there on a timer, faster while the runway is closed, sometimes as a Gold, Diamond or Rainbow
+  mutation.
 - The **Pets** tab shows the eggs hatching and every pet you have. Put pets in your pen or take them out, or
   **Equip best**. Pets in the pen roam it and earn dollars every second. Sell pets for dollars.
 - The green button at the front of your pen buys a bigger pen: room for more eggs at once and more pets.
@@ -74,11 +81,14 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the shiny white
   lines along the top when Secret and rarer eggs spawn. There is no runway timer or zone name across the top: a
   short message says when the runway is about to close, and when it closes.
-- **Shop** ("Coop Shop"): the next tier of the training stick and the next pen level, each for Robux or dollars (the
-  same upgrades as the stick's sign and the pen's green button), x2 / x4
-  server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
-  Max Stamina, from x2 up to x1024), dollar packs, and the x2 Dollars pass (every pet in your pen earns double).
-  Robux purchases are granted exactly once, and only reported to Roblox once saved.
+- Every panel and button shares one glossy look (`src/client/Ui/Theme.luau` and `Widgets.luau`): a thick white rim,
+  a white-to-lavender title band, a deep indigo body, cards in dark gradients with bright edges, chunky white
+  lettering outlined in navy, section headings with a thin line, and a purple main button on a darker lip.
+- **Shop** ("Coop Shop"): two **packs** at the top (see [Packs](#packs)), the next tier of the training stick and
+  the next pen level, each for Robux or dollars (the same upgrades as the stick's sign and the pen's green button),
+  x2 / x4 server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase
+  doubles Max Stamina, from x2 up to x1024), revives (+1, +5, +15), dollar packs, and the x2 Dollars pass (every pet
+  in your pen earns double). Robux purchases are granted exactly once, and only reported to Roblox once saved.
 - **Settings**: Music / Effects / Nature volume, show others' pets / your pets, reduce camera shake, vibration.
   Saved to the player's account.
 - The Egg Avalanche server event: twice the eggs in every zone for one runway cycle, once an hour.
@@ -118,7 +128,9 @@ The code lives in this repository; a place file is a snapshot of it. Two ways to
   every change to the code as soon as it lands in the folder (after a `git pull`, too). Rojo only replaces the
   scripts it manages (`ReplicatedStorage.Shared` and `.Packages`, `ServerScriptService.Server` and
   `.ServerPackages`, `StarterPlayer.StarterPlayerScripts.Client`); parts and models you added yourself are left
-  alone. Publish from Studio as usual when you are happy with it.
+  alone. Publish from Studio as usual when you are happy with it. Shortcut: double-click `Start Rojo.bat` in this
+  folder to start `rojo serve`, and keep its window open while you work. Turning on **Sync Reminder** in the Rojo
+  plugin's settings makes Studio offer to connect whenever you open a place you have synced before.
 
 Saving works in Studio only if the place is published and *Game Settings > Security > Enable Studio Access to API
 Services* is on. Otherwise the game still runs and simply does not save.
@@ -144,7 +156,7 @@ Services* is on. Otherwise the game still runs and simply does not save.
 Every price and amount is in `src/shared/Config/Shop.luau`. Each Robux item needs its ID from the Creator
 Dashboard (*Monetization > Developer Products* or *Passes*), pasted into its `productId` / `gamePassId`. There is
 one developer product per pen level, one per training stick tier, and one per stamina doubling (x1 to x2, x2 to x4
-...), because a product's price is fixed.
+...), because a product's price is fixed. Each pack (`Shop.Packs`) and each revive bundle is a developer product too.
 
 While an ID is `0`, the item cannot be bought in a live game ("This isn't for sale yet"). In Studio, buying it grants
 it straight away, so the whole shop can be tried before the products exist. The price shown comes from Roblox once an
@@ -202,13 +214,18 @@ once and holds 10 pets.
 **Hatching.** Hatch times go by rarity, from 30 seconds for a Common egg to 6 hours for an Eternal one
 (`src/shared/Config/Rarities.luau`). They are worked out from timestamps (`src/shared/HatchMath.luau`), so eggs keep
 hatching while you are offline. While the runway is closed every egg in the server hatches 30 times as fast, and that
-extra time is kept when the next cycle starts. When an egg hatches it bursts open. Its pet is Normal, or with luck
-**Silver** (8%), **Gold** (2.5%) or **Rainbow** (0.5%): recoloured, shinier (Gold and Rainbow sparkle), worth 2, 5
-or 15 times as much, and a little faster to ride.
+extra time is kept when the next cycle starts. When an egg hatches it bursts open. Its pet is Normal, or with luck a
+mutation: **Gold** (8%, shiny gold), **Diamond** (4%, bright icy-blue glass) or **Rainbow** (1%, every
+colour from a teal tail through blue, purple and red to a green head). Each sparkles, is worth 1.5, 3 or 10 times as
+much, and is a little faster to ride (`src/shared/PetVariants.luau` draws them; the odds are in
+`Config/Economy`). Silver is shelved: it no longer hatches, but Silver pets already saved keep it (worth 2 times).
+Two more mutations never hatch and only come with the shop's packs: **Molten** (black obsidian whose pale markings
+glow like lava, shedding embers) and **Crystal** (see-through cyan glass, sparkling), each worth 10 times as much
+and the fastest to ride.
 
 **Pets and dollars.** The **Pets** tab lists the eggs hatching and every pet you have, each with what it earns. Pets
 in your pen wander round it and earn dollars every second, more for rarer pets, pets from deeper zones (10 times the
-zone before) and variants. **Put in pen** / **In pen** chooses which pets are in it; **Equip best** fills it with
+zone before) and mutations. **Put in pen** / **In pen** chooses which pets are in it; **Equip best** fills it with
 the ones that earn the most. **Sell** (tap twice) pays 150 seconds of the pet's earnings. Dollars show at the top
 left, with what your pen earns a second.
 
@@ -218,7 +235,7 @@ and 18 pets at level 9. The numbers are in `src/shared/Config/Economy.luau`.
 
 **Riding pets.** **Ride** on a pet's card brings it out under you; then the **RIDE** / **GET OFF** button below the
 tabs gets you on and off it. A pet carries you faster than walking (33 studs a second for a Common pet, up to 66
-for an Eternal one, plus a little for variants) round the hub. Riding costs 5 stamina a second (20 seconds at the
+for an Eternal one, plus a little for mutations) round the hub. Riding costs 5 stamina a second (20 seconds at the
 starting 100): when your stamina runs out, the pet bucks you off, and you have to rest until you have at least 10
 again before it will carry you. Your stamina comes back as usual once you are off. Pets never go on the runway:
 ride one past the start zone and it goes away and you leap like anyone else; getting on an egg sends it away too.
@@ -314,9 +331,14 @@ steps with the golden "?" egg floating inside, gears, four lamp pillars and thre
   | 8 | Galaxy | Mythic | $100M | x18 | deep space, full of stars |
   | 9 | Rainbow | Eternal | $750M | x25 | a wide rainbow with a white halo, rainbow stars and a light |
 
+  Two more come only in the shop's packs, as each pack's "aura": the **Molten Trail** (Epic Pack: glowing lava
+  cooling to black obsidian, shedding embers, Max Stamina x5) and the **Crystal Trail** (Super Pack: white, cyan,
+  blue and pink glass, sparkling, x8). They cannot be bought for dollars.
+
   The stall's panel shows a card for each in a row that scrolls sideways: its name, level and rarity, a picture of
-  it streaming behind a runner, its boost, and a big button (its price, Equip, or Equipped). The list is in
-  `src/shared/Config/Trails.luau`; `StationService` draws them on characters.
+  it streaming behind a runner, its boost, and a big button (its price, Equip, or Equipped; for a pack's trail not
+  owned yet, **In Packs**, which opens the shop at its packs). The list is in `src/shared/Config/Trails.luau`;
+  `StationService` draws them on characters.
 - **Sell**: sell 1 or all of a kind of egg from your inventory, for half its stamina requirement in dollars (a
   Forest Common egg sells for $25). Eggs already hatching in your pen are not for sale; pets sell from the Pets tab.
 - **Fuse machine**: three of the same pet go in, and an egg of that pet comes out, usually hatching a size bigger.
@@ -325,6 +347,55 @@ steps with the golden "?" egg floating inside, gears, four lamp pillars and thre
 
 The rules are in `src/server/Logic/Stalls.luau` (and `Logic/Stats.luau` for Max Stamina), run by
 `src/server/Services/StationService.luau`; the panels are `src/client/Ui/StationPanels.luau`.
+
+## Leaderboards
+
+Three boards stand in a row beside the start zone, against the first zone's cliff, facing into the hub, so players
+see them walking from their plots to the runway (where: `HubLayout.leaderboardSpot`). Left to right:
+
+| Board | Counts | Colour and emblem |
+| --- | --- | --- |
+| **Top Stamina** | Max Stamina | gold, a lightning bolt |
+| **Top Collectors** | different pets ever had, each mutation counting (a Gold Fox and a Fox are two); selling a pet does not take it off | blue, a paw |
+| **Top Earners** | dollars a second from the pen (the number under your dollars) | green, a coin |
+
+Each is built from parts in the game's blocky style: a stone plinth, a white rim between two pillars banded in the
+board's colour with a glowing lamp on top, and a big blocky egg on top with the board's emblem on its front. The
+screen is drawn like the game's panels: a glossy title band with an "EVERY SERVER" tag, then a row for each of the
+top 8 players, with their face, display name and @username, and their score; gold, silver and bronze for the top
+three. Under the screen, each player sees their own line: "YOUR STAMINA 1.2K #12" ("#100+" outside the top 100).
+
+Each board ranks every server's players from its own OrderedDataStore, written and read once a minute; the players in
+the server are merged in with their live scores, so a change shows within 5 seconds. Without the store (Studio
+without API access) a board ranks the players in the server. The boards are in `src/shared/Config/Leaderboards.luau`
+(the old "Top Egg Claimers" board is kept there, shelved), built and kept up to date by
+`src/server/Services/LeaderboardService.luau`; the rankings are `src/server/Logic/Rankings.luau`, the count of pets
+found is `Hatchery.discoveredCount`, and each player's own line is drawn by
+`src/client/Controllers/LeaderboardController.luau`.
+
+## Packs
+
+The top of the shop has two packs, each one Robux purchase that gives a bundle at once, at a big discount. Each player
+can buy each pack once (the card then says OWNED).
+
+| | Epic Pack ("MOST POPULAR") | Super Pack ("BEST VALUE") |
+| --- | --- | --- |
+| Price | 149 Robux | 299 Robux |
+| Pet | Molten Sabertooth Cat, $6.5K a second | Crystal Mantis Empress, $160K a second |
+| Dollars | +$250K | +$1M |
+| Max Stamina | x8, for good | x16, for good |
+| Trail (the pack's "aura") | Molten Trail (x5) | Crystal Trail (x8) |
+| Revives | +2 | +3 |
+| Server luck | | x2 for 15 minutes |
+| "Worth" (crossed out) | 514 Robux (-71%) | 1,496 Robux (-80%) |
+
+Each card shows the pack's pet turning over a burst of rays, a tile for each thing in it, what those things would
+cost bought on their own in this shop (dollars at the best dollar pack's rate, the stamina doublings, revives one at
+a time, the luck boost; the pet and the trail come on top), and the price. The pet is a pet from the runway in a
+mutation only packs give (see [Eggs, pens and pets](#eggs-pens-and-pets)); it goes into the pen if there is room. The
+Max Stamina boosts of the two packs do not add up: the biggest counts. It multiplies Max Stamina on top of everything
+else, training stick reps included. The packs are in `Config/Shop` (`Shop.Packs`), what buying one does in
+`src/server/Logic/Packs.luau`, run by `ShopService`.
 
 ## The runway
 
@@ -346,8 +417,8 @@ wider than the one before, to the nearest whole 20-stud ground tile, up to zone 
 as wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer
 ones more rows, so none is emptier than the first.
 
-A bright, milky fog hangs over everything, like the owner's reference: close by is crisp, and from 40 studs away
-everything fades into pale white-blue, half gone by about 300 studs and lost in it by 600 (Lighting's own fog, set in
+A bright, milky fog hangs over everything, like the owner's reference: close by is crisp, and from 80 studs away
+everything fades into pale white-blue, half gone by about 490 studs and lost in it by 900 (Lighting's own fog, set in
 studs by `MapService`; there is no `Atmosphere`, which would hide it). It turns deep blue at night
 (`DayNightController`).
 
@@ -482,9 +553,9 @@ lune run tools/ui-preview trails
 ```
 
 Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
-trails), `sell`, `shop`, `eggs` (the Eggs panel), `secret` (the shiny lines along the top when Secret and Eternal
-eggs spawn), `stick` (the training stick's upgrade panel) and `training` (rolling on the stick, with a 2x boost and a
-bubble). It runs the game's own client scripts and draws their GUI objects in HTML, and the models in 3D previews as
+trails), `sell`, `shop` (opening on the packs), `eggs` (the Eggs panel), `secret` (the shiny lines along the top
+when Secret and Eternal eggs spawn), `revive` (the revive offer after a missed leap), `stick` (the training stick's
+upgrade panel) and `training` (rolling on the stick, with a 2x boost and a bubble). It runs the game's own client scripts and draws their GUI objects in HTML, and the models in 3D previews as
 flat-shaded drawings: a close sketch, not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models
@@ -581,7 +652,8 @@ To see a zone's pets without opening Studio, on a grassy stage beside a player, 
 lune run tools/pet-preview 1
 ```
 
-Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet).
+Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet). Add
+`--mutation=Rainbow` (or `Gold`, `Diamond`) to see every pet in that mutation's colours.
 
 Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
 four-legged, strider (four legs that bend: each leg's shin hangs from its upper leg at the knee, or behind at the
@@ -686,7 +758,8 @@ There are two kinds:
 
 - **Rule tests** check the game's rules and numbers directly (config, egg movement, the runway cycle, riding,
   stamina, cracking, the banks, the endless last zone, closures, shop prices, settings, luck boosts, the training
-  stick's reps, bubbles, upgrades and rider's pose), and that every
+  stick's reps, bubbles, upgrades and rider's pose, packs, revives, and the leaderboards' rankings and where they
+  stand), and that every
   egg and pet model exists, is unique and has nothing floating loose, and that every egg stays within its part
   budget. Pets have none. They are also checked for the limbs their skeleton needs, and for differently coloured
   blocks sharing a face (which flicker in Roblox).

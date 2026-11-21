@@ -372,6 +372,18 @@ function StationService.Init()
 	end)
 end
 
+-- Something outside the stall changed the player's trails (a pack from the shop gave one): tell their device, work
+-- out their Max Stamina again, and draw the equipped trail.
+function StationService.RefreshTrails(player: Player)
+	local data = DataService.GetData(player)
+	if data == nil then
+		return
+	end
+	sendTrails(player, data)
+	RunwayService.RefreshMaxStamina(player)
+	applyTrail(player)
+end
+
 -- What the player's device is told about their trails when it starts: { owned, equipped }.
 function StationService.GetTrails(player: Player)
 	local data = DataService.GetData(player)

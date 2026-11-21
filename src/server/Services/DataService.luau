@@ -52,6 +52,13 @@ local TEMPLATE = {
 	-- (before multipliers, like MaxStaminaBonus).
 	StickLevel = 1,
 	TrainedStamina = 0,
+	-- Revives left (Logic/Revives): each lets the player carry on after missing their leap.
+	Revives = 0,
+	-- The shop's packs bought (packId -> true), and the Max Stamina boost the best of them gives (Config/Shop).
+	Packs = {},
+	PackStamina = 1,
+	-- Every pet and variant the player has ever had ("Fox/Gold" -> true), for the Top Collectors board.
+	Discovered = {},
 	Stats = {
 		EggsClaimed = 0,
 		EggsSold = 0,

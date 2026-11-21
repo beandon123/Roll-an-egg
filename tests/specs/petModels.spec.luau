@@ -327,4 +327,61 @@ return function(harness)
 			expect.truthy(early.Head[1] > 0.4 - 0.1 * 0.4, "eases out of the old move")
 		end)
 	end)
+
+	describe("Mutations (Shared/PetVariants)", function()
+		-- PetVariants works in Color3s, so it is loaded with Lune's own Roblox types rather than through the harness.
+		local fs = require("@lune/fs")
+		local luau = require("@lune/luau")
+		local Color3 = require("@lune/roblox").Color3
+		local PetVariants = luau.load(fs.readFile("src/shared/PetVariants.luau"), {
+			debugName = "src/shared/PetVariants",
+			environment = { Color3 = Color3 },
+		})()
+
+		local BROWN = Color3.fromRGB(150, 100, 60)
+		local CREAM = Color3.fromRGB(240, 226, 200)
+		local EYE = Color3.fromRGB(20, 16, 14)
+
+		it("keeps dark details dark in every mutation", function()
+			for _, mutation in { "Gold", "Diamond", "Rainbow", "Silver" } do
+				local eye = PetVariants.tint(EYE, mutation, 0.9)
+				expect.equal(eye, EYE, mutation)
+			end
+		end)
+
+		it("makes Diamond pets bright icy white-blue glass, unlike see-through Crystal", function()
+			for _, color in { BROWN, CREAM } do
+				local ice, material, transparency = PetVariants.paint(color, "SmoothPlastic", 0, "Diamond", 0.5)
+				expect.truthy(math.min(ice.R, ice.G, ice.B) > 0.55, "pale")
+				expect.truthy(ice.B >= ice.R, "blue-white")
+				expect.equal(material, "Glass")
+				expect.equal(transparency, 0, "solid")
+			end
+			local _, glowing = PetVariants.paint(CREAM, "Neon", 0, "Diamond", 0.5)
+			expect.equal(glowing, "Neon", "what glowed keeps glowing")
+			local _, _, crystal = PetVariants.paint(BROWN, "SmoothPlastic", 0, "Crystal", 0.5)
+			expect.truthy(crystal > 0, "Crystal stays the see-through one")
+			expect.truthy(PetVariants.reflectance("Diamond") > PetVariants.reflectance("Gold"), "the shiniest")
+		end)
+
+		it("runs Rainbow pets through every colour from teal at the tail to green at the nose", function()
+			local function hueAt(along: number): number
+				local hue, saturation = PetVariants.tint(BROWN, "Rainbow", along):ToHSV()
+				expect.truthy(saturation > 0.8, "bright, saturated colours")
+				return hue
+			end
+			expect.near(hueAt(0), 0.5, 0.02, "teal tail")
+			expect.near(hueAt(0.3), 0.75, 0.02, "purple body")
+			expect.near(hueAt(1), 0.33, 0.02, "green head")
+			local red = hueAt(0.6)
+			expect.truthy(red > 0.95 or red < 0.05, "red towards the neck")
+		end)
+
+		it("keeps Gold gold and Silver silver for the pets that already have it", function()
+			local gold = PetVariants.tint(BROWN, "Gold", 0.5)
+			expect.truthy(gold.R > gold.G and gold.G > gold.B, "gold")
+			local silver = PetVariants.tint(BROWN, "Silver", 0.5)
+			expect.truthy(math.abs(silver.R - silver.B) < 0.15, "grey")
+		end)
+	end)
 end

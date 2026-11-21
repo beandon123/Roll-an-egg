@@ -31,7 +31,7 @@ local TrainingUi = {}
 -- The card's sky, like a bright day over the plaza.
 local SKY_LIGHT = Color3.fromRGB(132, 214, 255)
 local SKY_DEEP = Color3.fromRGB(58, 140, 236)
-local PANEL_DARK = Color3.fromRGB(26, 28, 36)
+local PANEL_DARK = Theme.PANEL_DEEP
 local BOOST_GOLD = Color3.fromRGB(255, 206, 60)
 local BOOST_DEEP = Color3.fromRGB(255, 132, 30)
 local STAMINA_BLUE = Color3.fromRGB(120, 220, 255)
@@ -264,16 +264,7 @@ function TrainingUi.stickCard(scope, layoutOrder: number?)
 		Size = UDim2.new(1, -8, 0, 318),
 		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 26),
-			Widgets.gradient(scope, SKY_LIGHT, SKY_DEEP),
-			Widgets.stroke(scope, 4),
-			Widgets.speckles(scope, {
-				{ 0.06, 0.18, 26 },
-				{ 0.94, 0.12, 16 },
-				{ 0.5, 0.95, 12 },
-				{ 0.03, 0.76, 12 },
-				{ 0.97, 0.66, 22 },
-			}),
+			Widgets.cardSkin(scope, SKY_LIGHT, SKY_DEEP, 26),
 			scope:New("TextLabel")({
 				Name = "Headline",
 				Position = UDim2.fromOffset(10, 8),
@@ -415,13 +406,13 @@ local function ladder(scope)
 				LayoutOrder = tier.level,
 				Size = UDim2.fromOffset(72, 104),
 				BackgroundColor3 = scope:Computed(function(use)
-					return if use(state) == "Locked" then Theme.SHELL_DARK else Theme.CREAM
+					return if use(state) == "Locked" then Theme.CARD_DEEP else Theme.CARD
 				end),
 				[Children] = {
 					Widgets.corner(scope, 14),
 					scope:New("UIStroke")({
 						Color = scope:Computed(function(use)
-							return if use(state) == "Current" then Theme.YOLK_DEEP else Theme.INK
+							return if use(state) == "Current" then Theme.YOLK else Theme.CARD_EDGE
 						end),
 						Thickness = scope:Computed(function(use)
 							return if use(state) == "Current" then 4 else 2.5
@@ -442,7 +433,7 @@ local function ladder(scope)
 						Position = UDim2.fromOffset(0, 60),
 						Size = UDim2.new(1, 0, 0, 18),
 						Text = `Lvl {tier.level}`,
-						TextColor3 = rgb(Rarities.Info[tier.rarity].color):Lerp(Theme.INK, 0.5),
+						TextColor3 = rgb(Rarities.Info[tier.rarity].color):Lerp(Theme.WHITE, 0.3),
 						TextSize = 16,
 					}),
 					Widgets.text(scope, {
@@ -506,7 +497,7 @@ function TrainingUi.panel(scope)
 							return `Roll on your {tier.name} for +{abbreviate(perSecond)} Max Stamina a second, kept `
 								.. "forever. Tap the 2x bubbles to double it!"
 						end),
-						TextColor3 = Color3.fromRGB(130, 96, 70),
+						TextColor3 = Theme.TEXT_SOFT,
 						TextSize = 15,
 						TextWrapped = true,
 					}),

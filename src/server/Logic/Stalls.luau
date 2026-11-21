@@ -1,6 +1,6 @@
 --!strict
--- The rules of the hub's stalls: buying and equipping trails at the Trails stall, and selling eggs at the Sell
--- stall. Both pay and charge in dollars.
+-- The rules of the hub's stalls: buying and equipping trails at the Trails stall (and the trails the shop's packs
+-- give), and selling eggs at the Sell stall. Both pay and charge in dollars.
 --
 -- These functions change a player's saved data table directly and never touch players, parts, or remotes:
 -- StationService checks what clients send, calls these, and tells the client what changed. Keeping them free of
@@ -23,10 +23,24 @@ export type TrailResult =
 	| "Owned"
 	| "NotOwned"
 	| "NotEnoughDollars"
+	| "PackOnly"
 
 local Stalls = {}
 
--- Buys a trail. A new trail is equipped straight away unless the one already equipped boosts stamina more.
+-- Adds a trail to what the player owns, and equips it unless the one already equipped boosts stamina more.
+-- Returns whether it was equipped.
+local function addTrail(data, trail: Trails.TrailInfo): boolean
+	data.Trails.Owned[trail.id] = true
+	local equipped = Trails.ById[data.Trails.Equipped]
+	if equipped == nil or trail.stamina >= equipped.stamina then
+		data.Trails.Equipped = trail.id
+		return true
+	end
+	return false
+end
+
+-- Buys a trail. A new trail is equipped straight away unless the one already equipped boosts stamina more. The
+-- packs' trails are not for sale here.
 function Stalls.buyTrail(data, trailId: string): (boolean, TrailResult)
 	local trail = Trails.ById[trailId]
 	if trail == nil then
@@ -35,19 +49,29 @@ function Stalls.buyTrail(data, trailId: string): (boolean, TrailResult)
 	if data.Trails.Owned[trailId] then
 		return false, "Owned"
 	end
+	if trail.pack then
+		return false, "PackOnly"
+	end
 	if data.Dollars < trail.price then
 		return false, "NotEnoughDollars"
 	end
 
 	data.Dollars -= trail.price
-	data.Trails.Owned[trailId] = true
-
-	local equipped = Trails.ById[data.Trails.Equipped]
-	if equipped == nil or trail.stamina >= equipped.stamina then
-		data.Trails.Equipped = trailId
+	if addTrail(data, trail) then
 		return true, "BoughtAndEquipped"
 	end
 	return true, "Bought"
+end
+
+-- Gives a player a trail for free (a pack from the shop), equipped unless theirs boosts more. Returns whether they
+-- did not have it already.
+function Stalls.giveTrail(data, trailId: string): boolean
+	local trail = Trails.ById[trailId]
+	if trail == nil or data.Trails.Owned[trailId] then
+		return false
+	end
+	addTrail(data, trail)
+	return true
 end
 
 -- Equips a trail the player owns.
@@ -62,10 +86,10 @@ function Stalls.equipTrail(data, trailId: string): (boolean, TrailResult)
 	return true, "Equipped"
 end
 
--- The ids of the trails a player owns, in shop order.
+-- The ids of the trails a player owns, in shop order (the stall's, then the packs').
 function Stalls.ownedTrails(data): { string }
 	local owned = {}
-	for _, trail in Trails.List do
+	for _, trail in Trails.All do
 		if data.Trails.Owned[trail.id] then
 			table.insert(owned, trail.id)
 		end

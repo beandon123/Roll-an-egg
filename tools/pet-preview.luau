@@ -7,10 +7,13 @@
 -- pets go beside it in pet-data.json, which the page loads (for hosts that serve the two together). Open it in a
 -- browser. The page takes a few settings after a `?` in its address, for pictures of one view: `pet=Bear` (one pet
 -- close up), `move=Idle`, `yaw=` and `pitch=` (radians), `zoom=`, `fy=` (the height looked at, in studs) and `t=`
--- (seconds into the animation; holds still).
+-- (seconds into the animation; holds still). With --mutation=Gold (or Diamond, Rainbow, and the pack-only Molten and
+-- Crystal), every pet is drawn in that mutation's colours, the way Shared/PetVariants paints it in the game.
 
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local process = require("@lune/process")
+local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
 
 local harness = require("../tests/harness")
@@ -27,11 +30,14 @@ local outPath = "tools/out/pet-preview.html"
 local zoneFilter = nil
 local fragment = false
 local split = false
+local mutation = nil
 for _, arg in process.args do
 	if arg == "--fragment" then
 		fragment = true
 	elseif arg == "--split" then
 		split = true
+	elseif arg:match("^%-%-mutation=") then
+		mutation = arg:match("^%-%-mutation=(.+)$")
 	elseif tonumber(arg) then
 		zoneFilter = tonumber(arg)
 	else
@@ -47,9 +53,34 @@ local function round(value: number): number
 	return math.round(value * 1000) / 1000
 end
 
-local function exportBoxes(list)
+-- PetVariants works in Color3s, so it is loaded with Lune's own Roblox types.
+local PetVariants = luau.load(fs.readFile("src/shared/PetVariants.luau"), {
+	debugName = "src/shared/PetVariants",
+	environment = { Color3 = roblox.Color3 },
+})()
+
+-- A box's colour, material and transparency in the chosen mutation. `along` is how far along the pet (tail to
+-- nose) it is, worked out as PetRig does.
+local function painted(box, along: number)
+	if mutation == nil then
+		return hex(box.color), box.material, box.transparency
+	end
+	local color, material, transparency = PetVariants.paint(
+		roblox.Color3.fromRGB(box.color[1], box.color[2], box.color[3]),
+		box.material,
+		box.transparency,
+		mutation,
+		along
+	)
+	return "#" .. color:ToHex(), material, transparency
+end
+
+local function exportBoxes(list, model)
+	local backZ = model.center[3] - model.size[3] / 2
 	local boxes = {}
 	for _, box in list do
+		local color, material, transparency =
+			painted(box, math.clamp((box.z - backZ) / math.max(1, model.size[3]), 0, 1))
 		local entry = {
 			round(box.x),
 			round(box.y),
@@ -57,9 +88,9 @@ local function exportBoxes(list)
 			round(box.sx),
 			round(box.sy),
 			round(box.sz),
-			hex(box.color),
-			box.material,
-			box.transparency,
+			color,
+			material,
+			transparency,
 			box.shape or "Block",
 			false,
 		}
@@ -86,7 +117,7 @@ for _, kind in PetModels.all() do
 				name = limb.name,
 				parent = limb.parent,
 				pivot = limb.pivot,
-				boxes = exportBoxes(limb.boxes),
+				boxes = exportBoxes(limb.boxes, model),
 			})
 		end
 		local fires = {}

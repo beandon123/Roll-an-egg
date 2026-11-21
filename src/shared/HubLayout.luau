@@ -91,6 +91,42 @@ HubLayout.STATION_REACH = 12
 HubLayout.STATION_CLOSE_DISTANCE = 26
 
 ----------------------------------------------------------------------------------------------------------------
+-- Leaderboards: the three boards (Config/Leaderboards) stand in a row beside the start zone, against the first
+-- zone's bank, facing back into the hub, where players walking from their plots to the runway see them. The first
+-- board is on the left as they walk up (the far end of the row), the last next to the start zone.
+
+-- How many boards there are, how wide each stands (its plinth), how deep its footprint is, and the gap between them.
+HubLayout.LEADERBOARD_COUNT = 3
+HubLayout.LEADERBOARD_WIDTH = 30
+HubLayout.LEADERBOARD_DEPTH = 10
+HubLayout.LEADERBOARD_GAP = 6
+-- Where the row stands: the middle of each footprint is this far behind the front of the hub, and the row starts
+-- this far beside the start zone.
+HubLayout.LEADERBOARD_Z = -9
+HubLayout.LEADERBOARD_FROM_X = Runway.START_WIDTH / 2 + 14
+
+-- Where board `index` (1 = the first) stands: the middle of its footprint. Boards face -z, into the hub.
+function HubLayout.leaderboardSpot(index: number): Point
+	local fromStart = HubLayout.LEADERBOARD_FROM_X + HubLayout.LEADERBOARD_WIDTH / 2
+	return {
+		x = fromStart
+			+ (HubLayout.LEADERBOARD_COUNT - index) * (HubLayout.LEADERBOARD_WIDTH + HubLayout.LEADERBOARD_GAP),
+		z = HubLayout.LEADERBOARD_Z,
+	}
+end
+
+-- Board `index`'s footprint on the ground.
+function HubLayout.leaderboardRect(index: number): Rect
+	local spot = HubLayout.leaderboardSpot(index)
+	return {
+		x = spot.x,
+		z = spot.z,
+		sizeX = HubLayout.LEADERBOARD_WIDTH,
+		sizeZ = HubLayout.LEADERBOARD_DEPTH,
+	}
+end
+
+----------------------------------------------------------------------------------------------------------------
 -- Geometry helpers
 
 function HubLayout.bounds(rect: Rect): (number, number, number, number)

@@ -39,8 +39,8 @@ local function eggKnob(scope, props)
 		[Children] = {
 			Widgets.corner(scope, UDim.new(0.5, 0)),
 			Widgets.stroke(scope, 3),
-			Widgets.gradient(scope, Theme.WHITE, Theme.SHELL),
-			Widgets.speckles(scope, { { 0.32, 0.36, 5 }, { 0.66, 0.58, 4 }, { 0.42, 0.74, 3 } }, Theme.SHELL_DARK, 0),
+			Widgets.gradient(scope, Theme.WHITE, Theme.HEADER_BOTTOM),
+			Widgets.speckles(scope, { { 0.32, 0.36, 5 }, { 0.66, 0.58, 4 }, { 0.42, 0.74, 3 } }, Theme.CARD_EDGE, 0),
 		},
 	})
 end
@@ -83,7 +83,7 @@ local function slider(scope, setting)
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.fromScale(0, 0.5),
 				Size = UDim2.new(1, 0, 0, 16),
-				BackgroundColor3 = Theme.TRACK,
+				BackgroundColor3 = Theme.WELL,
 				[Children] = {
 					Widgets.round(scope),
 					Widgets.stroke(scope, 2.5),
@@ -174,7 +174,7 @@ local function switch(scope, setting)
 		AutoButtonColor = false,
 		Text = "",
 		BackgroundColor3 = scope:Computed(function(use)
-			return if use(value) then Theme.GREEN else Theme.TRACK
+			return if use(value) then Theme.GREEN else Theme.WELL
 		end),
 		[OnEvent("Activated")] = function()
 			value:set(not peek(value))
@@ -210,10 +210,9 @@ local function row(scope, setting, order: number)
 		Name = setting.key,
 		LayoutOrder = order,
 		Size = UDim2.new(1, -8, 0, 70),
-		BackgroundColor3 = Theme.SHELL,
+		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 20),
-			Widgets.stroke(scope, 3),
+			Widgets.cardSkin(scope, Theme.CARD_EDGE, Theme.CARD, 20),
 			scope:New("Frame")({
 				Name = "IconBubble",
 				AnchorPoint = Vector2.new(0, 0.5),
@@ -275,7 +274,7 @@ function SettingsPanel.build(scope)
 			Size = UDim2.new(1, 0, 0, 24),
 			Font = Theme.SMALL_FONT,
 			Text = "Settings save to your account automatically",
-			TextColor3 = Color3.fromRGB(150, 110, 80),
+			TextColor3 = Theme.TEXT_SOFT,
 			TextSize = 14,
 		})
 	)

@@ -17,26 +17,31 @@ local PetWorth = Load.shared("PetWorth")
 local Rarities = Load.shared("Config", "Rarities")
 local Tuning = Load.shared("Config", "Tuning")
 
+local Theme = require(script.Parent.Theme)
 local UiState = require(script.Parent.UiState)
+local Widgets = require(script.Parent.Widgets)
 
 local Fusion = UiState.Fusion
 local Children = Fusion.Children
 local OnEvent = Fusion.OnEvent
 
-local WHITE = Color3.new(1, 1, 1)
-local PANEL = Color3.fromRGB(26, 28, 36)
-local CARD = Color3.fromRGB(44, 47, 60)
-local MUTED = Color3.fromRGB(170, 176, 192)
-local GO = Color3.fromRGB(70, 190, 100)
-local OFF = Color3.fromRGB(84, 90, 110)
-local SELL = Color3.fromRGB(205, 70, 70)
-local EGGS_COLOR = Color3.fromRGB(70, 140, 255)
-local PETS_COLOR = Color3.fromRGB(255, 140, 60)
-local RIDE_COLOR = Color3.fromRGB(60, 190, 120)
+-- The shared look (Ui/Theme): a deep indigo panel with a glossy title band, cards a shade lighter, white lettering
+-- outlined in navy, and glossy buttons.
+local WHITE = Theme.WHITE
+local PANEL = Theme.WELL
+local CARD = Theme.CARD
+local MUTED = Theme.TEXT_SOFT
+local GO = Theme.GREEN
+local OFF = Theme.CARD_EDGE
+local SELL = Theme.CORAL
+local EGGS_COLOR = Theme.SKY
+local PETS_COLOR = Theme.YOLK_DEEP
+local RIDE_COLOR = Theme.GREEN
 
-local VARIANT_COLORS = {
+local MUTATION_COLORS = {
 	Silver = Color3.fromRGB(214, 222, 236),
 	Gold = Color3.fromRGB(255, 205, 70),
+	Diamond = Color3.fromRGB(150, 235, 255),
 	Rainbow = Color3.fromRGB(255, 120, 200),
 }
 
@@ -85,6 +90,7 @@ local function corner(scope, radius: number)
 	return scope:New("UICorner")({ CornerRadius = UDim.new(0, radius) })
 end
 
+-- Lettering in the house style: white, outlined in navy (a little thicker with `Stroke`).
 local function label(scope, props)
 	return scope:New("TextLabel")({
 		Name = props.Name,
@@ -93,14 +99,37 @@ local function label(scope, props)
 		Position = props.Position,
 		Size = props.Size,
 		BackgroundTransparency = 1,
-		Font = props.Font or Enum.Font.GothamBold,
+		Font = props.Font or Theme.FONT,
 		Text = props.Text,
 		TextColor3 = props.Color or WHITE,
 		TextSize = props.TextSize or 14,
 		TextWrapped = true,
 		TextXAlignment = props.XAlignment or Enum.TextXAlignment.Center,
-		TextStrokeTransparency = props.Stroke or 1,
 		ZIndex = props.ZIndex,
+		[Children] = {
+			scope:New("UIStroke")({ Color = Theme.INK, Thickness = if props.Stroke then 2 else 1.5 }),
+		},
+	})
+end
+
+-- What a small button wears: rounded corners, a glossy fade, a navy edge, and its lettering outlined in navy.
+local function buttonSkin(scope, radius: number)
+	return {
+		corner(scope, radius),
+		scope:New("UIGradient")({
+			Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(200, 200, 214)),
+			Rotation = 90,
+		}),
+		scope:New("UIStroke")({ ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.INK, Thickness = 2 }),
+		scope:New("UIStroke")({ ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual, Color = Theme.INK, Thickness = 1.5 }),
+	}
+end
+
+-- A card's shading: a shade darker towards its bottom.
+local function cardShade(scope)
+	return scope:New("UIGradient")({
+		Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(170, 170, 196)),
+		Rotation = 90,
 	})
 end
 
@@ -252,11 +281,11 @@ local function petIcon(scope, name: string, rarity: string, size: number)
 		BackgroundColor3 = Panels.rarityColor(rarity),
 		[Children] = {
 			scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }),
-			scope:New("UIStroke")({ Color = Color3.new(0, 0, 0), Thickness = 2, Transparency = 0.4 }),
+			scope:New("UIStroke")({ Color = Theme.INK, Thickness = 2 }),
 			label(scope, {
 				Size = UDim2.fromScale(1, 1),
 				Text = string.upper(string.sub(name, 1, 1)),
-				Font = Enum.Font.FredokaOne,
+				Font = Theme.FONT,
 				TextSize = size * 0.55,
 				Stroke = 0.3,
 			}),
@@ -295,6 +324,7 @@ local function eggCard(scope, item)
 		end,
 		[Children] = {
 			corner(scope, 10),
+			cardShade(scope),
 			cardStroke(scope, item.kind, item.rarity),
 			eggIcon(scope, item.rarity, 40),
 			label(scope, {
@@ -318,14 +348,14 @@ local function eggCard(scope, item)
 				Position = UDim2.new(0.5, 0, 1, -6),
 				Size = UDim2.new(1, -12, 0, 26),
 				BackgroundColor3 = GO,
-				Font = Enum.Font.GothamBold,
+				Font = Theme.FONT,
 				Text = "Hold",
 				TextColor3 = WHITE,
 				TextSize = 14,
 				[OnEvent("Activated")] = function()
 					UiState.actions.holdEgg(item.kind)
 				end,
-				[Children] = { corner(scope, 8) },
+				[Children] = buttonSkin(scope, 8),
 			}),
 		},
 	})
@@ -356,14 +386,14 @@ local function freeRow(scope, order: number)
 				Position = UDim2.new(1, -8, 0.5, 0),
 				Size = UDim2.fromOffset(120, 34),
 				BackgroundColor3 = EGGS_COLOR,
-				Font = Enum.Font.GothamBold,
+				Font = Theme.FONT,
 				Text = "Put an egg down",
 				TextColor3 = WHITE,
 				TextSize = 13,
 				[OnEvent("Activated")] = function()
 					UiState.actions.openPanel("Eggs")
 				end,
-				[Children] = { corner(scope, 8) },
+				[Children] = buttonSkin(scope, 8),
 			}),
 		},
 	})
@@ -399,6 +429,7 @@ local function hatchRow(scope, order: number, entry)
 		end,
 		[Children] = {
 			corner(scope, 10),
+			cardShade(scope),
 			cardStroke(scope, entry.kind, entry.rarity),
 			scope:New("Frame")({
 				Position = UDim2.fromOffset(8, 0),
@@ -427,7 +458,7 @@ local function hatchRow(scope, order: number, entry)
 						Size = scope:Computed(function(use)
 							return UDim2.fromScale(use(progress), 1)
 						end),
-						[Children] = { corner(scope, 8) },
+						[Children] = buttonSkin(scope, 8),
 					}),
 					label(scope, {
 						Name = "Time",
@@ -449,13 +480,13 @@ local function smallButton(scope, props)
 		Position = props.Position,
 		Size = props.Size,
 		BackgroundColor3 = props.Color,
-		Font = Enum.Font.GothamBold,
+		Font = Theme.FONT,
 		Text = props.Text,
 		TextColor3 = WHITE,
 		TextSize = 12,
 		TextWrapped = true,
 		[OnEvent("Activated")] = props.Activated,
-		[Children] = { corner(scope, 7) },
+		[Children] = buttonSkin(scope, 7),
 	})
 end
 
@@ -483,6 +514,7 @@ local function petCard(scope, pet)
 		end,
 		[Children] = {
 			corner(scope, 10),
+			cardShade(scope),
 			cardStroke(scope, pet.kind, pet.rarity),
 			petIcon(scope, name, pet.rarity, 40),
 			label(scope, {
@@ -497,7 +529,7 @@ local function petCard(scope, pet)
 				Position = UDim2.fromOffset(4, 78),
 				Size = UDim2.new(1, -8, 0, 14),
 				Text = if variant ~= "Normal" then `{variant} {pet.rarity}` else pet.rarity,
-				Color = VARIANT_COLORS[variant] or Panels.rarityColor(pet.rarity),
+				Color = MUTATION_COLORS[variant] or Panels.rarityColor(pet.rarity),
 				TextSize = 11,
 			}),
 			label(scope, {
@@ -525,7 +557,7 @@ local function petCard(scope, pet)
 				BackgroundColor3 = scope:Computed(function(use)
 					return if use(riding) then RIDE_COLOR else OFF
 				end),
-				Font = Enum.Font.GothamBold,
+				Font = Theme.FONT,
 				Text = scope:Computed(function(use)
 					return if use(riding) then "Riding" else "Ride"
 				end),
@@ -534,14 +566,14 @@ local function petCard(scope, pet)
 				[OnEvent("Activated")] = function()
 					UiState.actions.ridePet(if Fusion.peek(riding) then "" else pet.uid)
 				end,
-				[Children] = { corner(scope, 7) },
+				[Children] = buttonSkin(scope, 7),
 			}),
 			scope:New("TextButton")({
 				Name = "Sell",
 				Position = UDim2.new(0.5, 2, 0, 140),
 				Size = UDim2.new(0.5, -8, 0, 24),
 				BackgroundColor3 = SELL,
-				Font = Enum.Font.GothamBold,
+				Font = Theme.FONT,
 				Text = scope:Computed(function(use)
 					return if use(confirming) then "Sure?" else Panels.money(PetWorth.sellPrice(pet))
 				end),
@@ -559,7 +591,7 @@ local function petCard(scope, pet)
 						end)
 					end
 				end,
-				[Children] = { corner(scope, 7) },
+				[Children] = buttonSkin(scope, 7),
 			}),
 		},
 	})
@@ -673,50 +705,63 @@ local function panel(scope)
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -104, 0.5, 0),
 		Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT),
-		BackgroundColor3 = PANEL,
-		BackgroundTransparency = 0.05,
+		BackgroundColor3 = WHITE,
 		Visible = scope:Computed(function(use)
 			return use(UiState.panel) ~= "None"
 		end),
 		[Children] = {
-			corner(scope, 14),
-			scope:New("UIStroke")({ Color = Color3.new(0, 0, 0), Thickness = 2, Transparency = 0.4 }),
+			Widgets.panelSkin(scope),
+			-- The glossy band behind the title and the close button.
+			Widgets.titleBand(scope, { Name = "Band", Text = "", Height = 50, ZIndex = 0 }),
 			label(scope, {
 				Name = "Title",
-				Position = UDim2.fromOffset(16, 8),
-				Size = UDim2.new(1, -70, 0, 30),
-				Font = Enum.Font.FredokaOne,
+				Position = UDim2.fromOffset(18, 6),
+				Size = UDim2.new(1, -70, 0, 38),
+				Font = Theme.TITLE_FONT,
 				Text = scope:Computed(function(use)
 					if use(UiState.panel) == "Eggs" then
 						return `Your eggs ({#use(UiState.eggs)})`
 					end
 					return `Your pets ({#use(UiState.pets)})`
 				end),
-				TextSize = 24,
+				TextSize = 28,
+				Stroke = true,
 				XAlignment = Enum.TextXAlignment.Left,
 			}),
 			scope:New("TextButton")({
 				Name = "Close",
-				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -10, 0, 8),
-				Size = UDim2.fromOffset(34, 34),
-				BackgroundColor3 = Color3.fromRGB(200, 70, 70),
-				Font = Enum.Font.GothamBold,
-				Text = "X",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, 6, 0, 6),
+				Size = UDim2.fromOffset(42, 42),
+				BackgroundColor3 = Theme.CORAL,
+				Font = Theme.FONT,
+				Text = "✕",
 				TextColor3 = WHITE,
-				TextSize = 18,
+				TextSize = 22,
 				[OnEvent("Activated")] = function()
 					UiState.actions.openPanel("None")
 				end,
-				[Children] = { corner(scope, 8) },
+				[Children] = {
+					scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }),
+					scope:New("UIStroke")({
+						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						Color = Theme.WHITE,
+						Thickness = 3,
+					}),
+					scope:New("UIStroke")({
+						ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+						Color = Theme.INK,
+						Thickness = 2,
+					}),
+				},
 			}),
 
 			-- The selected egg or pet, turning slowly (the model is put in by InventoryController).
 			scope:New("ViewportFrame")({
 				Name = "Preview",
-				Position = UDim2.fromOffset(12, 46),
-				Size = UDim2.new(1, -24, 0, 150),
-				BackgroundColor3 = Color3.fromRGB(56, 62, 82),
+				Position = UDim2.fromOffset(12, 58),
+				Size = UDim2.new(1, -24, 0, 146),
+				BackgroundColor3 = Theme.CARD_DEEP,
 				Ambient = Color3.fromRGB(170, 170, 180),
 				LightColor = Color3.fromRGB(255, 250, 240),
 				LightDirection = Vector3.new(-1, -1.5, -1),
@@ -752,8 +797,8 @@ local function panel(scope)
 
 			scope:New("ScrollingFrame")({
 				Name = "List",
-				Position = UDim2.fromOffset(12, 206),
-				Size = UDim2.new(1, -24, 1, -216),
+				Position = UDim2.fromOffset(12, 214),
+				Size = UDim2.new(1, -24, 1, -226),
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				ScrollBarThickness = 6,
@@ -853,14 +898,14 @@ local function panel(scope)
 										Position = UDim2.fromScale(1, 0),
 										Size = UDim2.fromOffset(124, 34),
 										BackgroundColor3 = GO,
-										Font = Enum.Font.GothamBold,
+										Font = Theme.FONT,
 										Text = "Equip best",
 										TextColor3 = WHITE,
 										TextSize = 14,
 										[OnEvent("Activated")] = function()
 											UiState.actions.equipBest()
 										end,
-										[Children] = { corner(scope, 8) },
+										[Children] = buttonSkin(scope, 8),
 									}),
 								},
 							}),
@@ -893,17 +938,17 @@ local function tabButton(scope, name: string, order: number, color: Color3, badg
 				Position = UDim2.new(0.5, 0, 1, -3),
 				Size = UDim2.new(1, 0, 0, 18),
 				BackgroundTransparency = 1,
-				Font = Enum.Font.FredokaOne,
+				Font = Theme.FONT,
 				Text = string.upper(name),
 				TextColor3 = WHITE,
 				TextSize = 16,
-				TextStrokeTransparency = 0.3,
+				[Children] = { scope:New("UIStroke")({ Color = Theme.INK, Thickness = 2 }) },
 			}),
 			corner(scope, 16),
+			cardShade(scope),
 			scope:New("UIStroke")({
-				Color = Color3.new(0, 0, 0),
+				Color = Theme.INK,
 				Thickness = 3,
-				Transparency = 0.3,
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			}),
 			scope:New("TextLabel")({
@@ -912,8 +957,8 @@ local function tabButton(scope, name: string, order: number, color: Color3, badg
 				Position = UDim2.new(1, 6, 0, -6),
 				ZIndex = 3,
 				Size = UDim2.fromOffset(30, 26),
-				BackgroundColor3 = Color3.fromRGB(230, 50, 60),
-				Font = Enum.Font.GothamBold,
+				BackgroundColor3 = Theme.CORAL,
+				Font = Theme.FONT,
 				Text = scope:Computed(function(use)
 					return tostring(use(badge))
 				end),
@@ -922,7 +967,15 @@ local function tabButton(scope, name: string, order: number, color: Color3, badg
 				Visible = scope:Computed(function(use)
 					return use(badge) > 0
 				end),
-				[Children] = { scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }) },
+				[Children] = {
+					scope:New("UICorner")({ CornerRadius = UDim.new(0.5, 0) }),
+					scope:New("UIStroke")({
+						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						Color = Theme.WHITE,
+						Thickness = 2,
+					}),
+					scope:New("UIStroke")({ Color = Theme.INK, Thickness = 1.5 }),
+				},
 			}),
 		},
 	})
@@ -974,13 +1027,12 @@ function Panels.build(scope)
 					LayoutOrder = 3,
 					Size = UDim2.fromOffset(84, 60),
 					BackgroundColor3 = RIDE_COLOR,
-					Font = Enum.Font.FredokaOne,
+					Font = Theme.FONT,
 					Text = scope:Computed(function(use)
 						return if use(UiState.riddenPet) ~= "" then "GET OFF" else "RIDE"
 					end),
 					TextColor3 = WHITE,
 					TextSize = 18,
-					TextStrokeTransparency = 0.5,
 					Visible = scope:Computed(function(use)
 						return use(UiState.mountChoice) ~= ""
 					end),
@@ -988,15 +1040,7 @@ function Panels.build(scope)
 						local riding = Fusion.peek(UiState.riddenPet) ~= ""
 						UiState.actions.ridePet(if riding then "" else Fusion.peek(UiState.mountChoice))
 					end,
-					[Children] = {
-						corner(scope, 16),
-						scope:New("UIStroke")({
-							Color = Color3.new(0, 0, 0),
-							Thickness = 3,
-							Transparency = 0.3,
-							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						}),
-					},
+					[Children] = buttonSkin(scope, 16),
 				}),
 			},
 		}),

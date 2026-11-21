@@ -1,11 +1,15 @@
--- The shop panel: featured upgrades (the training stick's next tier, and the pen's next level), server luck boosts,
--- Max Stamina, dollar packs, and game passes (Config/Shop). Buttons only ask the server; the server checks prices and shows Roblox's purchase prompt.
+-- The shop panel: packs (a pet, dollars, stamina, a trail and revives at once), featured upgrades (the training
+-- stick's next tier, and the pen's next level), server luck boosts, Max Stamina, revives, dollar packs, and game
+-- passes (Config/Shop). Buttons only ask the server; the server checks prices and shows Roblox's purchase prompt.
 
 local Load = require(script.Parent.Parent.Load)
 local Net = Load.shared("Net")
 local NumberFormat = Load.shared("NumberFormat")
+local PetWorth = Load.shared("PetWorth")
 local Shop = Load.shared("Config", "Shop")
+local Trails = Load.shared("Config", "Trails")
 
+local Panels = require(script.Parent.Panels)
 local Theme = require(script.Parent.Theme)
 local TrainingUi = require(script.Parent.TrainingUi)
 local UiState = require(script.Parent.UiState)
@@ -41,11 +45,14 @@ local function badge(scope, text, color)
 		BackgroundColor3 = color or Theme.YOLK,
 		[Children] = {
 			Widgets.round(scope),
-			Widgets.stroke(scope, 2.5),
+			Widgets.gradient(scope, Theme.WHITE, Color3.fromRGB(214, 214, 224)),
+			Widgets.stroke(scope, 2.5, Theme.WHITE),
 			Widgets.text(scope, {
 				Name = "Label",
 				Text = text,
 				TextSize = 17,
+				Font = Theme.TITLE_FONT,
+				Stroke = 2,
 				ZIndex = 3,
 			}),
 		},
@@ -54,10 +61,7 @@ end
 
 local function productCard(scope, product, accent)
 	local children = {
-		Widgets.corner(scope, 22),
-		Widgets.gradient(scope, accent.light, accent.deep),
-		Widgets.stroke(scope, 3),
-		Widgets.speckles(scope, { { 0.15, 0.12, 16 }, { 0.86, 0.4, 10 }, { 0.2, 0.55, 8 }, { 0.78, 0.18, 22 } }),
+		Widgets.cardSkin(scope, accent.light, accent.deep, 22),
 
 		-- A soft glow behind the icon.
 		scope:New("Frame")({
@@ -166,7 +170,7 @@ local function productGrid(scope, section: string, accent, columns: number, layo
 	})
 end
 
--- One side of the pen upgrade: a cream tile showing a pen level and how many pets it holds.
+-- One side of the pen upgrade: a dark tile showing a pen level and how many pets it holds.
 local function penTile(scope, props)
 	return scope:New("Frame")({
 		Name = props.Name,
@@ -174,10 +178,10 @@ local function penTile(scope, props)
 		Position = props.Position,
 		Size = UDim2.fromOffset(156, 116),
 		Visible = props.Visible,
-		BackgroundColor3 = Theme.CREAM,
+		BackgroundColor3 = Theme.CARD_DEEP,
 		[Children] = {
 			Widgets.corner(scope, 22),
-			Widgets.stroke(scope, 3),
+			Widgets.stroke(scope, 3, Theme.CARD_EDGE),
 			Widgets.text(scope, {
 				Name = "Icon",
 				Position = UDim2.fromOffset(0, 4),
@@ -198,7 +202,7 @@ local function penTile(scope, props)
 				Size = UDim2.new(1, 0, 0, 20),
 				Font = Theme.SMALL_FONT,
 				Text = props.Capacity,
-				TextColor3 = Color3.fromRGB(150, 100, 60),
+				TextColor3 = Theme.TEXT_SOFT,
 				TextSize = 16,
 			}),
 		},
@@ -225,16 +229,7 @@ local function penCard(scope)
 		Size = UDim2.new(1, -8, 0, 262),
 		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 26),
-			Widgets.gradient(scope, accent.light, accent.deep, 120),
-			Widgets.stroke(scope, 4),
-			Widgets.speckles(scope, {
-				{ 0.08, 0.2, 22 },
-				{ 0.93, 0.15, 14 },
-				{ 0.5, 0.92, 12 },
-				{ 0.04, 0.7, 10 },
-				{ 0.96, 0.62, 20 },
-			}),
+			Widgets.cardSkin(scope, accent.light, accent.deep, 26),
 			Widgets.text(scope, {
 				Name = "Headline",
 				Position = UDim2.fromOffset(0, 10),
@@ -331,8 +326,8 @@ local function penCard(scope)
 						Name = "BuyDollars",
 						LayoutOrder = 2,
 						Size = UDim2.fromScale(0.42, 1),
-						Color = Theme.CREAM,
-						Deep = Theme.SHELL_DARK,
+						Color = Theme.GREEN,
+						Deep = Theme.GREEN_DEEP,
 						Content = {
 							Widgets.dollar(scope, { Position = UDim2.new(0.5, -52, 0.5, 0), Size = 30 }),
 							Widgets.text(scope, {
@@ -374,20 +369,17 @@ local function doublingCard(scope)
 		Size = UDim2.new(1, -8, 0, 150),
 		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 24),
-			Widgets.gradient(scope, accent.light, accent.deep, 100),
-			Widgets.stroke(scope, 4),
-			Widgets.speckles(scope, { { 0.35, 0.18, 16 }, { 0.6, 0.86, 10 }, { 0.72, 0.2, 8 }, { 0.5, 0.5, 6 } }),
+			Widgets.cardSkin(scope, accent.light, accent.deep, 24),
 
 			scope:New("Frame")({
 				Name = "Seal",
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, 16, 0.5, 0),
 				Size = UDim2.fromOffset(108, 108),
-				BackgroundColor3 = Theme.CREAM,
+				BackgroundColor3 = Theme.CARD_DEEP,
 				[Children] = {
 					Widgets.round(scope),
-					Widgets.stroke(scope, 3.5),
+					Widgets.stroke(scope, 3.5, accent.light),
 					Widgets.text(scope, {
 						Name = "Icon",
 						Position = UDim2.fromOffset(0, 10),
@@ -401,8 +393,9 @@ local function doublingCard(scope)
 						Size = UDim2.new(1, 0, 0, 40),
 						Font = Theme.TITLE_FONT,
 						Text = "x2",
-						TextColor3 = accent.deep,
+						TextColor3 = accent.light,
 						TextSize = 40,
+						Stroke = 3,
 					}),
 				},
 			}),
@@ -528,6 +521,354 @@ local function doublingCard(scope)
 	})
 end
 
+-- The colour a pack's pet's name is written in, by its variant.
+local PACK_PET_COLORS = {
+	Molten = Color3.fromRGB(255, 150, 60),
+	Crystal = Color3.fromRGB(150, 245, 255),
+}
+
+-- One thing in a pack, on a dark tile: an icon, a value ("+$250K") and what it is ("CASH"), and a tag such as
+-- "FOREVER" on its corner.
+local function packTile(scope, props)
+	return scope:New("Frame")({
+		Name = props.Name,
+		LayoutOrder = props.Order,
+		BackgroundColor3 = Theme.CARD_DEEP,
+		[Children] = {
+			Widgets.corner(scope, 12),
+			Widgets.stroke(scope, 2.5, Theme.CARD_EDGE),
+			Widgets.text(scope, {
+				Name = "Icon",
+				Position = UDim2.fromOffset(0, 4),
+				Size = UDim2.new(1, 0, 0, 30),
+				Text = props.Icon,
+				TextSize = 26,
+			}),
+			Widgets.text(scope, {
+				Name = "Value",
+				Position = UDim2.fromOffset(4, 34),
+				Size = UDim2.new(1, -8, 0, 22),
+				Text = props.Value,
+				TextColor3 = props.Color or Theme.WHITE,
+				TextScaled = true,
+				MaxTextSize = 20,
+				Stroke = 2,
+			}),
+			Widgets.text(scope, {
+				Name = "Label",
+				Position = UDim2.fromOffset(4, 56),
+				Size = UDim2.new(1, -8, 0, 16),
+				Font = Theme.SMALL_FONT,
+				Text = props.Label,
+				TextColor3 = Theme.TEXT_SOFT,
+				TextScaled = true,
+				MaxTextSize = 13,
+			}),
+			if props.Tag
+				then Widgets.tag(scope, {
+					Name = "Tag",
+					Text = props.Tag,
+					AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, 6, 0, 0),
+					Size = UDim2.fromOffset(84, 22),
+					Rotation = 6,
+					Color = Theme.YOLK,
+					Deep = Theme.YOLK_DEEP,
+					TextSize = 13,
+					ZIndex = 3,
+				})
+				else nil,
+		},
+	})
+end
+
+-- A pack (Config/Shop): its pet turning on the left over a burst of rays (the model is put in by ShopController),
+-- its name, a tile for each thing in it, what those would cost on their own crossed out, and its price.
+local function packCard(scope, pack)
+	local colors = Theme.Packs[pack.id] or { light = Theme.VIOLET, deep = Theme.VIOLET_DEEP, ray = Theme.WHITE }
+	local owned = scope:Computed(function(use)
+		return use(UiState.ownedPacks)[pack.id] == true
+	end)
+	local origin = Shop.petOrigin(pack.pet.kind)
+	local income = if origin
+		then PetWorth.income({ zone = origin.zone, rarity = origin.rarity, variant = pack.pet.variant })
+		else 0
+	local trail = Trails.ById[pack.trail]
+	local trailName = if trail then string.upper((string.gsub(trail.name, " Trail$", ""))) else pack.trail
+
+	local rays = {}
+	for index = 1, 6 do
+		table.insert(
+			rays,
+			scope:New("Frame")({
+				Name = "Ray" .. index,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.55),
+				Size = UDim2.fromOffset(640, 30),
+				Rotation = index * 30,
+				BackgroundColor3 = colors.ray,
+				BackgroundTransparency = 0.72,
+				BorderSizePixel = 0,
+			})
+		)
+	end
+
+	local tiles = {
+		packTile(scope, {
+			Name = "Pet",
+			Order = 1,
+			Icon = "🐾",
+			Value = `${NumberFormat.abbreviate(income)}/s`,
+			Color = Theme.GREEN,
+			Label = string.upper(Panels.petName(pack.pet.kind)),
+		}),
+		packTile(scope, {
+			Name = "Cash",
+			Order = 2,
+			Icon = "💵",
+			Value = `+${NumberFormat.abbreviate(pack.dollars)}`,
+			Color = Theme.GREEN,
+			Label = "CASH",
+		}),
+		packTile(scope, {
+			Name = "Stamina",
+			Order = 3,
+			Icon = "⚡",
+			Value = `x{pack.stamina}`,
+			Label = "STAMINA",
+			Tag = "FOREVER",
+		}),
+		packTile(scope, {
+			Name = "Trail",
+			Order = 4,
+			Icon = "✨",
+			Value = trailName,
+			Label = "TRAIL",
+		}),
+		packTile(scope, {
+			Name = "Revives",
+			Order = 5,
+			Icon = "💖",
+			Value = `+{pack.revives}`,
+			Label = "REVIVES",
+		}),
+	}
+	if pack.luck then
+		table.insert(
+			tiles,
+			packTile(scope, {
+				Name = "Luck",
+				Order = 6,
+				Icon = "🍀",
+				Value = `x{pack.luck.multiplier}`,
+				Label = "LUCK",
+				Tag = `{math.floor(pack.luck.duration / 60)} MIN`,
+			})
+		)
+	end
+
+	local worth = Shop.packWorth(pack)
+	return scope:New("Frame")({
+		Name = pack.id,
+		LayoutOrder = pack.order,
+		Size = UDim2.new(1, -8, 0, 340),
+		BackgroundColor3 = Theme.WHITE,
+		[Children] = {
+			Widgets.corner(scope, 24),
+			Widgets.gradient(scope, colors.light, colors.deep, 120),
+			scope:New("UIStroke")({
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.WHITE,
+				Thickness = 4,
+			}),
+			-- Rays fanning out behind the pet, and the pet itself.
+			scope:New("Frame")({
+				Name = "Burst",
+				Size = UDim2.fromScale(0.42, 1),
+				BackgroundTransparency = 1,
+				ClipsDescendants = true,
+				[Children] = rays,
+			}),
+			scope:New("ViewportFrame")({
+				Name = "PetView",
+				Position = UDim2.fromOffset(8, 36),
+				Size = UDim2.new(0.42, -8, 1, -44),
+				BackgroundTransparency = 1,
+				Ambient = Color3.fromRGB(180, 176, 196),
+				LightColor = Color3.fromRGB(255, 250, 240),
+				LightDirection = Vector3.new(-1, -1.5, -1),
+				[Children] = { scope:New("WorldModel")({ Name = "World" }) },
+			}),
+			Widgets.tag(scope, {
+				Name = "Badge",
+				Text = pack.badge,
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.fromOffset(-10, 18),
+				Size = UDim2.fromOffset(200, 40),
+				Rotation = -7,
+				Color = if pack.order == 1 then Theme.YOLK else Theme.CORAL,
+				Deep = if pack.order == 1 then Theme.YOLK_DEEP else Theme.CORAL_DEEP,
+				TextSize = 22,
+				ZIndex = 3,
+			}),
+
+			scope:New("Frame")({
+				Name = "Info",
+				Position = UDim2.new(0.42, 0, 0, 12),
+				Size = UDim2.new(0.58, -16, 1, -24),
+				BackgroundTransparency = 1,
+				[Children] = {
+					Widgets.text(scope, {
+						Name = "Title",
+						Size = UDim2.new(1, 0, 0, 46),
+						Font = Theme.TITLE_FONT,
+						Text = pack.title,
+						TextColor3 = Theme.YOLK,
+						TextSize = 44,
+						Stroke = 4,
+					}),
+					Widgets.text(scope, {
+						Name = "PetName",
+						Position = UDim2.fromOffset(0, 46),
+						Size = UDim2.new(1, 0, 0, 24),
+						Text = string.upper(Panels.fullPetName(pack.pet.kind, pack.pet.variant)),
+						TextColor3 = PACK_PET_COLORS[pack.pet.variant] or Theme.WHITE,
+						TextScaled = true,
+						MaxTextSize = 22,
+						Stroke = 2.5,
+					}),
+					scope:New("Frame")({
+						Name = "Items",
+						Position = UDim2.fromOffset(0, 80),
+						Size = UDim2.new(1, 0, 0, 172),
+						BackgroundTransparency = 1,
+						[Children] = {
+							scope:New("UIGridLayout")({
+								CellSize = UDim2.new(1 / 3, -8, 0, 80),
+								CellPadding = UDim2.fromOffset(10, 10),
+								HorizontalAlignment = Enum.HorizontalAlignment.Center,
+								SortOrder = Enum.SortOrder.LayoutOrder,
+							}),
+							tiles,
+						},
+					}),
+
+					-- "WORTH <Robux> 514" struck through, the button with "-71%" on a sticker, and the price.
+					scope:New("Frame")({
+						Name = "Worth",
+						AnchorPoint = Vector2.new(0, 1),
+						Position = UDim2.fromScale(0, 1),
+						Size = UDim2.new(0.5, 0, 0, 56),
+						BackgroundTransparency = 1,
+						[Children] = {
+							Widgets.text(scope, {
+								Name = "Label",
+								Size = UDim2.fromOffset(64, 30),
+								Font = Theme.SMALL_FONT,
+								Text = "WORTH",
+								TextSize = 15,
+								TextXAlignment = Enum.TextXAlignment.Left,
+								Stroke = 1.5,
+							}),
+							Widgets.text(scope, {
+								Name = "Old",
+								Position = UDim2.fromOffset(64, 0),
+								Size = UDim2.new(1, -64, 0, 30),
+								Text = `{Theme.ROBUX} {worth}`,
+								TextColor3 = Theme.TEXT_SOFT,
+								TextScaled = true,
+								MaxTextSize = 22,
+								TextXAlignment = Enum.TextXAlignment.Left,
+								Stroke = 2,
+							}),
+							-- Struck through.
+							scope:New("Frame")({
+								Name = "Strike",
+								AnchorPoint = Vector2.new(0, 0.5),
+								Position = UDim2.fromOffset(60, 15),
+								Size = UDim2.fromOffset(72, 3),
+								Rotation = -8,
+								BackgroundColor3 = Theme.CORAL,
+								BorderSizePixel = 0,
+							}),
+							Widgets.text(scope, {
+								Name = "Once",
+								Position = UDim2.fromOffset(0, 32),
+								Size = UDim2.new(1, 0, 0, 18),
+								Font = Theme.SMALL_FONT,
+								Text = "One per player",
+								TextColor3 = Theme.WHITE,
+								TextSize = 13,
+								TextXAlignment = Enum.TextXAlignment.Left,
+								Stroke = 1.5,
+							}),
+						},
+					}),
+					Widgets.button(scope, {
+						Name = "Buy",
+						AnchorPoint = Vector2.new(1, 1),
+						Position = UDim2.fromScale(1, 1),
+						Size = UDim2.new(0.48, 0, 0, 56),
+						Visible = scope:Computed(function(use)
+							return not use(owned)
+						end),
+						Color = Theme.GREEN,
+						Deep = Theme.GREEN_DEEP,
+						Text = robuxText(scope, pack.id, pack.robux),
+						TextSize = 30,
+						OnActivated = function()
+							buy(pack.id)
+						end,
+					}),
+					Widgets.tag(scope, {
+						Name = "Discount",
+						Text = `-{Shop.packDiscount(pack)}%`,
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.new(1, -8, 1, -58),
+						Size = UDim2.fromOffset(74, 30),
+						Rotation = 10,
+						TextSize = 20,
+						ZIndex = 4,
+					}),
+					scope:New("Frame")({
+						Name = "Owned",
+						AnchorPoint = Vector2.new(1, 1),
+						Position = UDim2.fromScale(1, 1),
+						Size = UDim2.new(0.48, 0, 0, 52),
+						Visible = owned,
+						BackgroundColor3 = Theme.GREEN,
+						[Children] = {
+							Widgets.corner(scope, 14),
+							Widgets.stroke(scope, 3),
+							Widgets.text(scope, {
+								Text = "OWNED ✔",
+								TextColor3 = Theme.WHITE,
+								TextSize = 24,
+								Stroke = 2.5,
+							}),
+						},
+					}),
+				},
+			}),
+		},
+	})
+end
+
+-- How many revives the player has, over the revive products.
+local function revivesNote(scope)
+	return Widgets.text(scope, {
+		Name = "Have",
+		LayoutOrder = 2,
+		Size = UDim2.new(1, 0, 0, 26),
+		Text = scope:Computed(function(use)
+			local count = use(UiState.revives)
+			return `💖 You have {count} {if count == 1 then "revive" else "revives"}`
+		end),
+		TextSize = 20,
+		Stroke = 2,
+	})
+end
+
 -- Icons for pass seals, by pass id.
 local PASS_ICONS = { DoubleDollars = "💵" }
 
@@ -544,10 +885,7 @@ local function passCard(scope, pass)
 		Size = UDim2.new(1, -8, 0, 132),
 		BackgroundColor3 = Theme.WHITE,
 		[Children] = {
-			Widgets.corner(scope, 24),
-			Widgets.gradient(scope, accent.light, accent.deep, 100),
-			Widgets.stroke(scope, 3),
-			Widgets.speckles(scope, { { 0.3, 0.2, 14 }, { 0.62, 0.85, 10 }, { 0.55, 0.15, 8 } }),
+			Widgets.cardSkin(scope, accent.light, accent.deep, 24),
 
 			-- The badge on the left: "x2" over the pass's icon.
 			scope:New("Frame")({
@@ -555,10 +893,10 @@ local function passCard(scope, pass)
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, 16, 0.5, 0),
 				Size = UDim2.fromOffset(100, 100),
-				BackgroundColor3 = Theme.CREAM,
+				BackgroundColor3 = Theme.CARD_DEEP,
 				[Children] = {
 					Widgets.round(scope),
-					Widgets.stroke(scope, 3.5),
+					Widgets.stroke(scope, 3.5, accent.light),
 					Widgets.text(scope, {
 						Name = "Icon",
 						Position = UDim2.fromOffset(0, 10),
@@ -572,8 +910,9 @@ local function passCard(scope, pass)
 						Size = UDim2.new(1, 0, 0, 36),
 						Font = Theme.TITLE_FONT,
 						Text = "x2",
-						TextColor3 = accent.deep,
+						TextColor3 = accent.light,
 						TextSize = 36,
+						Stroke = 3,
 					}),
 				},
 			}),
@@ -598,7 +937,7 @@ local function passCard(scope, pass)
 				[Children] = {
 					Widgets.round(scope),
 					Widgets.stroke(scope, 2.5),
-					Widgets.text(scope, { Text = pass.tagline, TextSize = 16 }),
+					Widgets.text(scope, { Text = pass.tagline, TextSize = 16, Stroke = 2 }),
 				},
 			}),
 			Widgets.text(scope, {
@@ -712,10 +1051,30 @@ function ShopPanel.build(scope)
 		},
 	})
 
+	local packs = {}
+	for _, pack in Shop.Packs do
+		table.insert(packs, packCard(scope, pack))
+	end
+	local packList = scope:New("Frame")({
+		Name = "List",
+		LayoutOrder = 2,
+		Size = UDim2.fromScale(1, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		[Children] = {
+			-- Room for the tilted stickers that poke out of the top corners.
+			Widgets.padding(scope, 10, 8, 4),
+			Widgets.list(scope, { Padding = 22, HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+			packs,
+		},
+	})
+
 	local contents = {
+		Packs = packList,
 		Featured = { TrainingUi.stickCard(scope, 2), penCard(scope) },
 		Luck = productGrid(scope, "Luck", Theme.Sections.Luck, 2),
 		Stamina = { doublingCard(scope), productGrid(scope, "Stamina", Theme.Sections.Stamina, 3, 3) },
+		Revives = { revivesNote(scope), productGrid(scope, "Revives", Theme.Sections.Revives, 3, 3) },
 		Dollars = productGrid(scope, "Dollars", Theme.Sections.Dollars, 3),
 		Passes = passList,
 	}
@@ -737,13 +1096,13 @@ function ShopPanel.build(scope)
 				LayoutOrder = order,
 				Size = UDim2.new(1 / #Shop.Sections, -8, 1, 0),
 				Color = scope:Computed(function(use)
-					return if use(isSelected) then accent.light else Theme.CREAM
+					return if use(isSelected) then accent.light else Theme.CARD
 				end),
 				Deep = scope:Computed(function(use)
-					return if use(isSelected) then accent.deep else Theme.SHELL_DARK
+					return if use(isSelected) then accent.deep else Theme.CARD_DEEP
 				end),
 				Text = `{accent.icon} {accent.name}`,
-				TextSize = 18,
+				TextSize = if #Shop.Sections > 5 then 15 else 18,
 				OnActivated = function()
 					jump(name)
 				end,

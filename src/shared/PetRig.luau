@@ -38,7 +38,8 @@ local function newPart(name: string, parent: Instance, className: string?): Base
 end
 
 -- The rigged Model for a pet (a design name such as "MossStag"), or nil if that pet has no model yet. `variant`
--- ("Silver", "Gold", "Rainbow"; Normal if left out) recolours it (Shared/PetVariants).
+-- ("Silver", "Gold", "Rainbow", or the packs' "Molten" and "Crystal"; Normal if left out) recolours it
+-- (Shared/PetVariants).
 -- It is built at the origin; move it with Model:PivotTo.
 function PetRig.build(kind: string, variant: string?): Model?
 	local design = PetModels.get(kind)
@@ -94,10 +95,16 @@ function PetRig.build(kind: string, variant: string?): Model?
 				mesh.MeshType = Enum.MeshType.Sphere
 				mesh.Parent = block
 			end
-			block.Color =
-				PetVariants.tint(Color3.fromRGB(box.color[1], box.color[2], box.color[3]), variant, along(box.z))
-			block.Material = (Enum.Material :: any)[box.material]
-			block.Transparency = box.transparency
+			local color, material, transparency = PetVariants.paint(
+				Color3.fromRGB(box.color[1], box.color[2], box.color[3]),
+				box.material,
+				box.transparency,
+				variant,
+				along(box.z)
+			)
+			block.Color = color
+			block.Material = (Enum.Material :: any)[material]
+			block.Transparency = transparency
 			block.Reflectance = PetVariants.reflectance(variant)
 
 			local weld = Instance.new("WeldConstraint")

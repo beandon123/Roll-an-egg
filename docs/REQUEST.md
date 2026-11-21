@@ -61,7 +61,8 @@ Original theme, art, and creatures.
           only slightly), with higher steps behind it (28-36 and 38-50 studs more); the Ocean's boardwalk railing is
           7 studs tall
     - [ ] Fog like the owner's reference screenshots (decided): a bright, milky white-blue fog, crisp close by,
-          the runway ahead fading into pale light from 40 studs and gone by 600 (proposed); deep blue at night
+          the runway ahead fading into pale light from 80 studs and gone by 900 (decided: thinned from 40 and 600 on
+          21 Nov 2026); deep blue at night
     - [ ] Natural, fairly large gaps in the walls (decided), looking out over a valley with a low railing across
           (built). Nothing on the runway kills (decided): steering an egg into a wall or a railing bounces it back,
           costing stamina and slowing it for a moment (built)
@@ -189,7 +190,11 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
           with its name, "Lvl N" and rarity, a picture, "xN Stamina" on a dark strip, and a big green button
 
     - [ ] Trails stack with Max Stamina bought in the shop and its doublings (built: (base + bought) x doublings x
-          trail)
+          packs x trail)
+    - [x] Two more trails come only in the shop's packs, as each pack's "aura" (decided 21 Nov 2026: the reference's
+          auras are trails here; built): the Molten Trail (Epic Pack: glowing lava cooling to obsidian, embers, x5)
+          and the Crystal Trail (Super Pack: white, cyan, blue and pink glass, sparkling, x8) (looks and boosts
+          proposed). The stall shows them after the nine, with a button that opens the shop's packs
 - [ ] Sell stall (decided): sell eggs you don't want, for dollars (built); pets sell from the Pets tab (built)
     - [ ] Eggs: sell 1 or all of a kind; an egg is worth half its stamina requirement (proposed: Forest Common $25,
           Desert Mythic $900, Volcano Eternal $75K)
@@ -296,6 +301,11 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
       floaty leap with a few seconds (3.5 s) to land on an egg; touching the runway first, or running out of time,
       kills them. Pet riders too (decided): pets never go on the runway, so riding one past the start zone sends
       it away and launches the same leap
+    - [x] Revives (decided 21 Nov 2026: a boost bought in the shop to carry on a run after falling; built): a player
+          who misses their leap and has a revive is held where they fell and asked "Use a revive and carry on?" for
+          6 s (proposed); REVIVE puts them back in the air just above the nearest egg they could land on, with a
+          fresh leap; No thanks, or letting the time run out, sends them back to the hub as before. Sold in the shop
+          (+1 for 19, +5 for 79, +15 for 199 Robux, proposed) and in the packs; kept until used
 - [ ] Thrown off (stamina at 0, losing a duel): ragdoll + 1.5 s stun, claim progress lost; they are leaping, so only
       a lucky landing on another egg saves them
 - [ ] Death (decided: missing an egg when leaping, resetting; walls, gaps and obstacles never kill): cartoon splat,
@@ -325,8 +335,14 @@ First-pass stamina requirement per egg (base Max Stamina 100; Desert baseline 50
 - [ ] Server announcements: "Alex stole a Legendary egg from Sam!"
 
 ### Pets
-- [ ] Each pet: species, zone, rarity, variant (Normal / Silver / Gold / Rainbow chance on hatch, decided; built),
-      size, Income/sec, Mount Speed
+- [ ] Each pet: species, zone, rarity, mutation (called a variant in the code), size, Income/sec, Mount Speed
+    - [x] Mutations (decided 21 Nov 2026; built): a hatching pet may come out Gold (8%, x1.5), Diamond (4%, x3) or
+          Rainbow (1%, x10), each a little faster to ride; Rainbow runs through every colour from tail to head like
+          the owner's reference (teal, blue, purple, red, green head). Odds decided too. Silver is shelved: it no longer
+          hatches, but saved Silver pets keep it
+    - [x] Pack-only mutations (built 21 Nov 2026; proposed): Molten (black obsidian, its pale markings glowing like
+          lava, shedding embers) and Crystal (see-through cyan glass, sparkling), each x10 and the fastest to ride;
+          they never hatch, they only come with the shop's packs
     - [ ] Sizes, smallest first (decided): Tiny, Small, Normal, Big, Huge, Giant, Colossal, Titanic
     - [ ] Every hatch rolls a size; the bigger the size, the lower its chance (decided); first-pass odds (proposed;
           in `Config/PetTraits`, not rolled on hatch yet):
@@ -442,8 +458,19 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
 - [ ] Offline earnings (decided): you get the dollars your pets would have earned in your first hour offline, and no
       dollars at all beyond that hour; a "Welcome back" summary shows what you got (eggs keep growing the whole time
       you're away)
-- [ ] Global leaderboards: eggs claimed, eggs stolen, total dollars, rarest hatch
-    - [ ] Shown on boards beside the start zone (proposed); "Top Egg Claimers" is the first (built)
+- [ ] Global leaderboards (decided 21 Nov 2026, from the owner's reference: the same three boards, in the game's
+      own design; built): every server's best players, on three boards in a row beside the start zone facing into
+      the hub
+    - [x] Top Stamina (Max Stamina), Top Collectors (different pets ever had, each variant counting: a Gold Fox and a
+          Fox are two; selling a pet does not take it off the count; proposed reading of the reference's "variants"),
+          Top Earners (dollars a second from the pen) (built)
+    - [x] The look (built): a stone plinth, a white rim between two banded pillars topped with glowing lamps in the
+          board's colour, and a big blocky egg on top bearing its emblem (a lightning bolt, a paw, a coin); the
+          screen drawn like the game's panels (glossy title band, indigo body, a row a player with their face, gold,
+          silver and bronze for the top three); 8 rows; under it, each player's own score and place ("#100+" past
+          the top 100)
+    - [ ] "Top Egg Claimers", the first board, is shelved (kept in Config/Leaderboards); eggs stolen and rarest hatch
+          boards still to come
 - [ ] Community-join reward; opt-in Roblox experience notifications ("Your Mythic egg is ready to open!")
 
 ### Server Events (decided: Titan Egg + Egg Avalanche; Shiny Hour on hold)
@@ -478,6 +505,22 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
           during economy tuning)
     - [ ] Double Your Stamina (decided): a repeatable product; each purchase doubles Max Stamina, starting at x2, up to
           x1024 (ten doublings; the owner said "1096x", read as the nearest doubling); one developer product per step
+    - [x] Revives (decided; built): +1, +5 and +15 (see Riding & Claiming)
+- [x] Packs (decided 21 Nov 2026, from the owner's reference; built), at the top of the shop: one developer product
+      each, a bundle at a big discount. Contents and prices proposed:
+
+          Pack         Robux  Pet (own mutation)             Dollars  Max Stamina      Trail    Revives  Luck
+          Epic Pack    149    Molten Sabertooth Cat ($6.5K/s) +$250K  x8, forever      Molten   +2       -
+          Super Pack   299    Crystal Mantis Empress ($160K/s) +$1M   x16, forever     Crystal  +3       x2, 15 min
+
+    - [ ] "Worth" crossed out on each card is what the parts cost in this shop on their own (dollars at the best dollar
+          pack's rate, the stamina doublings, revives one at a time, the luck boost; the pet and trail come on top):
+          514 (-71%) and 1,496 (-80%)
+    - [x] One of each pack per player (decided 21 Nov 2026; built): once bought, its card says OWNED and the shop
+          turns down another purchase
+    - [ ] The packs' Max Stamina boosts don't add up, the biggest counts (proposed); it multiplies Max Stamina,
+          training stick reps included
+    - [ ] Not built: the reference's gift button (buying a pack for someone else)
 - [ ] Skip Growth (decided): Grow All finishes every growing egg; Skip finishes one egg
     - [ ] Price scales with the time left, worked out automatically (decided): Grow All adds up the time left on
           every growing egg, Skip uses that one egg's time left; the button always shows the current price, and it
@@ -495,7 +538,8 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Time left is counted at normal speed; the 30x closure boost isn't predicted (proposed)
     - [ ] At 100 pets, the purchase prompt warns first that the eggs will be ready but can't be opened (proposed)
     - [ ] Grow All is hidden when no egg is growing (proposed)
-- [ ] Shop UI ("Coop Shop"): sections Featured (next pen level, Robux or dollars), Luck, Stamina, Dollars, Passes;
+- [ ] Shop UI ("Coop Shop"): sections Packs, Featured (next pen level, Robux or dollars), Luck, Stamina, Revives,
+      Dollars, Passes;
       original look (eggshell cream, yolk-yellow buttons, speckled cards) (built)
 - [ ] Settings: Music / Effects / Nature volume, show others' pets, show your pets, reduce camera shake, vibration;
       saved to the account (built)
@@ -539,6 +583,11 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
           what the pen earns a second under the dollars
     - [ ] Day and night clock at the bottom right, like the owner's reference (decided, built): by day a moon and the
           time until night ("in 3m 20s"), by night a sun and the time until sunrise
+    - [x] The look of every panel and button (decided 21 Nov 2026, from the owner's reference of a glossy reward
+          card; built in `Ui/Theme` and `Ui/Widgets`): a thick white rim, a glossy white-to-lavender title band, a
+          deep indigo body, cards that are dark gradients of their colour with a bright edge (mint for highlights),
+          chunky white lettering outlined in dark navy, section headings with a thin line, tilted "NEW!"-style
+          stickers, and a purple main button (gold, green and coral ones too) on a darker lip
     - [ ] Growing Eggs menu (decided): a scrolling list of every egg in your pen, each with its egg icon and either a
           progress bar with the time left or, once ready, an Open button; opens from a HUD button (today the Pets tab
           lists the eggs hatching, and they hatch on their own when the timer ends)

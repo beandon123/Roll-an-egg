@@ -89,6 +89,8 @@ local function buyTrail(trailId: string)
 			UiState.showToast("Not enough dollars", BAD_COLOR)
 		elseif result == "Owned" then
 			UiState.showToast("You already own that trail", BAD_COLOR)
+		elseif result == "PackOnly" then
+			UiState.showToast("That trail only comes in the shop's packs", BAD_COLOR)
 		end
 	end)
 end

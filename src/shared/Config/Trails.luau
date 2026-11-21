@@ -7,6 +7,10 @@
 -- one before. The plain ones are a single ribbon; then come particles (dust, bubbles, snowflakes, embers, sparks,
 -- stars), a glowing halo round the ribbon, and a light that travels with you.
 -- First-pass prices and boosts; adjust in economy tuning.
+--
+-- Two more trails are never sold at the stall: they come only in the shop's packs (Config/Shop), as each pack's
+-- "aura". They are in `PackList`, not `List`, and the stall shows them after the nine, with a button that opens the
+-- shop instead of a price.
 -- Pure data (no Roblox APIs) so the test runner can load it outside Studio.
 
 -- What a trail sheds as it goes (StationService picks the texture and motion for each kind).
@@ -15,12 +19,14 @@ export type ParticleKind = "Dust" | "Bubble" | "Sparkle" | "Ember" | "Spark" | "
 export type TrailInfo = {
 	id: string,
 	name: string,
-	-- Its place in the shop, from 1 (the first trail) to 9.
+	-- Its place in the shop, from 1 (the first trail) to 9 (0 for a pack trail).
 	level: number,
 	-- A rarity from Config/Rarities, for its colour on the shop card.
 	rarity: string,
-	-- Dollars.
+	-- Dollars (0 for a pack trail, which is never sold for dollars).
 	price: number,
+	-- The pack (Config/Shop) it comes in, for a trail only a pack gives.
+	pack: string?,
 	-- Max Stamina multiplier while equipped.
 	stamina: number,
 	-- RGB 0-255, from the character back to the tail end of the trail.
@@ -184,10 +190,62 @@ local list: { TrailInfo } = {
 	},
 }
 
+-- Only in the shop's packs (Config/Shop), never at the stall: each pack's "aura".
+local packList: { TrailInfo } = {
+	{
+		-- Glowing lava at the runner, cooling to black obsidian at the tail, shedding embers.
+		id = "Molten",
+		name = "Molten Trail",
+		level = 0,
+		rarity = "Mythic",
+		price = 0,
+		pack = "EpicPack",
+		stamina = 5,
+		colors = { { 255, 214, 110 }, { 255, 110, 24 }, { 120, 30, 16 }, { 26, 16, 16 } },
+		width = 3,
+		lifetime = 0.85,
+		glow = 0.9,
+		halo = { 255, 104, 30 },
+		particles = { kind = "Ember", colors = { { 255, 210, 90 }, { 255, 72, 20 } }, rate = 26, size = 0.9 },
+		light = { 255, 120, 40 },
+	},
+	{
+		-- Glassy prism colours: white at the runner, then cyan, blue and pink, sparkling.
+		id = "Crystal",
+		name = "Crystal Trail",
+		level = 0,
+		rarity = "Secret",
+		price = 0,
+		pack = "SuperPack",
+		stamina = 8,
+		colors = { { 255, 255, 255 }, { 150, 255, 246 }, { 120, 168, 255 }, { 255, 150, 228 } },
+		width = 3.4,
+		lifetime = 0.95,
+		glow = 1,
+		halo = { 196, 255, 255 },
+		particles = {
+			kind = "Sparkle",
+			colors = { { 255, 255, 255 }, { 150, 255, 246 }, { 255, 170, 236 } },
+			rate = 34,
+			size = 0.8,
+		},
+		light = { 170, 236, 255 },
+	},
+}
+
+-- The stall's nine, in shop order.
 Trails.List = list
+-- The trails only the shop's packs give.
+Trails.PackList = packList
+-- Every trail: the stall's, then the packs'.
+local all = table.clone(list)
+for _, trail in packList do
+	table.insert(all, trail)
+end
+Trails.All = all
 
 local byId: { [string]: TrailInfo } = {}
-for _, trail in list do
+for _, trail in all do
 	byId[trail.id] = trail
 end
 Trails.ById = byId

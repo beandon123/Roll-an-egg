@@ -214,8 +214,8 @@ return function(harness)
 			-- hide it).
 			local lighting = session:service("Lighting")
 			expect.equal(lighting:FindFirstChildOfClass("Atmosphere"), nil)
-			expect.truthy(lighting.FogStart > 0 and lighting.FogStart < 100, "fog starts close by")
-			expect.truthy(lighting.FogEnd > lighting.FogStart and lighting.FogEnd <= 800, "and hides what is far off")
+			expect.truthy(lighting.FogStart >= 80 and lighting.FogStart < 150, "fog starts a little way off")
+			expect.truthy(lighting.FogEnd >= 900 and lighting.FogEnd <= 1000, "and hides what is far off")
 			expect.truthy(lighting.FogColor.R > 0.8 and lighting.FogColor.B > 0.9, "pale white-blue")
 			-- Bloom, so Neon glows; only light brighter than everyday sunlit ground blooms.
 			local bloom = lighting:FindFirstChild("Bloom")
@@ -723,6 +723,74 @@ return function(harness)
 			session:heartbeat(0.5, math.ceil(tuning.LEAP_SERVER_GRACE * 2) + 2)
 			expect.equal(leaper.Health, 0)
 			expect.equal(idler.Health, 100)
+		end)
+	end)
+
+	describe("Server: revives", function()
+		-- A player in the air over the runway who has just missed their leap.
+		local function missed(session, revives)
+			local player, humanoid, root = session:addPlayer(1, "Faller")
+			session:heartbeat(1 / 60)
+			dataOf(session, 1).Revives = revives
+			root.Position = roblox.Vector3.new(0, 14, 60)
+			session:fromClient("MissedLeap", player)
+			return player, humanoid, root
+		end
+
+		it("holds a player who missed their leap while they decide, and uses a revive when they say yes", function()
+			local session = startServer()
+			local tuning = shared(session).Tuning
+			local start = session.clock
+			local player, humanoid = missed(session, 2)
+			local offer = session:lastSent("ReviveOffer", player)
+			expect.near(offer.args[1], start + 1 / 60 + tuning.REVIVE_OFFER_TIME, 0.05)
+
+			-- Longer than a leap would be allowed: still there, waiting for an answer.
+			session:heartbeat(0.5, math.floor(tuning.REVIVE_OFFER_TIME * 2) - 1)
+			expect.equal(humanoid.Health, 100)
+
+			session:fromClient("UseRevive", player)
+			expect.equal(dataOf(session, 1).Revives, 1)
+			expect.equal(session:lastSent("Revived", player).args[1], 1)
+			-- A fresh leap: the usual time to land, then back to the hub.
+			session:heartbeat(0.5, math.floor(tuning.LEAP_TIME * 2))
+			expect.equal(humanoid.Health, 100)
+			session:heartbeat(0.5, math.ceil(tuning.LEAP_SERVER_GRACE * 2) + 2)
+			expect.equal(humanoid.Health, 0)
+		end)
+
+		it("sends a player back to the hub who has no revive, says no, or lets the time run out", function()
+			local session = startServer()
+			local player, humanoid = missed(session, 0)
+			expect.equal(session:lastSent("ReviveOffer", player).args[1], nil, "nothing to offer")
+			session:fromClient("UseRevive", player)
+			expect.falsy(session:lastSent("Revived", player), "nothing used")
+
+			session = startServer()
+			player, humanoid = missed(session, 1)
+			session:fromClient("DeclineRevive", player)
+			expect.equal(humanoid.Health, 0)
+			expect.equal(dataOf(session, 1).Revives, 1, "kept for next time")
+
+			session = startServer()
+			local tuning = shared(session).Tuning
+			player, humanoid = missed(session, 1)
+			session:heartbeat(0.5, math.ceil((tuning.REVIVE_OFFER_TIME + tuning.LEAP_SERVER_GRACE) * 2) + 1)
+			expect.equal(humanoid.Health, 0)
+			session:fromClient("UseRevive", player)
+			expect.equal(dataOf(session, 1).Revives, 1, "too late")
+		end)
+
+		it("offers nothing to a player in the hub", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Walker")
+			session:heartbeat(1 / 60)
+			dataOf(session, 1).Revives = 3
+			root.Position = roblox.Vector3.new(0, 13, -100)
+			session:fromClient("MissedLeap", player)
+			expect.equal(session:lastSent("ReviveOffer", player).args[1], nil)
+			session:fromClient("UseRevive", player)
+			expect.equal(dataOf(session, 1).Revives, 3)
 		end)
 	end)
 
@@ -2121,31 +2189,76 @@ return function(harness)
 			end
 		)
 
-		it("ranks players by eggs claimed on the leaderboard", function()
+		it("builds three leaderboards beside the start zone, facing into the hub", function()
 			local session = startServer()
-			local board = session:service("Workspace").Map.Leaderboard
-			local display = board.Board.Display
-			local rows = display.Rows
-			expect.equal(display.Banner.Title.Text, "TOP EGG CLAIMERS")
-			expect.truthy(rows.Row1 and rows.Row10, "ten rows")
-			expect.equal(display.Empty.Visible, true)
+			local folder = session:service("Workspace").Map.Leaderboards
+			local layout = session:require(session:service("ReplicatedStorage").Shared.HubLayout)
+			local titles = { "TOP STAMINA", "TOP COLLECTORS", "TOP EARNERS" }
+			for index, id in { "Stamina", "Collectors", "Earners" } do
+				local board = folder:FindFirstChild(id)
+				expect.truthy(board, id)
+				local display = board.Screen.Display
+				expect.equal(display.Banner.Title.Text, titles[index])
+				expect.truthy(display.Rows.Row1 and display.Rows.Row8, "eight rows")
+				expect.equal(display.Empty.Visible, true, "nobody yet")
+				expect.near(board.Screen.CFrame.LookVector.Z, -1, 1e-6, "faces into the hub")
+				expect.near(board.Screen.CFrame.Position.X, layout.leaderboardSpot(index).x, 1e-6)
+				expect.truthy(board:FindFirstChild("YouStrip"), "a strip for each player's own line")
+				expect.truthy(board:FindFirstChild("Lamp") and board:FindFirstChild("Crest"), "lamps and the egg")
+				expect.truthy(board:FindFirstChild("Emblem"), "its emblem")
+			end
+			expect.falsy(folder:FindFirstChild("EggClaimers"), "the old board is shelved")
+		end)
 
-			session:addPlayer(1, "Alice")
+		it("ranks players by Max Stamina, pets found and dollars a second", function()
+			local session = startServer()
+			local folder = session:service("Workspace").Map.Leaderboards
+			local alice = session:addPlayer(1, "Alice")
 			session:addPlayer(2, "Bob")
-			session:addPlayer(3, "Cara")
+			local cara = session:addPlayer(3, "Cara")
 			session:heartbeat(1 / 60)
-			dataOf(session, 1).Stats.EggsClaimed = 5
-			dataOf(session, 2).Stats.EggsClaimed = 1200
-			dataOf(session, 3).Stats.EggsClaimed = 0
+			dataOf(session, 1).MaxStaminaBonus = 900
+			dataOf(session, 2).StaminaMultiplier = 4
+			dataOf(session, 2).Discovered = { ["Fox/Normal"] = true, ["Fox/Gold"] = true, ["Owl/Normal"] = true }
+			dataOf(session, 1).Discovered = { ["Fox/Normal"] = true }
+			table.insert(dataOf(session, 3).Pets, {
+				uid = "p",
+				kind = "Bear",
+				egg = "Bear",
+				zone = 2,
+				rarity = "Epic",
+				variant = "Normal",
+				inPen = true,
+				hatchedAt = 0,
+			})
 			session:require(session:service("ServerScriptService").Server.Services.LeaderboardService).Refresh()
 
-			expect.equal(display.Empty.Visible, false)
-			expect.equal(rows.Row1.PlayerName.Text, "Bob")
-			expect.equal(rows.Row1.Score.Text, "1.2K 🥚")
-			expect.truthy(rows.Row1.Face.Image:match("id=2&"), rows.Row1.Face.Image)
-			expect.equal(rows.Row2.PlayerName.Text, "Alice")
-			-- Nobody with zero claims is listed.
-			expect.equal(rows.Row3.Visible, false)
+			local stamina = folder.Stamina.Screen.Display.Rows
+			expect.equal(stamina.Row1.PlayerName.Text, "Alice")
+			expect.equal(stamina.Row1.Handle.Text, "@Alice")
+			expect.equal(stamina.Row1.Score.Text, "1K")
+			expect.truthy(stamina.Row1.Face.Image:match("id=1&"), stamina.Row1.Face.Image)
+			expect.equal(stamina.Row2.PlayerName.Text, "Bob")
+			expect.equal(stamina.Row3.PlayerName.Text, "Cara")
+
+			local collectors = folder.Collectors.Screen.Display.Rows
+			expect.equal(collectors.Row1.PlayerName.Text, "Bob")
+			expect.equal(collectors.Row1.Score.Text, "3")
+			expect.equal(collectors.Row2.PlayerName.Text, "Alice")
+			-- Nobody with nothing to count is listed.
+			expect.equal(collectors.Row3.Visible, false)
+
+			local earners = folder.Earners.Screen.Display.Rows
+			expect.equal(earners.Row1.PlayerName.Text, "Cara")
+			expect.equal(earners.Row1.Score.Text, "$40")
+			expect.equal(earners.Row2.Visible, false)
+
+			-- Each player's own score and place, for the strip their device draws under each board.
+			expect.equal(alice:GetAttribute("LeaderboardStaminaScore"), 1000)
+			expect.equal(alice:GetAttribute("LeaderboardStaminaRank"), 1)
+			expect.equal(alice:GetAttribute("LeaderboardCollectorsRank"), 2)
+			expect.equal(cara:GetAttribute("LeaderboardCollectorsRank"), 0)
+			expect.equal(cara:GetAttribute("LeaderboardEarnersScore"), 40)
 			expect.equal(#session.warnings, 0, "warnings: " .. table.concat(session.warnings, "; "))
 		end)
 	end)
@@ -2285,6 +2398,78 @@ return function(harness)
 			session:fromClient("BuyWithDollars", player, "PenUpgrade")
 			expect.equal(purchaseResult(session, player)[2], false)
 			expect.equal(dataOf(session, 1).Dollars, 2250)
+		end)
+
+		it("sells a pack: its pet, dollars, a stamina boost for good, its trail and revives, once a player", function()
+			local session = startServer()
+			local player, _, root = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			local data = dataOf(session, 1)
+
+			session:fromClient("RequestPurchase", player, "EpicPack")
+			session:heartbeat(1 / 60)
+			local result = purchaseResult(session, player)
+			expect.equal(result[1], "EpicPack")
+			expect.equal(result[2], true)
+			expect.truthy(result[3]:match("^Epic Pack unlocked!"), result[3])
+			expect.truthy(result[3]:match("Molten Sabertooth Cat"), result[3])
+			expect.equal(data.Packs.EpicPack, true)
+			expect.equal(data.Dollars, 250000)
+			expect.equal(data.PackStamina, 8)
+			expect.equal(data.Revives, 2)
+			expect.equal(#data.Pets, 1)
+			expect.equal(data.Pets[1].variant, "Molten")
+			expect.equal(data.Pets[1].inPen, true)
+			expect.equal(data.Trails.Equipped, "Molten")
+			-- Max Stamina: 100, x8 for the pack, x5 for its trail.
+			expect.equal(session:lastSent("StaminaChanged", player).args[4], 4000)
+			expect.truthy(root:FindFirstChild("StaminaTrailTop"), "the trail streams behind the character")
+			expect.equal(session:lastSent("TrailsUpdated", player).args[2], "Molten")
+			local state = session:lastSent("PlayerStateUpdated", player).args[1]
+			expect.equal(state.revives, 2)
+			expect.equal(state.packs[1], "EpicPack")
+			expect.truthy(session:lastSent("InventoryChanged", player).args[1].pets[1], "the pet shows in the Pets tab")
+
+			task.wait(SHOP_COOLDOWN)
+			session:fromClient("RequestPurchase", player, "EpicPack")
+			result = purchaseResult(session, player)
+			expect.equal(result[2], false)
+			expect.equal(result[3], "You already have the Epic Pack!")
+			expect.equal(#data.Pets, 1, "nothing more given")
+		end)
+
+		it("sells the Super Pack through Roblox's prompt, with server luck for everyone", function()
+			local session = startServer()
+			shopConfig(session).PacksById.SuperPack.productId = 4242
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("RequestPurchase", player, "SuperPack")
+			expect.equal(session.prompts[1].id, 4242)
+			expect.equal(dataOf(session, 1).Dollars, 0, "nothing until Roblox confirms")
+
+			local granted = roblox.Enum.ProductPurchaseDecision.PurchaseGranted
+			expect.equal(processReceipt(session, { PlayerId = 1, ProductId = 4242, PurchaseId = "pack-1" }), granted)
+			local data = dataOf(session, 1)
+			expect.equal(data.Dollars, 1000000)
+			expect.equal(data.PackStamina, 16)
+			expect.equal(data.Revives, 3)
+			expect.equal(data.Pets[1].kind, "MantisEmpress")
+			expect.equal(data.Pets[1].variant, "Crystal")
+			expect.equal(data.Trails.Owned.Crystal, true)
+			expect.equal(session:lastSent("LuckChanged", "all").args[1][1].multiplier, 2)
+			-- The same receipt again gives nothing more.
+			expect.equal(processReceipt(session, { PlayerId = 1, ProductId = 4242, PurchaseId = "pack-1" }), granted)
+			expect.equal(#data.Pets, 1)
+		end)
+
+		it("sells revives", function()
+			local session = startServer()
+			local player = session:addPlayer(1, "Tester")
+			session:heartbeat(1 / 60)
+			session:fromClient("RequestPurchase", player, "Revives2")
+			expect.equal(dataOf(session, 1).Revives, 5)
+			expect.equal(purchaseResult(session, player)[3], "+5 Revives! (Studio test purchase)")
+			expect.equal(session:lastSent("PlayerStateUpdated", player).args[1].revives, 5)
 		end)
 
 		it("unlocks game passes", function()

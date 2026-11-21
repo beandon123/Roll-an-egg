@@ -174,8 +174,15 @@ function InventoryService.GivePet(player: Player, kind: string, egg: string, zon
 		hatchedAt = now(),
 	}
 	table.insert(data.Pets, pet)
+	Hatchery.discover(data, pet)
 	Hatchery.setInPen(data, pet.uid, true)
 	return true
+end
+
+-- Dollars a second the player's pen earns, boosts and all (what the wallet shows under their dollars).
+function InventoryService.GetIncome(player: Player): number
+	local data = DataService.GetData(player)
+	return if data then incomeOf(player, data) else 0
 end
 
 -- Hatches every egg of the player's that is ready. Returns whether any did.
