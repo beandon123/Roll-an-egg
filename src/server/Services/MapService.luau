@@ -178,16 +178,29 @@ end
 -- and the fog's colour with it, are set by each client from the cycle (see the client's DayNightController).
 local FOG_START = 40
 local FOG_END = 600
+
+-- Bloom, so Neon glows the way it does round the showpiece pets of other games: their eyes, runes, cracks and auras
+-- throw a soft halo of light. Only light brighter than the threshold blooms, which Neon is and sunlit ground is not.
+-- To try the game without it, delete Lighting.Bloom in Studio (or remove it here).
+local BLOOM = { intensity = 1, size = 28, threshold = 1.4 }
+
 local function setUpSky()
 	Lighting.ClockTime = 14
 	for _, child in Lighting:GetChildren() do
-		if child:IsA("Atmosphere") then
+		if child:IsA("Atmosphere") or child:IsA("BloomEffect") then
 			child:Destroy()
 		end
 	end
 	Lighting.FogStart = FOG_START
 	Lighting.FogEnd = FOG_END
 	Lighting.FogColor = Color3.fromRGB(220, 233, 245)
+
+	local bloom = Instance.new("BloomEffect")
+	bloom.Name = "Bloom"
+	bloom.Intensity = BLOOM.intensity
+	bloom.Size = BLOOM.size
+	bloom.Threshold = BLOOM.threshold
+	bloom.Parent = Lighting
 end
 
 -- Sends characters that have fallen out of the world back to the hub.

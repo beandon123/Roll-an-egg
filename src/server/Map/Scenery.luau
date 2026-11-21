@@ -3,9 +3,9 @@
 -- the one before, so the banks step out at every gate:
 --     Ground    the level runway, checkered in the zone's colours, blending into the next zone over its last rows
 --     Banks     tall stepped cliffs up both sides, like a canyon: stone capped with the zone's grass (or sand, snow,
---               rock) hanging over the edges, with the zone's plants and rocks on the ledges. Gaps in them look out
---               over a valley, with a low railing across (the Ocean zone is a boardwalk over a reef instead, with
---               rope railings along its edges)
+--               rock) hanging over the edges, with the zone's plants and rocks on the ledges (and, in the Jungle,
+--               long vines trailing down the cliff faces). Gaps in them look out over a valley, with a low railing
+--               across (the Ocean zone is a boardwalk over a reef instead, with rope railings along its edges)
 --     Backdrop  big blocky hills, mesas, mountains or volcanoes in the distance
 --     Gate      an arch over the start of the zone with its name and the stamina its eggs need
 --     Repeats   the last zone again past the end of the runway, which never ends (Shared/Runway)
@@ -64,8 +64,17 @@ export type Palette = {
 	props: { Prop },
 	-- The Ocean zone's sea, in place of banks.
 	sea: boolean?,
-	-- Lava rivers along the Volcano's banks, and lava falling down its cliffs.
+	-- Lava rivers along the Volcano's banks, lava falling down its cliffs, and lava glowing through cracks in its
+	-- ground.
 	lava: boolean?,
+	-- Vines trailing down the cliff faces (the Jungle).
+	vines: boolean?,
+	-- How crowded the ledges are with props, as a multiple of the usual (the dense Jungle's are packed).
+	density: number?,
+	-- The backdrop: tall flat-topped mesas (the Desert) rather than hills; and how likely each hill is to be a
+	-- smoking volcano (1 in the Volcano).
+	mesas: boolean?,
+	volcanoes: number?,
 }
 
 local PALETTES: { Palette } = {
@@ -97,6 +106,7 @@ local PALETTES: { Palette } = {
 		top = { 236, 210, 150 },
 		topMaterial = M.Sand,
 		backdrop = { 210, 140, 86 },
+		mesas = true,
 		props = {
 			{ kind = "Cactus", weight = 5, size = 2.6 },
 			{ kind = "Sandstone", weight = 3, size = 5 },
@@ -121,6 +131,27 @@ local PALETTES: { Palette } = {
 			{ kind = "IceCrystal", weight = 2, size = 3 },
 			{ kind = "Snowdrift", weight = 2, size = 6 },
 			{ kind = "Snowman", weight = 1, size = 2.8 },
+		},
+	},
+	{ -- Jungle: dark mossy rock under lush leafy grass, vines trailing down the cliffs, the banks crowded with trees,
+		-- bamboo, giant leaves and flowers
+		ground = { { 62, 130, 52 }, { 50, 114, 44 } },
+		groundMaterial = M.LeafyGrass,
+		kerb = { 92, 104, 74 },
+		cliff = { 72, 94, 64 },
+		cliffMaterial = M.Slate,
+		top = { 62, 150, 56 },
+		topMaterial = M.LeafyGrass,
+		backdrop = { 44, 104, 54 },
+		vines = true,
+		density = 1.9,
+		props = {
+			{ kind = "JungleTree", weight = 6, size = 3.6 },
+			{ kind = "GiantLeaves", weight = 4, size = 3.6 },
+			{ kind = "Bamboo", weight = 3, size = 3 },
+			{ kind = "Palm", weight = 2, size = 4 },
+			{ kind = "Fern", weight = 2, size = 4 },
+			{ kind = "TropicalFlowers", weight = 4, size = 4 },
 		},
 	},
 	{ -- Ocean: a boardwalk over a reef
@@ -150,6 +181,7 @@ local PALETTES: { Palette } = {
 		top = { 84, 76, 80 },
 		topMaterial = M.CrackedLava,
 		backdrop = { 60, 50, 54 },
+		volcanoes = 1,
 		props = {
 			{ kind = "Basalt", weight = 4, size = 4.5 },
 			{ kind = "MagmaRock", weight = 3, size = 4 },
@@ -166,6 +198,7 @@ local PALETTES: { Palette } = {
 		top = { 62, 160, 120 },
 		topMaterial = M.Grass,
 		backdrop = { 84, 112, 70 },
+		volcanoes = 0.3,
 		props = {
 			{ kind = "Fern", weight = 5, size = 4 },
 			{ kind = "Cycad", weight = 4, size = 4 },
@@ -194,6 +227,36 @@ extras.Flowers = function(model, base, size, random)
 			model,
 			Vector3.new(0.8, 0.5, 0.8),
 			base * CFrame.new(x, 1.35, z),
+			pick(random, colors),
+			{ collide = false }
+		)
+	end
+end
+
+-- Bright tropical flowers among broad leaves: bromeliads' red and orange spikes, orchids in pink and purple.
+extras.TropicalFlowers = function(model, base, size, random)
+	local colors = { { 236, 60, 70 }, { 250, 140, 40 }, { 240, 110, 200 }, { 170, 90, 230 }, { 250, 220, 70 } }
+	for _ = 1, 7 do
+		local x, z = (random() - 0.5) * size * 2, (random() - 0.5) * size * 2
+		local tall = between(random, 1.2, 2.6)
+		block(
+			model,
+			Vector3.new(1.8, 0.25, 0.7),
+			base * CFrame.new(x, 0.4, z) * CFrame.Angles(0, random() * math.pi, 0.5),
+			{ 52, 138, 56 },
+			{ collide = false }
+		)
+		block(
+			model,
+			Vector3.new(0.3, tall, 0.3),
+			base * CFrame.new(x, tall / 2, z),
+			{ 70, 140, 60 },
+			{ collide = false }
+		)
+		block(
+			model,
+			Vector3.new(0.6, 1, 0.6),
+			base * CFrame.new(x, tall + 0.4, z) * CFrame.Angles(0, random() * math.pi, 0),
 			pick(random, colors),
 			{ collide = false }
 		)
@@ -500,7 +563,7 @@ local function buildGround(folder: Instance, zoneId: number, palette: Palette, n
 	end
 
 	-- The volcano's ground glows through cracks.
-	if zoneId == 5 then
+	if palette.lava then
 		for _ = 1, math.round(40 * Runway.zoneLength(zoneId) / 600) do
 			local z = startZ + random() * Runway.zoneLength(zoneId)
 			block(
@@ -669,6 +732,37 @@ local function buildCliffs(folder: Instance, zoneId: number, palette: Palette, s
 						{ material = palette.topMaterial, collide = false }
 					).Name =
 						"Hanging"
+				end
+			end
+
+			if palette.vines then
+				-- Long vines trailing down the face, a leaf every couple of studs.
+				local below = if step == 1 then 0 else layout[step - 1].top
+				for _ = 1, 2 do
+					if random() < 0.55 then
+						local drop = between(random, 0.35, 0.85) * (spec.top - below - 2)
+						local along = (random() - 0.5) * (length - 1)
+						local top = frame * CFrame.new(side * (spec.inner - OVERHANG + 0.1), spec.top - CAP, along)
+						block(
+							folder,
+							Vector3.new(0.4, drop, 0.4),
+							top * CFrame.new(0, -drop / 2, 0),
+							vary(random, { 46, 112, 48 }, 0.08),
+							{ material = M.Grass, collide = false }
+						).Name =
+							"Vine"
+						local y = -1.5
+						while y > -drop + 0.5 do
+							block(
+								folder,
+								Vector3.new(0.3, 0.9, 0.8),
+								top * CFrame.new(-side * 0.2, y, 0) * CFrame.Angles(0.4, 0, 0),
+								vary(random, { 58, 146, 58 }, 0.1),
+								{ material = M.Grass, collide = false }
+							)
+							y -= between(random, 2, 3.2)
+						end
+					end
 				end
 			end
 
@@ -896,8 +990,9 @@ local function dressBanks(
 	props.Parent = folder
 	-- How likely each step is to get a prop.
 	local chance = { 0.45, 0.32, 0.2 }
+	local density = palette.density or 1
 	for _, top in tops do
-		if random() < chance[top.step] then
+		if random() < math.min(0.95, chance[top.step] * density) then
 			local prop = pickProp(random, palette.props)
 			local size = (prop.size or 3) * between(random, 0.85, 1.2)
 			local margin = math.min(size + 1, (top.to - top.from) / 2)
@@ -924,11 +1019,12 @@ local function buildBackdrop(folder: Instance, zoneId: number, palette: Palette,
 			local width = between(random, 70, 140)
 			local x = Runway.centerX(z) + side * (between(random, 210, 330) + spreadOf(zoneId))
 			local y = Runway.BASE_Y - 10
-			local layers = if zoneId == 2 then 2 else 4
+			local layers = if palette.mesas then 2 else 4
 			local size = width
-			local volcano = zoneId == 5 or (zoneId == 6 and random() < 0.3)
+			local chance = palette.volcanoes or 0
+			local volcano = chance >= 1 or (chance > 0 and random() < chance)
 			for layer = 1, layers do
-				local height = if zoneId == 2 then between(random, 40, 70) else between(random, 18, 34)
+				local height = if palette.mesas then between(random, 40, 70) else between(random, 18, 34)
 				local color = shade(palette.backdrop, (layer - 1) * 0.05)
 				if palette.backdropTop and layer == layers then
 					color = palette.backdropTop
@@ -941,7 +1037,7 @@ local function buildBackdrop(folder: Instance, zoneId: number, palette: Palette,
 					{ material = if palette.backdropTop and layer == layers then M.Snow else palette.cliffMaterial }
 				)
 				y += height
-				size *= if zoneId == 2 then 0.85 else 0.66
+				size *= if palette.mesas then 0.85 else 0.66
 			end
 			if volcano then
 				-- A glowing crater and a plume of smoke.
@@ -1053,7 +1149,9 @@ local function buildGate(folder: Instance, zoneId: number)
 		{ material = M.Wood }
 	)
 	local low, high = staminaRange(zone)
-	local subtitle = `Eggs need {NumberFormat.abbreviate(low)} - {NumberFormat.abbreviate(high)} stamina`
+	local subtitle = if high > 0
+		then `Eggs need {NumberFormat.abbreviate(low)} - {NumberFormat.abbreviate(high)} stamina`
+		else "Eggs coming soon"
 	-- Front faces players coming from the hub; Back faces players walking home.
 	addSignText(sign, Enum.NormalId.Front, string.upper(zone.name), subtitle)
 	addSignText(sign, Enum.NormalId.Back, string.upper(zone.name), subtitle)

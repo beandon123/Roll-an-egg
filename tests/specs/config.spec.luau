@@ -68,7 +68,7 @@ return function(harness)
 	describe("Zones", function()
 		it("has one zone per runway segment, in order", function()
 			expect.equal(#Zones.List, Runway.ZONE_COUNT)
-			local names = { "Forest", "Desert", "Snow", "Ocean", "Volcano", "Prehistoric" }
+			local names = { "Forest", "Desert", "Snow", "Jungle", "Ocean", "Volcano", "Prehistoric" }
 			for index, zone in Zones.List do
 				expect.equal(zone.id, index)
 				expect.equal(zone.name, names[index])
@@ -80,11 +80,17 @@ return function(harness)
 				{ Common = 2, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1 },
 				{ Common = 1, Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2 },
 				{ Uncommon = 2, Rare = 1, Epic = 1, Legendary = 1, Mythic = 2, Secret = 1 },
+				{ Uncommon = 1, Rare = 1, Epic = 1, Legendary = 1, Mythic = 1, Secret = 1, Eternal = 2 },
 				{ Rare = 2, Epic = 2, Legendary = 1, Mythic = 1, Secret = 2 },
 				{ Rare = 1, Epic = 1, Legendary = 2, Mythic = 2, Secret = 1, Eternal = 1 },
 				{ Epic = 2, Legendary = 2, Mythic = 1, Secret = 1, Eternal = 2 },
 			}
 			for index, zone in Zones.List do
+				local wanted = 0
+				for _, count in mixes[index] do
+					wanted += count
+				end
+				expect.equal(wanted, 8, zone.name .. " mix")
 				expect.equal(#zone.eggs, 8, zone.name .. " eggs")
 				local counts = {}
 				local lastOrder = 0
@@ -178,12 +184,18 @@ return function(harness)
 		it("returns nil for an egg that cannot drop in a zone", function()
 			expect.falsy(EggSpec.get(1, "Secret"))
 			expect.falsy(EggSpec.get(3, "Common"))
-			expect.falsy(EggSpec.get(4, "Eternal"))
+			expect.falsy(EggSpec.get(5, "Eternal"))
+			expect.truthy(EggSpec.get(4, "Eternal"), "the Jungle has Eternals")
 			expect.falsy(EggSpec.get(9, "Common"))
 		end)
 
 		it("only rolls rarities the zone allows", function()
 			for _, zone in Zones.List do
+				if #zone.eggs == 0 then
+					-- A zone waiting for its creatures rolls nothing that drops.
+					expect.falsy(EggSpec.pickEgg(zone.id, EggSpec.rollRarity(zone.id, 0.5), 0.5), zone.name)
+					continue
+				end
 				for step = 0, 999 do
 					local rarity = EggSpec.rollRarity(zone.id, step / 1000)
 					expect.truthy(zone.stamina[rarity], zone.name .. " rolled " .. rarity)
@@ -191,10 +203,10 @@ return function(harness)
 				expect.equal(EggSpec.rollRarity(zone.id, 0), zone.eggs[1].rarity, zone.name .. " most common")
 			end
 			expect.equal(EggSpec.rollRarity(1, 0.99999), "Mythic")
-			expect.equal(EggSpec.rollRarity(4, 0), "Rare")
-			expect.equal(EggSpec.rollRarity(5, 0.99999), "Eternal")
-			expect.equal(EggSpec.rollRarity(6, 0), "Epic")
+			expect.equal(EggSpec.rollRarity(5, 0), "Rare")
 			expect.equal(EggSpec.rollRarity(6, 0.99999), "Eternal")
+			expect.equal(EggSpec.rollRarity(7, 0), "Epic")
+			expect.equal(EggSpec.rollRarity(7, 0.99999), "Eternal")
 		end)
 
 		it("picks evenly between a zone's eggs of the same rarity", function()
@@ -203,10 +215,10 @@ return function(harness)
 			expect.equal(EggSpec.pickEgg(1, "Common", 0.49), "Leafy")
 			expect.equal(EggSpec.pickEgg(1, "Common", 0.5), "Cottontail")
 			expect.equal(EggSpec.pickEgg(1, "Common", 0.9999), "Cottontail")
-			expect.equal(EggSpec.pickEgg(4, "Secret", 0.7), "Abyss")
+			expect.equal(EggSpec.pickEgg(5, "Secret", 0.7), "Abyss")
 			expect.equal(EggSpec.pickEgg(1, "Epic", 0.9), "Bear")
-			expect.equal(EggSpec.pickEgg(6, "Eternal", 0.2), "Mosasaurus")
-			expect.equal(EggSpec.pickEgg(6, "Eternal", 0.8), "LunarDragon")
+			expect.equal(EggSpec.pickEgg(7, "Eternal", 0.2), "Mosasaurus")
+			expect.equal(EggSpec.pickEgg(7, "Eternal", 0.8), "LunarDragon")
 			expect.falsy(EggSpec.pickEgg(3, "Common", 0))
 			local zone, rarity = EggSpec.placeOf("Yeti")
 			expect.equal(zone, 3)
@@ -248,7 +260,13 @@ return function(harness)
 			)
 			expect.equal(AdminTools.DEFAULT_WALK_SPEED, 16, "Roblox's own walk speed")
 			expect.truthy(AdminTools.MAX_GIVE <= AdminTools.MAX_INVENTORY)
-			expect.truthy(AdminTools.MAX_STAMINA >= 500000, "enough for the hungriest egg")
+			local hungriest = 0
+			for _, zone in Zones.List do
+				for _, requirement in zone.stamina do
+					hungriest = math.max(hungriest, requirement)
+				end
+			end
+			expect.truthy(AdminTools.MAX_STAMINA >= hungriest, "enough for the hungriest egg")
 		end)
 	end)
 

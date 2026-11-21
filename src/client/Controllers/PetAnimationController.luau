@@ -6,7 +6,9 @@
 -- PenController, which sets "Move" as they walk and rest), pets being ridden (Workspace.Mounts, from
 -- MountController), pets spawned from the admin panel (Workspace.AdminPets) and those in the Model Showroom
 -- (Workspace.Showroom); set "Move" on one in Studio's Properties window to see its other moves (its moves are
--- listed in PetAnimations). Pets far from the camera are left still, since nobody can see them move.
+-- listed in PetAnimations). Pets far from the camera are left still, since nobody can see them move. Each pet starts
+-- at its own point in its moves, so pets side by side never move in lockstep, and when its move changes it eases from
+-- where it was into the new one (PetAnimations.blend) rather than snapping.
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -17,8 +19,22 @@ local PetModels = Load.shared("PetModels")
 
 local PetAnimationController = {}
 
--- `design` is worked out the first time the pet is close enough to animate (see step).
-type Tracked = { model: Model, motors: { [string]: Motor6D }, design: any? }
+-- Where each limb is (see PetAnimations.pose).
+type Pose = { [string]: { number } }
+
+-- `design` is worked out the first time the pet is close enough to animate (see step). Each pet starts at its own
+-- point in its moves (`offset`, seconds), so pets side by side never move in lockstep. When its move changes, it
+-- eases from where it was (`from`, the pose it had then) into the new one over PetAnimations.blendTime.
+type Tracked = {
+	model: Model,
+	motors: { [string]: Motor6D },
+	design: any?,
+	offset: number,
+	move: string?,
+	from: Pose?,
+	since: number,
+	last: Pose?,
+}
 
 -- Folders in Workspace whose pets are animated, however deep in them a pet is.
 local WATCHED_FOLDERS = { "PenPets", "Mounts", "AdminPets", "Showroom" }
@@ -30,6 +46,7 @@ local DESIGNS_PER_FRAME = 2
 
 local tracked: { [Model]: Tracked } = {}
 local clock = 0
+local random = Random.new()
 
 -- Starts animating a rigged pet. Pets of a kind with no model are left alone.
 function PetAnimationController.track(model: Model)
@@ -42,7 +59,16 @@ function PetAnimationController.track(model: Model)
 			motors[motor.Name] = motor
 		end
 	end
-	tracked[model] = { model = model, motors = motors, design = nil }
+	tracked[model] = {
+		model = model,
+		motors = motors,
+		design = nil,
+		offset = random:NextNumber(0, 30),
+		move = nil,
+		from = nil,
+		since = 0,
+		last = nil,
+	}
 end
 
 -- Turns each joint of a pet to where its move puts it `time` seconds in. The designs are drawn facing +z and the rig
@@ -65,7 +91,24 @@ local function apply(entry: Tracked, time: number)
 	if typeof(move) ~= "string" then
 		move = PetAnimations.defaultMove(design.skeleton, design.gait)
 	end
-	local pose = PetAnimations.pose(design.skeleton, move, time, design.wingSpread, design.size[2])
+	if move ~= entry.move then
+		-- Ease into the new move from wherever the pet was (if it was moving at all).
+		entry.from = if entry.move then entry.last else nil
+		entry.move = move
+		entry.since = time
+	end
+	local t = time + entry.offset
+	local pose = PetAnimations.pose(design.skeleton, move, t, design.wingSpread, design.size[2])
+	local from = entry.from
+	if from then
+		local progress = (time - entry.since) / PetAnimations.blendTime(design.skeleton)
+		if progress >= 1 then
+			entry.from = nil
+		else
+			pose = PetAnimations.blend(from, pose, progress)
+		end
+	end
+	entry.last = pose
 	local scale = design.scale
 	for name, motor in entry.motors do
 		local p = pose[name]

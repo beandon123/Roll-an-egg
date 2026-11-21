@@ -76,6 +76,11 @@ local function update()
 	if leapEndsAt then
 		UiState.leapSecondsLeft:set(math.max(0, math.ceil((leapEndsAt - os.clock()) * 10) / 10))
 	end
+
+	-- The rare-egg alert's lines pop in, shine and fade out by this clock.
+	if #UiState.Fusion.peek(UiState.announcements) > 0 then
+		UiState.announceClock:set(os.clock())
+	end
 end
 
 function HudController.Start()

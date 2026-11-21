@@ -111,9 +111,10 @@ Original theme, art, and creatures.
     - [ ] Rarer eggs are bigger and need more stamina (decided)
     - [ ] Readable from a distance: zone-themed shell + rarity color/glow/particles + size; icon/shape for colorblind players
     - [ ] Secret and Eternal pets show as "???" in the collection book until hatched (proposed)
-    - [ ] On-screen message for every player when a Secret or Eternal egg spawns, saying where (zone) and when
-          (the player's local time); no message for anything below Secret (decided). Large white text, up for 5 s,
-          with an alert sound so the whole server notices (decided, built)
+    - [ ] On-screen message for every player when a Secret or Eternal egg spawns, saying what and where: "Secret egg
+          has spawned in Volcano!"; no message for anything below Secret (decided). Shiny white text along the top of
+          the screen, up for 5 s, each new one on a line beneath any still up (decided, built: the time it spawned is
+          no longer shown), with a sparkle sound so the whole server notices (decided, built)
 
 First-pass egg tuning by rarity (same in every zone; adjust in playtests):
 
@@ -554,7 +555,7 @@ Roster, one pet per egg (edit freely; Robux-egg pets designed during the art pha
     - [ ] Keyboard/gamepad prompts swap automatically by input type
 - [ ] Audio (proposed: licensed tracks and sounds from Roblox's Creator Store): music per zone; rolling rumble;
       crack; per-rarity cues; claim fanfare; duel beat track + grade sounds; splat; closing horn;
-      Titan Egg alarm; Secret egg alert (built, from a sound every Roblox client has; Config/Sounds)
+      Titan Egg alarm; Secret egg alert, a sparkle (built, from a sound every Roblox client has; Config/Sounds)
 - [ ] VFX: rarity glows, dust trails, crack, claim burst, splat, hatch reveal, duel flash, Titan Egg landing,
       closure pop wave
 - [ ] Accessibility: rarity icons as well as colors; reduce camera shake; haptics toggle; duel timing calibration;

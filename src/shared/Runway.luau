@@ -24,17 +24,17 @@
 -- (see Logic/RunwaySim), which costs its rider some stamina.
 --
 -- The runway gets longer and wider the further it goes: each zone is longer than the one before (ZONE_LENGTHS, 800
--- studs in the Forest up to 2,600 in the Prehistoric zone) and wider (zoneWidth: 120, 140 and 160 studs, then a
--- quarter wider each zone: 200, 260 and 320), the banks stepping out at its gate. The last zone is the widest, and
--- keeps that width all the way through its endless repeats.
+-- studs in the Forest up to 2,960 in the Prehistoric zone) and wider (zoneWidth: 120, 140 and 160 studs, then a
+-- quarter wider each zone: 200, 260, 320 and 400), the banks stepping out at its gate. The last zone is the widest,
+-- and keeps that width all the way through its endless repeats.
 -- Because the zones differ in width, where an egg may be side to side depends on how far down the runway it is:
 -- lateralRange says, at a distance down it.
 
 local Runway = {}
 
-Runway.ZONE_COUNT = 6
--- How long each zone is, in order down the runway.
-Runway.ZONE_LENGTHS = { 800, 1160, 1520, 1880, 2240, 2600 }
+Runway.ZONE_COUNT = 7
+-- How long each zone is, in order down the runway: each 360 studs longer than the one before.
+Runway.ZONE_LENGTHS = { 800, 1160, 1520, 1880, 2240, 2600, 2960 }
 
 -- Where each zone starts, and where the zones end and the last zone starts repeating.
 local zoneStarts: { number } = {}
@@ -120,6 +120,7 @@ Runway.BENDS = {
 	{ shape = "S", amplitude = 46 }, -- Forest
 	{ shape = "Bulge", amplitude = -72 }, -- Desert
 	{ shape = "S", amplitude = -46 }, -- Snow
+	{ shape = "S", amplitude = 52 }, -- Jungle
 	{ shape = "Bulge", amplitude = 64 }, -- Ocean
 	{ shape = "S", amplitude = 46 }, -- Volcano
 	{ shape = "S", amplitude = -44 }, -- Prehistoric

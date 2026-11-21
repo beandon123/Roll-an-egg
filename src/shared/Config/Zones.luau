@@ -4,7 +4,8 @@
 --
 -- eggs:    the zone's 8 eggs, from the most common to the rarest. `egg` names a design in Shared/EggModels/Designs;
 --          `pet` is the pet that hatches from it (a design in Shared/PetModels/Designs, once it has a model).
---          A zone can have two eggs of the same rarity.
+--          A zone can have two eggs of the same rarity. A new zone can stand on the runway before its creatures are
+--          chosen: with no eggs (and so no stamina or weights) it drops none yet.
 -- stamina: the stamina requirement of each egg rarity that can drop in the zone.
 --          A rarity missing from this table cannot drop there.
 -- weights: relative drop odds for each rarity in the zone. A drop first picks a rarity with these odds, then one
@@ -92,7 +93,36 @@ local list: { ZoneInfo } = {
 		weights = { Uncommon = 27, Rare = 14, Epic = 6.5, Legendary = 2, Mythic = 0.45, Secret = 0.05 },
 	},
 	{
+		-- Dense jungle: jungle animals, giant insects and fantasy giants. The Mythic, Secret and Eternal candidates
+		-- are all here for now, side by side, until the owner picks which stay.
 		id = 4,
+		key = "Jungle",
+		name = "Jungle",
+		ground = { 58, 122, 50 },
+		accent = { 206, 64, 70 },
+		eggs = {
+			{ egg = "DartFrog", rarity = "Uncommon", pet = "PoisonDartFrog" },
+			{ egg = "Leafcutter", rarity = "Rare", pet = "GiantLeafcutterAnt" },
+			{ egg = "Centipede", rarity = "Epic", pet = "GiantCentipede" },
+			{ egg = "Hercules", rarity = "Legendary", pet = "HerculesBeetle" },
+			{ egg = "Anaconda", rarity = "Mythic", pet = "TitanAnaconda" },
+			{ egg = "Mantis", rarity = "Secret", pet = "MantisEmpress" },
+			{ egg = "VineHydra", rarity = "Eternal", pet = "VineHydra" },
+			{ egg = "JadeGuardian", rarity = "Eternal", pet = "JadeTempleGuardian" },
+		},
+		stamina = {
+			Uncommon = 9000,
+			Rare = 11000,
+			Epic = 13500,
+			Legendary = 16500,
+			Mythic = 20000,
+			Secret = 24000,
+			Eternal = 28000,
+		},
+		weights = { Uncommon = 27, Rare = 14, Epic = 6.5, Legendary = 2, Mythic = 0.45, Secret = 0.05, Eternal = 0.02 },
+	},
+	{
+		id = 5,
 		key = "Ocean",
 		name = "Ocean",
 		ground = { 240, 222, 170 },
@@ -107,17 +137,18 @@ local list: { ZoneInfo } = {
 			{ egg = "Kraken", rarity = "Secret", pet = "Kraken" },
 			{ egg = "Abyss", rarity = "Secret", pet = "Leviathan" },
 		},
+		-- Raised to make room for the Jungle before it (first numbers: to be tuned in playtests).
 		stamina = {
-			Rare = 12500,
-			Epic = 16000,
-			Legendary = 20000,
-			Mythic = 25000,
-			Secret = 30000,
+			Rare = 32000,
+			Epic = 40000,
+			Legendary = 50000,
+			Mythic = 62000,
+			Secret = 75000,
 		},
 		weights = { Rare = 14, Epic = 6.5, Legendary = 2, Mythic = 0.45, Secret = 0.05 },
 	},
 	{
-		id = 5,
+		id = 6,
 		key = "Volcano",
 		name = "Volcano",
 		ground = { 74, 60, 60 },
@@ -133,12 +164,12 @@ local list: { ZoneInfo } = {
 			{ egg = "LavaDragon", rarity = "Eternal", pet = "LavaDragon" },
 		},
 		stamina = {
-			Rare = 55000,
-			Epic = 70000,
-			Legendary = 85000,
-			Mythic = 100000,
-			Secret = 125000,
-			Eternal = 150000,
+			Rare = 140000,
+			Epic = 175000,
+			Legendary = 210000,
+			Mythic = 250000,
+			Secret = 310000,
+			Eternal = 375000,
 		},
 		weights = {
 			Rare = 14,
@@ -150,7 +181,7 @@ local list: { ZoneInfo } = {
 		},
 	},
 	{
-		id = 6,
+		id = 7,
 		key = "Prehistoric",
 		name = "Prehistoric",
 		ground = { 128, 138, 72 },
@@ -166,11 +197,11 @@ local list: { ZoneInfo } = {
 			{ egg = "LunarDragon", rarity = "Eternal", pet = "LunarDragon" },
 		},
 		stamina = {
-			Epic = 200000,
-			Legendary = 250000,
-			Mythic = 320000,
-			Secret = 400000,
-			Eternal = 500000,
+			Epic = 500000,
+			Legendary = 625000,
+			Mythic = 800000,
+			Secret = 1000000,
+			Eternal = 1250000,
 		},
 		weights = {
 			Epic = 14,

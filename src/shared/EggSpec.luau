@@ -74,6 +74,11 @@ end
 -- How many eggs a zone rolls for its lineup at sunrise: one for every LINEUP_EGG_SPACING studs it is long, so the
 -- long zones are as full of eggs as the short ones.
 function EggSpec.lineupSize(zoneId: number): number
+	local zone = Zones.List[math.clamp(zoneId, 1, #Zones.List)]
+	if zone and #zone.eggs == 0 then
+		-- A zone waiting for its creatures has no eggs to send out.
+		return 0
+	end
 	return math.max(1, math.round(Runway.zoneLength(zoneId) / Tuning.LINEUP_EGG_SPACING))
 end
 
@@ -88,8 +93,12 @@ function EggSpec.lineupGap(zoneId: number, rate: number): number
 			slowest = math.min(slowest, spec.rollSpeed)
 		end
 	end
+	local size = EggSpec.lineupSize(zoneId)
+	if size == 0 then
+		return Tuning.LINEUP_LAUNCH_GAP / math.max(1, rate)
+	end
 	local lap = (Runway.fadeZ(zoneId) - Runway.zoneStartZ(zoneId)) / slowest
-	return math.min(Tuning.LINEUP_LAUNCH_GAP, lap / EggSpec.lineupSize(zoneId)) / math.max(1, rate)
+	return math.min(Tuning.LINEUP_LAUNCH_GAP, lap / size) / math.max(1, rate)
 end
 
 -- Picks a rarity for a zone from a random number in [0, 1), using the zone's drop weights.

@@ -65,8 +65,14 @@ local Hatchery = {}
 ----------------------------------------------------------------------------------------------------------------
 -- Older saves
 
--- Brings data saved by an older version up to date. Safe to run on every load.
-function Hatchery.migrate(data: Data)
+-- The first zone a new zone was put in front of, and the save version from which saves count zones with it: the
+-- Jungle went in as zone 4, ahead of the Ocean, at version 3. Older saves' eggs and pets from zone 4 on move one on.
+local ZONE_INSERTS = { { at = 4, version = 3 } }
+
+-- Brings data saved by an older version up to date. `savedVersion` is the SchemaVersion the data was saved with
+-- (DataService reads it before filling in defaults); without one, only the version-free fixes run. Safe to run on
+-- every load.
+function Hatchery.migrate(data: Data, savedVersion: number?)
 	data.Hatching = data.Hatching or {}
 	data.Pets = data.Pets or {}
 	data.PenLevel = math.clamp(data.PenLevel or 1, 1, Plots.MAX_LEVEL)
@@ -89,6 +95,20 @@ function Hatchery.migrate(data: Data)
 		data.Nests = nil
 	end
 	data.NestCount = nil
+	-- Zones put in ahead of others since the data was saved: everything from those zones on is one zone further.
+	if savedVersion then
+		for _, insert in ZONE_INSERTS do
+			if savedVersion < insert.version then
+				for _, list in { data.Eggs or {}, data.Hatching, data.Pets } do
+					for _, item in list do
+						if type(item.zone) == "number" and item.zone >= insert.at then
+							item.zone += 1
+						end
+					end
+				end
+			end
+		end
+	end
 	if data.Coins then
 		data.Dollars += data.Coins
 		data.Coins = nil

@@ -9,6 +9,9 @@ local Settings = Load.shared("Config", "Settings")
 
 local scope = Fusion.scoped(Fusion)
 
+-- One line of the rare-egg alert (see UiState.showAnnouncement).
+export type Announcement = { id: number, text: string, shownAt: number, endsAt: number }
+
 -- One value per setting, starting at its default until the saved settings arrive.
 local settings = {}
 for _, setting in Settings.List do
@@ -115,12 +118,13 @@ local UiState = {
 	toastColor = scope:Value(Color3.new(1, 1, 1)),
 	toastVisible = scope:Value(false),
 
-	-- The big white message shown when a Secret or rarer egg spawns: a title, then where and when it spawned, and
-	-- the colour of its rarity.
-	announceTitle = scope:Value(""),
-	announceDetail = scope:Value(""),
-	announceColor = scope:Value(Color3.new(1, 1, 1)),
-	announceVisible = scope:Value(false),
+	-- The shiny white lines across the top of the screen when a Secret or rarer egg spawns ("Secret egg has spawned
+	-- in Volcano!"), oldest first: each new one goes beneath the others, and each leaves on its own when its time is
+	-- up. `shownAt` and `endsAt` are os.clock() times.
+	announcements = scope:Value({} :: { Announcement }),
+	-- os.clock(), updated every frame while there are lines up (HudController): their pop-in, shine and fade-out
+	-- are worked out from it.
+	announceClock = scope:Value(0),
 
 	-- Plain data (not shown directly): the numbers the stamina bar is worked out from each frame.
 	-- See Shared/StaminaMath.
@@ -147,6 +151,9 @@ local UiState = {
 	},
 	-- The server's luck boosts (Shared/LuckBoost); the HUD works the timer out from these each frame.
 	luckBoosts = {} :: { { multiplier: number, endsAt: number } },
+
+	-- The most rare-egg alert lines up at once.
+	MAX_ANNOUNCEMENTS = 4,
 }
 
 -- Opens a panel on the left, or closes it if it is already open. The Eggs or Pets panel on the right closes.
@@ -183,7 +190,7 @@ function UiState.setTrails(owned: unknown, equipped: unknown)
 end
 
 local toastToken = 0
-local announceToken = 0
+local announcementCount = 0
 
 -- Shows a short message near the top of the screen.
 function UiState.showToast(text: string, color: Color3?, seconds: number?)
@@ -199,18 +206,31 @@ function UiState.showToast(text: string, color: Color3?, seconds: number?)
 	end)
 end
 
--- Shows the rare-egg message for `seconds` (5 unless given). It sits below the toast, so everyday messages such as
--- "Hop combo" never hide it.
-function UiState.showAnnouncement(title: string, detail: string, color: Color3, seconds: number?)
-	announceToken += 1
-	local token = announceToken
-	UiState.announceTitle:set(title)
-	UiState.announceDetail:set(detail)
-	UiState.announceColor:set(color)
-	UiState.announceVisible:set(true)
+-- Adds a line to the rare-egg alert at the top of the screen, beneath any already up, for `seconds` (5 unless
+-- given). Past MAX_ANNOUNCEMENTS lines, the oldest goes to make room.
+function UiState.showAnnouncement(text: string, seconds: number?)
+	announcementCount += 1
+	local now = os.clock()
+	local line: Announcement = {
+		id = announcementCount,
+		text = text,
+		shownAt = now,
+		endsAt = now + (seconds or 5),
+	}
+	local lines = table.clone(Fusion.peek(UiState.announcements))
+	table.insert(lines, line)
+	while #lines > UiState.MAX_ANNOUNCEMENTS do
+		table.remove(lines, 1)
+	end
+	UiState.announceClock:set(now)
+	UiState.announcements:set(lines)
 	task.delay(seconds or 5, function()
-		if token == announceToken then
-			UiState.announceVisible:set(false)
+		local current = Fusion.peek(UiState.announcements)
+		local index = table.find(current, line)
+		if index then
+			local remaining = table.clone(current)
+			table.remove(remaining, index)
+			UiState.announcements:set(remaining)
 		end
 	end)
 end

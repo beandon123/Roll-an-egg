@@ -3,8 +3,9 @@
 -- Layout (phones first): luck boost top left; Shop and Settings tabs on the left edge; the wallet (Max Stamina,
 -- dollars, eggs) bottom left; Eggs, Pets and Ride tabs on the right edge (Ui/Panels); stamina and claim meters bottom
 -- centre (and, while rolling on the training stick, its card and 2x bubbles: Ui/TrainingUi); the day and night clock
--- bottom right. Messages appear near the top: short ones (toasts), and the big white alert when a Secret or rarer egg
--- spawns. The Shop and Settings panels open in the middle over a dimmed backdrop.
+-- bottom right. Across the very top, shiny white lines when a Secret or rarer egg spawns ("Secret egg has spawned in
+-- Volcano!"), one beneath another; short messages (toasts) just below them. The Shop and Settings panels open in the
+-- middle over a dimmed backdrop.
 
 local Workspace = game:GetService("Workspace")
 
@@ -33,6 +34,41 @@ local WARNING_COLOR = Color3.fromRGB(255, 160, 50)
 
 -- The design is laid out for a 720-pixel-tall screen and scaled to fit others.
 local REFERENCE_HEIGHT = 720
+
+-- Short messages (toasts) sit this far down the screen, or just below the rare-egg alert when it reaches further.
+local TOAST_TOP = 96
+
+-- The rare-egg alert: lines of shiny white text across the top of the screen, starting ANNOUNCE_TOP pixels down,
+-- each LINE_HEIGHT tall with LINE_GAP between them, and clear of the luck boost timer at the top left
+-- (ANNOUNCE_SIDE_ROOM pixels kept free at each side). Text shrinks to fit a narrow screen.
+local ANNOUNCE_TOP = 6
+local LINE_HEIGHT = 40
+local LINE_GAP = 2
+local LINE_TEXT_SIZE = 34
+local ANNOUNCE_SIDE_ROOM = 260
+-- Pearly white letters with a dark outline (so they read against the bright fog), and a white glint, tinged warm
+-- at its edges, that sweeps across them every SHINE_PERIOD seconds, taking SHINE_SWEEP seconds to cross.
+local PEARL = Color3.fromRGB(214, 222, 242)
+local GLINT_EDGE = Color3.fromRGB(255, 248, 226)
+local LINE_OUTLINE = Color3.fromRGB(24, 18, 48)
+local LINE_OUTLINE_TRANSPARENCY = 0.05
+local SHINE = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, PEARL),
+	ColorSequenceKeypoint.new(0.38, PEARL),
+	ColorSequenceKeypoint.new(0.46, GLINT_EDGE),
+	ColorSequenceKeypoint.new(0.5, WHITE),
+	ColorSequenceKeypoint.new(0.54, GLINT_EDGE),
+	ColorSequenceKeypoint.new(0.62, PEARL),
+	ColorSequenceKeypoint.new(1, PEARL),
+})
+local SHINE_TILT = 20
+local SHINE_PERIOD = 1.4
+local SHINE_SWEEP = 0.7
+-- A new line pops in POP_SCALE times its size and settles over POP_TIME seconds; each fades out over its last
+-- FADE_TIME seconds.
+local POP_SCALE = 1.3
+local POP_TIME = 0.3
+local FADE_TIME = 0.5
 
 local Hud = {}
 
@@ -242,6 +278,59 @@ local function emojiIcon(scope, emoji: string, size: number?)
 	})
 end
 
+-- How far down the screen the toast goes: below the rare-egg alert's lines, when they reach past TOAST_TOP.
+function Hud.toastTop(lineCount: number): number
+	return math.max(TOAST_TOP, ANNOUNCE_TOP + lineCount * (LINE_HEIGHT + LINE_GAP) + 6)
+end
+
+-- One line of the rare-egg alert: shiny white letters with a dark outline and a glint sweeping across them. It pops
+-- in a little larger than it settles, and fades out at the end of its time.
+local function announcementLine(scope, line: UiState.Announcement)
+	local age = scope:Computed(function(use)
+		return use(UiState.announceClock) - line.shownAt
+	end)
+	local fade = scope:Computed(function(use)
+		return math.clamp((use(UiState.announceClock) - (line.endsAt - FADE_TIME)) / FADE_TIME, 0, 1)
+	end)
+	return scope:New("TextLabel")({
+		Name = "Line",
+		LayoutOrder = line.id,
+		Size = UDim2.new(1, 0, 0, LINE_HEIGHT),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.FredokaOne,
+		Text = line.text,
+		TextColor3 = WHITE,
+		TextScaled = true,
+		TextTransparency = fade,
+		ZIndex = 25,
+		[Children] = {
+			scope:New("UITextSizeConstraint")({ MaxTextSize = LINE_TEXT_SIZE }),
+			scope:New("UIStroke")({
+				Color = LINE_OUTLINE,
+				Thickness = 3,
+				Transparency = scope:Computed(function(use)
+					return LINE_OUTLINE_TRANSPARENCY + (1 - LINE_OUTLINE_TRANSPARENCY) * use(fade)
+				end),
+			}),
+			-- The glint: the gradient slides from off the left end to off the right, then waits for the next one.
+			scope:New("UIGradient")({
+				Color = SHINE,
+				Rotation = SHINE_TILT,
+				Offset = scope:Computed(function(use)
+					local sweep = math.clamp((math.max(0, use(age)) % SHINE_PERIOD) / SHINE_SWEEP, 0, 1)
+					return Vector2.new(-1 + 2 * sweep, 0)
+				end),
+			}),
+			scope:New("UIScale")({
+				Scale = scope:Computed(function(use)
+					local t = math.clamp(use(age) / POP_TIME, 0, 1)
+					return 1 + (POP_SCALE - 1) * (1 - t) ^ 3
+				end),
+			}),
+		},
+	})
+end
+
 function Hud.mount(playerGui: Instance)
 	local scope = UiState.scope
 
@@ -256,15 +345,6 @@ function Hud.mount(playerGui: Instance)
 	if Workspace.CurrentCamera then
 		Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
 	end
-
-	-- The Secret egg alert pops up a little larger than it settles.
-	local announceScale = scope:Spring(
-		scope:Computed(function(use)
-			return if use(UiState.announceVisible) then 1 else 0.7
-		end),
-		28,
-		0.55
-	)
 
 	local staminaFill = scope:Computed(function(use)
 		local max = use(UiState.maxStamina)
@@ -452,7 +532,9 @@ function Hud.mount(playerGui: Instance)
 					scope:New("TextLabel")({
 						Name = "Toast",
 						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 96),
+						Position = scope:Computed(function(use)
+							return UDim2.new(0.5, 0, 0, Hud.toastTop(#use(UiState.announcements)))
+						end),
 						Size = UDim2.new(0.9, 0, 0, 40),
 						BackgroundTransparency = 1,
 						Font = Enum.Font.FredokaOne,
@@ -465,53 +547,32 @@ function Hud.mount(playerGui: Instance)
 						ZIndex = 30,
 					}),
 
-					-- Secret and rarer eggs: what spawned, where, and when, in big white letters across the screen (no box)
-					-- for a few seconds, while an alert sounds (see the client's EggController).
+					-- Secret and rarer eggs: "Secret egg has spawned in Volcano!" in shiny white letters across the top,
+					-- each new one beneath the others, while a sparkle sounds (see the client's EggController).
 					scope:New("Frame")({
-						Name = "Announcement",
+						Name = "Announcements",
 						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 146),
-						Size = UDim2.new(1, -40, 0, 120),
+						Position = UDim2.new(0.5, 0, 0, ANNOUNCE_TOP),
+						Size = UDim2.new(
+							1,
+							-2 * ANNOUNCE_SIDE_ROOM,
+							0,
+							UiState.MAX_ANNOUNCEMENTS * (LINE_HEIGHT + LINE_GAP)
+						),
 						BackgroundTransparency = 1,
-						Visible = UiState.announceVisible,
+						Visible = scope:Computed(function(use)
+							return #use(UiState.announcements) > 0
+						end),
 						ZIndex = 25,
 						[Children] = {
-							scope:New("UIScale")({ Scale = announceScale }),
-							scope:New("TextLabel")({
-								Name = "Title",
-								BackgroundTransparency = 1,
-								Size = UDim2.new(1, 0, 0, 76),
-								Font = Enum.Font.FredokaOne,
-								Text = UiState.announceTitle,
-								TextColor3 = WHITE,
-								TextSize = 68,
-								ZIndex = 25,
-								[Children] = {
-									scope:New("UIStroke")({
-										Color = Color3.new(0, 0, 0),
-										Thickness = 4,
-										Transparency = 0.1,
-									}),
-								},
+							scope:New("UIListLayout")({
+								Padding = UDim.new(0, LINE_GAP),
+								HorizontalAlignment = Enum.HorizontalAlignment.Center,
+								SortOrder = Enum.SortOrder.LayoutOrder,
 							}),
-							scope:New("TextLabel")({
-								Name = "Detail",
-								BackgroundTransparency = 1,
-								Position = UDim2.fromOffset(0, 78),
-								Size = UDim2.new(1, 0, 0, 36),
-								Font = Enum.Font.FredokaOne,
-								Text = UiState.announceDetail,
-								TextColor3 = WHITE,
-								TextSize = 30,
-								ZIndex = 25,
-								[Children] = {
-									scope:New("UIStroke")({
-										Color = Color3.new(0, 0, 0),
-										Thickness = 3,
-										Transparency = 0.15,
-									}),
-								},
-							}),
+							scope:ForValues(UiState.announcements, function(_, lineScope, line)
+								return announcementLine(lineScope, line)
+							end),
 						},
 					}),
 

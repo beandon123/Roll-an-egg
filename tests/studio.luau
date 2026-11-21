@@ -431,7 +431,7 @@ function Session:environment(scriptInstance)
 				}
 			end,
 		},
-		task = task,
+		task = session.task,
 		-- Libraries such as Fusion check that events really are Roblox signals.
 		typeof = function(value)
 			if type(value) == "table" and getmetatable(value) == Signal then
@@ -740,6 +740,70 @@ function Studio.buildPlace(): (string?, string?)
 	return output, nil
 end
 
+-- Every session opened and not yet closed.
+local openSessions = {}
+
+-- The task library a session's scripts see: the real one, except that once the session is closed (see close) its
+-- threads stop where they are, sleeping for good, rather than carry on in a world that is gone.
+local function sessionTask(session)
+	local function stop()
+		while true do
+			task.wait(1e9)
+		end
+	end
+	local function guard(callback)
+		return function(...)
+			if session.closed then
+				return
+			end
+			return callback(...)
+		end
+	end
+	return {
+		wait = function(seconds: number?)
+			local waited = task.wait(seconds)
+			if session.closed then
+				stop()
+			end
+			return waited
+		end,
+		spawn = function(callback, ...)
+			return task.spawn(if type(callback) == "function" then guard(callback) else callback, ...)
+		end,
+		defer = function(callback, ...)
+			return task.defer(if type(callback) == "function" then guard(callback) else callback, ...)
+		end,
+		delay = function(seconds: number?, callback, ...)
+			return task.delay(seconds, if type(callback) == "function" then guard(callback) else callback, ...)
+		end,
+		cancel = task.cancel,
+	}
+end
+
+-- Closes a session: its scripts' threads stop, and its whole world (the map, the players, everything) is
+-- destroyed, so a long run of tests does not keep every test's world in memory.
+function Session:close()
+	if self.closed then
+		return
+	end
+	self.closed = true
+	openSessions[self] = nil
+	for _, child in self.game:GetChildren() do
+		pcall(function()
+			for _, descendant in child:GetChildren() do
+				descendant:Destroy()
+			end
+		end)
+	end
+end
+
+-- Closes every open session (after each test: see harness.afterEach).
+function Studio.closeAll()
+	for session in openSessions do
+		session:close()
+	end
+end
+
 -- Opens a built place file as the server (`isServer = true`) or as one player's device.
 function Studio.open(placePath: string, options: { isServer: boolean, isStudio: boolean? })
 	local session = setmetatable({
@@ -769,7 +833,10 @@ function Studio.open(placePath: string, options: { isServer: boolean, isStudio: 
 		guid = 0,
 		moveVector = roblox.Vector3.new(0, 0, 0),
 		keysDown = {},
+		closed = false,
 	}, Session)
+	session.task = sessionTask(session)
+	openSessions[session] = true
 	current = session
 	return session
 end

@@ -7,12 +7,12 @@ into pets back at their plot. The full design is in [docs/REQUEST.md](docs/REQUE
 
 The first playable slice: **the runway, riding, hatching and pens**, plus **the shop, settings and admin panel**.
 
-- The map: the hub with a painted START ZONE where the runway begins, then a level runway that winds through six
-  zones (Forest, Desert, Snow, Ocean, Volcano, Prehistoric) like a canyon, each longer and wider than the one before
-  (800 studs long and 120 wide in the Forest, up to 2,600 by 320 in the Prehistoric zone), each with its own checkered
-  ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the Ocean),
-  plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The cliffs down
-  both sides are broken by fairly large gaps that look out over a valley, with a low railing across.
+- The map: the hub with a painted START ZONE where the runway begins, then a level runway that winds through seven
+  zones (Forest, Desert, Snow, Jungle, Ocean, Volcano, Prehistoric) like a canyon, each longer and wider than the one
+  before (800 studs long and 120 wide in the Forest, up to 2,960 by 400 in the Prehistoric zone), each with its own
+  checkered ground, tall stepped cliffs capped with grass hanging over their edges (a boardwalk over a reef in the
+  Ocean), plants and rocks, distant hills, and a gate with the zone's name (see [The runway](#the-runway)). The
+  cliffs down both sides are broken by fairly large gaps that look out over a valley, with a low railing across.
 - The runway never ends. The last zone repeats seamlessly past the end (ground, banks, gate and obstacles), and
   riders are quietly carried back one repeat at a time, so nobody ever reaches an end or sees one.
 - The hub's stations, in the plaza between the plots: the **Trails** stall (nine trails that stream behind you and
@@ -26,13 +26,15 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   mid-cycle. There is always an egg at the start of every zone to jump on: one leaves it at least every 4 seconds.
   Rarity sets their size, speed (27 studs a second for a Common egg up to 54 for an Eternal one; walking is 16) and
   stamina requirement. Rolling eggs kick up a thick cloud of dust.
-- When a Secret or Eternal egg spawns, every player sees a big white message for 5 seconds saying where and when,
-  and hears an alert (a lineup egg on its first lap of the day only). Other eggs spawn quietly.
+- When a Secret or Eternal egg spawns, every player sees a line of shiny white text along the top of the screen for
+  5 seconds ("Secret egg has spawned in Volcano!"), each new one beneath any still up, and hears a sparkle (a lineup
+  egg on its first lap of the day only). Other eggs spawn quietly.
 - Zone-themed obstacles on the runway, small and big (giant stumps, rock outcrops, buttes, walls of ice blocks,
   shipwrecks, obsidian crags). Eggs nobody is riding steer round them; riders have to steer clear themselves, or
   lose stamina and slow down. No obstacle or wall kills anyone.
 - Every zone has 8 eggs, each with its own blocky model built from parts (see below).
-- Blocky pet models for all 48 zone pets, rigged with joints so they can be animated (see below).
+- Blocky pet models for all 56 zone pets, rigged with joints so they can be animated and ridden (see below), every
+  zone's drawn in the showpiece style (sculpted voxels, glowing Neon, auras, with bloom in the lighting).
 - Players never walk on the runway. Walking past the start zone, or jumping off an egg, launches a floaty leap with
   3.5 seconds to land on an egg. Touching the runway first, or running out of time, kills you (back to your plot).
   That goes for pet riders too: a pet never goes on the runway, so riding one past the start zone sends it away and
@@ -59,7 +61,8 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
 - Ride any of your pets round the hub: it carries you faster than walking, but costs stamina while you ride, and
   bucks you off when your stamina runs out.
 - Each player gets one of 8 plots when they join, with their name over the gate, and respawns there. Everything is
-  saved (ProfileStore). See [Eggs, pens and pets](#eggs-pens-and-pets).
+  saved (ProfileStore); older saves are brought up to date as they load (eggs and pets saved before the Jungle
+  went in as zone 4 move one zone along). See [Eggs, pens and pets](#eggs-pens-and-pets).
 - A **training stick** in front of every pen: a roller over a trough of water. Step up and roll on it (birling) for
   as long as you like: every quarter of a second adds Max Stamina for good, with a "+1" floating over your head, and
   "2x" bubbles pop up to tap for a burst of double stamina. Eight tiers, from a twig to a rainbow crystal, bought with
@@ -68,9 +71,9 @@ The first playable slice: **the runway, riding, hatching and pens**, plus **the 
   second) at the bottom left as big numbers on dark bands (the green "+" buttons open the shop at that section), the
   Eggs (an egg), Pets (a paw) and Ride tabs on the right edge, the day and night clock at the bottom right (a moon and
   "in 3m 20s" until night by day, a sun and the time until sunrise by night), a timer while a server luck boost runs,
-  the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the big white
-  message for Secret and rarer eggs. Nothing runs across the top: a short message says when the runway is about to
-  close, and when it closes.
+  the stamina and claim meters (bottom centre), a "Land on an egg!" countdown while leaping, and the shiny white
+  lines along the top when Secret and rarer eggs spawn. There is no runway timer or zone name across the top: a
+  short message says when the runway is about to close, and when it closes.
 - **Shop** ("Coop Shop"): the next tier of the training stick and the next pen level, each for Robux or dollars (the
   same upgrades as the stick's sign and the pen's green button), x2 / x4
   server luck for 15 minutes (rarer eggs for everyone), Max Stamina packs, Double Your Stamina (each purchase doubles
@@ -333,14 +336,15 @@ The runway is level, and gets longer and wider the further it goes, the banks st
 | Forest | 800 | 120 | 11 |
 | Desert | 1,160 | 140 | 15 |
 | Snow | 1,520 | 160 | 20 |
-| Ocean | 1,880 | 200 | 25 |
-| Volcano | 2,240 | 260 | 30 |
-| Prehistoric | 2,600 | 320 | 35 |
+| Jungle | 1,880 | 200 | 25 |
+| Ocean | 2,240 | 260 | 30 |
+| Volcano | 2,600 | 320 | 35 |
+| Prehistoric | 2,960 | 400 | 39 |
 
-The first three zones are each 20 studs wider than the one before; from the Ocean (zone 4) on, each is a quarter wider
-than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zones added after that would stay as
-wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer ones
-more rows, so none is emptier than the first.
+The first three zones are each 20 studs wider than the one before; from the Jungle (zone 4) on, each is a quarter
+wider than the one before, to the nearest whole 20-stud ground tile, up to zone 7 (zones added after that would stay
+as wide as it). The last zone's endless repeats keep its width. Wider zones get more obstacles to a row, and longer
+ones more rows, so none is emptier than the first.
 
 A bright, milky fog hangs over everything, like the owner's reference: close by is crisp, and from 40 studs away
 everything fades into pale white-blue, half gone by about 300 studs and lost in it by 600 (Lighting's own fog, set in
@@ -359,7 +363,7 @@ eggs there at their copy nearest the player, so nothing seems to move.
 **Banks and gaps.** Tall stepped cliffs run down both sides, three steps of stone capped with grass (or sand, snow or
 rock) hanging over their edges: the wall beside the runway stands 46 to 54 studs high, the step behind it 28 to 36
 studs higher and the back step 38 to 50 higher again (the Ocean has a 7-stud boardwalk railing instead). The runway
-widens zone by zone, from 120 studs in the Forest to 320 in the Prehistoric zone, the banks stepping out at each gate.
+widens zone by zone, from 120 studs in the Forest to 400 in the Prehistoric zone, the banks stepping out at each gate.
 The banks are broken by gaps of 40 to 80 studs at irregular spacing (none by a zone's gate). Each gap looks out over
 a valley, with a low wooden railing across it and an invisible wall above. Nothing at the edge kills: a rider who
 steers their egg into a bank or a railing bounces back off it, losing 10% of the egg's stamina requirement and slowing
@@ -397,13 +401,14 @@ anyone. What happens to the rider of an egg that hits one (the egg is always kno
 | Forest | fallen logs, stumps, bushes, toadstools | boulders, trees, giant stumps, rock outcrops | |
 | Desert | cacti, tumbleweeds, skulls | sandstone rocks, buttes, sand geysers* | |
 | Snow | snowdrifts, snowmen | pines, ice boulders, walls of ice blocks | |
+| Jungle | giant leaves | bamboo thickets, jungle trees, temple ruins, giant flytraps* | mud pits |
 | Ocean | coral, barrels | sea rocks, shipwrecks, giant clams* | |
 | Volcano | obsidian spikes | basalt columns, smoking rocks, obsidian crags | lava pools, lava vents* |
 | Prehistoric | giant ferns, dinosaur skulls | giant ribcages, mossy boulders, giant stumps, rock outcrops | tar pits |
 
-\* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell), then a burst
-or a snap. They are harmless in between. A slowed egg rolls at 40% of its speed (`Shared/EggMotion` works it out from
-the clock, so every device draws it in the same place). The numbers are `Tuning.HIT_EFFECTS`.
+\* These go off now and then: a few seconds of warning (puffing smoke or sand, or a trembling shell or jaw), then a
+burst or a snap. They are harmless in between. A slowed egg rolls at 40% of its speed (`Shared/EggMotion` works it
+out from the clock, so every device draws it in the same place). The numbers are `Tuning.HIT_EFFECTS`.
 
 An egg nobody is riding steers round every obstacle on its own, along a path worked out the same way on the server
 and on every device. A ridden egg goes where its rider steers. The rider's device spots a hit at once and reports
@@ -477,10 +482,10 @@ lune run tools/ui-preview trails
 ```
 
 Then open `tools/out/ui-preview.html`. The scenes are `hud`, `trails`, `trails-end` (the panel scrolled to the last
-trails), `sell`, `shop`, `eggs` (the Eggs panel), `secret` (the message when a Secret egg spawns), `stick` (the
-training stick's upgrade panel) and `training` (rolling on the stick, with a 2x boost and a bubble). It runs the game's
-own client scripts and draws their GUI objects in HTML, and the models in 3D previews as flat-shaded drawings: a close
-sketch, not Roblox's renderer (fonts and emoji are the browser's).
+trails), `sell`, `shop`, `eggs` (the Eggs panel), `secret` (the shiny lines along the top when Secret and Eternal
+eggs spawn), `stick` (the training stick's upgrade panel) and `training` (rolling on the stick, with a 2x boost and a
+bubble). It runs the game's own client scripts and draws their GUI objects in HTML, and the models in 3D previews as
+flat-shaded drawings: a close sketch, not Roblox's renderer (fonts and emoji are the browser's).
 
 ## Egg models
 
@@ -497,7 +502,8 @@ picks a rarity with the zone's odds, then one of the zone's eggs of that rarity.
 
 Designs are drawn standing up on a voxel grid (layers 1-16 from the round bottom to the point; x and z from -6 to 5).
 On the runway the egg lies on its side and rolls. A design marked `shelved` is out of the game for now (the Frost
-Dragon and Magma Dragon eggs, among others); put it back in a zone's list to bring it back.
+Dragon and Magma Dragon eggs, and the Jungle candidates that were not picked, among others); put it back in a zone's
+list to bring it back.
 
 In the game, the admin panel's Eggs tab drops any egg, or all 8 of a zone's eggs one after another, and the Model
 Showroom stands every egg on end. To see every egg in 3D without opening Studio:
@@ -510,45 +516,111 @@ Then open `tools/out/egg-gallery.html` in a browser.
 
 ## Pet models
 
-Pets are built the same blocky way, in `src/shared/PetModels/Designs.luau`, one design per pet. Each egg in
-`Config/Zones.luau` names the pet that hatches from it. Every pet has its model:
+Pets are built the same blocky way, one design per pet. Each egg in `Config/Zones.luau` names the pet that hatches
+from it. Every pet has its model:
 
 - Forest: Squirrel, Bunny, Hedgehog, Fox, Owl, Bear, Moss Stag, Treant
 - Desert: Meerkat, Armadillo, Fennec Fox, Camel, Giant Scorpion, Pharaoh Jackal, Sphinx, Golden Scarab
 - Snow: Snow Hare, Arctic Fox, Reindeer, Frost Wolf, Sabertooth Cat, Aurora Owl, Woolly Mammoth, Yeti
+- Jungle: Poison Dart Frog, Giant Leafcutter Ant, Giant Centipede, Hercules Beetle, Titan Anaconda, Mantis Empress,
+  Vine Hydra, Jade Temple Guardian (two Eternals)
 - Ocean: Sea Turtle, Dolphin, Manta Ray, Great Shark, Narwhal, Hippocampus, Kraken, Leviathan
 - Volcano: Obsidian Goat, Cinder Boar, Volcano Tortoise, Fire Salamander, Chimera, Lava Golem, Cerberus, Lava Dragon
 - Prehistoric: Velociraptor, Pteranodon, Triceratops, Stegosaurus, Brachiosaurus, T-Rex, Mosasaurus, Lunar Dragon
 
-The rarer the pet, the more detailed it is. There is no block budget: quality comes first. Secret and Eternal pets
-are the showpieces, built in the finest detail (the tests require at least 150 blocks each).
+**The showpiece style.** Pets are drawn to look like the big showpiece pets of Roblox simulator games: part-built
+voxel models with real proportions, light baked into their colours (lighter tops, darker undersides), crisp angled
+claws, fangs, horns, quills and tufts of fur, and, the rarer they are, more that glows. Each zone has its own file
+beside `Designs.luau`: `PetModels/Forest.luau`, `PetModels/Desert.luau`, `PetModels/Snow.luau`,
+`PetModels/Jungle.luau`, `PetModels/Ocean.luau`, `PetModels/Volcano.luau` and `PetModels/Prehistoric.luau`:
 
-The more common pets are built from blocks placed by hand. The rarer four of each zone (and a few more) are
-sculpted: `newSculpt` models each limb cell by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes
-such as necks, tails and tentacles, with `curl` for a spiral at the end), colours it by rules (`coat` for patterns
-like stripes, dapples, belly plates and lava seams, `trace` for lines), and packs it into as few blocks as it can.
+| Rarity | Size (a player is 5 studs) | What glows |
+| --- | --- | --- |
+| Common, Uncommon | About a player's height | Nothing: natural animals with glossy eyes |
+| Rare | Taller than a player (the Owl, 9 studs; the Camel, 10) | A first touch: the Owl's eyes, the Camel's harness jewels |
+| Epic | Twice a player's height, long (the Bear, 14 studs long; the Giant Scorpion, 16; the Pteranodon's wings, 27 across) | Eyes and markings: the Bear's claw-mark runes and mushrooms, the Scorpion's eyes and venom, the Velociraptor's crest and sickle claws |
+| Legendary | Three times (the Moss Stag, 17 studs to its antler tips; the Pharaoh Jackal, 13; the Stegosaurus, 19 to the tips of its plates) | Eyes, markings and tips, a light, fireflies or sparkles, and an aura swirling at its feet: the Triceratops's eye-spotted frill, the Stegosaurus's plates rimmed in light |
+| Mythic | Three to five times (the Treant, 26 studs; the Sphinx, 18; the Woolly Mammoth, 17; the Brachiosaurus, 30) | All of that, more of it: the Treant's cracks and heart, the Sphinx's cracks, inscription and ankh, the Scarab's blazing sun disc, the Aurora Owl's aurora feathers, the Brachiosaurus's rows of lights and the glowing mushrooms in the moss on its back |
+| Secret | Five to eight times, colossal (the Yeti, 24 studs; the Kraken, 33 tall and 39 across; the Leviathan, 41 tall and 87 long; Cerberus, 32 tall; the T-Rex, 33 tall and 64 long; the Mantis Empress, 32 tall) | The most of all: the Yeti's crystal clusters; the Kraken's glowing veins, suckers and eyes under a gold crown with glowing gems, its writhing tentacles; the Leviathan's huge fanged maw, glowing portholes, glass fins and lure; Cerberus's three fire-maned heads; the T-Rex's glowing amber stripes and amber crystals, its jaws open on a glowing throat |
+| Eternal | Colossal (the Lava Dragon, 34 tall with wings spanning 65; the Lunar Dragon, 37 tall with wings spanning 67; the Mosasaurus, 83 long; the Vine Hydra, 36 tall; the Jade Temple Guardian, 45 to the tips of its plumes) | The Lava Dragon's lava glowing between obsidian scales, burning wings with glowing veins, fire in its jaws; the Lunar Dragon's starry scales and wings, glowing mane, crescent moon round its head and blue moonfire; the Mosasaurus's violet lights of the deep |
+
+The game's Lighting has a `BloomEffect` (named `Bloom`, set up by `MapService`), so Neon throws a soft halo the way
+it does round the showpiece pets of other games. Only light brighter than sunlit ground blooms. To try the game
+without it, delete `Lighting.Bloom` in Studio, or remove it from `MapService`.
+
+Every pet is rideable: a design sets where the rider sits (`pet:seat`), and the mount lifts the rider to it at any
+size. Pets bigger than about 10 studs are built from coarser cells (a design's `U`), so they keep their detail with
+fewer, larger blocks and build quickly: no Forest pet takes more than a second to build or has more than about 1,000
+blocks, and none in the game more than about 1,400. The size a pet hatches at (Tiny to Titanic) is not decided yet;
+the models are built to be scaled.
+
+The drawing tools are in `src/shared/PetModels/Kit.luau`, shared by every design. `newSculpt` models each limb cell
+by cell out of rounded shapes (`ellipsoid`, and `rod` for tapering tubes such as necks, tails and tentacles, with
+`curl` for a spiral at the end), colours it by rules (`coat` for patterns like stripes, belly plates and lava seams,
+told which way the clay faces at each cell, so a pale belly ends cleanly, `patches` for soft patches of moss or
+grizzled fur, `cracks` for the seams between plates (lava glowing between plates of rock), `nearPath` for the pale
+fringe of a tail, `trace` for lines, and `bake` for the light from above), and packs it into as few blocks as it can.
+`surface` lists the cells on its outside with the way each faces, for setting quills, tufts of fur and moss over it.
+`crystal` and `crystalCluster` grow faceted shards of ice (or any gem), glowing at their points if a design asks.
 Thin details leave the grid altogether and are built from parts at any angle (`blade`, `taper` for points, `egg` for
-balls and eyes, `triangle` for a flat sheet such as a wing membrane or fin, and `feather` for a banded feather),
+balls and eyes, `triangle` for a flat sheet such as a wing membrane or leaf, and `feather` for a banded feather),
 placed in the design's own units with `inUnits`, so horns, claws, fangs, wings, fins and eyes stay crisp however big
 a pet is shown. Some carry Roblox `Fire` too: the Lava Dragon's flames, the Lunar Dragon's blue moonfire, the
 Chimera's breath, the Volcano Tortoise's crater and the Fire Salamander's tail. (The Eternal Phoenix, built wholly
 from angled parts, is shelved for now, its design kept.) `PetRig` builds the angled parts as turned parts,
 `WedgePart`s, parts with a sphere `SpecialMesh`, and small welded parts holding each `Fire`.
 
-Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
-four-legged, winged, dragon (four legs and wings), two legs, theropod (two legs, small arms and a tail: the raptor
-and the T-Rex), six legs, swimmer (fins and a tail; these float), eight tentacles, or serpent (a chain of coils). `Shared/PetRig` builds the Roblox model: every limb turns on a
-`Motor6D` at its joint, so pets that share a skeleton can share their animations.
+Rare pets give off light and particles (`pet:light`, `pet:particles`: sparkles, embers, bubbles, snow, or fireflies
+that blink as they drift), and the rarest an aura (`pet:aura`): wisps of light winding up from a ring round their
+feet, a soft glow pooled under them and sparks thrown up, built by `ModelEffects.addAura` on a flat invisible disc
+welded to the pet's root.
 
-How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop,
-Crawl, Swim, and Roar for theropods), each a set of waves that turn or shift its limbs. Winged pets (the owls and the
-Pteranodon) and dragons (the Lava and Lunar Dragons) also
-**Fly** (up off the ground, tipped forward, wings beating in long strokes, legs tucked back) and **Hover** (flying
-on the spot, upright, rising with each beat). A winged design says how far its wings turn out to be spread
-(`wingSpread`), so owls that fold their wings at their sides open them to fly. The same moves drive the gallery
-(pick one with the buttons under a pet) and the game: `PetAnimationController` on the client plays them on rigged
-pets by setting each joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can
-fly and walks (or swims, or crawls) on the spot if not.
+To see a zone's pets without opening Studio, on a grassy stage beside a player, with their glow, flames and auras:
+
+```bash
+lune run tools/pet-preview 1
+```
+
+Then open `tools/out/pet-preview.html` in a browser (leave out the zone number for every pet).
+
+Each pet is made of limbs (Body, Head, legs, wings, tail...) on one of a few shared skeletons: four legs, low and
+four-legged, strider (four legs that bend: each leg's shin hangs from its upper leg at the knee, or behind at the
+hock, so a hoof or paw folds up as it steps: the Moss Stag, Bear, Camel, Pharaoh Jackal, Sphinx, Reindeer, Woolly
+Mammoth, Triceratops, Stegosaurus and Brachiosaurus), beast (a strider with a jaw hanging from its head, to snarl and
+roar: the Frost Wolf, Sabertooth Cat and Chimera), three-headed (a beast whose two side heads, each with its neck,
+hang from the body and move on their own: Cerberus), winged, dragon (four legs that bend at the knee and a pair of
+wings), two legs, giant (two legs and two arms that bend at the knee and elbow: the Yeti, Treant and Lava Golem),
+theropod (two legs, small arms and a tail: the raptor), tyrant (a theropod with knees and a jaw, for the T-Rex), six
+legs, swimmer (fins and a tail; these float: a design drawn up off the ground is moved down onto it and floats that
+much higher), eight tentacles, serpent (a chain of coils), or snake (a neck and head, and behind them a chain of eight
+lengths on the ground, each hanging from the one before, drawn coiled so it can uncoil: the Titan Anaconda).
+`Shared/PetRig` builds the Roblox model: every limb turns on a `Motor6D` at its joint, so pets that share a skeleton
+can share their animations. A limb drawn with `limbPair` and a parent on the left (a left shin hanging from the left
+leg) hangs its mirror image from the right one.
+
+How pets move is in `src/shared/PetAnimations.luau`: for each skeleton, a few moves (Idle, Walk, Stomp, Hop, Crawl,
+Swim, Slither, and Roar for theropods, tyrants and beasts), each a set of waves that turn or shift its limbs. Winged
+pets (the owls and the Pteranodon) and dragons (the Lava and Lunar Dragons) also **Fly** (up off the ground, tipped
+forward, wings beating in long strokes, legs tucked back) and **Hover** (flying on the spot, upright, rising with each
+beat). A winged design says how far its wings turn out to be spread (`wingSpread`), so owls that fold their wings at
+their sides open them to fly. The Leviathan swims with a wave rolling down its coils to the tail fan, from side to
+side and up and down, rising off the ground and riding up and down with each stroke while its fins row; the Kraken
+hauls itself along, the four tentacles on the ground reaching forward and dragging back in diagonal pairs while the
+four raised ones lash and curl and its body heaves with each pull. The Titan Anaconda rests coiled, a slow ripple
+running round its coils; when it moves it uncoils into an S trailing straight back from its reared neck, and a wave
+runs down the S from the neck to the tail, so the curves flow backwards along its body the way a real snake pushes
+itself along, its head held steady, looking ahead. Moves are layered so pets look alive rather than mechanical: a
+limb's motion is usually several waves at speeds that never quite line up (a standing pet breathes, shifts its weight,
+and looks round with a slow turn, a quicker glance, a nod and a tilt), what hangs off a limb follows it a little late
+(a head steadies itself against the body's bob, a tail swings after it, a forearm bends as its arm swings forward),
+steps and hops are eased in and out with no jerk where a foot leaves the ground or lands, and wings beat with a
+quicker downstroke than recovery and twist through each stroke. The same moves drive the gallery (pick one with the
+buttons under a pet) and the game: `PetAnimationController` on the client plays them on rigged pets by setting each
+joint's `Motor6D.Transform`. A pet plays its `Move` attribute, or by default hovers if it can fly and walks (or swims,
+crawls or slithers) on the spot if not. Each pet starts at its own point in its moves, so a pen of pets never moves in
+lockstep, and when its move changes (a pen pet stopping to rest, a mount setting off) it eases from where it was into
+the new one over 0.4 seconds (`PetAnimations.blend`) instead of snapping; a snake takes 1.2 seconds, so you see it
+uncoil as it sets off and coil back up as it stops (`PetAnimations.blendTime`).
 
 In the game, the admin panel's Pets tab stands any pet, or all of a zone's pets, in front of you, and the Model
 Showroom has them all. They move as they would in the game; set a pet's `Move` attribute in the Properties window
@@ -588,6 +660,7 @@ src/client/            StarterPlayerScripts.Client
                          (Theme and Widgets hold the shared look); and the admin panel
 tests/                 Automated tests (see below)
 tools/                 egg-gallery.luau: a web page that shows every egg and pet model in 3D;
+                       pet-preview.luau: a web page that stands a zone's pets on a Roblox-like stage;
                        map-preview.luau: a web page that shows the map in 3D;
                        ui-preview.luau: a web page that sketches the HUD and its panels;
                        rider-preview.luau: a web page that shows riders running on a rolling egg or training stick;
@@ -619,7 +692,8 @@ There are two kinds:
   blocks sharing a face (which flicker in Roblox).
 - **Smoke tests** build the place with Rojo and run the real server and client scripts against a stand-in for
   Roblox Studio (`tests/studio.luau`). They catch misspelled properties and wiring mistakes. Purchases are tested
-  by calling the game's own ProcessReceipt with made-up receipts.
+  by calling the game's own ProcessReceipt with made-up receipts. Each test's worlds are closed when it ends (their
+  scripts stop and their maps are destroyed), so the whole run stays within a few gigabytes of memory.
 
 The tests cannot check anything that needs the real engine: physics, animation, input, how things look and feel.
 Those need a play test in Studio.

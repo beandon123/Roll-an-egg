@@ -10,7 +10,7 @@
 --     sell     the Sell stall's panel open
 --     shop     the shop open
 --     eggs     the Eggs panel open
---     secret   the message (big white letters) when a Secret egg spawns
+--     secret   the shiny lines across the top when Secret and Eternal eggs spawn, a toast below them
 --     stick    the training stick's upgrade panel (from the sign beside the stick), the stick at its third tier
 --     training rolling on the training stick: its card, a 2x boost running and a "2x" bubble to tap
 -- The page draws a 1280 x 720 screen; add #w=844&h=390 to the address for a phone held sideways.
@@ -87,12 +87,10 @@ elseif scene == "shop" then
 elseif scene == "eggs" then
 	UiState.actions.openPanel("Eggs")
 elseif scene == "secret" then
-	UiState.showAnnouncement(
-		"SECRET EGG SPAWNED!",
-		"Start of the Volcano zone at 7:55:46 PM",
-		roblox.Color3.new(0, 0, 0),
-		60
-	)
+	UiState.showAnnouncement("Secret egg has spawned in Volcano!", 60)
+	UiState.showAnnouncement("Eternal egg has spawned in Prehistoric!", 60)
+	UiState.showAnnouncement("Secret egg has spawned in Ocean!", 60)
+	UiState.showToast("Runway closes in 30s!", roblox.Color3.fromRGB(255, 170, 70), 60)
 elseif scene == "stick" then
 	session:fromServer("PlayerStateUpdated", { stickLevel = 3 })
 	UiState.openPanel:set("Stick")
@@ -113,6 +111,11 @@ if scene == "training" then
 	UiState.trainingBubble:set({ id = 1, endsAt = session.clock + 60, x = 0.33, y = 0.36 })
 	UiState.bubbleLeft:set(0.7)
 	session:renderFrame(1 / 30)
+end
+if scene == "secret" then
+	-- Settled in, with the glint part way across: the lines time themselves by the real clock, so pick the moment.
+	local first = UiState.Fusion.peek(UiState.announcements)[1]
+	UiState.announceClock:set(first.shownAt + 2 * 1.4 + 0.4)
 end
 if scene == "trails-end" then
 	-- Scrolled along to the fanciest trails.
@@ -170,8 +173,9 @@ local function childOfClass(instance, className: string)
 	return nil
 end
 
--- A CSS background for a frame with a UIGradient: Roblox multiplies the background by the gradient's colours.
-local function gradientBackground(object, gradient): string
+-- A CSS gradient for a UIGradient over `base` (a colour and its transparency): Roblox multiplies the colour by the
+-- gradient's colours. The gradient's Offset slides it along.
+local function gradientCss(base, baseTransparency: number, gradient): string
 	local times = {}
 	local seen = {}
 	for _, keypoint in gradient.Color.Keypoints do
@@ -201,13 +205,12 @@ local function gradientBackground(object, gradient): string
 		return keypoints[#keypoints].Value
 	end
 	local stops = {}
-	local base = object.BackgroundColor3
 	for _, time in times do
 		local color = sample(gradient.Color.Keypoints, time, true)
 		local transparency = sample(gradient.Transparency.Keypoints, time, false)
 		local mixed = { R = base.R * color.R, G = base.G * color.G, B = base.B * color.B }
-		local alpha = 1 - (1 - object.BackgroundTransparency) * (1 - transparency)
-		table.insert(stops, `{css(mixed, alpha)} {string.format("%.2f", time * 100)}%`)
+		local alpha = 1 - (1 - baseTransparency) * (1 - transparency)
+		table.insert(stops, `{css(mixed, alpha)} {string.format("%.2f", (time + gradient.Offset.X) * 100)}%`)
 	end
 	return `linear-gradient({gradient.Rotation + 90}deg, {table.concat(stops, ", ")})`
 end
@@ -505,7 +508,10 @@ function render(object, layout: string?): string
 	local isText = object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")
 	if object.BackgroundTransparency < 1 then
 		if gradient and not isText then
-			table.insert(style, `background:{gradientBackground(object, gradient)}`)
+			table.insert(
+				style,
+				`background:{gradientCss(object.BackgroundColor3, object.BackgroundTransparency, gradient)}`
+			)
 		else
 			table.insert(style, `background:{css(object.BackgroundColor3, object.BackgroundTransparency)}`)
 		end
@@ -552,6 +558,19 @@ function render(object, layout: string?): string
 		-- Text that sizes its label (AutomaticSize) has to take up room, not float over it.
 		local class = if automatic == "None" then "text" else "text grow"
 		textHtml = `<div class="{class}" style="{table.concat(textStyle, ";")}"><span>{body}</span></div>`
+		-- A gradient on text colours the letters: drawn as a second copy over the outlined one, clipped to the letters.
+		if gradient then
+			local fill = gradientCss(object.TextColor3, object.TextTransparency, gradient)
+			local overlay = {}
+			for _, rule in textStyle do
+				if not string.match(rule, "^text%-shadow:") and not string.match(rule, "^color:") then
+					table.insert(overlay, rule)
+				end
+			end
+			table.insert(overlay, "color:transparent")
+			local clip = `background:{fill};-webkit-background-clip:text;background-clip:text;display:inline-block`
+			textHtml ..= `<div class="text" style="{table.concat(overlay, ";")}"><span style="{clip}">{body}</span></div>`
+		end
 	end
 	if stroke and (not isText or stroke.ApplyStrokeMode.Name == "Border") then
 		table.insert(style, `box-shadow:0 0 0 {stroke.Thickness}px {css(stroke.Color, stroke.Transparency)}`)

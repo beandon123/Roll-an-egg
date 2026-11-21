@@ -9,6 +9,7 @@
 --     Blocks   The visible parts, welded to their limb's part: plain blocks, wedges (WedgePart), and egg shapes (a
 --              Part with a sphere SpecialMesh, which stretches to fill it), some turned at an angle.
 --     Fires    Small invisible parts holding a Fire, welded to their limb where a design puts a flame.
+--     Aura     For pets with an aura: a flat invisible disc round their feet, welded to Root, giving off the swirl.
 -- The pet faces -Z, the way Roblox models face. Attributes on the Model:
 --     GroundOffset  how far Root's centre is above the ground, in studs (including any hover for floating pets)
 --     SeatOffset    where a rider sits, relative to Root
@@ -136,6 +137,9 @@ function PetRig.build(kind: string, variant: string?): Model?
 	end
 
 	ModelEffects.add(root, design.light, design.particles, scale)
+	if design.aura then
+		ModelEffects.addAura(model, root, design.aura, design.center[2] * scale)
+	end
 	PetVariants.addGlint(root, variant)
 	model:SetAttribute("Variant", variant or "Normal")
 

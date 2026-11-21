@@ -13,22 +13,36 @@ export type Alert = {
 	volume: number,
 	-- Seconds each note is left to ring before it is cleaned up.
 	length: number,
-	-- When each note plays (seconds after the alert starts) and how high (1 = as recorded).
-	notes: { { at: number, pitch: number } },
+	-- When each note plays (seconds after the alert starts), how high (1 = as recorded), and how loud (times
+	-- `volume`; 1 if left out).
+	notes: { { at: number, pitch: number, volume: number? } },
 }
 
--- Everyone in the server hears this when a Secret or rarer egg spawns: three rising chimes, twice over.
+-- Everyone in the server hears this when a Secret or rarer egg spawns: a sparkle. A short ping, played high and fast
+-- up a five-note (pentatonic) scale so it glitters rather than beeps, then a few higher twinkles that die away.
+-- Several notes ring at once, which is what makes it shimmer. If you upload a sparkle sound of your own, put its id
+-- here with a single note: { { at = 0, pitch = 1 } }.
 Sounds.SECRET_ALERT = {
 	id = "rbxasset://sounds/electronicpingshort.wav",
-	volume = 0.9,
-	length = 2,
+	volume = 0.75,
+	length = 1.5,
 	notes = {
-		{ at = 0, pitch = 1 },
-		{ at = 0.16, pitch = 1.26 },
-		{ at = 0.32, pitch = 1.5 },
-		{ at = 0.62, pitch = 1 },
-		{ at = 0.78, pitch = 1.26 },
-		{ at = 0.94, pitch = 1.5 },
+		-- The run up.
+		{ at = 0, pitch = 1.25, volume = 0.55 },
+		{ at = 0.035, pitch = 1.5, volume = 0.6 },
+		{ at = 0.07, pitch = 1.68, volume = 0.65 },
+		{ at = 0.105, pitch = 2, volume = 0.7 },
+		{ at = 0.14, pitch = 2.25, volume = 0.75 },
+		{ at = 0.175, pitch = 2.52, volume = 0.8 },
+		{ at = 0.21, pitch = 3, volume = 0.9 },
+		{ at = 0.245, pitch = 3.36, volume = 1 },
+		-- The twinkles, fading.
+		{ at = 0.36, pitch = 2.52, volume = 0.6 },
+		{ at = 0.44, pitch = 3.36, volume = 0.5 },
+		{ at = 0.52, pitch = 2.25, volume = 0.42 },
+		{ at = 0.61, pitch = 3, volume = 0.34 },
+		{ at = 0.72, pitch = 2.52, volume = 0.26 },
+		{ at = 0.85, pitch = 3.36, volume = 0.18 },
 	},
 } :: Alert
 

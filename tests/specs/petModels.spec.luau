@@ -17,6 +17,16 @@ return function(harness)
 		{ "Squirrel", "Bunny", "Hedgehog", "Fox", "Owl", "Bear", "MossStag", "Treant" },
 		{ "Meerkat", "Armadillo", "FennecFox", "Camel", "GiantScorpion", "PharaohJackal", "Sphinx", "GoldenScarab" },
 		{ "SnowHare", "ArcticFox", "Reindeer", "FrostWolf", "SabertoothCat", "AuroraOwl", "WoollyMammoth", "Yeti" },
+		{
+			"PoisonDartFrog",
+			"GiantLeafcutterAnt",
+			"GiantCentipede",
+			"HerculesBeetle",
+			"TitanAnaconda",
+			"MantisEmpress",
+			"VineHydra",
+			"JadeTempleGuardian",
+		},
 		{ "SeaTurtle", "Dolphin", "MantaRay", "GreatShark", "Narwhal", "Hippocampus", "Kraken", "Leviathan" },
 		{
 			"ObsidianGoat",
@@ -115,7 +125,15 @@ return function(harness)
 					end
 				end
 				expect.truthy(
-					({ Walk = true, Hop = true, Waddle = true, Stomp = true, Swim = true, Crawl = true })[model.gait],
+					({
+						Walk = true,
+						Hop = true,
+						Waddle = true,
+						Stomp = true,
+						Swim = true,
+						Crawl = true,
+						Slither = true,
+					})[model.gait],
 					model.name .. " gait"
 				)
 			end)
@@ -191,7 +209,20 @@ return function(harness)
 			each(function(model)
 				local order = Rarities.Info[model.rarity].order
 				expect.equal(model.light ~= nil, order >= 5, model.name .. " light")
-				expect.equal(model.particles ~= nil, order >= 6, model.name .. " particles")
+				-- Legendary pets may give off particles too (the Moss Stag's fireflies); Mythic and rarer always do.
+				if order >= 6 then
+					expect.truthy(model.particles ~= nil, model.name .. " particles")
+				elseif order < 5 then
+					expect.equal(model.particles, nil, model.name .. " particles")
+				end
+			end)
+		end)
+
+		it("gives only Legendary and rarer pets an aura round their feet", function()
+			each(function(model)
+				if model.aura then
+					expect.truthy(Rarities.Info[model.rarity].order >= 5, model.name .. " aura")
+				end
 			end)
 		end)
 	end)
@@ -247,6 +278,53 @@ return function(harness)
 				local flying = PetAnimations.pose(model.skeleton, "Hover", 0, model.wingSpread).LeftWing[3]
 				expect.truthy(flying - resting >= model.wingSpread, model.name .. " spreads its wings to fly")
 			end)
+		end)
+
+		it("bends every jointed leg and arm at the knee or elbow as the pet gets about", function()
+			for skeleton, limbs in PetModels.SKELETONS do
+				local move = PetAnimations.moveFor(skeleton, "Walk")
+				for _, limb in limbs do
+					if string.find(limb, "Shin$") or string.find(limb, "Forearm$") then
+						local low, high = math.huge, -math.huge
+						for step = 0, 60 do
+							local p = PetAnimations.pose(skeleton, move, step * 0.03)[limb]
+							local bend = if p then p[1] else 0
+							low, high = math.min(low, bend), math.max(high, bend)
+						end
+						expect.truthy(high - low > 0.15, `{skeleton} {move} bends its {limb}: {high - low}`)
+					end
+				end
+			end
+		end)
+
+		it("moves each of a three-headed pet's heads on its own", function()
+			for _, move in { "Idle", "Walk" } do
+				local apart = 0
+				for step = 0, 80 do
+					local pose = PetAnimations.pose("ThreeHeaded", move, step * 0.1)
+					local left, right = pose.LeftHead, pose.RightHead
+					apart = math.max(apart, math.abs(left[2] + right[2]), math.abs(left[1] - right[1]))
+				end
+				-- Mirror images of each other would cancel out (or match) at every moment.
+				expect.truthy(apart > 0.1, `the side heads move out of step when they {move}: {apart}`)
+			end
+		end)
+
+		it("eases from one move into the next", function()
+			local from = { Head = { 0.4, 0, 0, 0, 0, 0 }, Tail = { 0, 0.2, 0, 0, 0, 0 } }
+			local to = { Head = { 0, 0, 0, 0, 1, 0 }, Jaw = { 0.6, 0, 0, 0, 0, 0 } }
+			local start = PetAnimations.blend(from, to, 0)
+			expect.near(start.Head[1], 0.4, 1e-9, "starts where it was")
+			expect.near(start.Tail[2], 0.2, 1e-9, "a limb only the old move turned starts where it was")
+			expect.near(start.Jaw[1], 0, 1e-9, "a limb only the new move turns starts at rest")
+			local done = PetAnimations.blend(from, to, 1)
+			expect.near(done.Head[5], 1, 1e-9, "ends on the new move")
+			expect.near(done.Tail[2], 0, 1e-9, "the old move's limb comes to rest")
+			local middle = PetAnimations.blend(from, to, 0.5)
+			expect.near(middle.Head[1], 0.2, 1e-9, "halfway, half of each")
+			-- Eased: slow to leave and slow to arrive.
+			local early = PetAnimations.blend(from, to, 0.1)
+			expect.truthy(early.Head[1] > 0.4 - 0.1 * 0.4, "eases out of the old move")
 		end)
 	end)
 end

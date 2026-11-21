@@ -430,7 +430,11 @@ end
 
 -- How many eggs a zone's lineup holds at the current egg rate (EggSpec.lineupSize at the usual rate).
 local function lineupSize(zoneId: number, rate: number): number
-	return math.max(1, math.round(EggSpec.lineupSize(zoneId) * rate))
+	local usual = EggSpec.lineupSize(zoneId)
+	if usual == 0 then
+		return 0
+	end
+	return math.max(1, math.round(usual * rate))
 end
 
 -- Rolls `count` lineup eggs for a zone, leaving the chute EggSpec.lineupGap seconds apart (less while eggs drop

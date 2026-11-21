@@ -1,0 +1,657 @@
+<title>/*PET_TITLE*/Pet Lineup</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --ink: #17202e;
+    --muted: #586477;
+    --line: #d3dbe6;
+    --accent: #2f6fdb;
+    --display: "Fredoka", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151f; --panel: #182030; --ink: #e8eef7; --muted: #98a5b9; --line: #283346; --accent: #7fb0ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151f; --panel: #182030; --ink: #e8eef7; --muted: #98a5b9; --line: #283346; --accent: #7fb0ff;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); }
+  main {
+    max-width: 1180px; margin: 0 auto; padding-block: 20px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 28px; margin: 0 0 4px; }
+  .lede { color: var(--muted); margin: 0 0 16px; max-width: 70ch; line-height: 1.5; }
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+    background: #9ccbf2; border: 1px solid var(--line);
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .tag {
+    position: absolute; transform: translate(-50%, -100%); text-align: center; white-space: nowrap;
+    font-family: var(--display); font-weight: 700; line-height: 1.02; color: #fff;
+    text-shadow: 0 0 2px #000, 0 2px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000, 0 3px 6px rgba(0,0,0,.45);
+  }
+  .tag .size { font-size: 12px; letter-spacing: .04em; }
+  .tag .rarity { font-size: 15px; }
+  .tag .name { font-size: 17px; }
+  .tag .income { font-size: 18px; color: #4cff5a; }
+  .lineup .tag .rarity { font-size: 11px; }
+  .lineup .tag .name { font-size: 12px; }
+  .lineup .tag .income { font-size: 12px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; align-items: center; }
+  .controls .label { color: var(--muted); font-size: 13px; margin-right: 2px; letter-spacing: .03em; }
+  .lede, h1 { text-wrap: balance; }
+  button.chip {
+    font: 600 13px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 7px 12px; cursor: pointer; min-height: 34px;
+  }
+  button.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+  .fact { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .fact b { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .fact span { font-weight: 600; }
+  @media (max-width: 640px) { .stage { aspect-ratio: 4 / 5; } h1 { font-size: 22px; } }
+</style>
+<main>
+  <h1 id="title">Pets</h1>
+  <p class="lede" id="lede">Every pet of the zone on a Roblox-like stage, beside a 5-stud player for scale. Drag to turn the view, scroll to zoom, and pick a pet to see it close up and try its moves. Glowing Neon, flames, sparkles and auras are drawn the way they look in game, give or take Roblox's own lighting.</p>
+  <div class="stage" id="stage">
+    <canvas id="canvas" aria-label="3D view of the pets"></canvas>
+    <div class="labels" id="labels"></div>
+  </div>
+  <div class="controls" id="pet-buttons"><span class="label">Show</span></div>
+  <div class="controls" id="move-buttons" hidden><span class="label">Move</span></div>
+  <div class="facts" id="facts"></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script>
+(function () {
+  // The pets: written into the page by tools/pet-preview.luau, or beside it as pet-data.json (with --split).
+  const EMBEDDED = /*PET_DATA*/null;
+  if (EMBEDDED) start(EMBEDDED);
+  else fetch("pet-data.json").then((r) => r.json()).then(start).catch(() => {
+    document.getElementById("lede").textContent = "The pet data (pet-data.json) could not be loaded.";
+  });
+
+function start(DATA) {
+  const arr = (x) => (Array.isArray(x) ? x : []);
+  const pets = DATA.pets;
+  const params = new URLSearchParams(location.search);
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const still = params.has("t");
+  const zone = DATA.zones.find((z) => z.id === (DATA.zone || (pets[0] && pets[0].zone)));
+  document.getElementById("title").textContent = zone ? zone.name + " pets" : "Pets";
+
+  // ------------------------------------------------------------------ geometry and materials
+  const BOX = new THREE.BoxGeometry(1, 1, 1);
+  const WEDGE = (() => {
+    const p = [[-0.5,-0.5,-0.5],[0.5,-0.5,-0.5],[-0.5,-0.5,0.5],[0.5,-0.5,0.5],[-0.5,0.5,0.5],[0.5,0.5,0.5]];
+    const faces = [[0,1,3],[0,3,2],[2,3,5],[2,5,4],[0,4,5],[0,5,1],[0,2,4],[1,5,3]];
+    const verts = [];
+    for (const f of faces) for (const i of f) verts.push(...p[i]);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    g.computeVertexNormals();
+    return g;
+  })();
+  const BALL = new THREE.SphereGeometry(0.5, 20, 14);
+  const ROT = new THREE.Matrix4();
+  const BLOOM_LAYER = 1;
+  const materials = new Map();
+  function materialFor(hex, kind, transparency) {
+    const key = hex + kind + transparency;
+    if (materials.has(key)) return materials.get(key);
+    const color = new THREE.Color(hex);
+    let m;
+    if (kind === "Neon") {
+      // Roblox draws Neon at full brightness, a little whiter than its colour, with a glow round it.
+      m = new THREE.MeshBasicMaterial({ color: color.clone().lerp(new THREE.Color("#ffffff"), 0.18) });
+      m.userData.neon = true;
+    } else if (kind === "Glass" || kind === "Ice" || kind === "ForceField") {
+      m = new THREE.MeshPhongMaterial({ color, shininess: 120, specular: 0x9a9a9a, transparent: transparency > 0, opacity: 1 - transparency });
+    } else if (kind === "Metal" || kind === "DiamondPlate" || kind === "CorrodedMetal") {
+      m = new THREE.MeshPhongMaterial({ color, shininess: 60, specular: 0x666666 });
+    } else {
+      m = new THREE.MeshPhongMaterial({ color, shininess: 12, specular: 0x1a1a1a, transparent: transparency > 0, opacity: 1 - transparency });
+    }
+    materials.set(key, m);
+    return m;
+  }
+
+  function glowTexture() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.5)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  }
+  function sparkTexture() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.translate(32, 32);
+    const grad = g.createRadialGradient(0, 0, 0, 0, 0, 30);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    for (let i = 0; i < 4; i++) {
+      g.beginPath(); g.moveTo(0, -30); g.lineTo(4, 0); g.lineTo(0, 30); g.lineTo(-4, 0); g.closePath(); g.fill();
+      g.rotate(Math.PI / 4);
+    }
+    return new THREE.CanvasTexture(c);
+  }
+  const GLOW = glowTexture();
+  const SPARK = sparkTexture();
+
+  // ------------------------------------------------------------------ pets
+  function buildPet(pet) {
+    const root = new THREE.Group();
+    const inner = new THREE.Group();
+    root.add(inner);
+    const groups = {};
+    const base = new Map();
+    for (const limb of arr(pet.limbs)) {
+      const g = new THREE.Group();
+      const [px, py, pz] = limb.pivot;
+      for (const b of arr(limb.boxes)) {
+        const [x, y, z, sx, sy, sz, hex, kind, tr, shape, rot] = b;
+        const geometry = shape === "Wedge" ? WEDGE : shape === "Ball" ? BALL : BOX;
+        const mat = materialFor(hex, kind, tr);
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.position.set(x - px, y - py, z - pz);
+        mesh.scale.set(sx, sy, sz);
+        if (rot) {
+          ROT.set(rot[0], rot[1], rot[2], 0, rot[3], rot[4], rot[5], 0, rot[6], rot[7], rot[8], 0, 0, 0, 0, 1);
+          mesh.quaternion.setFromRotationMatrix(ROT);
+        }
+        mesh.castShadow = !(tr > 0.3);
+        mesh.receiveShadow = true;
+        if (mat.userData.neon) mesh.layers.enable(BLOOM_LAYER);
+        g.add(mesh);
+      }
+      groups[limb.name] = g;
+    }
+    const fires = [];
+    for (const fire of arr(pet.fires)) {
+      const g = groups[fire.limb];
+      if (!g) continue;
+      const limb = pet.limbs.find((l) => l.name === fire.limb);
+      const count = 40;
+      const seeds = [];
+      for (let i = 0; i < count; i++) seeds.push({ h: Math.random(), a: Math.random() * 6.283, r: Math.random(), s: 0.7 + Math.random() * 0.6 });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+      geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({
+        size: fire.size * 1.1, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      points.position.set(fire.position[0] - limb.pivot[0], fire.position[1] - limb.pivot[1], fire.position[2] - limb.pivot[2]);
+      points.userData = { seeds, size: fire.size, from: new THREE.Color(fire.color), to: new THREE.Color(fire.secondary) };
+      points.layers.enable(BLOOM_LAYER);
+      g.add(points);
+      fires.push(points);
+    }
+    for (const limb of pet.limbs) {
+      const g = groups[limb.name];
+      const parent = limb.parent && groups[limb.parent];
+      if (parent) {
+        const pp = pet.limbs.find((l) => l.name === limb.parent).pivot;
+        g.position.set(limb.pivot[0] - pp[0], limb.pivot[1] - pp[1], limb.pivot[2] - pp[2]);
+        parent.add(g);
+      } else {
+        g.position.set(limb.pivot[0], limb.pivot[1], limb.pivot[2]);
+        inner.add(g);
+      }
+      base.set(g, g.position.clone());
+    }
+    // Voxels to studs, standing on the ground (floating pets raised by their hover).
+    inner.scale.setScalar(pet.scale);
+    inner.position.y = (pet.hover || 0) * pet.scale;
+    const effects = [];
+    if (pet.particles) effects.push(makeParticles(pet, root));
+    if (pet.aura) effects.push(makeAura(pet, root));
+    root.userData = { pet, groups, base, fires, effects, inner };
+    for (const f of fires) updateFire(f, 0.5);
+    return root;
+  }
+
+  function updateFire(points, time) {
+    const { seeds, size, from, to } = points.userData;
+    const pos = points.geometry.attributes.position.array;
+    const col = points.geometry.attributes.color.array;
+    const c = new THREE.Color();
+    seeds.forEach((s, i) => {
+      const h = (s.h + time * 0.9 * s.s) % 1;
+      const spread = size * 0.32 * (1 - h) * s.r;
+      pos[i * 3] = Math.cos(s.a + h * 2) * spread;
+      pos[i * 3 + 1] = h * size * 1.3;
+      pos[i * 3 + 2] = Math.sin(s.a + h * 2) * spread;
+      c.copy(from).lerp(to, Math.min(1, h * 1.4)).multiplyScalar(Math.max(0, 1 - h * h));
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    });
+    points.geometry.attributes.position.needsUpdate = true;
+    points.geometry.attributes.color.needsUpdate = true;
+  }
+
+  // Sparkles, embers, bubbles or snow round the pet (ModelEffects in the game).
+  function makeParticles(pet, root) {
+    const info = pet.particles;
+    const w = pet.size[0] * pet.scale, h = pet.size[1] * pet.scale, d = pet.size[2] * pet.scale;
+    const count = 60;
+    const seeds = [];
+    for (let i = 0; i < count; i++) seeds.push({ x: Math.random() - 0.5, y: Math.random(), z: Math.random() - 0.5, s: 0.5 + Math.random(), p: Math.random() });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    const mat = new THREE.PointsMaterial({
+      color: new THREE.Color(info.color), size: Math.max(0.5, pet.scale * 1.6), map: info.style === "Sparkles" ? SPARK : GLOW,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const points = new THREE.Points(geo, mat);
+    points.layers.enable(BLOOM_LAYER);
+    root.add(points);
+    const cy = (pet.center[1] + (pet.hover || 0)) * pet.scale;
+    return { update(t) {
+      const pos = geo.attributes.position.array;
+      seeds.forEach((s, i) => {
+        let k = (s.p + t * 0.35 * s.s) % 1;
+        let y = info.style === "Snow" ? (1 - k) * h * 1.2 : info.style === "Sparkles" ? s.y * h : k * h * 1.3;
+        pos[i * 3] = s.x * w * 1.25 + (pet.center[0] * -pet.scale) * 0;
+        pos[i * 3 + 1] = y + (info.style === "Sparkles" ? cy - h / 2 : 0);
+        pos[i * 3 + 2] = s.z * d * 1.15 + pet.center[2] * pet.scale;
+      });
+      geo.attributes.position.needsUpdate = true;
+      mat.opacity = 0.9;
+      mat.size = Math.max(0.5, pet.scale * 1.6) * (0.75 + 0.25 * Math.sin(t * 6));
+    } };
+  }
+
+  // The swirl of light round a rare pet's feet.
+  function makeAura(pet, root) {
+    const color = new THREE.Color((pet.aura && pet.aura.color) || (pet.particles && pet.particles.color) || (pet.light && pet.light.color) || "#5ff6ff");
+    const radius = Math.max(pet.size[0], pet.size[2]) * pet.scale * 0.36;
+    const g = new THREE.Group();
+    g.position.z = pet.center[2] * pet.scale;
+    root.add(g);
+    const count = 90;
+    const seeds = [];
+    for (let i = 0; i < count; i++) seeds.push({ a: Math.random() * 6.283, r: 0.35 + Math.random() * 0.75, p: Math.random(), s: 0.6 + Math.random() * 0.8 });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    const mat = new THREE.PointsMaterial({ color, size: radius * 0.22, map: GLOW, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 });
+    const points = new THREE.Points(geo, mat);
+    points.layers.enable(BLOOM_LAYER);
+    g.add(points);
+    const ringMat = new THREE.MeshBasicMaterial({ color, map: GLOW, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+    const ring = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2.6, radius * 2.6), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05;
+    ring.layers.enable(BLOOM_LAYER);
+    g.add(ring);
+    return { update(t) {
+      const pos = geo.attributes.position.array;
+      seeds.forEach((s, i) => {
+        const k = (s.p + t * 0.5 * s.s) % 1;
+        const a = s.a + t * 2.2 * s.s;
+        const r = radius * s.r * (1 - k * 0.5);
+        pos[i * 3] = Math.cos(a) * r;
+        pos[i * 3 + 1] = k * radius * 1.4;
+        pos[i * 3 + 2] = Math.sin(a) * r;
+      });
+      geo.attributes.position.needsUpdate = true;
+    } };
+  }
+
+  // Shapes as in PetAnimations: "lift" is the upper half of a wave, eased in and out; "bounce" is sine squared.
+  const SHAPES = {
+    sin: Math.sin,
+    lift: (x) => { const s = Math.max(0, Math.sin(x)); return s * s; },
+    bounce: (x) => { const s = Math.sin(x); return s * s; },
+  };
+  // Like PetAnimations.blend: a pet eases into a new move over BLEND seconds, from the pose it had.
+  const BLEND = 0.4;
+  function blendPoses(from, to, t) {
+    const k = t * t * (3 - 2 * t);
+    const out = {};
+    for (const [name, p] of Object.entries(to)) {
+      const a = from[name] || [0, 0, 0, 0, 0, 0];
+      out[name] = p.map((v, i) => a[i] * (1 - k) + v * k);
+    }
+    for (const [name, a] of Object.entries(from)) if (!out[name]) out[name] = a.map((v) => v * (1 - k));
+    return out;
+  }
+  function easeInto(userData, move, pose, now) {
+    if (userData.move !== undefined && userData.move !== move) { userData.from = userData.last; userData.since = now; }
+    userData.move = move;
+    if (userData.from) {
+      const t = (now - userData.since) / ((userData.pet && userData.pet.blend) || BLEND);
+      if (t >= 1) userData.from = null;
+      else pose = blendPoses(userData.from, pose, t);
+    }
+    userData.last = pose;
+    return pose;
+  }
+  const CHANNELS = { rx: 0, ry: 1, rz: 2, px: 3, py: 4, pz: 5 };
+  function animatePet(model, t, move, now) {
+    const { pet, groups, base } = model.userData;
+    for (const g of Object.values(groups)) { g.position.copy(base.get(g)); g.rotation.set(0, 0, 0); }
+    const moves = (DATA.moves || {})[pet.skeleton] || {};
+    const name = moves[move] ? move : pet.move;
+    const waves = moves[name] || [];
+    let pose = {};
+    for (const w of arr(waves)) {
+      const limb = pose[w.limb] || (pose[w.limb] = [0, 0, 0, 0, 0, 0]);
+      const shape = SHAPES[w.shape || "sin"];
+      let value = (w.base || 0) + (w.spread || 0) * (pet.wingSpread || 0) + w.size * shape(w.speed * t + (w.shift || 0));
+      if (w.tall) value *= pet.size[1] / 20;
+      limb[CHANNELS[w.channel]] += value;
+    }
+    pose = easeInto(model.userData, name, pose, now);
+    for (const [limbName, p] of Object.entries(pose)) {
+      const g = groups[limbName];
+      if (!g) continue;
+      g.rotation.set(p[0], p[1], p[2]);
+      g.position.x += p[3]; g.position.y += p[4]; g.position.z += p[5];
+    }
+  }
+
+  // A blocky player, 5 studs tall, for scale.
+  function buildPlayer() {
+    const g = new THREE.Group();
+    const skin = new THREE.MeshPhongMaterial({ color: 0xf5cd9b, shininess: 8 });
+    const shirt = new THREE.MeshPhongMaterial({ color: 0x3a7bd5, shininess: 8 });
+    const pants = new THREE.MeshPhongMaterial({ color: 0x2b2f3a, shininess: 8 });
+    const add = (mat, x, y, z, sx, sy, sz) => {
+      const m = new THREE.Mesh(BOX, mat);
+      m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    };
+    add(pants, -0.5, 1, 0, 0.95, 2, 1);
+    add(pants, 0.5, 1, 0, 0.95, 2, 1);
+    add(shirt, 0, 3, 0, 2, 2, 1);
+    add(shirt, -1.5, 3, 0, 0.95, 2, 1);
+    add(shirt, 1.5, 3, 0, 0.95, 2, 1);
+    add(skin, 0, 4.6, 0, 1.15, 1.2, 1.15);
+    return g;
+  }
+
+  // ------------------------------------------------------------------ stage
+  const canvas = document.getElementById("canvas");
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9ccbf2);
+  scene.fog = new THREE.Fog(0xc9e3f7, 260, 900);
+  scene.add(new THREE.HemisphereLight(0xeaf4ff, 0x6c8a52, 0.78));
+  const sun = new THREE.DirectionalLight(0xfff6e8, 0.86);
+  sun.position.set(-60, 120, 80);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0006;
+  scene.add(sun);
+  scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.25);
+  fill.position.set(60, 30, -50);
+  scene.add(fill);
+
+  function studTexture() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.fillStyle = "#4fa443"; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = "rgba(0,0,0,0.06)"; g.fillRect(0, 0, 64, 2); g.fillRect(0, 0, 2, 64);
+    g.fillStyle = "rgba(255,255,255,0.05)"; g.beginPath(); g.arc(32, 32, 12, 0, 6.283); g.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(400, 400);
+    t.anisotropy = 8;
+    t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshLambertMaterial({ map: studTexture() }));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.5, 2000);
+
+  // Selective bloom: only Neon, flames and particles glow (the three.js selective-bloom recipe).
+  const renderScene = new THREE.RenderPass(scene, camera);
+  const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 1.25, 0.55, 0);
+  const bloomComposer = new THREE.EffectComposer(renderer);
+  bloomComposer.renderToScreen = false;
+  bloomComposer.addPass(renderScene);
+  bloomComposer.addPass(bloomPass);
+  const mixPass = new THREE.ShaderPass(new THREE.ShaderMaterial({
+    uniforms: { baseTexture: { value: null }, bloomTexture: { value: bloomComposer.renderTarget2.texture } },
+    vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: "uniform sampler2D baseTexture; uniform sampler2D bloomTexture; varying vec2 vUv; void main() { gl_FragColor = texture2D(baseTexture, vUv) + vec4(1.0) * texture2D(bloomTexture, vUv); }",
+    defines: {},
+  }), "baseTexture");
+  mixPass.needsSwap = true;
+  const finalComposer = new THREE.EffectComposer(renderer);
+  finalComposer.addPass(renderScene);
+  finalComposer.addPass(mixPass);
+  const bloomLayer = new THREE.Layers();
+  bloomLayer.set(BLOOM_LAYER);
+  const DARK = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const DARK_POINTS = new THREE.PointsMaterial({ color: 0x000000, size: 0 });
+  const saved = {};
+  function darken(obj) {
+    if ((obj.isMesh || obj.isPoints) && !bloomLayer.test(obj.layers)) {
+      saved[obj.uuid] = obj.material;
+      obj.material = obj.isPoints ? DARK_POINTS : DARK;
+    }
+  }
+  function restore(obj) {
+    if (saved[obj.uuid]) { obj.material = saved[obj.uuid]; delete saved[obj.uuid]; }
+  }
+
+  // ------------------------------------------------------------------ layout
+  const view = { pet: params.get("pet") || null, yaw: Number(params.get("yaw") || 0.42), pitch: Number(params.get("pitch") || 0.16), move: params.get("move") || null, zoom: Number(params.get("zoom") || (params.get("pet") ? 1 : 0.74)) };
+  let shown = [];
+  let player = null;
+  const labelsEl = document.getElementById("labels");
+  let focus = { center: new THREE.Vector3(), radius: 10 };
+
+  function clearStage() {
+    for (const s of shown) scene.remove(s.root);
+    if (player) scene.remove(player);
+    shown = [];
+    labelsEl.innerHTML = "";
+  }
+
+  function addLabel(pet) {
+    const el = document.createElement("div");
+    el.className = "tag";
+    el.innerHTML = '<div class="rarity"></div><div class="name"></div><div class="income"></div>';
+    el.querySelector(".rarity").textContent = pet.rarity;
+    el.querySelector(".rarity").style.color = pet.rarity === "Secret" ? "#e8e2ff" : pet.rarityColor;
+    el.querySelector(".name").textContent = pet.name;
+    el.querySelector(".income").textContent = pet.income;
+    labelsEl.append(el);
+    return el;
+  }
+
+  function layout() {
+    clearStage();
+    const list = view.pet ? pets.filter((p) => p.kind === view.pet) : pets;
+    // Side by side, smallest first, a gap between each.
+    let x = 0;
+    const gap = 6;
+    labelsEl.classList.toggle("lineup", !view.pet);
+    for (const pet of list) {
+      const root = buildPet(pet);
+      const w = pet.size[0] * pet.scale, d = pet.size[2] * pet.scale;
+      const width = Math.max(w, d * 0.55);
+      root.position.x = x + width / 2;
+      root.position.z = -pet.center[2] * pet.scale;
+      scene.add(root);
+      shown.push({ root, pet, label: addLabel(pet), width, offset: Math.random() * 30 });
+      x += width + gap;
+    }
+    const total = x - gap;
+    for (const s of shown) s.root.position.x -= total / 2;
+    player = buildPlayer();
+    player.position.set(-total / 2 - 4, 0, 2);
+    if (view.pet) player.position.set(-(shown[0].width / 2) - 2.5, 0, -1);
+    scene.add(player);
+    const box = new THREE.Box3();
+    for (const s of shown) box.expandByObject(s.root);
+    if (!view.pet) box.expandByObject(player);
+    focus.center = box.getCenter(new THREE.Vector3());
+    focus.radius = box.getSize(new THREE.Vector3()).length() / 2;
+    if (params.has("fy")) focus.center.y = Number(params.get("fy"));
+    const r = Math.max(30, focus.radius * 1.6);
+    sun.position.set(focus.center.x - r * 0.5, r * 1.2, focus.center.z + r * 0.7);
+    sun.target.position.copy(focus.center);
+    const sc = sun.shadow.camera;
+    sc.left = -r; sc.right = r; sc.top = r; sc.bottom = -r; sc.near = 1; sc.far = r * 4;
+    sc.updateProjectionMatrix();
+    buildButtons();
+    buildFacts();
+  }
+
+  function buildButtons() {
+    const bar = document.getElementById("pet-buttons");
+    bar.querySelectorAll("button").forEach((b) => b.remove());
+    const all = document.createElement("button");
+    all.className = "chip"; all.textContent = "All";
+    all.setAttribute("aria-pressed", String(!view.pet));
+    all.onclick = () => { view.pet = null; view.move = null; view.zoom = 0.74; layout(); };
+    bar.append(all);
+    for (const pet of pets) {
+      const b = document.createElement("button");
+      b.className = "chip"; b.textContent = pet.name;
+      b.setAttribute("aria-pressed", String(view.pet === pet.kind));
+      b.onclick = () => { view.pet = pet.kind; view.move = null; view.zoom = 1; layout(); };
+      bar.append(b);
+    }
+    const moves = document.getElementById("move-buttons");
+    moves.querySelectorAll("button").forEach((b) => b.remove());
+    moves.hidden = !view.pet;
+    if (view.pet) {
+      const pet = pets.find((p) => p.kind === view.pet);
+      for (const m of arr(pet.moveNames)) {
+        const b = document.createElement("button");
+        b.className = "chip"; b.textContent = m;
+        b.setAttribute("aria-pressed", String((view.move || pet.move) === m));
+        b.onclick = () => { view.move = m; buildButtons(); };
+        moves.append(b);
+      }
+    }
+  }
+
+  function buildFacts() {
+    const facts = document.getElementById("facts");
+    facts.innerHTML = "";
+    const add = (k, v) => { const f = document.createElement("div"); f.className = "fact"; f.innerHTML = "<b></b><span></span>"; f.querySelector("b").textContent = k; f.querySelector("span").textContent = v; facts.append(f); };
+    if (view.pet) {
+      const pet = pets.find((p) => p.kind === view.pet);
+      add("Rarity", pet.rarity);
+      add("Height", (pet.size[1] * pet.scale).toFixed(1) + " studs (player 5)");
+      add("Length", (pet.size[2] * pet.scale).toFixed(1) + " studs");
+      add("Parts", String(pet.parts));
+      add("Skeleton", pet.skeleton);
+    } else {
+      for (const pet of pets) add(pet.name, (pet.size[1] * pet.scale).toFixed(1) + " studs tall, " + pet.parts + " parts");
+    }
+  }
+
+  // ------------------------------------------------------------------ input
+  let dragging = false, lastX = 0, lastY = 0, idle = 0;
+  canvas.addEventListener("pointerdown", (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    view.yaw -= (e.clientX - lastX) * 0.008; view.pitch = Math.min(1.2, Math.max(-0.05, view.pitch + (e.clientY - lastY) * 0.006));
+    lastX = e.clientX; lastY = e.clientY; idle = 0;
+  });
+  canvas.addEventListener("pointerup", () => { dragging = false; });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); view.zoom = Math.min(3, Math.max(0.35, view.zoom * (1 + e.deltaY * 0.001))); }, { passive: false });
+
+  function resize() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    renderer.setSize(w, h, false);
+    bloomComposer.setSize(w, h);
+    finalComposer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", resize);
+
+  const projected = new THREE.Vector3();
+  function frame(time) {
+    const t = still ? Number(params.get("t")) : reduceMotion ? 0.4 : time / 1000;
+    for (const s of shown) {
+      // Each pet at its own point in its moves, as in the game (unless the view is held still for a picture).
+      animatePet(s.root, t + (still ? 0 : s.offset), view.move, time / 1000);
+      for (const f of arr(s.root.userData.fires)) updateFire(f, t);
+      for (const e of s.root.userData.effects) e.update(t);
+    }
+    const dist = (focus.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) * 0.82 * view.zoom;
+    camera.position.set(
+      focus.center.x + Math.sin(view.yaw) * Math.cos(view.pitch) * dist,
+      focus.center.y + Math.sin(view.pitch) * dist,
+      focus.center.z + Math.cos(view.yaw) * Math.cos(view.pitch) * dist
+    );
+    camera.lookAt(focus.center.x, params.has("fy") ? focus.center.y : focus.center.y * 0.8, focus.center.z);
+    // Close up, the player stands to the pet's side as seen from the camera, never in front of it.
+    if (view.pet && player && shown[0]) {
+      const p = shown[0].pet;
+      const reach = Math.max(p.size[0], p.size[2]) * p.scale * 0.5 + 3;
+      player.position.set(-Math.cos(view.yaw) * reach, 0, Math.sin(view.yaw) * reach + shown[0].root.position.z + p.center[2] * p.scale);
+      player.rotation.y = view.yaw;
+    }
+    scene.background = new THREE.Color(0x000000);
+    scene.fog.color.set(0x000000);
+    ground.visible = true;
+    scene.traverse(darken);
+    bloomComposer.render();
+    scene.traverse(restore);
+    scene.background = new THREE.Color(0x9ccbf2);
+    scene.fog.color.set(0xc9e3f7);
+    finalComposer.render();
+    // Labels over each pet's head.
+    const rect = canvas.getBoundingClientRect();
+    for (const s of shown) {
+      const top = (s.pet.size[1] + (s.pet.hover || 0)) * s.pet.scale + 0.6;
+      projected.set(s.root.position.x, top, s.root.position.z + s.pet.center[2] * s.pet.scale).project(camera);
+      s.label.style.left = ((projected.x + 1) / 2 * rect.width) + "px";
+      s.label.style.top = ((1 - projected.y) / 2 * rect.height) + "px";
+      s.label.style.display = projected.z < 1 ? "" : "none";
+    }
+    if (!still) requestAnimationFrame(frame);
+    else window.__rendered = true;
+  }
+
+  resize();
+  layout();
+  requestAnimationFrame(frame);
+}
+})();
+</script>

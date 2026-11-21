@@ -19,9 +19,9 @@
 -- seems to move. Dust is the one thing that cannot be moved once made, so near the end of a loop each egg also lays
 -- its trail one loop back ("echo" dust), ready for when the player arrives there.
 --
--- Also shows the on-screen message when a Secret or rarer egg spawns, with an alert sound so the whole server
--- notices, and the red circle round the egg a jumping local player is heading for (RideController decides which,
--- with Shared/JumpAim).
+-- Also shows the shiny line across the top of the screen when a Secret or rarer egg spawns ("Secret egg has spawned
+-- in Volcano!"), with a sparkle sound so the whole server notices, and the red circle round the egg a jumping local
+-- player is heading for (RideController decides which, with Shared/JumpAim).
 --
 -- Each egg's look comes from Shared/EggModels (a blocky model, different for every zone and rarity), built into parts
 -- by Shared/EggRig. Every part is anchored, and this controller writes where every one of them goes, each at its own
@@ -75,8 +75,11 @@ local POP_DISTANCE = 50
 local ECHO_RANGE = 80
 -- No dust for eggs this far from the camera.
 local DUST_MAX_DISTANCE = 280
--- How long the Secret egg message stays up, in seconds.
+-- How long each line of the rare-egg alert stays up, in seconds.
 local ANNOUNCE_TIME = 5
+-- Rare eggs that spawn within this many seconds of the last sparkle share it, rather than piling sparkles on top of
+-- one another (several can appear at once at sunrise); each still gets its own line.
+local ALERT_GAP = 0.8
 -- An egg's drawn position eases onto a new slow-down the server sends, rather than jumping (see SlowDown), at this
 -- rate, and never by more than NUDGE_LIMIT studs.
 local NUDGE_SETTLE = 6
@@ -100,6 +103,7 @@ local DUST_COLORS = {
 	{ 182, 160, 118 }, -- Forest: dry earth
 	{ 236, 208, 152 }, -- Desert: sand
 	{ 246, 250, 255 }, -- Snow: powder
+	{ 104, 116, 64 }, -- Jungle: leaf litter
 	{ 214, 236, 248 }, -- Ocean: spray off the boardwalk
 	{ 112, 102, 102 }, -- Volcano: ash
 	{ 176, 156, 116 }, -- Prehistoric: dirt
@@ -470,30 +474,28 @@ local function appear(egg: ClientEgg)
 	end
 end
 
--- "3:42:07 PM", in the player's own time zone.
-local function localClockTime(time: number): string
-	local date = os.date("*t", math.floor(time))
-	local hour = date.hour % 12
-	if hour == 0 then
-		hour = 12
-	end
-	return string.format("%d:%02d:%02d %s", hour, date.min, date.sec, if date.hour < 12 then "AM" else "PM")
-end
+-- When the last sparkle started (os.clock()).
+local lastAlertAt = -math.huge
 
--- An alarm everyone in the server hears when a Secret or rarer egg spawns: a few rising chimes, twice over
--- (Config/Sounds), as loud as the player's Effects volume allows.
+-- A sparkle everyone in the server hears when a Secret or rarer egg spawns: a quick glittering run up, then a few
+-- twinkles that fade away (Config/Sounds), as loud as the player's Effects volume allows.
 local function playAlert()
+	local clock = os.clock()
+	if clock - lastAlertAt < ALERT_GAP then
+		return
+	end
 	local alert = Sounds.SECRET_ALERT
 	local volume = UiState.Fusion.peek(UiState.settings.EffectsVolume)
 	if typeof(volume) ~= "number" or volume <= 0 then
 		return
 	end
+	lastAlertAt = clock
 	for _, note in alert.notes do
 		task.delay(note.at, function()
 			local sound = Instance.new("Sound")
 			sound.Name = "SecretAlert"
 			sound.SoundId = alert.id
-			sound.Volume = alert.volume * volume
+			sound.Volume = alert.volume * (note.volume or 1) * volume
 			sound.PlaybackSpeed = note.pitch
 			sound.Parent = SoundService
 			sound:Play()
@@ -504,19 +506,15 @@ local function playAlert()
 	end
 end
 
--- The on-screen message for a Secret or rarer egg: what spawned, where, and when, in big white letters for
--- ANNOUNCE_TIME seconds, with the alert sound.
+-- The rare-egg alert for a Secret or rarer egg: a shiny line across the top of the screen saying what spawned and
+-- where ("Secret egg has spawned in Volcano!"), beneath any others still up, for ANNOUNCE_TIME seconds, with the
+-- sparkle.
 local function announce(egg: ClientEgg)
 	local info = Rarities.Info[egg.rarity]
 	if not info.announce then
 		return
 	end
-	UiState.showAnnouncement(
-		`{string.upper(egg.rarity)} EGG SPAWNED!`,
-		`Start of the {Zones.List[egg.zone].name} zone at {localClockTime(egg.spawnTime)}`,
-		rgb(info.color),
-		ANNOUNCE_TIME
-	)
+	UiState.showAnnouncement(`{egg.rarity} egg has spawned in {Zones.List[egg.zone].name}!`, ANNOUNCE_TIME)
 	playAlert()
 end
 

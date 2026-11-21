@@ -511,7 +511,35 @@
 
   // Moves the pet the way it moves in the game: the waves of one of its skeleton's moves (Shared/PetAnimations),
   // each turning or shifting one limb: base + spread * wing spread + size * shape(speed * time + shift).
-  const SHAPES = { sin: Math.sin, lift: (x) => Math.max(0, Math.sin(x)), bounce: (x) => Math.abs(Math.sin(x)) };
+  // Shapes as in PetAnimations: "lift" is the upper half of a wave, eased in and out; "bounce" is sine squared.
+  const SHAPES = {
+    sin: Math.sin,
+    lift: (x) => { const s = Math.max(0, Math.sin(x)); return s * s; },
+    bounce: (x) => { const s = Math.sin(x); return s * s; },
+  };
+  // Like PetAnimations.blend: a pet eases into a new move over BLEND seconds, from the pose it had.
+  const BLEND = 0.4;
+  function blendPoses(from, to, t) {
+    const k = t * t * (3 - 2 * t);
+    const out = {};
+    for (const [name, p] of Object.entries(to)) {
+      const a = from[name] || [0, 0, 0, 0, 0, 0];
+      out[name] = p.map((v, i) => a[i] * (1 - k) + v * k);
+    }
+    for (const [name, a] of Object.entries(from)) if (!out[name]) out[name] = a.map((v) => v * (1 - k));
+    return out;
+  }
+  function easeInto(userData, move, pose, now) {
+    if (userData.move !== undefined && userData.move !== move) { userData.from = userData.last; userData.since = now; }
+    userData.move = move;
+    if (userData.from) {
+      const t = (now - userData.since) / ((userData.pet && userData.pet.blend) || BLEND);
+      if (t >= 1) userData.from = null;
+      else pose = blendPoses(userData.from, pose, t);
+    }
+    userData.last = pose;
+    return pose;
+  }
   const CHANNELS = { rx: 0, ry: 1, rz: 2, px: 3, py: 4, pz: 5 };
   function animatePet(model, t) {
     const { pet, groups, base } = model.userData;
@@ -520,8 +548,9 @@
       g.rotation.set(0, 0, 0);
     }
     const moves = (DATA.moves || {})[pet.skeleton] || {};
-    const waves = moves[state.move] || moves[pet.move] || [];
-    const pose = {};
+    const name = moves[state.move] ? state.move : pet.move;
+    const waves = moves[name] || [];
+    let pose = {};
     for (const w of Array.isArray(waves) ? waves : []) {
       const limb = pose[w.limb] || (pose[w.limb] = [0, 0, 0, 0, 0, 0]);
       const shape = SHAPES[w.shape || "sin"];
@@ -529,8 +558,9 @@
       if (w.tall) value *= pet.size[1] / 20;
       limb[CHANNELS[w.channel]] += value;
     }
-    for (const [name, p] of Object.entries(pose)) {
-      const g = groups[name];
+    pose = easeInto(model.userData, name, pose, t);
+    for (const [limbName, p] of Object.entries(pose)) {
+      const g = groups[limbName];
       if (!g) continue;
       g.rotation.set(p[0], p[1], p[2]);
       g.position.x += p[3]; g.position.y += p[4]; g.position.z += p[5];
@@ -749,7 +779,9 @@
 
   const MOVES = {
     Quadruped: "Four legs", LowSlung: "Four short legs", Winged: "Wings", Biped: "Two legs", ManyLegged: "Six legs",
-    Swimmer: "Fins", Tentacled: "Eight tentacles", Serpent: "Coils", Dragon: "Four legs and wings", Theropod: "Two legs and a tail",
+    Swimmer: "Fins", Tentacled: "Eight tentacles", Serpent: "Coils", Dragon: "Four jointed legs and wings",
+    Theropod: "Two legs and a tail", Beast: "Four jointed legs and a jaw", Strider: "Four jointed legs",
+    ThreeHeaded: "Three heads and four jointed legs", Giant: "Jointed arms and legs", Tyrant: "Jointed legs and a jaw",
   };
   const GAITS = { Walk: "walks", Hop: "hops", Waddle: "waddles", Stomp: "stomps", Swim: "swims", Crawl: "crawls" };
 

@@ -105,6 +105,7 @@ for _, kind in PetModels.all() do
 		wingSpread = model.wingSpread,
 		moveNames = PetAnimations.movesOf(model.skeleton),
 		move = PetAnimations.defaultMove(model.skeleton, model.gait),
+		blend = PetAnimations.blendTime(model.skeleton),
 		size = model.size,
 		center = model.center,
 		limbs = limbs,

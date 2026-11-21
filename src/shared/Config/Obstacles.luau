@@ -12,7 +12,7 @@
 --                     pet (or leaping) through one wade through it slowly
 -- hx, hz:  half its footprint in studs: hx across the runway, hz along it. Eggs without a rider steer round it.
 -- grow:    the largest random enlargement of the footprint (1.3 = up to 30% bigger), so no two look alike.
--- timing:  for obstacles that go off now and then (a geyser, a lava vent, a snapping clam): every `period`
+-- timing:  for obstacles that go off now and then (a geyser, a lava vent, a snapping clam or flytrap): every `period`
 --          seconds it gives `warn` seconds of warning, then is in the way for `active` seconds. The rest of the
 --          time it is harmless. Eggs without a rider steer round it all the same.
 -- flat:    lies in the ground rather than standing on it, so players riding a pet go over it.
@@ -85,6 +85,19 @@ Obstacles.Kinds = {
 	Snowdrift = kind("Bump", 7, 3, "a snowdrift", { grow = 1.3 }),
 	Snowman = kind("Bump", 2.8, 2.8, "a snowman", { grow = 1.15 }),
 	IceBlocks = kind("Crash", 12, 9, "the ice blocks", { grow = 1.2 }),
+	-- Jungle
+	GiantLeaves = kind("Bump", 4, 3.4, "the giant leaves", { grow = 1.25 }),
+	Bamboo = kind("Crash", 3.4, 3, "a bamboo thicket", { grow = 1.25 }),
+	JungleTree = kind("Crash", 3.6, 3.6, "a jungle tree", { grow = 1.2 }),
+	MudPit = kind("Slow", 6.5, 5, "the mud", { grow = 1.3, flat = true, hitText = "Stuck in the mud!" }),
+	Flytrap = kind(
+		"Crash",
+		4,
+		3.6,
+		"a giant flytrap",
+		{ grow = 1.1, timing = { period = 5.5, warn = 1.2, active = 1.4 }, hitText = "Snapped up by a giant flytrap!" }
+	),
+	TempleRuin = kind("Crash", 11, 8, "a temple ruin", { grow = 1.2 }),
 	-- Ocean
 	Coral = kind("Bump", 3.6, 3.2, "the coral", { grow = 1.3 }),
 	SeaRock = kind("Crash", 5, 4.5, "a sea rock", { grow = 1.3 }),
@@ -123,6 +136,7 @@ Obstacles.Zones = {
 	{ weights = { Log = 2, Boulder = 2, Stump = 2, Oak = 3, Bush = 3, Toadstools = 2, GiantStump = 2, Outcrop = 2 } },
 	{ weights = { Cactus = 4, Sandstone = 3, Tumbleweed = 2, SandGeyser = 3, Skull = 1.5, Butte = 2 } },
 	{ weights = { Pine = 4, IceBoulder = 3, Snowdrift = 3, Snowman = 2, IceBlocks = 2 } },
+	{ weights = { GiantLeaves = 4, Bamboo = 3, JungleTree = 3, MudPit = 3, Flytrap = 3, TempleRuin = 2 } },
 	{ weights = { Coral = 4, SeaRock = 3, GiantClam = 3, Barrel = 3, Wreck = 2 } },
 	{ weights = { LavaPool = 3, Basalt = 3, LavaVent = 3, ObsidianSpikes = 2, MagmaRock = 2, Crag = 2 } },
 	{ weights = { TarPit = 3, Fern = 4, Ribcage = 2, MossyBoulder = 3, DinoSkull = 2, GiantStump = 2, Outcrop = 1 } },

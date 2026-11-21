@@ -49,6 +49,8 @@ export type Limb = {
 
 export type Light = { color: Color, brightness: number, range: number }
 export type Particles = { color: Color, style: string, rate: number }
+-- A swirl of light rising round the pet's feet (rare pets): `color`, and `accent` for the sparks in it.
+export type Aura = { color: Color, accent: Color }
 
 export type Model = {
 	kind: string,
@@ -74,6 +76,7 @@ export type Model = {
 	center: { number },
 	light: Light?,
 	particles: Particles?,
+	aura: Aura?,
 	fires: { Fire },
 	-- Blocks not joined to the rest of the pet, which would float in the air. Should always be 0.
 	loose: number,
@@ -92,12 +95,89 @@ PetModels.VOXEL = 0.5
 -- the same way. Every limb except Body hangs from Body unless a design says otherwise.
 PetModels.SKELETONS = {
 	Quadruped = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
+	-- Four legs that bend: each leg's lower half (the Shin, from the elbow or knee down) hangs from its upper half,
+	-- so a paw folds up as it steps; and a Jaw hanging from the Head, so it can bare its teeth and roar. For the big
+	-- hunters (wolves, great cats).
+	Beast = {
+		"Body",
+		"Head",
+		"Jaw",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
+	-- The beast with two more heads (Cerberus): each side head (with its neck) hangs from the Body, to move on its own.
+	ThreeHeaded = {
+		"Body",
+		"Head",
+		"Jaw",
+		"LeftHead",
+		"RightHead",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
+	-- Four long legs that bend: each leg's Shin hangs from its upper half, so a hoof or foot folds up as it steps
+	-- (deer, camels, elephants, sauropods).
+	Strider = {
+		"Body",
+		"Head",
+		"FrontLeftLeg",
+		"FrontRightLeg",
+		"BackLeftLeg",
+		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
+		"Tail",
+	},
 	-- Short legs and a long body close to the ground (hedgehogs, lizards).
 	LowSlung = { "Body", "Head", "FrontLeftLeg", "FrontRightLeg", "BackLeftLeg", "BackRightLeg", "Tail" },
 	Winged = { "Body", "Head", "LeftWing", "RightWing", "LeftLeg", "RightLeg", "Tail" },
 	Biped = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg" },
-	-- Two legs, small arms and a long tail (raptors, tyrannosaurs).
+	-- Two legs and two arms that bend: each Forearm hangs from its arm at the elbow, each Shin from its leg at the
+	-- knee (the big walkers: yetis, treants, golems).
+	Giant = {
+		"Body",
+		"Head",
+		"LeftArm",
+		"RightArm",
+		"LeftForearm",
+		"RightForearm",
+		"LeftLeg",
+		"RightLeg",
+		"LeftShin",
+		"RightShin",
+	},
+	-- Two legs, small arms and a long tail (raptors).
 	Theropod = { "Body", "Head", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Tail" },
+	-- A theropod built to be huge: each leg's lower half (the Shin, from the knee down) hangs from its upper half, so
+	-- a foot folds up as it steps, and a Jaw hangs from the Head, so it can roar (tyrannosaurs).
+	Tyrant = {
+		"Body",
+		"Head",
+		"Jaw",
+		"LeftArm",
+		"RightArm",
+		"LeftLeg",
+		"RightLeg",
+		"LeftShin",
+		"RightShin",
+		"Tail",
+	},
 	-- Floats and swims: fins (or wings, or forelegs) and a tail.
 	Swimmer = { "Body", "Head", "LeftFin", "RightFin", "Tail" },
 	-- Eight tentacles round a body, with the head (mantle) on top.
@@ -116,7 +196,21 @@ PetModels.SKELETONS = {
 	-- A long body in a chain of coils (Segment1 hangs from Body, Segment2 from Segment1, Tail from Segment2), so
 	-- a ripple can run down it.
 	Serpent = { "Body", "Head", "LeftFin", "RightFin", "Segment1", "Segment2", "Tail" },
-	-- Four legs and a pair of wings (dragons).
+	-- A great snake on land: its neck (Body) and head, and behind them a chain of eight lengths on the ground, each
+	-- hanging from the one before, drawn coiled so it can uncoil to slither (see PetAnimations.SNAKE_COIL).
+	Snake = {
+		"Body",
+		"Head",
+		"Segment1",
+		"Segment2",
+		"Segment3",
+		"Segment4",
+		"Segment5",
+		"Segment6",
+		"Segment7",
+		"Tail",
+	},
+	-- Four legs that bend at the knee (each Shin hanging from its leg) and a pair of wings (dragons).
 	Dragon = {
 		"Body",
 		"Head",
@@ -124,6 +218,10 @@ PetModels.SKELETONS = {
 		"FrontRightLeg",
 		"BackLeftLeg",
 		"BackRightLeg",
+		"FrontLeftShin",
+		"FrontRightShin",
+		"BackLeftShin",
+		"BackRightShin",
 		"LeftWing",
 		"RightWing",
 		"Tail",
@@ -379,12 +477,16 @@ export type PetBuilder = typeof(setmetatable(
 		seatPoint: { number }?,
 		lightInfo: Light?,
 		particleInfo: Particles?,
+		auraInfo: Aura?,
 	},
 	PetBuilder
 ))
 
 local function newPet(): PetBuilder
-	return setmetatable({ limbs = {}, byName = {}, seatPoint = nil, lightInfo = nil, particleInfo = nil }, PetBuilder)
+	return setmetatable(
+		{ limbs = {}, byName = {}, seatPoint = nil, lightInfo = nil, particleInfo = nil, auraInfo = nil },
+		PetBuilder
+	)
 end
 
 -- Starts a limb that turns around `pivot` (x, y, z in voxels; halves are fine). `parent` defaults to Body.
@@ -404,7 +506,8 @@ function PetBuilder.limb(self: PetBuilder, name: string, pivot: { number }, pare
 	return setmetatable({ build = build }, LimbBuilder)
 end
 
--- Draws a left limb with `draw`, then its mirror image as the right limb. The pivot is the left one's.
+-- Draws a left limb with `draw`, then its mirror image as the right limb. The pivot is the left one's. A `parent`
+-- on the left (such as "FrontLeftLeg", for a shin) is mirrored too: the right limb hangs from "FrontRightLeg".
 function PetBuilder.limbPair(
 	self: PetBuilder,
 	leftName: string,
@@ -415,7 +518,8 @@ function PetBuilder.limbPair(
 )
 	local left = self:limb(leftName, pivot, parent)
 	draw(left)
-	local right = self:limb(rightName, { -pivot[1], pivot[2], pivot[3] }, parent)
+	local rightParent = if parent then (string.gsub(parent, "Left", "Right")) else nil
+	local right = self:limb(rightName, { -pivot[1], pivot[2], pivot[3] }, rightParent)
 	-- Replay the left limb's blocks mirrored, keeping paint on top of blocks. A part at an angle is mirrored by
 	-- turning it the mirror-image way round; every shape is symmetrical across its own x, so it looks the same.
 	for index, range in left.build.ranges do
@@ -473,6 +577,11 @@ end
 
 function PetBuilder.particles(self: PetBuilder, style: string, color: Color, rate: number?)
 	self.particleInfo = { style = style, color = color, rate = rate or 6 }
+end
+
+-- A swirl of light rising round its feet, in `color` with sparks of `accent` (white if left out).
+function PetBuilder.aura(self: PetBuilder, color: Color, accent: Color?)
+	self.auraInfo = { color = color, accent = accent or { 255, 255, 255 } }
 end
 
 ----------------------------------------------------------------------------------------------------------------
@@ -611,6 +720,35 @@ function PetModels.get(kind: string): Model?
 	local pet = newPet()
 	design.draw(pet)
 
+	-- A design drawn with a gap under it (a swimmer drawn up off the ground) is moved down to stand on y = 0, and the
+	-- gap added to its hover, so it floats just as high as it was drawn.
+	local lowest = math.huge
+	for _, build in pet.limbs do
+		for _, box in build.boxes do
+			lowest = math.min(lowest, (PetModels.extent(box))[2])
+		end
+	end
+	-- Whole cells only, so blocks stay on the grid the checks below rely on.
+	local gap = if lowest < math.huge then math.max(0, math.floor(lowest + 0.001)) else 0
+	if gap > 0 then
+		for _, build in pet.limbs do
+			build.pivot = { build.pivot[1], build.pivot[2] - gap, build.pivot[3] }
+			for _, box in build.boxes do
+				box.y -= gap
+			end
+			for _, range in build.ranges do
+				range[2] -= gap
+				range[5] -= gap
+			end
+			for _, fire in build.fires do
+				fire.position = { fire.position[1], fire.position[2] - gap, fire.position[3] }
+			end
+		end
+		if pet.seatPoint then
+			pet.seatPoint = { pet.seatPoint[1], pet.seatPoint[2] - gap, pet.seatPoint[3] }
+		end
+	end
+
 	local info = Rarities.Info[rarity]
 	local glow = if rarity == "Secret" then SECRET_GLOW else info.color
 	if info.order >= 5 and pet.lightInfo == nil then
@@ -644,7 +782,7 @@ function PetModels.get(kind: string): Model?
 		rarity = rarity,
 		skeleton = design.skeleton,
 		gait = design.gait or "Walk",
-		hover = design.hover or 0,
+		hover = (design.hover or 0) + gap,
 		scale = design.scale or PetModels.VOXEL,
 		wingSpread = design.wingSpread or 0,
 		limbs = limbs,
@@ -653,6 +791,7 @@ function PetModels.get(kind: string): Model?
 		center = { (high[1] + low[1]) / 2, (high[2] + low[2]) / 2, (high[3] + low[3]) / 2 },
 		light = pet.lightInfo,
 		particles = pet.particleInfo,
+		aura = pet.auraInfo,
 		fires = fires,
 		loose = countLoose(pet),
 		flicker = 0,
